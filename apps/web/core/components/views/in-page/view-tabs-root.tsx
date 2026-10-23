@@ -12,9 +12,7 @@ import { ViewTabsBar } from "./view-tabs-bar";
 type TViewTabsRootProps = TViewTabsParams & {
   /** 系统页签的名字，如「全部工作项」 */
   allLabel: string;
-  /** 页面名，用在「以后打开xx页直接落在这个视图」 */
-  pageLabel: string;
-  /** 「保存为视图」弹窗里的摘要行 */
+  /** 「存为新视图」弹窗里的摘要行 */
   getSummary?: (snapshot: TViewSnapshot) => TViewSummaryRow[];
 };
 
@@ -25,7 +23,7 @@ type TSaveModalState = { mode: "create" } | { mode: "edit"; view: IProjectView }
  * 页面只负责提供当前状态（current）和如何应用一个视图（apply）。
  */
 export const ViewTabsRoot = observer(function ViewTabsRoot(props: TViewTabsRootProps) {
-  const { allLabel, pageLabel, getSummary, ...params } = props;
+  const { allLabel, getSummary, ...params } = props;
   // store hooks
   const { getUserDetails } = useMember();
   const tabs = useViewTabs(params);
@@ -95,7 +93,6 @@ export const ViewTabsRoot = observer(function ViewTabsRoot(props: TViewTabsRootP
       <SaveViewModal
         isOpen={!!saveModal}
         mode={saveModal?.mode ?? "create"}
-        pageLabel={pageLabel}
         initialName={saveModal?.mode === "edit" ? saveModal.view.name : ""}
         initialAccess={saveModal?.mode === "edit" ? saveModal.view.access : undefined}
         initialIsDefault={saveModal?.mode === "edit" ? tabs.defaultViewId === saveModal.view.id : false}

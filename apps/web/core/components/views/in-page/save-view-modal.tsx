@@ -1,16 +1,15 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, Globe, User, X } from "lucide-react";
+import { Columns3, ListFilter, Rows3, User, Users, X } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { Button } from "@plane/propel/button";
 import { EViewAccess } from "@plane/types";
-import { EModalPosition, EModalWidth, Input, ModalCore, ToggleSwitch } from "@plane/ui";
+import { Checkbox, EModalPosition, EModalWidth, Input, ModalCore } from "@plane/ui";
 import { cn } from "@plane/utils";
 import type { TSaveViewInput, TViewSummaryRow } from "./types";
 
 type TSaveViewModalProps = {
   isOpen: boolean;
   mode: "create" | "edit";
-  /** 「以后打开xx页直接落在这个视图」里的 xx */
-  pageLabel: string;
   initialName?: string;
   initialAccess?: EViewAccess;
   initialIsDefault?: boolean;
@@ -19,16 +18,44 @@ type TSaveViewModalProps = {
   onSubmit: (input: TSaveViewInput) => Promise<void> | void;
 };
 
-const ACCESS_OPTIONS: { value: EViewAccess; label: string; description: string; icon: typeof Globe }[] = [
-  { value: EViewAccess.PRIVATE, label: "个人视图", description: "只有你看得到，随时可改", icon: User },
-  { value: EViewAccess.PUBLIC, label: "公共视图", description: "项目成员都能看到，你和项目管理员可改", icon: Globe },
+const ACCESS_OPTIONS: { value: EViewAccess; label: string; icon: LucideIcon }[] = [
+  { value: EViewAccess.PRIVATE, label: "仅自己", icon: User },
+  { value: EViewAccess.PUBLIC, label: "项目所有成员", icon: Users },
 ];
+
+const SUMMARY_ICONS: Record<TViewSummaryRow["kind"], LucideIcon> = {
+  filters: ListFilter,
+  layout: Rows3,
+  properties: Columns3,
+};
+
+const SummaryRow = ({ row }: { row: TViewSummaryRow }) => {
+  const Icon = SUMMARY_ICONS[row.kind];
+  return (
+    <div className="flex min-h-11 items-center gap-3 border-b border-subtle px-3.5 py-2 text-13 last:border-b-0">
+      <Icon className="size-4 shrink-0 text-tertiary" />
+      <span className="w-14 shrink-0 text-secondary">{row.label}</span>
+      <span className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
+        {row.chips?.map((chip) => (
+          <span
+            key={chip}
+            className="inline-flex h-5.5 shrink-0 items-center rounded border border-subtle bg-surface-1 px-2 text-12 text-primary"
+          >
+            {chip}
+          </span>
+        ))}
+        <span className={cn("truncate", row.chips?.length ? "pl-0.5 text-12 text-tertiary" : "text-primary")}>
+          {row.text}
+        </span>
+      </span>
+    </div>
+  );
+};
 
 export const SaveViewModal = (props: TSaveViewModalProps) => {
   const {
     isOpen,
     mode,
-    pageLabel,
     initialName = "",
     initialAccess = EViewAccess.PRIVATE,
     initialIsDefault = false,
@@ -80,94 +107,84 @@ export const SaveViewModal = (props: TSaveViewModalProps) => {
         className="flex flex-col"
       >
         <div className="flex items-center justify-between px-6 pt-5">
-          <h3 className="text-lg font-semibold text-primary">{mode === "create" ? "保存为视图" : "编辑视图"}</h3>
+          <h3 className="text-18 font-semibold text-primary">{mode === "create" ? "存为新视图" : "编辑视图"}</h3>
           <button
             type="button"
             onClick={onClose}
-            className="grid h-8 w-8 place-items-center rounded-md text-tertiary hover:bg-layer-2-hover hover:text-primary"
+            className="-mr-1.5 grid size-8 place-items-center rounded-md text-tertiary hover:bg-layer-transparent-hover hover:text-primary"
             aria-label="关闭"
           >
-            <X className="h-4 w-4" />
+            <X className="size-4" />
           </button>
         </div>
 
-        <div className="px-6 pt-5">
-          <label htmlFor="in-page-view-name" className="mb-2 block text-sm font-semibold text-secondary">
-            视图名称
-          </label>
-          <Input
-            id="in-page-view-name"
-            ref={inputRef}
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            placeholder="例如：本迭代待办"
-            inputSize="md"
-            className="w-full"
-            maxLength={255}
-          />
-        </div>
+        <div className="flex flex-col gap-5.5 px-6 pt-5.5">
+          <div>
+            <label htmlFor="in-page-view-name" className="mb-2 block text-13 font-semibold text-primary">
+              视图名称
+            </label>
+            <Input
+              id="in-page-view-name"
+              ref={inputRef}
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="例如：本迭代待办"
+              inputSize="md"
+              className="h-10 w-full rounded-lg text-14"
+              maxLength={255}
+            />
+          </div>
 
-        <div className="px-6 pt-5">
-          <div className="mb-2 text-sm font-semibold text-secondary">谁能看到</div>
-          <div className="grid grid-cols-2 gap-2.5">
-            {ACCESS_OPTIONS.map((option) => {
-              const selected = access === option.value;
-              const Icon = option.icon;
-              return (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() => setAccess(option.value)}
-                  className={cn(
-                    "flex gap-3 rounded-lg border p-3 text-left transition-colors",
-                    selected ? "border-accent-strong bg-accent-subtle" : "border-subtle hover:bg-layer-2-hover"
-                  )}
-                >
-                  <span
+          <div>
+            <div className="mb-2 text-13 font-semibold text-primary">谁能看到</div>
+            <div className="grid grid-cols-2 gap-1 rounded-lg bg-layer-1 p-1" role="radiogroup" aria-label="谁能看到">
+              {ACCESS_OPTIONS.map((option) => {
+                const selected = access === option.value;
+                const Icon = option.icon;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    onClick={() => setAccess(option.value)}
                     className={cn(
-                      "mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-full border",
-                      selected ? "border-accent-strong bg-accent-primary" : "border-strong"
+                      "flex h-9 items-center justify-center gap-2 rounded-md text-13 transition-colors",
+                      selected
+                        ? "bg-surface-1 font-semibold text-primary shadow-raised-100"
+                        : "font-medium text-secondary hover:text-primary"
                     )}
                   >
-                    {selected && <Check className="h-2.5 w-2.5 text-on-color" strokeWidth={3} />}
-                  </span>
-                  <span className="flex min-w-0 flex-col gap-1">
-                    <span className="flex items-center gap-1.5 text-sm font-semibold text-primary">
-                      <Icon className={cn("h-3.5 w-3.5", selected ? "text-accent-primary" : "text-tertiary")} />
-                      {option.label}
-                    </span>
-                    <span className="text-xs leading-relaxed text-tertiary">{option.description}</span>
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {mode === "create" && summary && summary.length > 0 && (
-          <div className="px-6 pt-5">
-            <div className="mb-2 text-sm font-semibold text-secondary">这个视图会记住</div>
-            <div className="divide-y divide-subtle rounded-lg border border-subtle bg-surface-2">
-              {summary.map((row) => (
-                <div key={row.label} className="flex items-start gap-2.5 px-3.5 py-2.5 text-sm">
-                  <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent-primary" />
-                  <span className="w-20 shrink-0 font-semibold text-primary">{row.label}</span>
-                  <span className="min-w-0 text-secondary">{row.text}</span>
-                </div>
-              ))}
+                    <Icon className="size-4 shrink-0" />
+                    {option.label}
+                  </button>
+                );
+              })}
             </div>
           </div>
-        )}
 
-        <div className="mx-6 mt-5 flex items-center justify-between rounded-lg border border-subtle px-3.5 py-3">
-          <div className="flex flex-col gap-0.5">
-            <span className="text-sm font-semibold text-primary">设为我的默认视图</span>
-            <span className="text-xs text-tertiary">以后打开{pageLabel}页直接落在这个视图</span>
-          </div>
-          <ToggleSwitch value={isDefault} onChange={setIsDefault} size="md" />
+          {mode === "create" && summary && summary.length > 0 && (
+            <div>
+              <div className="mb-2 text-13 font-semibold text-primary">会记住这些设置</div>
+              <div className="rounded-lg border border-subtle bg-surface-2">
+                {summary.map((row) => (
+                  <SummaryRow key={row.kind} row={row} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          <label htmlFor="in-page-view-default" className="flex w-fit cursor-pointer items-center gap-2.5">
+            <Checkbox
+              id="in-page-view-default"
+              checked={isDefault}
+              onChange={(event) => setIsDefault(event.target.checked)}
+            />
+            <span className="text-13 text-primary">设为我的默认视图</span>
+          </label>
         </div>
 
-        <div className="flex justify-end gap-2.5 px-6 pb-5 pt-5">
+        <div className="flex justify-end gap-2.5 px-6 pt-6.5 pb-5.5">
           <Button variant="secondary" size="xl" type="button" onClick={onClose}>
             取消
           </Button>

@@ -1,12 +1,18 @@
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Globe, MoreHorizontal, Plus, SlidersHorizontal, User } from "lucide-react";
 import type { ReactNode } from "react";
+import { Check, ChevronDown, Copy, Layers, Plus, SlidersHorizontal, Star } from "lucide-react";
 import { Button } from "@plane/propel/button";
-import { EViewAccess } from "@plane/types";
 import type { IProjectView } from "@plane/types";
+import { CustomMenu, Tooltip } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { MoreViewsPopover } from "./more-views-popover";
-import { ViewActionsMenu } from "./view-actions-menu";
+import {
+  VIEW_MENU_ITEM_CLASS,
+  VIEW_MENU_OPTIONS_CLASS,
+  ViewActionsMenu,
+  ViewMenuSeparator,
+} from "./view-actions-menu";
+import { getViewTabClassName, ViewLayoutIcon, ViewTabContent } from "./view-tab-parts";
 
 type TViewTabsBarProps = {
   allLabel: string;
@@ -35,48 +41,59 @@ type TViewTabsBarProps = {
   onManage: () => void;
 };
 
-/** 右侧「更多 / 新建视图」要占的宽度，量页签时先扣掉 */
-const RESERVED_WIDTH = 230;
+/** 右侧「更多 / 新建」要占的宽度，量页签时先扣掉 */
+const RESERVED_WIDTH = 150;
+/** 页签之间的 gap-1 */
+const TAB_GAP = 4;
 
-const ViewIcon = ({ view, className }: { view: IProjectView; className?: string }) =>
-  view.access === EViewAccess.PUBLIC ? (
-    <Globe className={cn("h-3.5 w-3.5 shrink-0", className)} />
-  ) : (
-    <User className={cn("h-3.5 w-3.5 shrink-0", className)} />
-  );
+const allIcon = (isActive: boolean) => (
+  <Layers className={cn("size-3.5 shrink-0", isActive ? "text-accent-primary" : "text-tertiary")} />
+);
 
-type TTabProps = {
-  label: string;
-  view?: IProjectView;
-  isActive?: boolean;
-  isDirty?: boolean;
-  onClick?: () => void;
-  menu?: ReactNode;
-  /** 隐藏量宽行里的副本：不可聚焦、不可点 */
-  isGhost?: boolean;
+const viewIcon = (view: IProjectView, isActive: boolean) => (
+  <ViewLayoutIcon view={view} className={isActive ? "text-accent-primary" : "text-tertiary"} />
+);
+
+type TSaveSplitButtonProps = {
+  viewName: string;
+  canCreate: boolean;
+  onSave: () => void;
+  onSaveAs: () => void;
 };
 
-const Tab = ({ label, view, isActive = false, isDirty = false, onClick, menu, isGhost = false }: TTabProps) => (
-  <div className={cn("relative flex h-[42px] shrink-0 items-center", isActive ? "text-primary" : "text-secondary")}>
+/** 「保存视图 ▾」：主按钮存回当前视图，▾ 里还有另存为 */
+const SaveSplitButton = ({ viewName, canCreate, onSave, onSaveAs }: TSaveSplitButtonProps) => (
+  <div className="flex h-8 shrink-0 overflow-hidden rounded-md">
     <button
       type="button"
-      onClick={onClick}
-      tabIndex={isGhost ? -1 : undefined}
-      disabled={isGhost}
+      onClick={onSave}
       className={cn(
-        "flex h-full items-center gap-1.5 pl-3 text-sm whitespace-nowrap",
-        menu ? "pr-1" : "pr-3",
-        isActive ? "font-semibold" : "font-medium hover:text-primary"
+        "bg-accent-primary px-4 text-13 font-semibold whitespace-nowrap text-on-color hover:bg-accent-primary-hover",
+        !canCreate && "rounded-md"
       )}
     >
-      {view && <ViewIcon view={view} className={isActive ? "text-accent-primary" : "text-tertiary"} />}
-      <span className="max-w-[180px] truncate">{label}</span>
-      {isActive && isDirty && (
-        <span className="ml-0.5 h-2 w-2 shrink-0 rounded-full bg-accent-primary" aria-label="有未保存的更改" />
-      )}
+      保存视图
     </button>
-    {menu}
-    {isActive && <span className="absolute inset-x-2.5 bottom-0 h-0.5 rounded-full bg-accent-primary" />}
+    {canCreate && (
+      <CustomMenu
+        placement="bottom-end"
+        customButton={<ChevronDown className="size-3.5" />}
+        customButtonClassName="grid h-8 w-7.5 place-items-center border-l border-accent-subtle bg-accent-primary text-on-color hover:bg-accent-primary-hover"
+        ariaLabel="更多保存方式"
+        optionsClassName={VIEW_MENU_OPTIONS_CLASS}
+        maxHeight="lg"
+        closeOnSelect
+      >
+        <CustomMenu.MenuItem className={VIEW_MENU_ITEM_CLASS} onClick={onSave}>
+          <Check className="size-4 shrink-0 text-tertiary" />
+          <span className="truncate">保存到「{viewName}」</span>
+        </CustomMenu.MenuItem>
+        <CustomMenu.MenuItem className={VIEW_MENU_ITEM_CLASS} onClick={onSaveAs}>
+          <Copy className="size-4 shrink-0 text-tertiary" />
+          另存为新视图…
+        </CustomMenu.MenuItem>
+      </CustomMenu>
+    )}
   </div>
 );
 
@@ -113,6 +130,7 @@ export const ViewTabsBar = (props: TViewTabsBarProps) => {
   // state
   const [visibleCount, setVisibleCount] = useState(views.length);
   // derived values
+  const isAllActive = activeViewId === null;
   const activeBarIndex = views.findIndex((view) => view.id === activeViewId);
   /** 当前视图收在「更多」里（不在页签栏的名单上），量宽行要多量它一份 */
   const activeOutsideBar = activeView && activeBarIndex === -1 ? activeView : null;
@@ -129,8 +147,8 @@ export const ViewTabsBar = (props: TViewTabsBarProps) => {
         let used = 0;
         let count = 0;
         for (const width of barWidths) {
-          if (used + width > available) break;
-          used += width;
+          if (used + width + TAB_GAP > available) break;
+          used += width + TAB_GAP;
           count += 1;
         }
         return count;
@@ -138,7 +156,8 @@ export const ViewTabsBar = (props: TViewTabsBarProps) => {
       const base = container.clientWidth - (widths[0] ?? 0) - RESERVED_WIDTH;
       let count = fit(base);
       if (activeViewId && (activeBarIndex === -1 || activeBarIndex >= count)) {
-        const activeWidth = activeBarIndex === -1 ? (widths[1 + views.length] ?? 0) : barWidths[activeBarIndex];
+        const activeWidth =
+          (activeBarIndex === -1 ? (widths[1 + views.length] ?? 0) : barWidths[activeBarIndex]) + TAB_GAP;
         count = fit(base - activeWidth);
       }
       setVisibleCount(count);
@@ -147,7 +166,7 @@ export const ViewTabsBar = (props: TViewTabsBarProps) => {
     const observer = new ResizeObserver(() => compute());
     observer.observe(container);
     return () => observer.disconnect();
-  }, [views, allLabel, activeViewId, activeBarIndex, activeOutsideBar]);
+  }, [views, allLabel, activeViewId, activeBarIndex, activeOutsideBar, isDirty]);
 
   const { stripViews, extraView, overflowViews } = useMemo(() => {
     const strip = views.slice(0, visibleCount);
@@ -165,120 +184,161 @@ export const ViewTabsBar = (props: TViewTabsBarProps) => {
     [overflowViews, hiddenViews, activeViewId]
   );
 
-  const renderActiveMenu = (view: IProjectView) => (
-    <ViewActionsMenu
-      view={view}
-      isDefault={defaultViewId === view.id}
-      isInBar={isViewInBar(view)}
-      canEdit={canEditView(view)}
-      canDelete={canDeleteView(view)}
-      canCreate={canCreate}
-      customButton={<MoreHorizontal className="h-3.5 w-3.5" />}
-      customButtonClassName="mr-2 grid h-5 w-5 place-items-center rounded text-tertiary hover:bg-layer-2-hover hover:text-primary"
-      onRename={onRename}
-      onDuplicate={onDuplicate}
-      onToggleAccess={onToggleAccess}
-      onSetDefault={onSetDefault}
-      onToggleInBar={onToggleInBar}
-      onDelete={onDelete}
-    />
-  );
-
+  /** 当前页签（没改动时）点开就是它的菜单 */
   const renderViewTab = (view: IProjectView) => {
     const isActive = view.id === activeViewId;
+    if (isActive && !isDirty)
+      return (
+        <ViewActionsMenu
+          key={view.id}
+          view={view}
+          ownerName={getOwnerName(view.owned_by)}
+          isDefault={defaultViewId === view.id}
+          isInBar={isViewInBar(view)}
+          canEdit={canEditView(view)}
+          canDelete={canDeleteView(view)}
+          canCreate={canCreate}
+          className="shrink-0"
+          customButton={<ViewTabContent icon={viewIcon(view, true)} label={view.name} withChevron />}
+          customButtonClassName={getViewTabClassName(true)}
+          onRename={onRename}
+          onDuplicate={onDuplicate}
+          onToggleAccess={onToggleAccess}
+          onSetDefault={onSetDefault}
+          onToggleInBar={onToggleInBar}
+          onDelete={onDelete}
+          onManage={onManage}
+        />
+      );
     return (
-      <Tab
+      <button
         key={view.id}
-        label={view.name}
-        view={view}
-        isActive={isActive}
-        isDirty={isDirty}
+        type="button"
         onClick={() => onSelect(view.id)}
-        menu={isActive && !isDirty ? renderActiveMenu(view) : undefined}
-      />
+        className={getViewTabClassName(isActive)}
+      >
+        <ViewTabContent icon={viewIcon(view, isActive)} label={view.name} isDirty={isActive && isDirty} />
+      </button>
     );
   };
+
+  const renderAllTab = () => {
+    if (isAllActive && !isDirty)
+      return (
+        <CustomMenu
+          className="shrink-0"
+          customButton={<ViewTabContent icon={allIcon(true)} label={allLabel} withChevron />}
+          customButtonClassName={getViewTabClassName(true)}
+          placement="bottom-start"
+          optionsClassName={VIEW_MENU_OPTIONS_CLASS}
+          maxHeight="lg"
+          closeOnSelect
+        >
+          <div className="px-2.5 pt-1.5 pb-2 text-14 font-semibold text-primary">{allLabel}</div>
+          <ViewMenuSeparator />
+          <CustomMenu.MenuItem
+            className={VIEW_MENU_ITEM_CLASS}
+            onClick={() => defaultViewId !== null && onSetDefault(null)}
+          >
+            <Star className={cn("size-4 shrink-0", defaultViewId === null ? "fill-current text-warning-primary" : "text-tertiary")} />
+            <span className="flex-1">{defaultViewId === null ? "我的默认视图" : "设为我的默认视图"}</span>
+            {defaultViewId === null && <Check className="size-4 shrink-0 text-accent-primary" />}
+          </CustomMenu.MenuItem>
+          <CustomMenu.MenuItem className={VIEW_MENU_ITEM_CLASS} onClick={onManage}>
+            <SlidersHorizontal className="size-4 shrink-0 text-tertiary" />
+            管理全部视图…
+          </CustomMenu.MenuItem>
+        </CustomMenu>
+      );
+    return (
+      <button type="button" onClick={() => onSelect(null)} className={getViewTabClassName(isAllActive)}>
+        <ViewTabContent icon={allIcon(isAllActive)} label={allLabel} isDirty={isAllActive && isDirty} />
+      </button>
+    );
+  };
+
+  /** 量宽行里的副本：样式与真页签一致（当前页签带 ▾ 或改动点） */
+  const renderGhost = (key: string, label: string, isActive: boolean, icon: ReactNode) => (
+    <span key={key} className={getViewTabClassName(isActive)}>
+      <ViewTabContent icon={icon} label={label} isDirty={isActive && isDirty} withChevron={isActive && !isDirty} />
+    </span>
+  );
 
   return (
     <div
       data-view-tabs
-      className="relative flex h-[42px] shrink-0 items-center border-b border-subtle bg-surface-1 pl-2 pr-2"
+      className="relative flex h-12 shrink-0 items-center gap-2 border-b border-subtle bg-surface-1 px-4"
     >
       {/* 隐藏的量宽行 */}
       <div
         ref={measureRef}
         aria-hidden
-        className="pointer-events-none absolute left-0 top-0 flex h-0 items-center overflow-hidden opacity-0"
+        className="pointer-events-none absolute top-0 left-0 flex h-0 items-center gap-1 overflow-hidden opacity-0"
       >
-        <Tab label={allLabel} isGhost />
-        {views.map((view) => (
-          <Tab key={view.id} label={view.name} view={view} isGhost />
-        ))}
-        {activeOutsideBar && <Tab label={activeOutsideBar.name} view={activeOutsideBar} isGhost />}
+        {renderGhost("all", allLabel, isAllActive, allIcon(isAllActive))}
+        {views.map((view) => renderGhost(view.id, view.name, view.id === activeViewId, viewIcon(view, false)))}
+        {activeOutsideBar && renderGhost("extra", activeOutsideBar.name, true, viewIcon(activeOutsideBar, true))}
       </div>
 
-      <div ref={containerRef} data-view-tabs-strip className="flex min-w-0 flex-1 items-center overflow-hidden">
-        <Tab label={allLabel} isActive={activeViewId === null} isDirty={isDirty} onClick={() => onSelect(null)} />
+      <div ref={containerRef} data-view-tabs-strip className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
+        {renderAllTab()}
         {stripViews.map(renderViewTab)}
         {extraView && (
           <>
-            <span className="mx-1 h-4 w-px shrink-0 bg-border-subtle" />
+            <span className="mx-1 h-4 w-px shrink-0 bg-layer-3" />
             {renderViewTab(extraView)}
           </>
         )}
         {moreViews.length > 0 && (
           <MoreViewsPopover
             views={moreViews}
+            canCreate={canCreate}
+            isViewInBar={isViewInBar}
             getOwnerName={getOwnerName}
             onSelect={onSelect}
+            onToggleInBar={onToggleInBar}
             onManage={onManage}
+            onCreate={onCreate}
           />
         )}
         {canCreate && (
           <>
-            <span className="mx-1 h-4 w-px shrink-0 bg-border-subtle" />
-            <button
-              type="button"
-              onClick={onCreate}
-              className="flex h-[42px] shrink-0 items-center gap-1 px-2.5 text-sm font-medium whitespace-nowrap text-accent-primary hover:opacity-80"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              新建视图
-            </button>
+            <span className="mx-1.5 h-[18px] w-px shrink-0 bg-layer-3" />
+            <Tooltip tooltipContent="新建视图">
+              <button
+                type="button"
+                onClick={onCreate}
+                className="grid size-8 shrink-0 place-items-center rounded-lg text-secondary hover:bg-layer-transparent-hover hover:text-primary"
+                aria-label="新建视图"
+              >
+                <Plus className="size-4" />
+              </button>
+            </Tooltip>
           </>
         )}
       </div>
 
-      {isDirty ? (
-        <div className="flex shrink-0 items-center gap-2 pl-3">
-          <span className="hidden items-center gap-1.5 text-xs text-tertiary whitespace-nowrap xl:flex">
-            <span className="h-2 w-2 rounded-full bg-accent-primary" />
-            {activeView ? `「${activeView.name}」有未保存的更改` : "当前筛选还没有存成视图"}
-          </span>
+      {isDirty && (
+        <div className="flex shrink-0 items-center gap-2">
+          <span className="hidden text-13 whitespace-nowrap text-warning-primary xl:inline">未保存的更改</span>
           <Button variant="ghost" size="lg" onClick={onDiscard}>
             放弃
           </Button>
-          {canCreate && (
-            <Button variant="secondary" size="lg" onClick={onCreate}>
-              另存为新视图
-            </Button>
-          )}
-          {activeView && canSaveActive && (
-            <Button variant="primary" size="lg" onClick={onSaveActive}>
-              保存视图
-            </Button>
+          {activeView && canSaveActive ? (
+            <SaveSplitButton
+              viewName={activeView.name}
+              canCreate={canCreate}
+              onSave={onSaveActive}
+              onSaveAs={onCreate}
+            />
+          ) : (
+            canCreate && (
+              <Button variant="primary" size="lg" onClick={onCreate}>
+                {activeView ? "另存为新视图" : "存为新视图"}
+              </Button>
+            )
           )}
         </div>
-      ) : (
-        <Button
-          variant="ghost"
-          size="lg"
-          className="shrink-0"
-          prependIcon={<SlidersHorizontal />}
-          onClick={onManage}
-        >
-          管理视图
-        </Button>
       )}
     </div>
   );

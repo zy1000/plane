@@ -16,8 +16,12 @@ export type TSaveViewInput = {
 };
 
 export type TViewSummaryRow = {
+  /** 决定行首图标 */
+  kind: "filters" | "layout" | "properties";
   label: string;
   text: string;
+  /** 筛选行：用到的属性名 */
+  chips?: string[];
 };
 
 export type TViewTabsParams = {

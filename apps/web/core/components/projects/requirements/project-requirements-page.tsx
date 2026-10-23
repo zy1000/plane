@@ -32,7 +32,7 @@ import { ProjectRequirementModuleSidebar } from "@/components/requirements/modul
 import { RequirementPeekOverview } from "@/components/requirements/requirement-detail";
 import { FiltersRow } from "@/components/rich-filters/filters-row";
 import { FiltersToggle } from "@/components/rich-filters/filters-toggle";
-import { ViewTabsRoot, countFilterConditions } from "@/components/views/in-page";
+import { ViewTabsRoot, getFilterPropertyLabels, getFilterSummaryRow } from "@/components/views/in-page";
 import type { TViewSnapshot, TViewSummaryRow } from "@/components/views/in-page";
 import { useProducts } from "@/hooks/store/use-products";
 import { useProject } from "@/hooks/store/use-project";
@@ -251,16 +251,18 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
     [filter, setHiddenColumns]
   );
 
-  const getViewSummary = useCallback((snapshot: TViewSnapshot): TViewSummaryRow[] => {
-    const conditionCount = countFilterConditions(snapshot.rich_filters);
-    const hidden = (snapshot.display_properties as unknown as TRequirementViewDisplayProperties | undefined)
-      ?.hidden_columns;
-    const visibleCount = TOGGLEABLE_COLUMNS.length - (hidden?.length ?? 0);
-    return [
-      { label: "筛选条件", text: conditionCount > 0 ? `${conditionCount} 条` : "无（看全部）" },
-      { label: "显示列", text: `${visibleCount} 列` },
-    ];
-  }, []);
+  const getViewSummary = useCallback(
+    (snapshot: TViewSnapshot): TViewSummaryRow[] => {
+      const hidden = (snapshot.display_properties as unknown as TRequirementViewDisplayProperties | undefined)
+        ?.hidden_columns;
+      const visibleCount = TOGGLEABLE_COLUMNS.length - (hidden?.length ?? 0);
+      return [
+        getFilterSummaryRow(snapshot.rich_filters, getFilterPropertyLabels(filter)),
+        { kind: "properties", label: "显示列", text: `${visibleCount} 列` },
+      ];
+    },
+    [filter]
+  );
 
   const urlPeekRequirementId = searchParams.get("peek");
   const [peekRequirementId, setPeekRequirement] = useState<string | null>(urlPeekRequirementId);
@@ -443,7 +445,6 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
           projectId={project}
           scope="requirements"
           allLabel="全部需求"
-          pageLabel="需求"
           current={currentViewSnapshot}
           apply={applyViewSnapshot}
           compareKeys={["rich_filters", "display_properties"]}

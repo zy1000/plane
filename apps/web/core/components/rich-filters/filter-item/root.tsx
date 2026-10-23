@@ -107,6 +107,8 @@ export const FilterItem = observer(function FilterItem<P extends TFilterProperty
         )}
         optionsClassName="w-48"
         maxHeight="2xl"
+        searchPlaceholder="搜索"
+        noResultsMessage="没有匹配项"
         disabled={isOperatorSelectionDisabled}
         customButton={
           <div className="flex h-full items-center" aria-disabled={isOperatorSelectionDisabled}>

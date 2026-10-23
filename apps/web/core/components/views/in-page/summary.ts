@@ -1,5 +1,10 @@
+import type { IFilterInstance } from "@plane/shared-state";
 import { LOGICAL_OPERATOR } from "@plane/types";
+import type { TExternalFilter, TFilterProperty } from "@plane/types";
 import type { TViewSnapshot, TViewSummaryRow } from "./types";
+
+/** 显示字段一行最多列出的个数，多的写「等 N 项」 */
+const MAX_LISTED_PROPERTIES = 4;
 
 const DISPLAY_PROPERTY_LABELS: Record<string, string> = {
   key: "编号",
@@ -66,9 +71,30 @@ export const countFilterConditions = (expression: unknown): number => {
   return Object.keys(record).length > 0 ? 1 : 0;
 };
 
-/** 工作项 / 缺陷页「保存为视图」弹窗里的摘要 */
-export const getWorkItemViewSummary = (snapshot: TViewSnapshot): TViewSummaryRow[] => {
-  const conditionCount = countFilterConditions(snapshot.rich_filters);
+/** 当前筛选用到的属性名（去重，按出现顺序），给「会记住这些设置」的筛选行 */
+export const getFilterPropertyLabels = <P extends TFilterProperty, E extends TExternalFilter>(
+  filter: IFilterInstance<P, E> | undefined
+): string[] => {
+  if (!filter) return [];
+  const labels = filter.allConditionsForDisplay
+    .map((condition) => filter.configManager.getConfigByProperty(condition.property)?.label)
+    .filter((label): label is string => !!label);
+  return Array.from(new Set(labels));
+};
+
+/** 筛选行：属性名做 chip，文字写条件数 */
+export const getFilterSummaryRow = (expression: unknown, filterLabels: string[]): TViewSummaryRow => {
+  const conditionCount = countFilterConditions(expression);
+  return {
+    kind: "filters",
+    label: "筛选",
+    text: conditionCount > 0 ? `共 ${conditionCount} 个条件` : "无，看全部",
+    chips: conditionCount > 0 ? filterLabels : [],
+  };
+};
+
+/** 工作项 / 缺陷页「存为视图」弹窗里的摘要 */
+export const getWorkItemViewSummary = (snapshot: TViewSnapshot, filterLabels: string[] = []): TViewSummaryRow[] => {
   const properties = Object.entries(snapshot.display_properties ?? {})
     .filter(([, enabled]) => enabled)
     .map(([key]) => DISPLAY_PROPERTY_LABELS[key] ?? key);
@@ -77,14 +103,21 @@ export const getWorkItemViewSummary = (snapshot: TViewSnapshot): TViewSummaryRow
   const orderBy = displayFilters.order_by as string | undefined;
   const layout = displayFilters.layout as string | undefined;
   const arrangement = [
+    layout ? (LAYOUT_LABELS[layout] ?? layout) : null,
     groupBy ? `按${GROUP_BY_LABELS[groupBy] ?? groupBy}分组` : "不分组",
     orderBy ? `按${ORDER_BY_LABELS[orderBy] ?? orderBy}排序` : null,
-    layout ? `${LAYOUT_LABELS[layout] ?? layout}布局` : null,
   ].filter(Boolean);
+  const listed = properties.slice(0, MAX_LISTED_PROPERTIES).join("、");
+  const propertiesText =
+    properties.length === 0
+      ? "全部"
+      : properties.length > MAX_LISTED_PROPERTIES
+        ? `${listed} 等 ${properties.length} 项`
+        : listed;
 
   return [
-    { label: "筛选条件", text: conditionCount > 0 ? `${conditionCount} 条` : "无（看全部）" },
-    { label: "显示字段", text: properties.length > 0 ? properties.join("、") : "全部" },
-    { label: "分组与排序", text: arrangement.join(" · ") },
+    getFilterSummaryRow(snapshot.rich_filters, filterLabels),
+    { kind: "layout", label: "布局", text: arrangement.join(" · ") },
+    { kind: "properties", label: "显示字段", text: propertiesText },
   ];
 };

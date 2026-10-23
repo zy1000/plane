@@ -53,7 +53,7 @@ export const AddFilterDropdown = observer(function AddFilterDropdown<
     ? [
         {
           value: "all_filters_applied",
-          content: <div className="text-placeholder italic">All filters applied</div>,
+          content: <div className="text-placeholder italic">已添加全部筛选条件</div>,
           query: "all filters applied",
           disabled: true,
         },
@@ -87,6 +87,8 @@ export const AddFilterDropdown = observer(function AddFilterDropdown<
         disabled={isDisabled}
         customButtonClassName={className}
         customButton={customButton}
+        searchPlaceholder="搜索"
+        noResultsMessage="没有匹配项"
       />
     </div>
   );

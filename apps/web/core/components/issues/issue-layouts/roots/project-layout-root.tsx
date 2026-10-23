@@ -14,7 +14,7 @@ import { EIssueLayoutTypes, EIssuesStoreType } from "@plane/types";
 import type { TWorkItemFilterExpression } from "@plane/types";
 import { Spinner } from "@plane/ui";
 // components
-import { ViewTabsRoot, getWorkItemViewSummary } from "@/components/views/in-page";
+import { ViewTabsRoot, getFilterPropertyLabels, getWorkItemViewSummary } from "@/components/views/in-page";
 import type { TViewSnapshot } from "@/components/views/in-page";
 import { ProjectLevelWorkItemFiltersHOC } from "@/components/work-item-filters/filters-hoc/project-level";
 import { WorkItemFiltersRow } from "@/components/work-item-filters/filters-row";
@@ -143,10 +143,11 @@ export const ProjectLayoutRoot = observer(function ProjectLayoutRoot() {
               projectId={projectId}
               scope="issues"
               allLabel="全部工作项"
-              pageLabel="工作项"
               current={currentViewSnapshot}
               apply={applyViewSnapshot}
-              getSummary={getWorkItemViewSummary}
+              getSummary={(snapshot) =>
+                getWorkItemViewSummary(snapshot, getFilterPropertyLabels(projectWorkItemsFilter))
+              }
             />
             {projectWorkItemsFilter && (
               <WorkItemFiltersRow

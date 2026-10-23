@@ -72,6 +72,8 @@ interface CustomSearchSelectProps {
   onChange: any;
   onClose?: () => void;
   noResultsMessage?: string;
+  /** 下拉里搜索框的占位文字 */
+  searchPlaceholder?: string;
   options?: ICustomSearchSelectOption[];
 }
 

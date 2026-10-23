@@ -25,7 +25,7 @@ import { BaseGanttRoot } from "@/components/issues/issue-layouts/gantt";
 import { KanBanLayout } from "@/components/issues/issue-layouts/kanban/roots/project-root";
 import { ListLayout } from "@/components/issues/issue-layouts/list/roots/project-root";
 import { ProjectSpreadsheetLayout } from "@/components/issues/issue-layouts/spreadsheet/roots/project-root";
-import { ViewTabsRoot, getWorkItemViewSummary } from "@/components/views/in-page";
+import { ViewTabsRoot, getFilterPropertyLabels, getWorkItemViewSummary } from "@/components/views/in-page";
 import type { TViewSnapshot } from "@/components/views/in-page";
 // hooks
 import { useIssues } from "@/hooks/store/use-issues";
@@ -466,12 +466,13 @@ export const DefectListRoot = observer(function DefectListRoot() {
                 projectId={projectId}
                 scope="defects"
                 allLabel="全部缺陷"
-                pageLabel="缺陷"
                 current={currentViewSnapshot}
                 apply={applyViewSnapshot}
                 applyOnMount
                 ready={areDefectFiltersInitialized}
-                getSummary={getWorkItemViewSummary}
+                getSummary={(snapshot) =>
+                  getWorkItemViewSummary(snapshot, getFilterPropertyLabels(typedPageFilter))
+                }
               />
               <div className="relative flex min-h-0 w-full flex-1 overflow-hidden">
                 <DefectQuickFilterRail

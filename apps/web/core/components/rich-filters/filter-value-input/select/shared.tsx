@@ -57,4 +57,6 @@ export const getCommonCustomSearchSelectProps = (isDisabled?: boolean) => ({
   ),
   optionsClassName: "w-56",
   maxHeight: "md" as const,
+  searchPlaceholder: "搜索",
+  noResultsMessage: "没有匹配项",
 });

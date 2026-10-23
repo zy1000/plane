@@ -167,6 +167,7 @@ export function CustomSearchSelect(props: ICustomSearchSelectProps) {
     value,
     tabIndex,
     noResultsMessage = "No matches found",
+    searchPlaceholder = "Search",
     defaultOpen = false,
   } = props;
   const listboxId = useId();
@@ -363,7 +364,7 @@ export function CustomSearchSelect(props: ICustomSearchSelectProps) {
                   setActive({ index: null, source: "initial" });
                 }}
                 onKeyDown={handleInputKeyDown}
-                placeholder="Search"
+                placeholder={searchPlaceholder}
               />
             </div>
             {filteredOptions ? (
