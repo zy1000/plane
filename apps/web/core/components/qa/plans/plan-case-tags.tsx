@@ -59,3 +59,17 @@ export const PlanCaseResultTag = ({ value, colors }: TPlanCaseTagProps) => (
 export const PlanCaseReviewStatusTag = ({ value, colors }: TPlanCaseTagProps) => (
   <PlanCaseTag value={value} colors={colors} fallback={PLAN_CASE_REVIEW_STATUS_COLOR_MAP} />
 );
+
+/** 计划状态配色：未开始灰、进行中品牌蓝、已完成绿 */
+const PLAN_STATE_COLOR_CLASS: Record<string, string> = {
+  未开始: TAG_COLOR_CLASS.gray,
+  进行中: TAG_COLOR_CLASS.blue,
+  已完成: TAG_COLOR_CLASS.green,
+};
+
+/** 计划状态标签：计划列表与计划用例页实体栏共用 */
+export const PlanStateTag = ({ state }: { state?: string | null }) => {
+  if (!state) return null;
+  const colorClass = PLAN_STATE_COLOR_CLASS[state] ?? PLAN_STATE_COLOR_CLASS["未开始"];
+  return <span className={`${TAG_BASE_CLASS} ${colorClass}`}>{state}</span>;
+};

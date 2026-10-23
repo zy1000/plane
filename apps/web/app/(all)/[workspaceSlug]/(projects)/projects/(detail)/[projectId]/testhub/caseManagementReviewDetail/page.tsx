@@ -4,7 +4,10 @@ import { useParams, useSearchParams, useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useMemo } from "react";
 import { PageHead } from "@/components/core/page-title";
 import { Breadcrumbs } from "@plane/ui";
-import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
+import { ChevronDownIcon } from "@plane/propel/icons";
+import { ClipboardCheck } from "lucide-react";
+import { TestHubEntityBar } from "@/components/qa/shared/testhub-entity-bar";
+import { TestHubHeaderActions } from "@/components/qa/shared/testhub-header-actions";
 import { Pagination, Popconfirm, Select } from "antd";
 import { CaseService as CaseApiService } from "@/services/qa/case.service";
 import { CaseService as ReviewApiService, type ReviewCaseListItem } from "@/services/qa/review.service";
@@ -533,71 +536,61 @@ export default function CaseManagementReviewDetailPage() {
       <div className="h-full w-full">
         <PageHead title="评审详情" />
         <div className="flex h-full w-full flex-col">
-          {/* 页头横跨整行，左栏与表格从它下面开始，两者等高（与计划详情页一致） */}
-          <div className="flex flex-shrink-0 items-center justify-between border-b border-subtle px-3 pt-2 pb-2">
-            <div>
-              <Breadcrumbs className="grow-0">
-                <Breadcrumbs.Item
-                  component={
-                    <BreadcrumbLink
-                      href={`/${workspaceSlug}/projects/${projectId}/testhub/reviews`}
-                      label="用例评审"
-                    />
-                  }
-                />
-                <Breadcrumbs.Item
-                  component={
-                    <Breadcrumbs.ItemWrapper className="min-w-0 !cursor-pointer !gap-2 !px-1.5 !py-1 !text-sm !font-medium !text-secondary hover:!bg-layer-1 hover:!text-primary">
-                      <Select
-                        value={reviewId || undefined}
-                        placeholder="选择评审"
-                        loading={reviewListLoading}
-                        showSearch
-                        optionFilterProp="label"
-                        className="h-full min-w-[200px] max-w-[240px] !cursor-pointer [&_.ant-select-selection-item]:!max-w-[180px] [&_.ant-select-selection-item]:!truncate [&_.ant-select-selection-item]:!text-inherit [&_.ant-select-selection-item]:!text-sm [&_.ant-select-selection-item]:!font-medium [&_.ant-select-selection-item]:!leading-4 [&_.ant-select-selection-placeholder]:!text-inherit [&_.ant-select-selection-placeholder]:!text-sm [&_.ant-select-selection-placeholder]:!font-medium [&_.ant-select-selection-placeholder]:!leading-4 [&_.ant-select-selection-search]:!h-full [&_.ant-select-selection-search-input]:!h-full [&_.ant-select-selection-search-input]:!text-sm [&_.ant-select-selection-wrap]:!flex [&_.ant-select-selection-wrap]:!h-full [&_.ant-select-selection-wrap]:!items-center [&_.ant-select-selector]:!h-full [&_.ant-select-selector]:!min-h-0 [&_.ant-select-selector]:!cursor-pointer [&_.ant-select-selector]:!items-center [&_.ant-select-selector]:!bg-transparent [&_.ant-select-selector]:!p-0 [&_.ant-select-selector]:!shadow-none"
-                        variant="borderless"
-                        suffixIcon={null}
-                        showArrow={false}
-                        options={reviewList.map((r) => ({ value: String(r.id), label: String(r.name || "-") }))}
-                        onChange={onChangeReview}
-                      />
-                    </Breadcrumbs.ItemWrapper>
-                  }
-                />
-              </Breadcrumbs>
-            </div>
-            <div className="flex items-center gap-2">
-              <CasesSearchInput
-                value={filters.search ?? ""}
-                onSearch={(query) => {
-                  const trimmedQuery = query.trim();
-                  const nextFilters: TReviewCaseListFilters = { ...filters };
-                  if (trimmedQuery) nextFilters.search = trimmedQuery;
-                  else delete nextFilters.search;
-                  setFilters(nextFilters);
-                  fetchReviewCaseList(1, pageSize, { filtersParam: nextFilters });
-                }}
-              />
-              <FiltersToggle filter={reviewCaseFilter} triggerClassName="h-8 w-8" iconButtonSize="xl" />
-              <ReviewCaseDisplayFilters
-                displayProperties={reviewCaseDisplayProperties}
-                ordering={ordering}
-                onDisplayPropertiesChange={handleDisplayPropertiesUpdate}
-                onOrderByChange={handleSortChange}
-              />
-              <button
-                type="button"
-                disabled={!canEditReview}
-                onClick={() => {
-                  if (!canEditReview) return;
-                  setIsCaseSelectionOpen(true);
-                }}
-                className="flex items-center justify-center gap-1.5 rounded bg-accent-primary px-3 py-1.5 text-xs font-medium whitespace-nowrap text-on-color transition-all hover:bg-accent-primary-hover focus:bg-accent-primary-hover focus:text-on-color disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                关联用例
-              </button>
-            </div>
-          </div>
+          {/* 本页操作 portal 到页签行右侧；实体栏只放评审切换 */}
+          <TestHubHeaderActions>
+            <CasesSearchInput
+              value={filters.search ?? ""}
+              onSearch={(query) => {
+                const trimmedQuery = query.trim();
+                const nextFilters: TReviewCaseListFilters = { ...filters };
+                if (trimmedQuery) nextFilters.search = trimmedQuery;
+                else delete nextFilters.search;
+                setFilters(nextFilters);
+                fetchReviewCaseList(1, pageSize, { filtersParam: nextFilters });
+              }}
+            />
+            <FiltersToggle filter={reviewCaseFilter} triggerClassName="h-8 w-8" iconButtonSize="xl" />
+            <ReviewCaseDisplayFilters
+              displayProperties={reviewCaseDisplayProperties}
+              ordering={ordering}
+              onDisplayPropertiesChange={handleDisplayPropertiesUpdate}
+              onOrderByChange={handleSortChange}
+            />
+            <button
+              type="button"
+              disabled={!canEditReview}
+              onClick={() => {
+                if (!canEditReview) return;
+                setIsCaseSelectionOpen(true);
+              }}
+              className="flex items-center justify-center gap-1.5 rounded bg-accent-primary px-3 py-1.5 text-xs font-medium whitespace-nowrap text-on-color transition-all hover:bg-accent-primary-hover focus:bg-accent-primary-hover focus:text-on-color disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              关联用例
+            </button>
+          </TestHubHeaderActions>
+          <TestHubEntityBar icon={<ClipboardCheck className="size-4" strokeWidth={1.75} />}>
+            <Breadcrumbs.Item
+              component={
+                <div className="flex h-full items-center">
+                  <Select
+                    value={reviewId || undefined}
+                    placeholder="选择评审"
+                    loading={reviewListLoading}
+                    size="small"
+                    showSearch
+                    optionFilterProp="label"
+                    style={{ height: "100%" }}
+                    popupMatchSelectWidth={260}
+                    className="h-full max-w-[360px] cursor-pointer [&_.ant-select-arrow]:!right-0 [&_.ant-select-arrow]:!text-tertiary [&_.ant-select-selection-item]:!max-w-[280px] [&_.ant-select-selection-item]:!truncate [&_.ant-select-selection-item]:!text-14 [&_.ant-select-selection-item]:!font-semibold [&_.ant-select-selection-item]:!leading-4 [&_.ant-select-selection-item]:!text-primary [&_.ant-select-selection-placeholder]:!text-14 [&_.ant-select-selection-placeholder]:!leading-4 [&_.ant-select-selection-placeholder]:!text-secondary [&_.ant-select-selection-search]:!h-full [&_.ant-select-selection-search-input]:!h-full [&_.ant-select-selection-search-input]:!text-14 [&_.ant-select-selection-wrap]:!flex [&_.ant-select-selection-wrap]:!h-full [&_.ant-select-selection-wrap]:!items-center [&_.ant-select-selector]:!h-full [&_.ant-select-selector]:!min-h-full [&_.ant-select-selector]:!cursor-pointer [&_.ant-select-selector]:!items-center [&_.ant-select-selector]:!bg-transparent [&_.ant-select-selector]:!py-0 [&_.ant-select-selector]:!pl-0 [&_.ant-select-selector]:!pr-5 [&_.ant-select-selector]:!shadow-none"
+                    variant="borderless"
+                    suffixIcon={<ChevronDownIcon className="size-3.5" />}
+                    options={reviewList.map((r) => ({ value: String(r.id), label: String(r.name || "-") }))}
+                    onChange={onChangeReview}
+                  />
+                </div>
+              }
+            />
+          </TestHubEntityBar>
           <div className="flex min-h-0 flex-1 overflow-hidden">
             <ModuleTreePanel
               root={{ key: "root", label: "全部用例" }}

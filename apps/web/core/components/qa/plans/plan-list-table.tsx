@@ -13,6 +13,7 @@ import { ButtonAvatars } from "@/components/dropdowns/member/avatar";
 import { useMember } from "@/hooks/store/use-member";
 import { getPlanReviewRuleLabel, type TPlanListRow } from "@/services/qa/plan.service";
 import { PlanPassRate } from "./plan-pass-rate";
+import { PlanStateTag } from "./plan-case-tags";
 
 /** 各列按比例分宽度，名称列不独占剩余空间；顺序即视觉顺序 */
 const GRID_TEMPLATE_COLUMNS =
@@ -24,13 +25,6 @@ const CELL = "flex h-full min-w-0 items-center border-r border-subtle px-3 last:
 const HEADERS = ["计划名称", "用例数", "通过率", "状态", "执行结果", "执行人", "复核人", "迭代", "发布", "计划周期"];
 
 const TAG = "inline-flex h-[22px] items-center rounded px-2 text-12 font-medium";
-
-/** 状态标签配色：未开始灰、进行中品牌蓝、已完成绿 */
-const STATE_TAG: Record<string, string> = {
-  未开始: "bg-layer-3 text-secondary",
-  进行中: "bg-accent-subtle text-accent-primary",
-  已完成: "bg-success-subtle text-success-primary",
-};
 
 /** 没有值就留空，不放占位符 */
 const Empty = () => null;
@@ -156,7 +150,7 @@ export const PlanListTable = ({ plans, canEdit, canDelete, onOpen, onEdit, onDel
               <PlanPassRate plan={plan} />
             </span>
             <span className={CELL}>
-              {plan.state ? <span className={cn(TAG, STATE_TAG[plan.state] ?? STATE_TAG["未开始"])}>{plan.state}</span> : null}
+              <PlanStateTag state={plan.state} />
             </span>
             <span className={CELL}>
               {plan.result === "通过" || plan.result === "不通过" ? (

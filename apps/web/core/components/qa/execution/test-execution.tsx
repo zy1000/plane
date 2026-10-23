@@ -6,6 +6,7 @@ import { useParams, usePathname, useRouter, useSearchParams } from "next/navigat
 import { PageHead } from "@/components/core/page-title";
 import { Breadcrumbs } from "@plane/ui";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
+import { TestHubEntityBar } from "@/components/qa/shared/testhub-entity-bar";
 import { Row, Col, Card, Input, Tag, Spin, message, Button, Table, Tooltip, Radio, Select, Modal, Checkbox, Upload, Dropdown } from "antd";
 import { DownOutlined } from "@ant-design/icons";
 import * as LucideIcons from "lucide-react";
@@ -1043,23 +1044,9 @@ export default function TestExecutionPage() {
   const StepsTable = React.memo(StepsTableBase);
 
   return (
-    <div className="flex flex-col gap-3 p-4 w-full">
+    <div className="flex w-full flex-col">
       <PageHead title="用例详情" />
-      <Breadcrumbs>
-        <Breadcrumbs.Item
-          component={
-            <BreadcrumbLink
-              href={
-                workspaceSlug && projectId
-                  ? `/${workspaceSlug}/projects/${projectId}/testhub/plans${
-                      repositoryId ? `?repositoryId=${encodeURIComponent(repositoryId)}` : ""
-                    }`
-                  : undefined
-              }
-              label="测试计划"
-            />
-          }
-        />
+      <TestHubEntityBar icon={<LucideIcons.ClipboardList className="size-4" strokeWidth={1.75} />}>
         <Breadcrumbs.Item
           component={
             <BreadcrumbLink
@@ -1074,626 +1061,628 @@ export default function TestExecutionPage() {
             />
           }
         />
-        <Breadcrumbs.Item component={<BreadcrumbLink label="用例详情" isLast />} />
-      </Breadcrumbs>
+        <Breadcrumbs.Item component={<TestHubEntityBar.Current>用例详情</TestHubEntityBar.Current>} />
+      </TestHubEntityBar>
+      <div className="flex flex-col gap-3 p-4 w-full">
 
-      <Transition show={mounted} enter="transition-opacity duration-200" enterFrom="opacity-0" enterTo="opacity-100">
-        <Row className="w-full rounded-md border border-subtle overflow-hidden" gutter={0} wrap={false}>
-          {/* 左树与右边两栏等高：Row 没定高，面板自带的 h-full 算不出值反而不拉伸，用 h-auto 盖掉让它 stretch，再靠 max-h 钉在视口内 */}
-          <ModuleTreePanel
-            className={topOffset === 180 ? "h-auto max-h-[calc(100dvh-180px)]" : "h-auto max-h-[calc(100dvh-130px)]"}
-            headerLeft={<PlanCaseGroupBySwitcher value={groupBy} disabled={!planId} onChange={handleGroupByChange} />}
-            root={{ key: "root", label: "全部用例", count: activeTree.total }}
-            nodes={activeTree.nodes}
-            selectedKey={selectedTreeKey}
-            onSelect={activeTree.onSelect}
-            expandedKeys={expandedKeys}
-            onExpandedKeysChange={setExpandedKeys}
-            loading={activeTree.loading}
-            emptyText="计划里还没有用例"
-            railLabel={treeRailLabel}
-          />
+        <Transition show={mounted} enter="transition-opacity duration-200" enterFrom="opacity-0" enterTo="opacity-100">
+          <Row className="w-full rounded-md border border-subtle overflow-hidden" gutter={0} wrap={false}>
+            {/* 左树与右边两栏等高：Row 没定高，面板自带的 h-full 算不出值反而不拉伸，用 h-auto 盖掉让它 stretch，再靠 max-h 钉在视口内 */}
+            <ModuleTreePanel
+              className={topOffset === 180 ? "h-auto max-h-[calc(100dvh-180px)]" : "h-auto max-h-[calc(100dvh-130px)]"}
+              headerLeft={<PlanCaseGroupBySwitcher value={groupBy} disabled={!planId} onChange={handleGroupByChange} />}
+              root={{ key: "root", label: "全部用例", count: activeTree.total }}
+              nodes={activeTree.nodes}
+              selectedKey={selectedTreeKey}
+              onSelect={activeTree.onSelect}
+              expandedKeys={expandedKeys}
+              onExpandedKeysChange={setExpandedKeys}
+              loading={activeTree.loading}
+              emptyText="计划里还没有用例"
+              railLabel={treeRailLabel}
+            />
 
-          <Col
-            flex="0 0 auto"
-            className="border-r border-subtle max-h-[calc(100dvh-130px)] overflow-hidden flex flex-col"
-            style={{ width: 360, minWidth: 280, maxWidth: 520, maxHeight: `calc(100dvh - ${topOffset}px)` }}
-          >
-            <div className="p-4 flex flex-col gap-3 flex-1 min-h-0">
-              <div className="flex items-center gap-3">
-                <Input.Search
-                  className="flex-1 min-w-0"
-                  placeholder="按用例名称搜索"
-                  allowClear
-                  onSearch={(v) => {
-                    setKeyword(v);
-                    debouncedSearch.cancel();
-                    fetchCases(v);
-                  }}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    setKeyword(v);
-                    if (v.trim() === "") {
+            <Col
+              flex="0 0 auto"
+              className="border-r border-subtle max-h-[calc(100dvh-130px)] overflow-hidden flex flex-col"
+              style={{ width: 360, minWidth: 280, maxWidth: 520, maxHeight: `calc(100dvh - ${topOffset}px)` }}
+            >
+              <div className="p-4 flex flex-col gap-3 flex-1 min-h-0">
+                <div className="flex items-center gap-3">
+                  <Input.Search
+                    className="flex-1 min-w-0"
+                    placeholder="按用例名称搜索"
+                    allowClear
+                    onSearch={(v) => {
+                      setKeyword(v);
                       debouncedSearch.cancel();
-                      fetchCases("");
-                    } else {
-                      debouncedSearch(v);
-                    }
-                  }}
+                      fetchCases(v);
+                    }}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setKeyword(v);
+                      if (v.trim() === "") {
+                        debouncedSearch.cancel();
+                        fetchCases("");
+                      } else {
+                        debouncedSearch(v);
+                      }
+                    }}
+                  />
+                </div>
+                <ExecutionCaseFilterBar
+                  items={executionFilterItems}
+                  activeKey={executionFilterKey}
+                  onChange={setExecutionFilterKey}
                 />
-              </div>
-              <ExecutionCaseFilterBar
-                items={executionFilterItems}
-                activeKey={executionFilterKey}
-                onChange={setExecutionFilterKey}
-              />
-              {listLoading ? (
-                <div className="flex items-center justify-center py-12">
-                  <Spin />
-                </div>
-              ) : error ? (
-                <div className="bg-red-50 border border-red-200 rounded-md p-4 mb-2">
-                  <div className="text-red-800 text-sm">{error}</div>
-                </div>
-              ) : (
-                <div className="flex flex-col gap-3 flex-1 min-h-0">
-                  <div
-                    ref={leftRef}
-                    className="flex-1 min-h-0 overflow-y-auto vertical-scrollbar scrollbar-sm flex flex-col gap-3 pr-2 pl-1 py-1"
-                    style={{ scrollbarGutter: "stable" }}
-                  >
-                    {filteredCases.length === 0 ? (
-                      <div className="text-secondary py-12 text-center">
-                        {isExecutionFiltering && cases.length > 0 ? "暂无匹配的筛选结果" : "暂无数据"}
-                      </div>
-                    ) : (
-                      filteredCases.map((item) => {
-                        const caseId = String(item.case);
-                        const isActive = String(selectedCaseId || "") === caseId;
-                        const assigneeName = item.assignee
-                          ? getUserDetails(String(item.assignee))?.display_name || "未知用户"
-                          : "未分配";
-                        return (
-                          <Card
-                            key={item.id}
-                            data-case-id={caseId}
-                            variant="outlined"
-                            hoverable
-                            onClick={() => {
-                              setSelectedCaseId(caseId);
-                              fetchCaseDetail(caseId);
-                            }}
-                            className={`${isActive ? "ring-2 ring-accent-strong" : ""} rounded-md hover:shadow-sm transition-shadow`}
-                          >
-                            <div className="flex flex-col gap-2">
-                              <div className="flex items-center justify-between gap-2">
-                                <div className="text-sm leading-5 font-medium truncate">{item.name}</div>
-                                <div className="flex shrink-0 items-center gap-1">
-                                  <Tag color={(enumsData?.plan_case_result || {})[String(item.result)]}>
-                                    {item.result || "-"}
-                                  </Tag>
-                                  {/* 未复核是默认态，不占位 */}
-                                  {item.review_status && item.review_status !== "未复核" && (
-                                    <PlanCaseReviewStatusTag
-                                      value={item.review_status}
-                                      colors={enumsData?.plan_case_review_status}
-                                    />
-                                  )}
-                                </div>
-                              </div>
-                              <div className="text-xs leading-4 text-secondary truncate">执行人: {assigneeName}</div>
-                            </div>
-                          </Card>
-                        );
-                      })
-                    )}
+                {listLoading ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Spin />
                   </div>
-                </div>
-              )}
-            </div>
-          </Col>
-
-          <Col flex="auto" className="flex flex-col min-h-0" style={{ maxHeight: `calc(100dvh - ${topOffset}px)` }}>
-            <div className="flex flex-col flex-1 min-h-0">
-              <div
-                ref={rightRef}
-                className="flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm"
-                style={{ scrollPaddingBottom: 80 }}
-              >
-                {/* font-body：详情区在 antd Row 里，antd 会把字体族换成系统字体栈，这里拉回页面字体，与用例抽屉一致 */}
-                <div className="p-4 font-body" style={{ scrollPaddingBottom: 16 }}>
-                  {!selectedCaseId ? (
-                    <div className="text-secondary py-12 text-center">请从左侧选择一个用例</div>
-                  ) : detailLoading ? (
-                    <div className="flex items-center justify-center py-12">
-                      <Spin />
-                    </div>
-                  ) : !caseDetail ? (
-                    <div className="text-secondary py-12 text-center">未获取到用例详情</div>
-                  ) : (
-                    <div className="flex flex-col gap-4">
-                      <div>
-                        <TitleInput
-                          disabled
-                          value={String(caseDetail?.name ?? "")}
-                          onChange={() => {}}
-                          onBlur={() => {}}
-                          code={String(caseDetail?.code ?? "")}
-                        />
-                        <CaseMetaForm
-                          disabled
-                          projectId={projectId ? String(projectId) : undefined}
-                          assignee={normalizeId(caseDetail?.assignee)}
-                          onAssigneeChange={() => {}}
-                          onAssigneeBlur={() => {}}
-                          assigneeOptions={[]}
-                          stateValue={undefined}
-                          onStateChange={() => {}}
-                          onStateBlur={() => {}}
-                          caseStateOptions={[]}
-                          typeValue={normalizeId(caseDetail?.type)}
-                          onTypeChange={() => {}}
-                          onTypeBlur={() => {}}
-                          caseTypeOptions={caseTypeOptions}
-                          priorityValue={normalizeId(caseDetail?.priority)}
-                          onPriorityChange={() => {}}
-                          onPriorityBlur={() => {}}
-                          casePriorityOptions={casePriorityOptions}
-                          labelList={Array.isArray(caseDetail?.labels) ? caseDetail.labels : []}
-                        />
-                      </div>
-                      <div className="border-b border-gray-200">
-                        <nav className="flex gap-4 overflow-x-auto">
-                          {(
-                            [
-                              { key: "basic", label: "基本信息" },
-                              { key: "req-link", label: "需求" },
-                              { key: "work", label: "工作项" },
-                              { key: "defect", label: "缺陷" },
-                              { key: "history", label: "执行" },
-                              { key: "review", label: "评审" },
-                              { key: "attachment", label: "附件" },
-                            ] as const
-                          ).map((tab) => (
-                            <button
-                              key={tab.key}
-                              type="button"
-                              onClick={() => setActiveTab(tab.key)}
-                              className={`px-2 py-3 text-sm leading-5 font-medium -mb-px border-b-2 whitespace-nowrap transition-colors ${
-                                activeTab === tab.key
-                                  ? "text-accent-primary border-accent-strong"
-                                  : "text-secondary border-transparent hover:text-accent-primary"
-                              }`}
+                ) : error ? (
+                  <div className="bg-red-50 border border-red-200 rounded-md p-4 mb-2">
+                    <div className="text-red-800 text-sm">{error}</div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-3 flex-1 min-h-0">
+                    <div
+                      ref={leftRef}
+                      className="flex-1 min-h-0 overflow-y-auto vertical-scrollbar scrollbar-sm flex flex-col gap-3 pr-2 pl-1 py-1"
+                      style={{ scrollbarGutter: "stable" }}
+                    >
+                      {filteredCases.length === 0 ? (
+                        <div className="text-secondary py-12 text-center">
+                          {isExecutionFiltering && cases.length > 0 ? "暂无匹配的筛选结果" : "暂无数据"}
+                        </div>
+                      ) : (
+                        filteredCases.map((item) => {
+                          const caseId = String(item.case);
+                          const isActive = String(selectedCaseId || "") === caseId;
+                          const assigneeName = item.assignee
+                            ? getUserDetails(String(item.assignee))?.display_name || "未知用户"
+                            : "未分配";
+                          return (
+                            <Card
+                              key={item.id}
+                              data-case-id={caseId}
+                              variant="outlined"
+                              hoverable
+                              onClick={() => {
+                                setSelectedCaseId(caseId);
+                                fetchCaseDetail(caseId);
+                              }}
+                              className={`${isActive ? "ring-2 ring-accent-strong" : ""} rounded-md hover:shadow-sm transition-shadow`}
                             >
-                              {tab.label}
-                            </button>
-                          ))}
-                        </nav>
-                      </div>
-
-                      <div className="min-h-[550px]">
-                        <Transition
-                          show={activeTab === "basic"}
-                          enter="transition duration-150 ease-out"
-                          enterFrom="transform scale-95 opacity-0"
-                          enterTo="transform scale-100 opacity-100"
-                          leave="transition duration-100 ease-in"
-                          leaveFrom="transform scale-100 opacity-100"
-                          leaveTo="transform scale-95 opacity-0"
-                        >
-                          {activeTab === "basic" && (
-                            <div className="flex flex-col gap-4 min-h-[550px]">
-                              <div>
-                                <label className="mb-3 flex items-center gap-2 text-sm leading-5 font-medium text-secondary">
-                                  前置条件
-                                </label>
-                                <RichTextEditor
-                                  value={String(caseDetail?.precondition ?? "")}
-                                  onChange={() => {}}
-                                  onBlur={() => {}}
-                                  aria-label="前置条件"
-                                  placeholder="暂无内容"
-                                  editable={false}
-                                  readonlyTextClassName="text-sm leading-6 text-primary"
-                                />
+                              <div className="flex flex-col gap-2">
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="text-sm leading-5 font-medium truncate">{item.name}</div>
+                                  <div className="flex shrink-0 items-center gap-1">
+                                    <Tag color={(enumsData?.plan_case_result || {})[String(item.result)]}>
+                                      {item.result || "-"}
+                                    </Tag>
+                                    {/* 未复核是默认态，不占位 */}
+                                    {item.review_status && item.review_status !== "未复核" && (
+                                      <PlanCaseReviewStatusTag
+                                        value={item.review_status}
+                                        colors={enumsData?.plan_case_review_status}
+                                      />
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="text-xs leading-4 text-secondary truncate">执行人: {assigneeName}</div>
                               </div>
+                            </Card>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </Col>
 
-                              {stepViewMode === 1 ? (
-                                <>
+            <Col flex="auto" className="flex flex-col min-h-0" style={{ maxHeight: `calc(100dvh - ${topOffset}px)` }}>
+              <div className="flex flex-col flex-1 min-h-0">
+                <div
+                  ref={rightRef}
+                  className="flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm"
+                  style={{ scrollPaddingBottom: 80 }}
+                >
+                  {/* font-body：详情区在 antd Row 里，antd 会把字体族换成系统字体栈，这里拉回页面字体，与用例抽屉一致 */}
+                  <div className="p-4 font-body" style={{ scrollPaddingBottom: 16 }}>
+                    {!selectedCaseId ? (
+                      <div className="text-secondary py-12 text-center">请从左侧选择一个用例</div>
+                    ) : detailLoading ? (
+                      <div className="flex items-center justify-center py-12">
+                        <Spin />
+                      </div>
+                    ) : !caseDetail ? (
+                      <div className="text-secondary py-12 text-center">未获取到用例详情</div>
+                    ) : (
+                      <div className="flex flex-col gap-4">
+                        <div>
+                          <TitleInput
+                            disabled
+                            value={String(caseDetail?.name ?? "")}
+                            onChange={() => {}}
+                            onBlur={() => {}}
+                            code={String(caseDetail?.code ?? "")}
+                          />
+                          <CaseMetaForm
+                            disabled
+                            projectId={projectId ? String(projectId) : undefined}
+                            assignee={normalizeId(caseDetail?.assignee)}
+                            onAssigneeChange={() => {}}
+                            onAssigneeBlur={() => {}}
+                            assigneeOptions={[]}
+                            stateValue={undefined}
+                            onStateChange={() => {}}
+                            onStateBlur={() => {}}
+                            caseStateOptions={[]}
+                            typeValue={normalizeId(caseDetail?.type)}
+                            onTypeChange={() => {}}
+                            onTypeBlur={() => {}}
+                            caseTypeOptions={caseTypeOptions}
+                            priorityValue={normalizeId(caseDetail?.priority)}
+                            onPriorityChange={() => {}}
+                            onPriorityBlur={() => {}}
+                            casePriorityOptions={casePriorityOptions}
+                            labelList={Array.isArray(caseDetail?.labels) ? caseDetail.labels : []}
+                          />
+                        </div>
+                        <div className="border-b border-gray-200">
+                          <nav className="flex gap-4 overflow-x-auto">
+                            {(
+                              [
+                                { key: "basic", label: "基本信息" },
+                                { key: "req-link", label: "需求" },
+                                { key: "work", label: "工作项" },
+                                { key: "defect", label: "缺陷" },
+                                { key: "history", label: "执行" },
+                                { key: "review", label: "评审" },
+                                { key: "attachment", label: "附件" },
+                              ] as const
+                            ).map((tab) => (
+                              <button
+                                key={tab.key}
+                                type="button"
+                                onClick={() => setActiveTab(tab.key)}
+                                className={`px-2 py-3 text-sm leading-5 font-medium -mb-px border-b-2 whitespace-nowrap transition-colors ${
+                                  activeTab === tab.key
+                                    ? "text-accent-primary border-accent-strong"
+                                    : "text-secondary border-transparent hover:text-accent-primary"
+                                }`}
+                              >
+                                {tab.label}
+                              </button>
+                            ))}
+                          </nav>
+                        </div>
+
+                        <div className="min-h-[550px]">
+                          <Transition
+                            show={activeTab === "basic"}
+                            enter="transition duration-150 ease-out"
+                            enterFrom="transform scale-95 opacity-0"
+                            enterTo="transform scale-100 opacity-100"
+                            leave="transition duration-100 ease-in"
+                            leaveFrom="transform scale-100 opacity-100"
+                            leaveTo="transform scale-95 opacity-0"
+                          >
+                            {activeTab === "basic" && (
+                              <div className="flex flex-col gap-4 min-h-[550px]">
+                                <div>
+                                  <label className="mb-3 flex items-center gap-2 text-sm leading-5 font-medium text-secondary">
+                                    前置条件
+                                  </label>
+                                  <RichTextEditor
+                                    value={String(caseDetail?.precondition ?? "")}
+                                    onChange={() => {}}
+                                    onBlur={() => {}}
+                                    aria-label="前置条件"
+                                    placeholder="暂无内容"
+                                    editable={false}
+                                    readonlyTextClassName="text-sm leading-6 text-primary"
+                                  />
+                                </div>
+
+                                {stepViewMode === 1 ? (
+                                  <>
+                                    <div>
+                                      <div className="mb-2 flex items-center justify-between gap-6">
+                                        <label className="flex items-center gap-2 text-sm leading-5 font-medium text-secondary">
+                                          文本描述
+                                        </label>
+                                        <StepTypeSwitcher mode={stepViewMode} onChange={setStepViewMode} />
+                                      </div>
+                                      <RichTextEditor
+                                        value={String(caseDetail?.text_description ?? "")}
+                                        onChange={() => {}}
+                                        onBlur={() => {}}
+                                        aria-label="文本描述"
+                                        placeholder="暂无内容"
+                                        editable={false}
+                                        readonlyTextClassName="text-sm leading-6 text-primary"
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="mb-2 flex items-center gap-2 text-sm leading-5 font-medium text-secondary">
+                                        预期结果
+                                      </label>
+                                      <RichTextEditor
+                                        value={String(caseDetail?.text_result ?? "")}
+                                        onChange={() => {}}
+                                        onBlur={() => {}}
+                                        aria-label="预期结果"
+                                        placeholder="暂无内容"
+                                        editable={false}
+                                        readonlyTextClassName="text-sm leading-6 text-primary"
+                                      />
+                                    </div>
+                                  </>
+                                ) : (
                                   <div>
                                     <div className="mb-2 flex items-center justify-between gap-6">
                                       <label className="flex items-center gap-2 text-sm leading-5 font-medium text-secondary">
-                                        文本描述
+                                        测试步骤
                                       </label>
                                       <StepTypeSwitcher mode={stepViewMode} onChange={setStepViewMode} />
                                     </div>
-                                    <RichTextEditor
-                                      value={String(caseDetail?.text_description ?? "")}
-                                      onChange={() => {}}
-                                      onBlur={() => {}}
-                                      aria-label="文本描述"
-                                      placeholder="暂无内容"
-                                      editable={false}
-                                      readonlyTextClassName="text-sm leading-6 text-primary"
+                                    <StepsTable
+                                      steps={displaySteps}
+                                      actualMap={stepActualResultMap}
+                                      execMap={stepExecResultMap}
+                                      onChangeActual={handleChangeActual}
+                                      onChangeExec={handleChangeExec}
                                     />
                                   </div>
-                                  <div>
-                                    <label className="mb-2 flex items-center gap-2 text-sm leading-5 font-medium text-secondary">
-                                      预期结果
-                                    </label>
-                                    <RichTextEditor
-                                      value={String(caseDetail?.text_result ?? "")}
-                                      onChange={() => {}}
-                                      onBlur={() => {}}
-                                      aria-label="预期结果"
-                                      placeholder="暂无内容"
-                                      editable={false}
-                                      readonlyTextClassName="text-sm leading-6 text-primary"
-                                    />
-                                  </div>
-                                </>
-                              ) : (
+                                )}
+
                                 <div>
-                                  <div className="mb-2 flex items-center justify-between gap-6">
-                                    <label className="flex items-center gap-2 text-sm leading-5 font-medium text-secondary">
-                                      测试步骤
-                                    </label>
-                                    <StepTypeSwitcher mode={stepViewMode} onChange={setStepViewMode} />
-                                  </div>
-                                  <StepsTable
-                                    steps={displaySteps}
-                                    actualMap={stepActualResultMap}
-                                    execMap={stepExecResultMap}
-                                    onChangeActual={handleChangeActual}
-                                    onChangeExec={handleChangeExec}
+                                  <label className="mb-2 flex items-center gap-2 text-sm leading-5 font-medium text-secondary">
+                                    备注
+                                  </label>
+                                  <RichTextEditor
+                                    value={caseDetail?.remark}
+                                    onChange={() => {}}
+                                    onBlur={() => {}}
+                                    aria-label="备注"
+                                    placeholder="暂无内容"
+                                    editable={false}
+                                    readonlyTextClassName="text-sm leading-6 text-primary"
                                   />
                                 </div>
-                              )}
 
-                              <div>
-                                <label className="mb-2 flex items-center gap-2 text-sm leading-5 font-medium text-secondary">
-                                  备注
-                                </label>
-                                <RichTextEditor
-                                  value={caseDetail?.remark}
-                                  onChange={() => {}}
-                                  onBlur={() => {}}
-                                  aria-label="备注"
-                                  placeholder="暂无内容"
-                                  editable={false}
-                                  readonlyTextClassName="text-sm leading-6 text-primary"
+                              </div>
+                            )}
+                          </Transition>
+
+                          <Transition
+                            show={activeTab === "req-link"}
+                            enter="transition duration-150 ease-out"
+                            enterFrom="transform scale-95 opacity-0"
+                            enterTo="transform scale-100 opacity-100"
+                            leave="transition duration-100 ease-in"
+                            leaveFrom="transform scale-100 opacity-100"
+                            leaveTo="transform scale-95 opacity-0"
+                          >
+                            {activeTab === "req-link" && selectedCaseId && (
+                              <div className="min-h-[550px]">
+                                <RequirementDisplayPanel
+                                  caseId={String(selectedCaseId)}
+                                  projectId={projectId ? String(projectId) : undefined}
+                                  canEdit={false}
                                 />
                               </div>
+                            )}
+                          </Transition>
 
-                            </div>
-                          )}
-                        </Transition>
-
-                        <Transition
-                          show={activeTab === "req-link"}
-                          enter="transition duration-150 ease-out"
-                          enterFrom="transform scale-95 opacity-0"
-                          enterTo="transform scale-100 opacity-100"
-                          leave="transition duration-100 ease-in"
-                          leaveFrom="transform scale-100 opacity-100"
-                          leaveTo="transform scale-95 opacity-0"
-                        >
-                          {activeTab === "req-link" && selectedCaseId && (
-                            <div className="min-h-[550px]">
-                              <RequirementDisplayPanel
-                                caseId={String(selectedCaseId)}
-                                projectId={projectId ? String(projectId) : undefined}
-                                canEdit={false}
-                              />
-                            </div>
-                          )}
-                        </Transition>
-
-                        <Transition
-                          show={activeTab === "work"}
-                          enter="transition duration-150 ease-out"
-                          enterFrom="transform scale-95 opacity-0"
-                          enterTo="transform scale-100 opacity-100"
-                          leave="transition duration-100 ease-in"
-                          leaveFrom="transform scale-100 opacity-100"
-                          leaveTo="transform scale-95 opacity-0"
-                        >
-                          {activeTab === "work" && selectedCaseId && (
-                            <div className="-mt-7 min-h-[550px]">
-                              <WorkItemDisplayModal caseId={String(selectedCaseId)} defaultType="Task" />
-                            </div>
-                          )}
-                        </Transition>
-
-                        <Transition
-                          show={activeTab === "defect"}
-                          enter="transition duration-150 ease-out"
-                          enterFrom="transform scale-95 opacity-0"
-                          enterTo="transform scale-100 opacity-100"
-                          leave="transition duration-100 ease-in"
-                          leaveFrom="transform scale-100 opacity-100"
-                          leaveTo="transform scale-95 opacity-0"
-                        >
-                          {activeTab === "defect" && selectedCaseId && (
-                            <div className="-mt-7 min-h-[550px]">
-                              <WorkItemDisplayModal
-                                caseId={String(selectedCaseId)}
-                                defaultType="Bug"
-                                reloadToken={recordsRefreshKey}
-                              />
-                            </div>
-                          )}
-                        </Transition>
-
-                        <Transition
-                          show={activeTab === "attachment"}
-                          enter="transition duration-150 ease-out"
-                          enterFrom="transform scale-95 opacity-0"
-                          enterTo="transform scale-100 opacity-100"
-                          leave="transition duration-100 ease-in"
-                          leaveFrom="transform scale-100 opacity-100"
-                          leaveTo="transform scale-95 opacity-0"
-                        >
-                          {activeTab === "attachment" && (
-                            <div id="attachments-section" className="min-h-[550px] scroll-mb-16">
-                              {attachments.length === 0 ? (
-                                <div className="p-3 text-sm text-secondary">暂无附件</div>
-                              ) : (
-                                <Table
-                                  size="small"
-                                  pagination={false}
-                                  rowKey={(r: any) => String(r?.id)}
-                                  dataSource={attachments}
-                                  columns={[
-                                    {
-                                      title: "文件名",
-                                      dataIndex: ["attributes", "name"],
-                                      key: "name",
-                                      render: (_: any, record: any) => (
-                                        <span className="truncate block max-w-[480px]">
-                                          {String(record?.attributes?.name || record?.filename || record?.id)}
-                                        </span>
-                                      ),
-                                    },
-                                    {
-                                      title: "操作",
-                                      key: "action",
-                                      width: 120,
-                                      render: (_: any, record: any) => (
-                                        <Tooltip title="下载">
-                                          <Button type="link" size="small" onClick={() => handleDownloadAttachment(record)}>
-                                            下载
-                                          </Button>
-                                        </Tooltip>
-                                      ),
-                                    },
-                                  ]}
-                                />
-                              )}
-                            </div>
-                          )}
-                        </Transition>
-
-                        <Transition
-                          show={activeTab === "history"}
-                          enter="transition duration-150 ease-out"
-                          enterFrom="transform scale-95 opacity-0"
-                          enterTo="transform scale-100 opacity-100"
-                          leave="transition duration-100 ease-in"
-                          leaveFrom="transform scale-100 opacity-100"
-                          leaveTo="transform scale-95 opacity-0"
-                        >
-                          {activeTab === "history" && (
-                            /* 每次执行的复核结论挂在对应的执行记录卡片下 */
-                            <ExecutionRecordsPanel
-                              key={`${selectedCaseId}-${recordsRefreshKey}`}
-                              workspaceSlug={workspaceSlug}
-                              reviewId={reviewId}
-                              caseId={selectedCaseId}
-                              reviewerCount={planReviewerCount}
-                            />
-                          )}
-                        </Transition>
-
-                        <Transition
-                          show={activeTab === "review"}
-                          enter="transition duration-150 ease-out"
-                          enterFrom="transform scale-95 opacity-0"
-                          enterTo="transform scale-100 opacity-100"
-                          leave="transition duration-100 ease-in"
-                          leaveFrom="transform scale-100 opacity-100"
-                          leaveTo="transform scale-95 opacity-0"
-                        >
-                          {activeTab === "review" && selectedCaseId && (
-                            <div className="min-h-[550px]">
-                              <CaseReviewRecordsTable
-                                workspaceSlug={String(workspaceSlug ?? "")}
-                                caseId={String(selectedCaseId)}
-                              />
-                            </div>
-                          )}
-                        </Transition>
-
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {selectedCaseId && !detailLoading && caseDetail && activeTab === "basic" ? (
-                <div className="sticky bottom-0 w-full shrink-0 bg-surface-1" style={{ borderTop: "1px solid #f0f0f0" }}>
-                  <div className="p-4">
-                    <div className="px-0 py-3 flex flex-col gap-3">
-                      <Radio.Group onChange={handleRadioChange} value={reviewValue} disabled={!selectedCaseId || !isCurrentUserAssignee}>
-                        {Object.keys(enumsData?.plan_case_result || {})
-                          .filter((k) => k !== "未执行")
-                          .map((k, idx) => (
-                            <Radio key={k} value={k} className={idx > 0 ? "ml-6" : undefined}>
-                              <Tag color={(enumsData?.plan_case_result || {})[k]}>{k}</Tag>
-                            </Radio>
-                          ))}
-                      </Radio.Group>
-                      <div
-                        onDoubleClick={() => {
-                          setReasonDraft(reason);
-                          setReasonModalOpen(true);
-                        }}
-                      >
-                        <Input.TextArea
-                          value={reason}
-                          onChange={(e) => setReason(e.target.value)}
-                          autoSize={{ minRows: 1, maxRows: 1 }}
-                          placeholder="请输入原因（双击可全屏输入）"
-                          allowClear
-                          disabled={!isCurrentUserAssignee}
-                          className="resize-none"
-                          onKeyDownCapture={(e) => {
-                            if (e.ctrlKey || e.metaKey || e.altKey || e.key === "Escape" || e.key === "Tab") return;
-                            e.stopPropagation();
-                          }}
-                        />
-                      </div>
-                      {!isCurrentUserAssignee && (
-                        <div className="text-xs text-danger-primary">当前用例仅执行人可提交执行结果</div>
-                      )}
-                      {pendingFiles.length > 0 && (
-                        <div className="rounded-md border border-subtle bg-layer-1/60 px-3 py-2">
-                          <div className="mb-2 flex items-center justify-between gap-3">
-                            <div className="flex items-center gap-2 text-xs font-medium text-secondary">
-                              <span className="flex size-5 items-center justify-center rounded bg-surface-1 text-accent-primary">
-                                <LucideIcons.Paperclip size={13} />
-                              </span>
-                              <span>待上传附件</span>
-                              <span className="text-placeholder">提交结果成功后自动绑定</span>
-                            </div>
-                            <span className="text-xs text-placeholder">共 {pendingFiles.length} 个</span>
-                          </div>
-                          <div className="flex max-h-20 flex-wrap gap-2 overflow-y-auto vertical-scrollbar scrollbar-sm pr-1">
-                            {pendingFiles.map((pf) => (
-                              <Tooltip key={pf.id} title={`${pf.file.name}（${formatFileSize(pf.file.size)}）`}>
-                                <div className="group flex max-w-[260px] items-center gap-2 rounded border border-subtle bg-surface-1 px-2 py-1.5 text-xs shadow-sm transition-colors hover:border-accent-strong">
-                                  <LucideIcons.FileText size={13} className="shrink-0 text-secondary" />
-                                  <div className="min-w-0">
-                                    <div className="truncate text-primary">{pf.file.name}</div>
-                                    <div className="text-[11px] leading-4 text-placeholder">{formatFileSize(pf.file.size)}</div>
-                                  </div>
-                                  <button
-                                    type="button"
-                                    aria-label="移除附件"
-                                    onClick={() => removePendingFile(pf.id)}
-                                    className="ml-1 flex size-4 shrink-0 items-center justify-center rounded text-placeholder transition-colors hover:bg-layer-2 hover:text-danger-primary"
-                                  >
-                                    <LucideIcons.X size={12} />
-                                  </button>
-                                </div>
-                              </Tooltip>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={handleSubmitReview}
-                            disabled={!selectedCaseId || submitLoading || !isCurrentUserAssignee}
-                            className="text-on-color bg-accent-primary hover:bg-accent-primary-hover focus:text-on-color focus:bg-accent-primary-hover px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                          <Transition
+                            show={activeTab === "work"}
+                            enter="transition duration-150 ease-out"
+                            enterFrom="transform scale-95 opacity-0"
+                            enterTo="transform scale-100 opacity-100"
+                            leave="transition duration-100 ease-in"
+                            leaveFrom="transform scale-100 opacity-100"
+                            leaveTo="transform scale-95 opacity-0"
                           >
-                            {submitLoading ? "提交中..." : "提交结果"}
-                          </button>
-                          <Tooltip title="为当前用例创建一个缺陷工作项">
+                            {activeTab === "work" && selectedCaseId && (
+                              <div className="-mt-7 min-h-[550px]">
+                                <WorkItemDisplayModal caseId={String(selectedCaseId)} defaultType="Task" />
+                              </div>
+                            )}
+                          </Transition>
+
+                          <Transition
+                            show={activeTab === "defect"}
+                            enter="transition duration-150 ease-out"
+                            enterFrom="transform scale-95 opacity-0"
+                            enterTo="transform scale-100 opacity-100"
+                            leave="transition duration-100 ease-in"
+                            leaveFrom="transform scale-100 opacity-100"
+                            leaveTo="transform scale-95 opacity-0"
+                          >
+                            {activeTab === "defect" && selectedCaseId && (
+                              <div className="-mt-7 min-h-[550px]">
+                                <WorkItemDisplayModal
+                                  caseId={String(selectedCaseId)}
+                                  defaultType="Bug"
+                                  reloadToken={recordsRefreshKey}
+                                />
+                              </div>
+                            )}
+                          </Transition>
+
+                          <Transition
+                            show={activeTab === "attachment"}
+                            enter="transition duration-150 ease-out"
+                            enterFrom="transform scale-95 opacity-0"
+                            enterTo="transform scale-100 opacity-100"
+                            leave="transition duration-100 ease-in"
+                            leaveFrom="transform scale-100 opacity-100"
+                            leaveTo="transform scale-95 opacity-0"
+                          >
+                            {activeTab === "attachment" && (
+                              <div id="attachments-section" className="min-h-[550px] scroll-mb-16">
+                                {attachments.length === 0 ? (
+                                  <div className="p-3 text-sm text-secondary">暂无附件</div>
+                                ) : (
+                                  <Table
+                                    size="small"
+                                    pagination={false}
+                                    rowKey={(r: any) => String(r?.id)}
+                                    dataSource={attachments}
+                                    columns={[
+                                      {
+                                        title: "文件名",
+                                        dataIndex: ["attributes", "name"],
+                                        key: "name",
+                                        render: (_: any, record: any) => (
+                                          <span className="truncate block max-w-[480px]">
+                                            {String(record?.attributes?.name || record?.filename || record?.id)}
+                                          </span>
+                                        ),
+                                      },
+                                      {
+                                        title: "操作",
+                                        key: "action",
+                                        width: 120,
+                                        render: (_: any, record: any) => (
+                                          <Tooltip title="下载">
+                                            <Button type="link" size="small" onClick={() => handleDownloadAttachment(record)}>
+                                              下载
+                                            </Button>
+                                          </Tooltip>
+                                        ),
+                                      },
+                                    ]}
+                                  />
+                                )}
+                              </div>
+                            )}
+                          </Transition>
+
+                          <Transition
+                            show={activeTab === "history"}
+                            enter="transition duration-150 ease-out"
+                            enterFrom="transform scale-95 opacity-0"
+                            enterTo="transform scale-100 opacity-100"
+                            leave="transition duration-100 ease-in"
+                            leaveFrom="transform scale-100 opacity-100"
+                            leaveTo="transform scale-95 opacity-0"
+                          >
+                            {activeTab === "history" && (
+                              /* 每次执行的复核结论挂在对应的执行记录卡片下 */
+                              <ExecutionRecordsPanel
+                                key={`${selectedCaseId}-${recordsRefreshKey}`}
+                                workspaceSlug={workspaceSlug}
+                                reviewId={reviewId}
+                                caseId={selectedCaseId}
+                                reviewerCount={planReviewerCount}
+                              />
+                            )}
+                          </Transition>
+
+                          <Transition
+                            show={activeTab === "review"}
+                            enter="transition duration-150 ease-out"
+                            enterFrom="transform scale-95 opacity-0"
+                            enterTo="transform scale-100 opacity-100"
+                            leave="transition duration-100 ease-in"
+                            leaveFrom="transform scale-100 opacity-100"
+                            leaveTo="transform scale-95 opacity-0"
+                          >
+                            {activeTab === "review" && selectedCaseId && (
+                              <div className="min-h-[550px]">
+                                <CaseReviewRecordsTable
+                                  workspaceSlug={String(workspaceSlug ?? "")}
+                                  caseId={String(selectedCaseId)}
+                                />
+                              </div>
+                            )}
+                          </Transition>
+
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {selectedCaseId && !detailLoading && caseDetail && activeTab === "basic" ? (
+                  <div className="sticky bottom-0 w-full shrink-0 bg-surface-1" style={{ borderTop: "1px solid #f0f0f0" }}>
+                    <div className="p-4">
+                      <div className="px-0 py-3 flex flex-col gap-3">
+                        <Radio.Group onChange={handleRadioChange} value={reviewValue} disabled={!selectedCaseId || !isCurrentUserAssignee}>
+                          {Object.keys(enumsData?.plan_case_result || {})
+                            .filter((k) => k !== "未执行")
+                            .map((k, idx) => (
+                              <Radio key={k} value={k} className={idx > 0 ? "ml-6" : undefined}>
+                                <Tag color={(enumsData?.plan_case_result || {})[k]}>{k}</Tag>
+                              </Radio>
+                            ))}
+                        </Radio.Group>
+                        <div
+                          onDoubleClick={() => {
+                            setReasonDraft(reason);
+                            setReasonModalOpen(true);
+                          }}
+                        >
+                          <Input.TextArea
+                            value={reason}
+                            onChange={(e) => setReason(e.target.value)}
+                            autoSize={{ minRows: 1, maxRows: 1 }}
+                            placeholder="请输入原因（双击可全屏输入）"
+                            allowClear
+                            disabled={!isCurrentUserAssignee}
+                            className="resize-none"
+                            onKeyDownCapture={(e) => {
+                              if (e.ctrlKey || e.metaKey || e.altKey || e.key === "Escape" || e.key === "Tab") return;
+                              e.stopPropagation();
+                            }}
+                          />
+                        </div>
+                        {!isCurrentUserAssignee && (
+                          <div className="text-xs text-danger-primary">当前用例仅执行人可提交执行结果</div>
+                        )}
+                        {pendingFiles.length > 0 && (
+                          <div className="rounded-md border border-subtle bg-layer-1/60 px-3 py-2">
+                            <div className="mb-2 flex items-center justify-between gap-3">
+                              <div className="flex items-center gap-2 text-xs font-medium text-secondary">
+                                <span className="flex size-5 items-center justify-center rounded bg-surface-1 text-accent-primary">
+                                  <LucideIcons.Paperclip size={13} />
+                                </span>
+                                <span>待上传附件</span>
+                                <span className="text-placeholder">提交结果成功后自动绑定</span>
+                              </div>
+                              <span className="text-xs text-placeholder">共 {pendingFiles.length} 个</span>
+                            </div>
+                            <div className="flex max-h-20 flex-wrap gap-2 overflow-y-auto vertical-scrollbar scrollbar-sm pr-1">
+                              {pendingFiles.map((pf) => (
+                                <Tooltip key={pf.id} title={`${pf.file.name}（${formatFileSize(pf.file.size)}）`}>
+                                  <div className="group flex max-w-[260px] items-center gap-2 rounded border border-subtle bg-surface-1 px-2 py-1.5 text-xs shadow-sm transition-colors hover:border-accent-strong">
+                                    <LucideIcons.FileText size={13} className="shrink-0 text-secondary" />
+                                    <div className="min-w-0">
+                                      <div className="truncate text-primary">{pf.file.name}</div>
+                                      <div className="text-[11px] leading-4 text-placeholder">{formatFileSize(pf.file.size)}</div>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      aria-label="移除附件"
+                                      onClick={() => removePendingFile(pf.id)}
+                                      className="ml-1 flex size-4 shrink-0 items-center justify-center rounded text-placeholder transition-colors hover:bg-layer-2 hover:text-danger-primary"
+                                    >
+                                      <LucideIcons.X size={12} />
+                                    </button>
+                                  </div>
+                                </Tooltip>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        <div>
+                          <div className="flex items-center gap-2">
                             <button
                               type="button"
-                              onClick={handleOpenCreateDefect}
-                              disabled={!workspaceSlug}
+                              onClick={handleSubmitReview}
+                              disabled={!selectedCaseId || submitLoading || !isCurrentUserAssignee}
                               className="text-on-color bg-accent-primary hover:bg-accent-primary-hover focus:text-on-color focus:bg-accent-primary-hover px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                              新增缺陷
+                              {submitLoading ? "提交中..." : "提交结果"}
                             </button>
-                          </Tooltip>
-                          <Tooltip title="附件将在提交结果成功后才上传并绑定">
-                            <Upload
-                              multiple
-                              showUploadList={false}
-                              beforeUpload={(file) => {
-                                addPendingFile(file as unknown as File);
-                                return false;
-                              }}
-                            >
+                            <Tooltip title="为当前用例创建一个缺陷工作项">
                               <button
                                 type="button"
-                                disabled={!selectedCaseId || !isCurrentUserAssignee}
-                                className="border border-subtle text-secondary hover:bg-layer-1 px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                                onClick={handleOpenCreateDefect}
+                                disabled={!workspaceSlug}
+                                className="text-on-color bg-accent-primary hover:bg-accent-primary-hover focus:text-on-color focus:bg-accent-primary-hover px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                               >
-                                <LucideIcons.Paperclip size={13} />
-                                上传附件
+                                新增缺陷
                               </button>
-                            </Upload>
-                          </Tooltip>
-                          <Checkbox checked={autoNext} onChange={(e) => setAutoNext(e.target.checked)}>
-                            执行后自动切换下一条
-                          </Checkbox>
+                            </Tooltip>
+                            <Tooltip title="附件将在提交结果成功后才上传并绑定">
+                              <Upload
+                                multiple
+                                showUploadList={false}
+                                beforeUpload={(file) => {
+                                  addPendingFile(file as unknown as File);
+                                  return false;
+                                }}
+                              >
+                                <button
+                                  type="button"
+                                  disabled={!selectedCaseId || !isCurrentUserAssignee}
+                                  className="border border-subtle text-secondary hover:bg-layer-1 px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                  <LucideIcons.Paperclip size={13} />
+                                  上传附件
+                                </button>
+                              </Upload>
+                            </Tooltip>
+                            <Checkbox checked={autoNext} onChange={(e) => setAutoNext(e.target.checked)}>
+                              执行后自动切换下一条
+                            </Checkbox>
+                          </div>
                         </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              ) : null}
-            </div>
-          </Col>
-        </Row>
-      </Transition>
-      <Modal
-        title="执行原因"
-        open={reasonModalOpen}
-        cancelText="取消"
-        okText="确定"
-        onCancel={() => setReasonModalOpen(false)}
-        onOk={() => {
-          setReason(reasonDraft);
-          setReasonModalOpen(false);
-        }}
-        destroyOnHidden
-        width={600}
-      >
-        <Input.TextArea
-          value={reasonDraft}
-          onChange={(e) => setReasonDraft(e.target.value)}
-          rows={4}
-          placeholder="请输入原因"
-          allowClear
-          onKeyDownCapture={(e) => {
-            if (e.ctrlKey || e.metaKey || e.altKey || e.key === "Escape" || e.key === "Tab") return;
-            e.stopPropagation();
+                ) : null}
+              </div>
+            </Col>
+          </Row>
+        </Transition>
+        <Modal
+          title="执行原因"
+          open={reasonModalOpen}
+          cancelText="取消"
+          okText="确定"
+          onCancel={() => setReasonModalOpen(false)}
+          onOk={() => {
+            setReason(reasonDraft);
+            setReasonModalOpen(false);
+          }}
+          destroyOnHidden
+          width={600}
+        >
+          <Input.TextArea
+            value={reasonDraft}
+            onChange={(e) => setReasonDraft(e.target.value)}
+            rows={4}
+            placeholder="请输入原因"
+            allowClear
+            onKeyDownCapture={(e) => {
+              if (e.ctrlKey || e.metaKey || e.altKey || e.key === "Escape" || e.key === "Tab") return;
+              e.stopPropagation();
+            }}
+          />
+        </Modal>
+        <BugIssueModal
+          isOpen={isCreateDefectOpen}
+          onClose={() => setIsCreateDefectOpen(false)}
+          modalTitle="新增缺陷"
+          isDraft={false}
+          initialDescriptionHtml={buildStepsHtml()}
+          data={{ project_id: projectId }}
+          isProjectSelectionDisabled={true}
+          onSubmit={async (res) => {
+            try {
+              setIsCreateDefectOpen(false);
+              if (activeTab === "defect") setRecordsRefreshKey((k) => k + 1);
+              message.success("缺陷创建成功");
+              const bugId = String((res as any)?.id ?? "");
+              const caseId = String(selectedCaseId ?? "");
+              if (workspaceSlug && bugId && caseId) {
+                const plan = new PlanApiService();
+                await plan.addCaseBug(String(workspaceSlug), { case_id: caseId, issue_id: bugId });
+                message.success("已绑定缺陷与用例");
+              }
+            } catch (e: any) {
+              const msg = e?.message || e?.detail || e?.error || "缺陷创建或绑定失败";
+              message.error(msg);
+            }
           }}
         />
-      </Modal>
-      <BugIssueModal
-        isOpen={isCreateDefectOpen}
-        onClose={() => setIsCreateDefectOpen(false)}
-        modalTitle="新增缺陷"
-        isDraft={false}
-        initialDescriptionHtml={buildStepsHtml()}
-        data={{ project_id: projectId }}
-        isProjectSelectionDisabled={true}
-        onSubmit={async (res) => {
-          try {
-            setIsCreateDefectOpen(false);
-            if (activeTab === "defect") setRecordsRefreshKey((k) => k + 1);
-            message.success("缺陷创建成功");
-            const bugId = String((res as any)?.id ?? "");
-            const caseId = String(selectedCaseId ?? "");
-            if (workspaceSlug && bugId && caseId) {
-              const plan = new PlanApiService();
-              await plan.addCaseBug(String(workspaceSlug), { case_id: caseId, issue_id: bugId });
-              message.success("已绑定缺陷与用例");
-            }
-          } catch (e: any) {
-            const msg = e?.message || e?.detail || e?.error || "缺陷创建或绑定失败";
-            message.error(msg);
-          }
-        }}
-      />
+      </div>
     </div>
   );
 }

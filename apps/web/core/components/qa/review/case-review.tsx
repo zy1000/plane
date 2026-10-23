@@ -6,6 +6,7 @@ import { useParams, useSearchParams, useRouter, usePathname } from "next/navigat
 import { PageHead } from "@/components/core/page-title";
 import { Breadcrumbs } from "@plane/ui";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
+import { TestHubEntityBar } from "@/components/qa/shared/testhub-entity-bar";
 import { Row, Col, Input, Tag, Spin, Button, Table, Tooltip, Radio, Select, Modal, Checkbox } from "antd";
 import { CheckCircleOutlined, CloseCircleOutlined, ExclamationCircleOutlined, DownOutlined } from "@ant-design/icons";
 import debounce from "lodash-es/debounce";
@@ -755,14 +756,9 @@ export default function CaseReview() {
   };
 
   return (
-    <div className="flex flex-col gap-3 p-4 w-full">
+    <div className="flex w-full flex-col">
       <PageHead title="用例详情" />
-      <Breadcrumbs>
-        <Breadcrumbs.Item
-          component={
-            <BreadcrumbLink href={`/${workspaceSlug}/projects/${projectId}/testhub/reviews`} label="用例评审" />
-          }
-        />
+      <TestHubEntityBar icon={<LucideIcons.ClipboardCheck className="size-4" strokeWidth={1.75} />}>
         <Breadcrumbs.Item
           component={
             <BreadcrumbLink
@@ -771,465 +767,467 @@ export default function CaseReview() {
             />
           }
         />
-        <Breadcrumbs.Item component={<BreadcrumbLink label="用例详情" isLast />} />
-      </Breadcrumbs>
+        <Breadcrumbs.Item component={<TestHubEntityBar.Current>用例详情</TestHubEntityBar.Current>} />
+      </TestHubEntityBar>
+      <div className="flex flex-col gap-3 p-4 w-full">
 
-      <Row className="w-full rounded-md border border-subtle overflow-hidden" gutter={0} wrap={false}>
-        {/* 左树与右边两栏等高：Row 没定高，面板自带的 h-full 算不出值反而不拉伸，用 h-auto 盖掉让它 stretch，再靠 max-h 钉在视口内 */}
-        <ModuleTreePanel
-          className={topOffset === 180 ? "h-auto max-h-[calc(100dvh-180px)]" : "h-auto max-h-[calc(100dvh-130px)]"}
-          root={{ key: "root", label: "全部用例" }}
-          nodes={moduleTreeNodes}
-          selectedKey={selectedTreeKey}
-          onSelect={handleTreeSelect}
-          expandedKeys={expandedKeys}
-          onExpandedKeysChange={setExpandedKeys}
-          loading={treeLoading}
-          emptyText="评审里还没有用例"
-          railLabel={treeRailLabel}
-        />
+        <Row className="w-full rounded-md border border-subtle overflow-hidden" gutter={0} wrap={false}>
+          {/* 左树与右边两栏等高：Row 没定高，面板自带的 h-full 算不出值反而不拉伸，用 h-auto 盖掉让它 stretch，再靠 max-h 钉在视口内 */}
+          <ModuleTreePanel
+            className={topOffset === 180 ? "h-auto max-h-[calc(100dvh-180px)]" : "h-auto max-h-[calc(100dvh-130px)]"}
+            root={{ key: "root", label: "全部用例" }}
+            nodes={moduleTreeNodes}
+            selectedKey={selectedTreeKey}
+            onSelect={handleTreeSelect}
+            expandedKeys={expandedKeys}
+            onExpandedKeysChange={setExpandedKeys}
+            loading={treeLoading}
+            emptyText="评审里还没有用例"
+            railLabel={treeRailLabel}
+          />
 
-        <Col
-          flex="0 0 auto"
-          className="border-r border-subtle max-h-[calc(100dvh-130px)] overflow-hidden flex flex-col"
-          style={{ width: 390, minWidth: 320, maxWidth: 520, maxHeight: `calc(100dvh - ${topOffset}px)` }}
-        >
-          <div className="p-4 flex flex-col gap-3 flex-1 min-h-0">
-            <Input.Search
-              placeholder="按用例名称搜索"
-              allowClear
-              onSearch={(v) => {
-                setKeyword(v);
-                debouncedSearch.cancel();
-                fetchCases(v);
-              }}
-              onChange={(e) => {
-                const v = e.target.value;
-                setKeyword(v);
-                if (v.trim() === "") {
+          <Col
+            flex="0 0 auto"
+            className="border-r border-subtle max-h-[calc(100dvh-130px)] overflow-hidden flex flex-col"
+            style={{ width: 390, minWidth: 320, maxWidth: 520, maxHeight: `calc(100dvh - ${topOffset}px)` }}
+          >
+            <div className="p-4 flex flex-col gap-3 flex-1 min-h-0">
+              <Input.Search
+                placeholder="按用例名称搜索"
+                allowClear
+                onSearch={(v) => {
+                  setKeyword(v);
                   debouncedSearch.cancel();
-                  fetchCases("");
-                } else {
-                  debouncedSearch(v);
-                }
-              }}
-            />
-            <ReviewCaseFilterBar filters={filters} activeKey={activeFilterKey} onChange={setActiveFilterKey} />
-            {listLoading ? (
-              <div className="flex items-center justify-center py-12">
-                <Spin />
-              </div>
-            ) : error ? (
-              <div className="bg-danger-subtle border border-danger-subtle rounded-md p-4 mb-2">
-                <div className="text-danger-primary text-sm">{error}</div>
-              </div>
-            ) : (
-              <ReviewCaseList
-                cases={filteredCases}
-                selectedCaseId={selectedCaseId}
-                suggestionCounts={suggestionCounts}
-                reviewEnums={reviewEnums}
-                onSelect={selectCase}
-                emptyText={isFiltering && cases.length > 0 ? "暂无匹配的筛选结果" : "暂无数据"}
+                  fetchCases(v);
+                }}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setKeyword(v);
+                  if (v.trim() === "") {
+                    debouncedSearch.cancel();
+                    fetchCases("");
+                  } else {
+                    debouncedSearch(v);
+                  }
+                }}
               />
-            )}
-          </div>
-        </Col>
-
-        <Col
-          flex="auto"
-          className="flex flex-col min-h-0"
-          style={{ height: `calc(100dvh - ${topOffset}px)`, maxHeight: `calc(100dvh - ${topOffset}px)` }}
-        >
-          <div className="flex flex-col flex-1 min-h-0">
-            <div className="min-h-0 flex-1 overflow-hidden">
-              {/* font-body：详情区在 antd Row 里，antd 会把字体族换成系统字体栈，这里拉回页面字体，与用例抽屉一致 */}
-              <div className="flex h-full min-h-0 min-w-0 flex-col p-4 font-body" style={{ scrollPaddingBottom: 16 }}>
-                {!selectedCaseId ? (
-                  <div className="text-secondary py-12 text-center">请从左侧选择一个用例</div>
-                ) : detailLoading ? (
-                  <div className="flex items-center justify-center py-12">
-                    <Spin />
-                  </div>
-                ) : !caseDetail ? (
-                  <div className="text-secondary py-12 text-center">未获取到用例详情</div>
-                ) : (
-                  <div className="flex min-h-0 flex-1 flex-col gap-4">
-                    <div className="border-b border-subtle">
-                      <nav className="flex flex-wrap gap-4">
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab("basic")}
-                      className={`flex items-center gap-1.5 px-2 py-3 text-sm leading-5 font-medium -mb-px border-b-2 transition-colors ${
-                        activeTab === "basic"
-                          ? "text-accent-primary border-accent-strong"
-                          : "text-primary border-transparent hover:text-accent-primary"
-                      }`}
-                    >
-                      <LucideIcons.Info size={16} aria-hidden="true" />
-                      基本信息
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab("work")}
-                      className={`flex items-center gap-1.5 px-2 py-3 text-sm leading-5 font-medium -mb-px border-b-2 transition-colors ${
-                        activeTab === "work"
-                          ? "text-accent-primary border-accent-strong"
-                          : "text-primary border-transparent hover:text-accent-primary"
-                      }`}
-                    >
-                      <LucideIcons.ListTodo size={16} aria-hidden="true" />
-                      工作项
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab("defect")}
-                      className={`flex items-center gap-1.5 px-2 py-3 text-sm leading-5 font-medium -mb-px border-b-2 transition-colors ${
-                        activeTab === "defect"
-                          ? "text-accent-primary border-accent-strong"
-                          : "text-primary border-transparent hover:text-accent-primary"
-                      }`}
-                    >
-                      <LucideIcons.Bug size={16} aria-hidden="true" />
-                      缺陷
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab("attachment")}
-                      className={`flex items-center gap-1.5 px-2 py-3 text-sm leading-5 font-medium -mb-px border-b-2 transition-colors ${
-                        activeTab === "attachment"
-                          ? "text-accent-primary border-accent-strong"
-                          : "text-primary border-transparent hover:text-accent-primary"
-                      }`}
-                    >
-                      <LucideIcons.Paperclip size={16} aria-hidden="true" />
-                      附件
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab("history")}
-                      className={`flex items-center gap-1.5 px-2 py-3 text-sm leading-5 font-medium -mb-px border-b-2 transition-colors ${
-                        activeTab === "history"
-                          ? "text-accent-primary border-accent-strong"
-                          : "text-primary border-transparent hover:text-accent-primary"
-                      }`}
-                    >
-                      <LucideIcons.History size={16} aria-hidden="true" />
-                      评审历史
-                    </button>
-                      </nav>
-                    </div>
-                    <div className="min-h-0 flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm">
-                      <Transition
-                        show={activeTab === "basic"}
-                        enter="transition duration-150 ease-out"
-                        enterFrom="transform scale-95 opacity-0"
-                        enterTo="transform scale-100 opacity-100"
-                        leave="transition duration-100 ease-in"
-                        leaveFrom="transform scale-100 opacity-100"
-                        leaveTo="transform scale-95 opacity-0"
-                      >
-                        {activeTab === "basic" && (
-                          <div className="flex min-h-full flex-col gap-4 pb-20">
-                        {/* 标题区排版对齐用例抽屉的 TitleInput：编号 11px 在上，标题 20px/600 在下；标题仍是按钮，点击打开抽屉 */}
-                        <div>
-                          <div className="mb-3">
-                            <div className="mb-5 flex min-h-5 items-center">
-                              <span className="text-caption-sm-regular font-medium whitespace-nowrap text-secondary">
-                                {caseDetail?.sequence_id
-                                  ? `${caseDetail?.project_identifier ? caseDetail.project_identifier + "-" : ""}${caseDetail.sequence_id}`
-                                  : (caseDetail?.code ?? "-")}
-                              </span>
-                            </div>
-                            <div className="flex min-w-0 flex-wrap items-center gap-2">
-                              <button
-                                type="button"
-                                className="min-w-0 break-words py-1 text-left text-xl font-semibold text-primary transition-colors hover:text-accent-primary cursor-pointer"
-                                onClick={handleOpenCase}
-                                disabled={!selectedCaseId}
-                              >
-                                {caseDetail?.name ?? "-"}
-                              </button>
-                              <Tag className="m-0 shrink-0" color="blue">
-                                {loadingCaseVersions ? "加载中..." : currentVersionLabel}
-                              </Tag>
-                              <Button
-                                size="small"
-                                type="link"
-                                className="px-0 ml-4"
-                                disabled={loadingCaseVersions || (caseVersions || []).length <= 0 || !selectedCaseId}
-                                onClick={() => setCompareOpen(true)}
-                              >
-                                版本对比
-                              </Button>
-                            </div>
-                          </div>
-                          <CaseMetaForm
-                            disabled
-                            projectId={projectId ? String(projectId) : undefined}
-                            assignee={normalizeId(caseDetail?.assignee)}
-                            onAssigneeChange={() => {}}
-                            onAssigneeBlur={() => {}}
-                            assigneeOptions={[]}
-                            stateValue={undefined}
-                            onStateChange={() => {}}
-                            onStateBlur={() => {}}
-                            caseStateOptions={[]}
-                            typeValue={normalizeId(caseDetail?.type)}
-                            onTypeChange={() => {}}
-                            onTypeBlur={() => {}}
-                            caseTypeOptions={caseTypeOptions}
-                            priorityValue={normalizeId(caseDetail?.priority)}
-                            onPriorityChange={() => {}}
-                            onPriorityBlur={() => {}}
-                            casePriorityOptions={casePriorityOptions}
-                            labelList={Array.isArray(caseDetail?.labels) ? caseDetail.labels : []}
-                          />
-                        </div>
-
-                        <div>
-                          <label className="mb-3 flex items-center gap-2 text-sm leading-5 font-medium text-secondary">
-                            前置条件
-                          </label>
-                          <RichTextEditor
-                            value={String(caseDetail?.precondition ?? "")}
-                            onChange={() => {}}
-                            onBlur={() => {}}
-                            aria-label="前置条件"
-                            placeholder="暂无内容"
-                            editable={false}
-                            readonlyTextClassName="text-sm leading-6 text-primary"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="mb-2 flex items-center gap-2 text-sm leading-5 font-medium text-secondary">
-                            测试步骤
-                          </label>
-                          <StepsTable steps={caseDetail?.steps as StepItem[]} />
-                        </div>
-
-                        <div>
-                          <label className="mb-2 flex items-center gap-2 text-sm leading-5 font-medium text-secondary">
-                            备注
-                          </label>
-                          <RichTextEditor
-                            value={caseDetail.remark}
-                            onChange={() => {}}
-                            onBlur={() => {}}
-                            aria-label="备注"
-                            placeholder="暂无内容"
-                            editable={false}
-                            readonlyTextClassName="text-sm leading-6 text-primary"
-                          />
-                        </div>
-
-                      </div>
-                    )}
-                  </Transition>
-
-                  <Transition
-                    show={activeTab === "work"}
-                    enter="transition duration-150 ease-out"
-                    enterFrom="transform scale-95 opacity-0"
-                    enterTo="transform scale-100 opacity-100"
-                    leave="transition duration-100 ease-in"
-                    leaveFrom="transform scale-100 opacity-100"
-                    leaveTo="transform scale-95 opacity-0"
-                  >
-                    {activeTab === "work" && selectedCaseId && (
-                      <div className="-mt-6 h-full overflow-y-auto vertical-scrollbar scrollbar-sm pb-20">
-                        <WorkItemDisplayModal caseId={String(selectedCaseId)} defaultType="Task" />
-                      </div>
-                    )}
-                  </Transition>
-
-                  <Transition
-                    show={activeTab === "defect"}
-                    enter="transition duration-150 ease-out"
-                    enterFrom="transform scale-95 opacity-0"
-                    enterTo="transform scale-100 opacity-100"
-                    leave="transition duration-100 ease-in"
-                    leaveFrom="transform scale-100 opacity-100"
-                    leaveTo="transform scale-95 opacity-0"
-                  >
-                    {activeTab === "defect" && selectedCaseId && (
-                      <div className="-mt-6 h-full overflow-y-auto vertical-scrollbar scrollbar-sm pb-20">
-                        <WorkItemDisplayModal caseId={String(selectedCaseId)} defaultType="Bug" />
-                      </div>
-                    )}
-                      </Transition>
-
-                      <Transition
-                        show={activeTab === "attachment"}
-                        enter="transition duration-150 ease-out"
-                        enterFrom="transform scale-95 opacity-0"
-                        enterTo="transform scale-100 opacity-100"
-                        leave="transition duration-100 ease-in"
-                        leaveFrom="transform scale-100 opacity-100"
-                        leaveTo="transform scale-95 opacity-0"
-                      >
-                        {activeTab === "attachment" && (
-                          <div
-                            id="attachments-section"
-                            className="h-full overflow-y-auto vertical-scrollbar scrollbar-sm scroll-mb-16 pb-20"
-                          >
-                            {attachments.length === 0 ? (
-                              <div className="p-3 text-sm text-secondary">暂无附件</div>
-                            ) : (
-                              <Table
-                                size="small"
-                                pagination={false}
-                                rowKey={(r: any) => String(r?.id)}
-                                dataSource={attachments}
-                                columns={[
-                                  {
-                                    title: "文件名",
-                                    dataIndex: ["attributes", "name"],
-                                    key: "name",
-                                    render: (_: any, record: any) => (
-                                      <span className="truncate block max-w-[480px]">
-                                        {String(record?.attributes?.name || record?.filename || record?.id)}
-                                      </span>
-                                    ),
-                                  },
-                                  {
-                                    title: "操作",
-                                    key: "action",
-                                    width: 120,
-                                    render: (_: any, record: any) => (
-                                      <Tooltip title="下载">
-                                        <Button type="link" size="small" onClick={() => handleDownloadAttachment(record)}>
-                                          下载
-                                        </Button>
-                                      </Tooltip>
-                                    ),
-                                  },
-                                ]}
-                              />
-                            )}
-                          </div>
-                        )}
-                      </Transition>
-
-                      <Transition
-                        show={activeTab === "history"}
-                        enter="transition duration-150 ease-out"
-                        enterFrom="transform scale-95 opacity-0"
-                        enterTo="transform scale-100 opacity-100"
-                        leave="transition duration-100 ease-in"
-                        leaveFrom="transform scale-100 opacity-100"
-                        leaveTo="transform scale-95 opacity-0"
-                      >
-                        {activeTab === "history" && (
-                          <ReviewRecordsPanel
-                            key={`${selectedCaseId}-${recordsRefreshKey}`}
-                            workspaceSlug={workspaceSlug}
-                            reviewId={reviewId}
-                            caseId={selectedCaseId}
-                            onRecordsUpdated={handleRecordsUpdated}
-                          />
-                        )}
-                      </Transition>
-                    </div>
-                    {selectedCaseId && (
-                      <CaseVersionCompareModal
-                        open={compareOpen}
-                        onClose={() => setCompareOpen(false)}
-                        workspaceSlug={String(workspaceSlug)}
-                        caseId={String(selectedCaseId)}
-                        caseVersions={caseVersions}
-                        latestVersion={latestVersion}
-                        currentVersionLabel={currentVersionLabel}
-                        enumsData={enumsData as any}
-                      />
-                    )}
-                  </div>
-                )}
-              </div>
+              <ReviewCaseFilterBar filters={filters} activeKey={activeFilterKey} onChange={setActiveFilterKey} />
+              {listLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Spin />
+                </div>
+              ) : error ? (
+                <div className="bg-danger-subtle border border-danger-subtle rounded-md p-4 mb-2">
+                  <div className="text-danger-primary text-sm">{error}</div>
+                </div>
+              ) : (
+                <ReviewCaseList
+                  cases={filteredCases}
+                  selectedCaseId={selectedCaseId}
+                  suggestionCounts={suggestionCounts}
+                  reviewEnums={reviewEnums}
+                  onSelect={selectCase}
+                  emptyText={isFiltering && cases.length > 0 ? "暂无匹配的筛选结果" : "暂无数据"}
+                />
+              )}
             </div>
+          </Col>
 
-            {selectedCaseId && !detailLoading && caseDetail && activeTab === "basic" ? (
-              <div className="sticky bottom-0 w-full shrink-0 bg-surface-1" style={{ borderTop: "1px solid #f0f0f0" }}>
-                <div className="p-4">
-                  <div className="px-0 py-3 flex flex-col gap-3">
-                    <div className="text-sm font-normal">开始评审</div>
-                    <Radio.Group onChange={handleRadioChange} value={reviewValue} disabled={!selectedCaseId}>
-                      <Radio value="通过" disabled={!isCurrentUserReviewer}>
-                        <span style={{ color: "#52c41a" }} className="flex items-center gap-1">
-                          <CheckCircleOutlined /> 通过
-                        </span>
-                      </Radio>
-                      <Radio value="不通过" className="ml-6" disabled={!isCurrentUserReviewer}>
-                        <span style={{ color: "#f5222d" }} className="flex items-center gap-1">
-                          <CloseCircleOutlined /> 不通过
-                        </span>
-                      </Radio>
-                      <Radio value="建议" className="ml-6">
-                        <span style={{ color: "#fa8c16" }} className="flex items-center gap-1">
-                          <ExclamationCircleOutlined /> 建议
-                        </span>
-                      </Radio>
-                    </Radio.Group>
-                    <div>
-                      <Button type="link" onClick={() => setReasonModalOpen(true)} disabled={!selectedCaseId}>
-                        添加原因
-                      </Button>
+          <Col
+            flex="auto"
+            className="flex flex-col min-h-0"
+            style={{ height: `calc(100dvh - ${topOffset}px)`, maxHeight: `calc(100dvh - ${topOffset}px)` }}
+          >
+            <div className="flex flex-col flex-1 min-h-0">
+              <div className="min-h-0 flex-1 overflow-hidden">
+                {/* font-body：详情区在 antd Row 里，antd 会把字体族换成系统字体栈，这里拉回页面字体，与用例抽屉一致 */}
+                <div className="flex h-full min-h-0 min-w-0 flex-col p-4 font-body" style={{ scrollPaddingBottom: 16 }}>
+                  {!selectedCaseId ? (
+                    <div className="text-secondary py-12 text-center">请从左侧选择一个用例</div>
+                  ) : detailLoading ? (
+                    <div className="flex items-center justify-center py-12">
+                      <Spin />
                     </div>
-                    <div className="flex items-center gap-3">
+                  ) : !caseDetail ? (
+                    <div className="text-secondary py-12 text-center">未获取到用例详情</div>
+                  ) : (
+                    <div className="flex min-h-0 flex-1 flex-col gap-4">
+                      <div className="border-b border-subtle">
+                        <nav className="flex flex-wrap gap-4">
                       <button
                         type="button"
-                        onClick={handleSubmitReview}
-                        disabled={!selectedCaseId || submitLoading}
-                        className="text-on-color bg-accent-primary hover:bg-accent-primary-hover focus:text-on-color focus:bg-accent-primary-hover px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                        onClick={() => setActiveTab("basic")}
+                        className={`flex items-center gap-1.5 px-2 py-3 text-sm leading-5 font-medium -mb-px border-b-2 transition-colors ${
+                          activeTab === "basic"
+                            ? "text-accent-primary border-accent-strong"
+                            : "text-primary border-transparent hover:text-accent-primary"
+                        }`}
                       >
-                        {submitLoading ? "提交中..." : "提交评审"}
+                        <LucideIcons.Info size={16} aria-hidden="true" />
+                        基本信息
                       </button>
-                      <Checkbox checked={autoNext} onChange={(e) => setAutoNext(e.target.checked)}>
-                        评审后自动切换下一条
-                      </Checkbox>
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab("work")}
+                        className={`flex items-center gap-1.5 px-2 py-3 text-sm leading-5 font-medium -mb-px border-b-2 transition-colors ${
+                          activeTab === "work"
+                            ? "text-accent-primary border-accent-strong"
+                            : "text-primary border-transparent hover:text-accent-primary"
+                        }`}
+                      >
+                        <LucideIcons.ListTodo size={16} aria-hidden="true" />
+                        工作项
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab("defect")}
+                        className={`flex items-center gap-1.5 px-2 py-3 text-sm leading-5 font-medium -mb-px border-b-2 transition-colors ${
+                          activeTab === "defect"
+                            ? "text-accent-primary border-accent-strong"
+                            : "text-primary border-transparent hover:text-accent-primary"
+                        }`}
+                      >
+                        <LucideIcons.Bug size={16} aria-hidden="true" />
+                        缺陷
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab("attachment")}
+                        className={`flex items-center gap-1.5 px-2 py-3 text-sm leading-5 font-medium -mb-px border-b-2 transition-colors ${
+                          activeTab === "attachment"
+                            ? "text-accent-primary border-accent-strong"
+                            : "text-primary border-transparent hover:text-accent-primary"
+                        }`}
+                      >
+                        <LucideIcons.Paperclip size={16} aria-hidden="true" />
+                        附件
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab("history")}
+                        className={`flex items-center gap-1.5 px-2 py-3 text-sm leading-5 font-medium -mb-px border-b-2 transition-colors ${
+                          activeTab === "history"
+                            ? "text-accent-primary border-accent-strong"
+                            : "text-primary border-transparent hover:text-accent-primary"
+                        }`}
+                      >
+                        <LucideIcons.History size={16} aria-hidden="true" />
+                        评审历史
+                      </button>
+                        </nav>
+                      </div>
+                      <div className="min-h-0 flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm">
+                        <Transition
+                          show={activeTab === "basic"}
+                          enter="transition duration-150 ease-out"
+                          enterFrom="transform scale-95 opacity-0"
+                          enterTo="transform scale-100 opacity-100"
+                          leave="transition duration-100 ease-in"
+                          leaveFrom="transform scale-100 opacity-100"
+                          leaveTo="transform scale-95 opacity-0"
+                        >
+                          {activeTab === "basic" && (
+                            <div className="flex min-h-full flex-col gap-4 pb-20">
+                          {/* 标题区排版对齐用例抽屉的 TitleInput：编号 11px 在上，标题 20px/600 在下；标题仍是按钮，点击打开抽屉 */}
+                          <div>
+                            <div className="mb-3">
+                              <div className="mb-5 flex min-h-5 items-center">
+                                <span className="text-caption-sm-regular font-medium whitespace-nowrap text-secondary">
+                                  {caseDetail?.sequence_id
+                                    ? `${caseDetail?.project_identifier ? caseDetail.project_identifier + "-" : ""}${caseDetail.sequence_id}`
+                                    : (caseDetail?.code ?? "-")}
+                                </span>
+                              </div>
+                              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                <button
+                                  type="button"
+                                  className="min-w-0 break-words py-1 text-left text-xl font-semibold text-primary transition-colors hover:text-accent-primary cursor-pointer"
+                                  onClick={handleOpenCase}
+                                  disabled={!selectedCaseId}
+                                >
+                                  {caseDetail?.name ?? "-"}
+                                </button>
+                                <Tag className="m-0 shrink-0" color="blue">
+                                  {loadingCaseVersions ? "加载中..." : currentVersionLabel}
+                                </Tag>
+                                <Button
+                                  size="small"
+                                  type="link"
+                                  className="px-0 ml-4"
+                                  disabled={loadingCaseVersions || (caseVersions || []).length <= 0 || !selectedCaseId}
+                                  onClick={() => setCompareOpen(true)}
+                                >
+                                  版本对比
+                                </Button>
+                              </div>
+                            </div>
+                            <CaseMetaForm
+                              disabled
+                              projectId={projectId ? String(projectId) : undefined}
+                              assignee={normalizeId(caseDetail?.assignee)}
+                              onAssigneeChange={() => {}}
+                              onAssigneeBlur={() => {}}
+                              assigneeOptions={[]}
+                              stateValue={undefined}
+                              onStateChange={() => {}}
+                              onStateBlur={() => {}}
+                              caseStateOptions={[]}
+                              typeValue={normalizeId(caseDetail?.type)}
+                              onTypeChange={() => {}}
+                              onTypeBlur={() => {}}
+                              caseTypeOptions={caseTypeOptions}
+                              priorityValue={normalizeId(caseDetail?.priority)}
+                              onPriorityChange={() => {}}
+                              onPriorityBlur={() => {}}
+                              casePriorityOptions={casePriorityOptions}
+                              labelList={Array.isArray(caseDetail?.labels) ? caseDetail.labels : []}
+                            />
+                          </div>
+
+                          <div>
+                            <label className="mb-3 flex items-center gap-2 text-sm leading-5 font-medium text-secondary">
+                              前置条件
+                            </label>
+                            <RichTextEditor
+                              value={String(caseDetail?.precondition ?? "")}
+                              onChange={() => {}}
+                              onBlur={() => {}}
+                              aria-label="前置条件"
+                              placeholder="暂无内容"
+                              editable={false}
+                              readonlyTextClassName="text-sm leading-6 text-primary"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="mb-2 flex items-center gap-2 text-sm leading-5 font-medium text-secondary">
+                              测试步骤
+                            </label>
+                            <StepsTable steps={caseDetail?.steps as StepItem[]} />
+                          </div>
+
+                          <div>
+                            <label className="mb-2 flex items-center gap-2 text-sm leading-5 font-medium text-secondary">
+                              备注
+                            </label>
+                            <RichTextEditor
+                              value={caseDetail.remark}
+                              onChange={() => {}}
+                              onBlur={() => {}}
+                              aria-label="备注"
+                              placeholder="暂无内容"
+                              editable={false}
+                              readonlyTextClassName="text-sm leading-6 text-primary"
+                            />
+                          </div>
+
+                        </div>
+                      )}
+                    </Transition>
+
+                    <Transition
+                      show={activeTab === "work"}
+                      enter="transition duration-150 ease-out"
+                      enterFrom="transform scale-95 opacity-0"
+                      enterTo="transform scale-100 opacity-100"
+                      leave="transition duration-100 ease-in"
+                      leaveFrom="transform scale-100 opacity-100"
+                      leaveTo="transform scale-95 opacity-0"
+                    >
+                      {activeTab === "work" && selectedCaseId && (
+                        <div className="-mt-6 h-full overflow-y-auto vertical-scrollbar scrollbar-sm pb-20">
+                          <WorkItemDisplayModal caseId={String(selectedCaseId)} defaultType="Task" />
+                        </div>
+                      )}
+                    </Transition>
+
+                    <Transition
+                      show={activeTab === "defect"}
+                      enter="transition duration-150 ease-out"
+                      enterFrom="transform scale-95 opacity-0"
+                      enterTo="transform scale-100 opacity-100"
+                      leave="transition duration-100 ease-in"
+                      leaveFrom="transform scale-100 opacity-100"
+                      leaveTo="transform scale-95 opacity-0"
+                    >
+                      {activeTab === "defect" && selectedCaseId && (
+                        <div className="-mt-6 h-full overflow-y-auto vertical-scrollbar scrollbar-sm pb-20">
+                          <WorkItemDisplayModal caseId={String(selectedCaseId)} defaultType="Bug" />
+                        </div>
+                      )}
+                        </Transition>
+
+                        <Transition
+                          show={activeTab === "attachment"}
+                          enter="transition duration-150 ease-out"
+                          enterFrom="transform scale-95 opacity-0"
+                          enterTo="transform scale-100 opacity-100"
+                          leave="transition duration-100 ease-in"
+                          leaveFrom="transform scale-100 opacity-100"
+                          leaveTo="transform scale-95 opacity-0"
+                        >
+                          {activeTab === "attachment" && (
+                            <div
+                              id="attachments-section"
+                              className="h-full overflow-y-auto vertical-scrollbar scrollbar-sm scroll-mb-16 pb-20"
+                            >
+                              {attachments.length === 0 ? (
+                                <div className="p-3 text-sm text-secondary">暂无附件</div>
+                              ) : (
+                                <Table
+                                  size="small"
+                                  pagination={false}
+                                  rowKey={(r: any) => String(r?.id)}
+                                  dataSource={attachments}
+                                  columns={[
+                                    {
+                                      title: "文件名",
+                                      dataIndex: ["attributes", "name"],
+                                      key: "name",
+                                      render: (_: any, record: any) => (
+                                        <span className="truncate block max-w-[480px]">
+                                          {String(record?.attributes?.name || record?.filename || record?.id)}
+                                        </span>
+                                      ),
+                                    },
+                                    {
+                                      title: "操作",
+                                      key: "action",
+                                      width: 120,
+                                      render: (_: any, record: any) => (
+                                        <Tooltip title="下载">
+                                          <Button type="link" size="small" onClick={() => handleDownloadAttachment(record)}>
+                                            下载
+                                          </Button>
+                                        </Tooltip>
+                                      ),
+                                    },
+                                  ]}
+                                />
+                              )}
+                            </div>
+                          )}
+                        </Transition>
+
+                        <Transition
+                          show={activeTab === "history"}
+                          enter="transition duration-150 ease-out"
+                          enterFrom="transform scale-95 opacity-0"
+                          enterTo="transform scale-100 opacity-100"
+                          leave="transition duration-100 ease-in"
+                          leaveFrom="transform scale-100 opacity-100"
+                          leaveTo="transform scale-95 opacity-0"
+                        >
+                          {activeTab === "history" && (
+                            <ReviewRecordsPanel
+                              key={`${selectedCaseId}-${recordsRefreshKey}`}
+                              workspaceSlug={workspaceSlug}
+                              reviewId={reviewId}
+                              caseId={selectedCaseId}
+                              onRecordsUpdated={handleRecordsUpdated}
+                            />
+                          )}
+                        </Transition>
+                      </div>
+                      {selectedCaseId && (
+                        <CaseVersionCompareModal
+                          open={compareOpen}
+                          onClose={() => setCompareOpen(false)}
+                          workspaceSlug={String(workspaceSlug)}
+                          caseId={String(selectedCaseId)}
+                          caseVersions={caseVersions}
+                          latestVersion={latestVersion}
+                          currentVersionLabel={currentVersionLabel}
+                          enumsData={enumsData as any}
+                        />
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {selectedCaseId && !detailLoading && caseDetail && activeTab === "basic" ? (
+                <div className="sticky bottom-0 w-full shrink-0 bg-surface-1" style={{ borderTop: "1px solid #f0f0f0" }}>
+                  <div className="p-4">
+                    <div className="px-0 py-3 flex flex-col gap-3">
+                      <div className="text-sm font-normal">开始评审</div>
+                      <Radio.Group onChange={handleRadioChange} value={reviewValue} disabled={!selectedCaseId}>
+                        <Radio value="通过" disabled={!isCurrentUserReviewer}>
+                          <span style={{ color: "#52c41a" }} className="flex items-center gap-1">
+                            <CheckCircleOutlined /> 通过
+                          </span>
+                        </Radio>
+                        <Radio value="不通过" className="ml-6" disabled={!isCurrentUserReviewer}>
+                          <span style={{ color: "#f5222d" }} className="flex items-center gap-1">
+                            <CloseCircleOutlined /> 不通过
+                          </span>
+                        </Radio>
+                        <Radio value="建议" className="ml-6">
+                          <span style={{ color: "#fa8c16" }} className="flex items-center gap-1">
+                            <ExclamationCircleOutlined /> 建议
+                          </span>
+                        </Radio>
+                      </Radio.Group>
+                      <div>
+                        <Button type="link" onClick={() => setReasonModalOpen(true)} disabled={!selectedCaseId}>
+                          添加原因
+                        </Button>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={handleSubmitReview}
+                          disabled={!selectedCaseId || submitLoading}
+                          className="text-on-color bg-accent-primary hover:bg-accent-primary-hover focus:text-on-color focus:bg-accent-primary-hover px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {submitLoading ? "提交中..." : "提交评审"}
+                        </button>
+                        <Checkbox checked={autoNext} onChange={(e) => setAutoNext(e.target.checked)}>
+                          评审后自动切换下一条
+                        </Checkbox>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            ) : null}
-          </div>
-        </Col>
-      </Row>
-      <Modal
-        title="填写评审原因"
-        open={reasonModalOpen}
-        onCancel={() => setReasonModalOpen(false)}
-        footer={
-          <div className="flex items-center justify-end gap-2">
-            <PlaneButton key="cancel" variant="secondary" onClick={() => setReasonModalOpen(false)}>
-              取消
-            </PlaneButton>
-            <PlaneButton key="submit" variant="primary" loading={submitLoading} onClick={handleSubmitReview}>
-              提交评审
-            </PlaneButton>
-          </div>
-        }
-      >
-        <Input.TextArea
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-          rows={4}
-          placeholder="请输入不通过或建议的原因"
-          allowClear
+              ) : null}
+            </div>
+          </Col>
+        </Row>
+        <Modal
+          title="填写评审原因"
+          open={reasonModalOpen}
+          onCancel={() => setReasonModalOpen(false)}
+          footer={
+            <div className="flex items-center justify-end gap-2">
+              <PlaneButton key="cancel" variant="secondary" onClick={() => setReasonModalOpen(false)}>
+                取消
+              </PlaneButton>
+              <PlaneButton key="submit" variant="primary" loading={submitLoading} onClick={handleSubmitReview}>
+                提交评审
+              </PlaneButton>
+            </div>
+          }
+        >
+          <Input.TextArea
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            rows={4}
+            placeholder="请输入不通过或建议的原因"
+            allowClear
+          />
+        </Modal>
+        <UpdateModal
+          open={isCaseModalOpen}
+          onClose={() => {
+            setIsCaseModalOpen(false);
+            fetchCases(keyword, selectedModuleId, false, selectedRepositoryId, true);
+            if (selectedCaseId) fetchCaseDetail(String(selectedCaseId));
+          }}
+          caseId={selectedCaseId}
+          workspaceSlug={workspaceSlug ? String(workspaceSlug) : undefined}
+          projectId={projectId ? String(projectId) : undefined}
         />
-      </Modal>
-      <UpdateModal
-        open={isCaseModalOpen}
-        onClose={() => {
-          setIsCaseModalOpen(false);
-          fetchCases(keyword, selectedModuleId, false, selectedRepositoryId, true);
-          if (selectedCaseId) fetchCaseDetail(String(selectedCaseId));
-        }}
-        caseId={selectedCaseId}
-        workspaceSlug={workspaceSlug ? String(workspaceSlug) : undefined}
-        projectId={projectId ? String(projectId) : undefined}
-      />
+      </div>
     </div>
   );
 }

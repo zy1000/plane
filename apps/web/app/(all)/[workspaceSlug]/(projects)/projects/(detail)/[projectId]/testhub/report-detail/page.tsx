@@ -2,12 +2,14 @@
 
 import { useState } from "react";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
-import { ArrowLeft, Folder, ListChecks } from "lucide-react";
+import { FileText } from "lucide-react";
 import { Button } from "@plane/propel/button";
-import { Avatar } from "@plane/ui";
+import { Avatar, Breadcrumbs } from "@plane/ui";
 import { cn, getFileURL } from "@plane/utils";
 import { message } from "antd";
 import { formatCNDateTime } from "@/components/qa/cases/util";
+import { TestHubEntityBar } from "@/components/qa/shared/testhub-entity-bar";
+import { TestHubHeaderActions } from "@/components/qa/shared/testhub-header-actions";
 import { getUserAvatarFallbackBackgroundColor } from "@/helpers/user-avatar.helper";
 import { useMember } from "@/hooks/store/use-member";
 import { useWorkspace } from "@/hooks/store/use-workspace";
@@ -37,33 +39,23 @@ const waitForPaint = () =>
     requestAnimationFrame(() => resolve());
   });
 
-const MetaDot = () => <span className="mx-1 size-[3px] rounded-full bg-strong" />;
-
-/** 页头第二行：所属模块 · N 个测试计划 · 创建人 · 创建 / 更新时间 */
+/** 实体栏右侧：所属模块 · N 个测试计划 · 创建 / 更新时间 · 创建人 */
 const ReportMeta = ({ detail, planCount }: { detail: TReportDetail; planCount: number }) => {
   const { getUserDetails } = useMember();
   const creator = detail.created_by ? getUserDetails(detail.created_by) : undefined;
   const creatorName = creator?.display_name || detail.created_by_detail?.display_name || "";
   const creatorAvatar = creator?.avatar_url || detail.created_by_detail?.avatar || "";
   return (
-    <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-13 text-tertiary">
-      {detail.module_name && (
-        <>
-          <span className="inline-flex items-center gap-1.5">
-            <Folder className="size-[13px] text-placeholder" />
-            {detail.module_name}
-          </span>
-          <MetaDot />
-        </>
-      )}
-      <span className="inline-flex items-center gap-1.5">
-        <ListChecks className="size-[13px] text-placeholder" />
-        <b className="font-medium text-secondary">{planCount}</b> 个测试计划
-      </span>
+    <>
+      {detail.module_name && <TestHubEntityBar.Meta label="模块">{detail.module_name}</TestHubEntityBar.Meta>}
+      <TestHubEntityBar.Meta label="测试计划">{planCount}</TestHubEntityBar.Meta>
+      <TestHubEntityBar.Divider />
+      <TestHubEntityBar.Meta label="创建于">{formatCNDateTime(detail.created_at).slice(0, 10)}</TestHubEntityBar.Meta>
+      <TestHubEntityBar.Meta label="更新于">{formatCNDateTime(detail.updated_at).slice(0, 16)}</TestHubEntityBar.Meta>
       {creatorName && (
         <>
-          <MetaDot />
-          <span className="inline-flex items-center gap-1.5">
+          <TestHubEntityBar.Divider />
+          <TestHubEntityBar.Meta label="创建人">
             <Avatar
               src={getFileURL(creatorAvatar)}
               name={creatorName}
@@ -71,14 +63,10 @@ const ReportMeta = ({ detail, planCount }: { detail: TReportDetail; planCount: n
               fallbackBackgroundColor={getUserAvatarFallbackBackgroundColor(creator)}
             />
             {creatorName}
-          </span>
+          </TestHubEntityBar.Meta>
         </>
       )}
-      <MetaDot />
-      <span>创建于 {formatCNDateTime(detail.created_at).slice(0, 10)}</span>
-      <MetaDot />
-      <span>更新于 {formatCNDateTime(detail.updated_at).slice(0, 16)}</span>
-    </div>
+    </>
   );
 };
 
@@ -119,10 +107,6 @@ export default function ReportDetailPage() {
 
   const reportTitle = detail?.name || reportName || "测试报告";
   const basePath = tmProjectBasePath(String(workspaceSlug || ""), String(projectId || ""));
-
-  const handleBack = () => {
-    router.push(`${basePath}/reports`);
-  };
 
   const handleOpenPlan = (plan: TReportPlanStat) => {
     try {
@@ -189,39 +173,40 @@ export default function ReportDetailPage() {
 
   return (
     <div className="flex h-full w-full flex-col overflow-hidden">
-      {/* 页头 */}
-      <div className="flex flex-shrink-0 items-start gap-3.5 border-b border-subtle bg-surface-1 px-7 pb-4 pt-[18px]">
-        <Button variant="secondary" size="xl" className="mt-0.5 !px-2" onClick={handleBack} aria-label="返回报告列表">
-          <ArrowLeft className="size-4" />
+      {/* 导出 portal 到页签行右侧；实体栏放报告名 + 类型，右侧是模块 / 计划数 / 时间 / 创建人 */}
+      <TestHubHeaderActions>
+        <Button
+          variant="primary"
+          size="xl"
+          onClick={handleExportPdf}
+          loading={exporting}
+          disabled={exporting || loading || !detail || !canExportReport}
+        >
+          导出 PDF
         </Button>
-        <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 items-center gap-2.5">
-            <h2 className="truncate text-[20px] font-semibold tracking-tight text-primary">{reportTitle}</h2>
-            {detail?.report_type && (
-              <span
-                className={cn(
-                  "inline-flex h-[22px] shrink-0 items-center rounded px-2 text-12 font-medium",
-                  REPORT_TYPE_CLASS[detail.report_type] ?? "bg-layer-1 text-secondary"
-                )}
-              >
-                {detail.report_type}
-              </span>
-            )}
-          </div>
-          {detail && <ReportMeta detail={detail} planCount={planCount} />}
-        </div>
-        <div className="flex flex-shrink-0 items-center gap-2 pt-0.5">
-          <Button
-            variant="primary"
-            size="xl"
-            onClick={handleExportPdf}
-            loading={exporting}
-            disabled={exporting || loading || !detail || !canExportReport}
-          >
-            导出 PDF
-          </Button>
-        </div>
-      </div>
+      </TestHubHeaderActions>
+      <TestHubEntityBar
+        icon={<FileText className="size-4" strokeWidth={1.75} />}
+        meta={detail ? <ReportMeta detail={detail} planCount={planCount} /> : undefined}
+      >
+        <Breadcrumbs.Item
+          component={
+            <span className="flex min-w-0 items-center gap-2.5">
+              <TestHubEntityBar.Current className="max-w-[480px] px-0">{reportTitle}</TestHubEntityBar.Current>
+              {detail?.report_type && (
+                <span
+                  className={cn(
+                    "inline-flex h-[22px] shrink-0 items-center rounded px-2 text-12 font-medium",
+                    REPORT_TYPE_CLASS[detail.report_type] ?? "bg-layer-1 text-secondary"
+                  )}
+                >
+                  {detail.report_type}
+                </span>
+              )}
+            </span>
+          }
+        />
+      </TestHubEntityBar>
 
       {/* 正文 */}
       <div className="vertical-scrollbar scrollbar-md flex-1 overflow-y-auto bg-surface-2 px-7 py-5">

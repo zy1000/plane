@@ -60,7 +60,11 @@ import {
   type TModuleTreeNode,
 } from "@/components/qa/module-tree";
 import { PlanCasesTable } from "@/components/qa/plans/plan-cases-table";
-import { PlanCaseResultTag, PlanCaseReviewStatusTag } from "@/components/qa/plans/plan-case-tags";
+import { PlanCaseResultTag, PlanCaseReviewStatusTag, PlanStateTag } from "@/components/qa/plans/plan-case-tags";
+import { TestHubEntityBar } from "@/components/qa/shared/testhub-entity-bar";
+import { TestHubHeaderActions } from "@/components/qa/shared/testhub-header-actions";
+import { ButtonAvatars } from "@/components/dropdowns/member/avatar";
+import { ClipboardList } from "lucide-react";
 import { PlanCaseReviewModal } from "@/components/qa/plans/plan-case-review-modal";
 import { usePlanCaseReview } from "@/components/qa/plans/use-plan-case-review";
 import {
@@ -208,6 +212,14 @@ export default function PlanCasesPage() {
   const [planList, setPlanList] = useState<TPlanListItem[]>([]);
   const [planListLoading, setPlanListLoading] = useState<boolean>(false);
   const currentPlan = useMemo(() => planList.find((p) => String(p.id) === String(planId)), [planList, planId]);
+  /** 实体栏右侧的计划周期：两头都没有就不显示 */
+  const planPeriod = useMemo(() => {
+    const begin = currentPlan?.begin_time ? String(currentPlan.begin_time).slice(0, 10) : "";
+    const end = currentPlan?.end_time ? String(currentPlan.end_time).slice(0, 10) : "";
+    if (!begin && !end) return "";
+    return `${begin || "…"} ~ ${end || "…"}`;
+  }, [currentPlan]);
+  const reviewerIds = useMemo(() => (currentPlan?.reviewers ?? []).map(String), [currentPlan]);
 
   const caseTypeEnums = useMemo(
     () =>
@@ -909,120 +921,126 @@ export default function PlanCasesPage() {
     <div className="h-full w-full">
       <PageHead title="计划用例" description={repositoryName || ""} />
       <div className="flex h-full w-full flex-col">
-        {/* 页头横跨整行，左栏与表格从它下面开始，两者等高 */}
-        <div className="flex flex-shrink-0 items-start justify-between border-b border-subtle px-3 pt-2 pb-2">
-          <div>
-            <Breadcrumbs className="h-8">
-              <Breadcrumbs.Item
-                component={
-                  <BreadcrumbLink
-                    href={`/${workspaceSlug}/projects/${projectId}/testhub/plans`}
-                    label="测试计划"
-                  />
-                }
-              />
-              {(currentPlan?.module_path ?? []).map((m) => (
-                <Breadcrumbs.Item
-                  key={m.id}
-                  component={
-                    <BreadcrumbLink
-                      href={`/${workspaceSlug}/projects/${projectId}/testhub/plans?moduleId=${m.id}`}
-                      label={m.name}
-                    />
-                  }
-                />
-              ))}
-              <Breadcrumbs.Item
-                component={
-                  <div className="flex h-full items-center">
-                    <Select
-                      value={planId || undefined}
-                      placeholder="选择测试计划"
-                      loading={planListLoading}
-                      size="small"
-                      showSearch
-                      optionFilterProp="label"
-                      style={{ height: "100%" }}
-                      className="h-full min-w-[200px] cursor-pointer [&_.ant-select-selection-item]:!text-sm [&_.ant-select-selection-item]:!leading-4 [&_.ant-select-selection-item]:!text-primary [&_.ant-select-selection-placeholder]:!text-sm [&_.ant-select-selection-placeholder]:!leading-4 [&_.ant-select-selection-placeholder]:!text-secondary [&_.ant-select-selection-search]:!h-full [&_.ant-select-selection-search-input]:!h-full [&_.ant-select-selection-wrap]:!flex [&_.ant-select-selection-wrap]:!h-full [&_.ant-select-selection-wrap]:!items-center [&_.ant-select-selector]:!h-full [&_.ant-select-selector]:!min-h-full [&_.ant-select-selector]:!cursor-pointer [&_.ant-select-selector]:!items-center [&_.ant-select-selector]:!p-0"
-                      variant="borderless"
-                      suffixIcon={null}
-                      showArrow={false}
-                      options={planList.map((p) => ({ value: String(p.id), label: String(p.name || "-") }))}
-                      onChange={onChangePlan}
-                    />
-                  </div>
-                }
-              />
-            </Breadcrumbs>
-            <div className="mt-1.5 flex flex-wrap items-center gap-2 pl-1 empty:hidden">
-              {/* 已选筛选条件接在页头信息后面，没有条件时不渲染 */}
-              <PlanCaseFiltersInline filter={planCaseFilter} />
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <CasesSearchInput
-              disabled={!planId}
-              value={filters.search ?? ""}
-              onSearch={(query) => {
-                const trimmedQuery = query.trim();
-                const nextFilters: TPlanCaseListFilters = { ...filters };
-                if (trimmedQuery) nextFilters.search = trimmedQuery;
-                else delete nextFilters.search;
-                setFilters(nextFilters);
-                fetchCases(1, pageSize, { filtersParam: nextFilters });
-              }}
-            />
-            <FiltersToggle filter={planCaseFilter} triggerClassName="h-8 w-8" iconButtonSize="xl" />
-            <PlanCaseDisplayFilters
-              disabled={!planId}
-              displayProperties={planCaseDisplayProperties}
-              ordering={ordering}
-              onDisplayPropertiesChange={handleDisplayPropertiesUpdate}
-              onOrderByChange={handleSortChange}
-            />
-            <div className="inline-flex items-center [&>*:first-child]:rounded-r-none [&>*:last-child]:rounded-l-none">
-              <PlaneButton
-                variant="primary"
-                size="xl"
-                disabled={!canEditPlan}
-                onClick={() => {
-                  if (!canEditPlan) return;
-                  setIsPlanModalOpen(true);
-                }}
-              >
-                规划用例
-              </PlaneButton>
-              <Dropdown
-                menu={{
-                  items: dropdownItems.map((item) => Object.assign({}, item, { disabled: !canEditPlan })),
-                  onClick: ({ key }) => {
-                    if (!canEditPlan) return;
-                    if (key === "by_work_item") {
-                      setIsPlanModalOpen(true);
-                    } else if (key === "by_iteration" || key === "by_release") {
-                      setPlanningTab(key === "by_iteration" ? "cycle" : "release");
-                      setIsPlanningModalOpen(true);
-                    }
-                  },
-                }}
-                disabled={!canEditPlan}
-                trigger={["click"]}
-              >
-                <PlaneButton variant="primary" size="xl" disabled={!canEditPlan} className="px-1">
-                  <ChevronDownIcon className="h-4 w-4" />
-                </PlaneButton>
-              </Dropdown>
-            </div>
+        {/* 本页操作 portal 到页签行右侧；实体栏只放路径与计划信息 */}
+        <TestHubHeaderActions>
+          <CasesSearchInput
+            disabled={!planId}
+            value={filters.search ?? ""}
+            onSearch={(query) => {
+              const trimmedQuery = query.trim();
+              const nextFilters: TPlanCaseListFilters = { ...filters };
+              if (trimmedQuery) nextFilters.search = trimmedQuery;
+              else delete nextFilters.search;
+              setFilters(nextFilters);
+              fetchCases(1, pageSize, { filtersParam: nextFilters });
+            }}
+          />
+          <FiltersToggle filter={planCaseFilter} triggerClassName="h-8 w-8" iconButtonSize="xl" />
+          <PlanCaseDisplayFilters
+            disabled={!planId}
+            displayProperties={planCaseDisplayProperties}
+            ordering={ordering}
+            onDisplayPropertiesChange={handleDisplayPropertiesUpdate}
+            onOrderByChange={handleSortChange}
+          />
+          <div className="inline-flex items-center [&>*:first-child]:rounded-r-none [&>*:last-child]:rounded-l-none">
             <PlaneButton
-              variant="secondary"
+              variant="primary"
               size="xl"
-              className="mr-4"
-              onClick={() => setIsExportModalOpen(true)}
-              disabled={!planId}
+              disabled={!canEditPlan}
+              onClick={() => {
+                if (!canEditPlan) return;
+                setIsPlanModalOpen(true);
+              }}
             >
-              导出
+              规划用例
             </PlaneButton>
+            <Dropdown
+              menu={{
+                items: dropdownItems.map((item) => Object.assign({}, item, { disabled: !canEditPlan })),
+                onClick: ({ key }) => {
+                  if (!canEditPlan) return;
+                  if (key === "by_work_item") {
+                    setIsPlanModalOpen(true);
+                  } else if (key === "by_iteration" || key === "by_release") {
+                    setPlanningTab(key === "by_iteration" ? "cycle" : "release");
+                    setIsPlanningModalOpen(true);
+                  }
+                },
+              }}
+              disabled={!canEditPlan}
+              trigger={["click"]}
+            >
+              <PlaneButton variant="primary" size="xl" disabled={!canEditPlan} className="px-1">
+                <ChevronDownIcon className="h-4 w-4" />
+              </PlaneButton>
+            </Dropdown>
           </div>
+          <PlaneButton
+            variant="secondary"
+            size="xl"
+            onClick={() => setIsExportModalOpen(true)}
+            disabled={!planId}
+          >
+            导出
+          </PlaneButton>
+        </TestHubHeaderActions>
+        <TestHubEntityBar
+          icon={<ClipboardList className="size-4" strokeWidth={1.75} />}
+          meta={
+            <>
+              {currentPlan?.state && (
+                <>
+                  <PlanStateTag state={currentPlan.state} />
+                  <TestHubEntityBar.Divider />
+                </>
+              )}
+              <TestHubEntityBar.Meta label="用例">{activeTree.total ?? 0}</TestHubEntityBar.Meta>
+              {planPeriod && <TestHubEntityBar.Meta label="周期">{planPeriod}</TestHubEntityBar.Meta>}
+              {reviewerIds.length > 0 && (
+                <TestHubEntityBar.Meta label="复核人">
+                  <ButtonAvatars userIds={reviewerIds} size="sm" showTooltip />
+                </TestHubEntityBar.Meta>
+              )}
+            </>
+          }
+        >
+          {(currentPlan?.module_path ?? []).map((m) => (
+            <Breadcrumbs.Item
+              key={m.id}
+              component={
+                <BreadcrumbLink
+                  href={`/${workspaceSlug}/projects/${projectId}/testhub/plans?moduleId=${m.id}`}
+                  label={m.name}
+                />
+              }
+            />
+          ))}
+          <Breadcrumbs.Item
+            component={
+              <div className="flex h-full items-center">
+                <Select
+                  value={planId || undefined}
+                  placeholder="选择测试计划"
+                  loading={planListLoading}
+                  size="small"
+                  showSearch
+                  optionFilterProp="label"
+                  style={{ height: "100%" }}
+                  popupMatchSelectWidth={260}
+                  className="h-full max-w-[360px] cursor-pointer [&_.ant-select-arrow]:!right-0 [&_.ant-select-arrow]:!text-tertiary [&_.ant-select-selection-item]:!text-14 [&_.ant-select-selection-item]:!font-semibold [&_.ant-select-selection-item]:!leading-4 [&_.ant-select-selection-item]:!text-primary [&_.ant-select-selection-placeholder]:!text-14 [&_.ant-select-selection-placeholder]:!leading-4 [&_.ant-select-selection-placeholder]:!text-secondary [&_.ant-select-selection-search]:!h-full [&_.ant-select-selection-search-input]:!h-full [&_.ant-select-selection-wrap]:!flex [&_.ant-select-selection-wrap]:!h-full [&_.ant-select-selection-wrap]:!items-center [&_.ant-select-selector]:!h-full [&_.ant-select-selector]:!min-h-full [&_.ant-select-selector]:!cursor-pointer [&_.ant-select-selector]:!items-center [&_.ant-select-selector]:!py-0 [&_.ant-select-selector]:!pl-0 [&_.ant-select-selector]:!pr-5"
+                  variant="borderless"
+                  suffixIcon={<ChevronDownIcon className="size-3.5" />}
+                  options={planList.map((p) => ({ value: String(p.id), label: String(p.name || "-") }))}
+                  onChange={onChangePlan}
+                />
+              </div>
+            }
+          />
+        </TestHubEntityBar>
+        <div className="flex flex-wrap items-center gap-2 border-b border-subtle px-4 py-2 empty:hidden">
+          {/* 已选筛选条件：没有条件时整行不渲染 */}
+          <PlanCaseFiltersInline filter={planCaseFilter} />
         </div>
         <div className="flex min-h-0 flex-1 overflow-hidden">
           <ModuleTreePanel

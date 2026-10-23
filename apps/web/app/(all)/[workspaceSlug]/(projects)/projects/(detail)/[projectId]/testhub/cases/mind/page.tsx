@@ -4,12 +4,13 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { PageHead } from "@/components/core/page-title";
 import { Breadcrumbs } from "@plane/ui";
-import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { RepositorySelect } from "../../repository-select";
+import { TestHubEntityBar } from "@/components/qa/shared/testhub-entity-bar";
+import { TestHubHeaderActions } from "@/components/qa/shared/testhub-header-actions";
 import { UnorderedListOutlined, ShareAltOutlined } from "@ant-design/icons";
 import { Col, Input, Modal, Row, Tree } from "antd";
 import type { TreeProps } from "antd";
-import { ListChecks } from "lucide-react";
+import { Library, ListChecks } from "lucide-react";
 import { CaseService } from "@/services/qa/case.service";
 import { CaseModuleService } from "@/services/qa/case-module.service";
 import { CaseMindmap } from "@/components/qa/cases/case-mindmap";
@@ -828,57 +829,49 @@ export default function TestCasesMindPage() {
       <PageHead title={`测试用例${repositoryName ? " - " + repositoryName : ""} - 脑图`} />
       <div className="h-full w-full">
         <div className="flex h-full w-full flex-col">
-          <div className="px-3 pt-2 pb-2 sm:pt-2 flex items-center justify-between flex-shrink-0 border-b border-subtle">
-            <div>
-              <Breadcrumbs>
-                <Breadcrumbs.Item
-                  component={<BreadcrumbLink href={`/${workspaceSlug}/projects/${projectId}/testhub`} label="测试用例库" />}
+          {/* 列表 / 脑图切换 portal 到页签行右侧；实体栏只放用例库切换 */}
+          <TestHubHeaderActions>
+            <button
+              type="button"
+              onClick={() => router.push(listUrl)}
+              className="h-8 w-8 rounded border border-subtle text-secondary hover:text-primary hover:bg-layer-1 flex items-center justify-center"
+              aria-label="列表视图"
+            >
+              <UnorderedListOutlined />
+            </button>
+            <button
+              type="button"
+              className="h-8 w-8 rounded border border-accent-strong bg-accent-subtle text-accent-primary flex items-center justify-center"
+              aria-label="脑图视图"
+            >
+              <ShareAltOutlined />
+            </button>
+          </TestHubHeaderActions>
+          <TestHubEntityBar icon={<Library className="size-4" strokeWidth={1.75} />}>
+            <Breadcrumbs.Item
+              component={
+                <RepositorySelect
+                  key={`repository-select-mind-${repositoryId || "all"}`}
+                  workspaceSlug={String(workspaceSlug || "")}
+                  projectId={String(projectId || "")}
+                  className="inline-flex"
+                  buttonClassName="min-w-0 border-0 px-1.5 py-1 text-14 font-semibold text-primary hover:bg-layer-1 cursor-pointer gap-2 h-full"
+                  labelClassName="max-w-[240px] leading-4"
+                  defaultRepositoryId={repositoryId}
+                  onRepositoryChange={({ id, name }) => {
+                    const ws = String(workspaceSlug || "");
+                    const pid = String(projectId || "");
+                    setRepositoryName(name ? String(name) : "");
+                    if (id)
+                      router.push(
+                        `/${ws}/projects/${pid}/testhub/cases/mind?repositoryId=${encodeURIComponent(String(id))}`
+                      );
+                    else router.push(`/${ws}/projects/${pid}/testhub/cases/mind`);
+                  }}
                 />
-                <Breadcrumbs.Item
-                  isLast
-                  component={
-                    <RepositorySelect
-                      key={`repository-select-mind-${repositoryId || "all"}`}
-                      workspaceSlug={String(workspaceSlug || "")}
-                      projectId={String(projectId || "")}
-                      className="inline-flex"
-                      buttonClassName="min-w-0 border-0 px-1.5 py-1 text-sm font-medium text-secondary hover:text-primary hover:bg-layer-1 cursor-pointer gap-2 h-full"
-                      labelClassName="max-w-[150px] leading-4"
-                      hideChevron
-                      defaultRepositoryId={repositoryId}
-                      onRepositoryChange={({ id, name }) => {
-                        const ws = String(workspaceSlug || "");
-                        const pid = String(projectId || "");
-                        setRepositoryName(name ? String(name) : "");
-                        if (id)
-                          router.push(
-                            `/${ws}/projects/${pid}/testhub/cases/mind?repositoryId=${encodeURIComponent(String(id))}`
-                          );
-                        else router.push(`/${ws}/projects/${pid}/testhub/cases/mind`);
-                      }}
-                    />
-                  }
-                />
-              </Breadcrumbs>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => router.push(listUrl)}
-                className="h-8 w-8 rounded border border-subtle text-secondary hover:text-primary hover:bg-layer-1 flex items-center justify-center"
-                aria-label="列表视图"
-              >
-                <UnorderedListOutlined />
-              </button>
-              <button
-                type="button"
-                className="h-8 w-8 rounded border border-accent-strong bg-accent-subtle text-accent-primary flex items-center justify-center"
-                aria-label="脑图视图"
-              >
-                <ShareAltOutlined />
-              </button>
-            </div>
-          </div>
+              }
+            />
+          </TestHubEntityBar>
           <Row wrap={false} className="flex-1 overflow-hidden pb-0" gutter={[0, 16]}>
             <Col
               className="relative flex flex-col h-full border-r border-subtle"

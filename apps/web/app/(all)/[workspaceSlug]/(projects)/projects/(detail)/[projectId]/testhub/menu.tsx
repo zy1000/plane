@@ -12,6 +12,7 @@ import {
 import { cn } from "@plane/utils";
 import { useUserPermissions } from "@/hooks/store/user";
 import { CasesSearchInput } from "@/components/qa/cases/cases-search";
+import { TESTHUB_HEADER_ACTIONS_ID } from "@/components/qa/shared/testhub-header-actions";
 import {
   isTMOverviewActive,
   isTMOverviewMenuActive,
@@ -230,6 +231,10 @@ export const TestManagementMenuBar = () => {
               新建评审
             </button>
           </div>
+        )}
+        {/* 二级页：本页操作由页面 portal 进来，页签行始终是同一行 */}
+        {!isOverviewActive && !isPlansActive && !isReviewsActive && !isReportsActive && (
+          <div id={TESTHUB_HEADER_ACTIONS_ID} className="ml-2 flex shrink-0 items-center gap-2 empty:hidden" />
         )}
       </div>
     </div>
