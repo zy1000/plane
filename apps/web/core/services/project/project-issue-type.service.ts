@@ -116,10 +116,22 @@ export class ProjectIssueTypeService extends APIService {
     super(API_BASE_URL);
   }
 
-  // 添加缓存清除方法
-  clearCache(workspaceSlug: string, projectId: string): void {
-    const cacheKey = projectId;
-    projectIssueTypesCache.delete(cacheKey);
+  /**
+   * 创建 / 更新后把返回的类型合并进已有缓存。缓存不存在时不动（留给下一次列表请求填充），
+   * 否则会造出一份只含这一条的「残缺缓存」，其他页面会把它当完整列表用。
+   */
+  private upsertCache(projectId: string, issueType: TIssueType | undefined): void {
+    const cached = projectIssueTypesCache.get(projectId);
+    if (!cached || !issueType?.id) return;
+    projectIssueTypesCache.set(projectId, { ...cached, [issueType.id]: issueType });
+  }
+
+  private removeFromCache(projectId: string, issueTypeId: string): void {
+    const cached = projectIssueTypesCache.get(projectId);
+    if (!cached) return;
+    const rest = { ...cached };
+    delete rest[issueTypeId];
+    projectIssueTypesCache.set(projectId, rest);
   }
 
   async fetchProjectIssueTypes(workspaceSlug: string, projectId: string, force = false): Promise<TIssueType[]> {
@@ -187,8 +199,7 @@ export class ProjectIssueTypeService extends APIService {
   ): Promise<TIssueType> {
     return this.post(`${issueConfigBasePath(workspaceSlug, projectId)}/issue-types/`, data)
       .then((response) => {
-        // 清除缓存以确保下次获取最新数据
-        this.clearCache(workspaceSlug, projectId);
+        this.upsertCache(projectId, response?.data);
         return response?.data;
       })
       .catch((error) => {
@@ -204,7 +215,7 @@ export class ProjectIssueTypeService extends APIService {
   ): Promise<TIssueType> {
     return this.patch(`${issueConfigBasePath(workspaceSlug, projectId)}/issue-types/${issueTypeId}/`, data)
       .then((response) => {
-        this.clearCache(workspaceSlug, projectId);
+        this.upsertCache(projectId, response?.data);
         return response?.data;
       })
       .catch((error) => {
@@ -216,8 +227,7 @@ export class ProjectIssueTypeService extends APIService {
   async deleteProjectIssueType(workspaceSlug: string, projectId: string, issueTypeId: string): Promise<any> {
     return this.delete(`${issueConfigBasePath(workspaceSlug, projectId)}/issue-types/${issueTypeId}/`)
       .then((response) => {
-        // 清除缓存以确保下次获取最新数据
-        this.clearCache(workspaceSlug, projectId);
+        this.removeFromCache(projectId, issueTypeId);
         return response?.data;
       })
       .catch((error) => {

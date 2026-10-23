@@ -310,7 +310,8 @@ export const ISSUE_DISPLAY_FILTERS_BY_PAGE: TIssueFiltersToDisplayByPageType = {
       "label_id",
       "start_date",
       "target_date",
-      // type_id is intentionally excluded: the page enforces a fixed type constraint
+      // 缺陷页固定口径是「类别=缺陷」，类型本身可筛（用于区分硬件缺陷/软件缺陷等）
+      "type_id",
     ] as TWorkItemFilterProperty[],
     layoutOptions: {
       list: {

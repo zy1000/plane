@@ -97,12 +97,9 @@ export const useProjectIssueTypes = (workspaceSlug: string | undefined, projectI
     async (data: Partial<TIssueType>) => {
       if (!workspaceSlug || !projectId) return;
 
+      // 缓存由 service 合并维护，这里只同步本地列表
       const createdIssueType = await projectIssueTypeService.createProjectIssueType(workspaceSlug, projectId, data);
       setIssueTypes((prev) => [...(prev ?? []), createdIssueType]);
-      projectIssueTypesCache.set(projectId, {
-        ...(projectIssueTypesCache.get(projectId) ?? {}),
-        [createdIssueType.id]: createdIssueType,
-      });
       return createdIssueType;
     },
     [workspaceSlug, projectId]
@@ -119,10 +116,6 @@ export const useProjectIssueTypes = (workspaceSlug: string | undefined, projectI
         data
       );
       setIssueTypes((prev) => prev?.map((issueType) => (issueType.id === issueTypeId ? updatedIssueType : issueType)));
-      projectIssueTypesCache.set(projectId, {
-        ...(projectIssueTypesCache.get(projectId) ?? {}),
-        [issueTypeId]: updatedIssueType,
-      });
       return updatedIssueType;
     },
     [workspaceSlug, projectId]
@@ -134,11 +127,6 @@ export const useProjectIssueTypes = (workspaceSlug: string | undefined, projectI
 
       await projectIssueTypeService.deleteProjectIssueType(workspaceSlug, projectId, issueTypeId);
       setIssueTypes((prev) => prev?.filter((issueType) => issueType.id !== issueTypeId));
-      const cache = projectIssueTypesCache.get(projectId);
-      if (cache) {
-        delete cache[issueTypeId];
-        projectIssueTypesCache.set(projectId, cache);
-      }
     },
     [workspaceSlug, projectId]
   );

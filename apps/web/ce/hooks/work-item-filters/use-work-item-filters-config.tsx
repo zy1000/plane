@@ -75,6 +75,7 @@ import { useProjectIssueTypes } from "@/hooks/store/use-project-issue-types";
 import { useProjectTypeExtraFields } from "@/hooks/store/use-project-type-extra-fields";
 import { useRelease } from "@/hooks/store/use-release";
 import { useProjectProduct } from "@/hooks/store/use-project-product";
+import { useTypedPageIssueTypeIds } from "@/hooks/use-issue-layout-store";
 // plane web imports
 import { useFiltersOperatorConfigs } from "@/plane-web/hooks/rich-filters/use-filters-operator-configs";
 // utils
@@ -130,6 +131,12 @@ export const useWorkItemFiltersConfig = (props: TUseWorkItemFiltersConfigProps):
     useProjectProduct();
   const { getUserDetails } = useMember();
   const { issueTypes: workItemTypes } = useProjectIssueTypes(workspaceSlug, projectId);
+  // 缺陷等按类别固定口径的页面会提供本页类型 ID，类型筛选只列这些；工作项页没提供则列全部
+  const typedPageIssueTypeIds = useTypedPageIssueTypeIds();
+  const typeFilterOptions = useMemo(() => {
+    if (!workItemTypes || !typedPageIssueTypeIds) return workItemTypes;
+    return workItemTypes.filter((issueType) => typedPageIssueTypeIds.includes(issueType.id));
+  }, [workItemTypes, typedPageIssueTypeIds]);
   const { fields: projectExtraFields } = useProjectTypeExtraFields(workspaceSlug, projectId);
   // derived values
   const operatorConfigs = useFiltersOperatorConfigs({ workspaceSlug });
@@ -508,10 +515,10 @@ export const useWorkItemFiltersConfig = (props: TUseWorkItemFiltersConfigProps):
           // 如果没有图标配置，使用默认图标
           return <LayersIcon className="h-3 w-3 flex-shrink-0" />;
         },
-        issueTypes: workItemTypes ?? [],
+        issueTypes: typeFilterOptions ?? [],
         ...operatorConfigs,
       }) as TFilterConfig<TWorkItemFilterProperty, TFilterValue>,
-    [isFilterEnabled, workItemTypes, operatorConfigs]
+    [isFilterEnabled, workItemTypes, typeFilterOptions, operatorConfigs]
   );
 
   // Build custom property filter configs from all project extra fields

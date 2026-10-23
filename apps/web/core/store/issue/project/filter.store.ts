@@ -47,7 +47,7 @@ import {
  * state_id。若只按单一 state_id 过滤，会漏掉其他类型的同名状态对应的工作项。
  * 本函数在生成 API 查询参数前将单个 state_id 扩展为所有同名 IDs，保证结果完整。
  */
-function expandStateIdsInExpression(
+export function expandStateIdsInExpression(
   expression: TWorkItemFilterExpression,
   stateNameToIdsMap: Map<string, string[]>
 ): TWorkItemFilterExpression {
