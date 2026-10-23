@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { observer } from "mobx-react";
 import { Controller } from "react-hook-form";
 import { useParams } from "next/navigation";
@@ -62,6 +62,8 @@ export type TIssueTypeSelectProps<T extends Partial<TIssueFields>> = {
   hideIcon?: boolean;
   showTooltip?: boolean;
   tabIndex?: number;
+  /** 只列出该类别下的类型（如「缺陷」），默认值也从中取第一个 */
+  categoryName?: string;
 };
 
 export const IssueTypeSelect = observer(<T extends Partial<TIssueFields>>(props: TIssueTypeSelectProps<T>) => {
@@ -83,6 +85,7 @@ export const IssueTypeSelect = observer(<T extends Partial<TIssueFields>>(props:
     hideIcon = false,
     showTooltip = false,
     tabIndex,
+    categoryName,
   } = props;
 
   // refs
@@ -100,6 +103,10 @@ export const IssueTypeSelect = observer(<T extends Partial<TIssueFields>>(props:
   const { workspaceSlug } = useParams();
   const { isMobile } = usePlatformOS();
   const { issueTypes, isLoading, error } = useProjectIssueTypes(workspaceSlug?.toString(), projectId || undefined);
+  const selectableTypes = useMemo(
+    () => (categoryName ? issueTypes?.filter((type) => type.category_name === categoryName) : issueTypes),
+    [issueTypes, categoryName]
+  );
 
   // popper
   const { styles, attributes } = usePopper(referenceElement, popperElement, {
@@ -154,7 +161,7 @@ export const IssueTypeSelect = observer(<T extends Partial<TIssueFields>>(props:
 
   // 准备选项数据 - 直接使用issueTypes，不添加"无类型"选项
   const options =
-    issueTypes?.map((type) => ({
+    selectableTypes?.map((type) => ({
       value: type.id,
       query: type.name,
       content: (
@@ -178,8 +185,8 @@ export const IssueTypeSelect = observer(<T extends Partial<TIssueFields>>(props:
 
   const getDisplayName = (value: string | null | undefined) => {
     // 如果没有值且有可用的类型，显示第一个类型的名称
-    if (!value && issueTypes && issueTypes.length > 0) {
-      return issueTypes[0].name;
+    if (!value && selectableTypes && selectableTypes.length > 0) {
+      return selectableTypes[0].name;
     }
     const selectedType = getSelectedType(value);
     return selectedType?.name || placeholder;
@@ -189,8 +196,8 @@ export const IssueTypeSelect = observer(<T extends Partial<TIssueFields>>(props:
     if (hideIcon) return null;
 
     // 如果没有值且有可用的类型，使用第一个类型的图标
-    if (!value && issueTypes && issueTypes.length > 0) {
-      return renderTypeIcon(issueTypes[0], "h-3 w-3 flex-shrink-0");
+    if (!value && selectableTypes && selectableTypes.length > 0) {
+      return renderTypeIcon(selectableTypes[0], "h-3 w-3 flex-shrink-0");
     }
 
     const selectedType = getSelectedType(value);
@@ -217,10 +224,10 @@ export const IssueTypeSelect = observer(<T extends Partial<TIssueFields>>(props:
 
         // 如果没有值且有可用的类型，自动设置为第一个类型
         React.useEffect(() => {
-          if (!value && issueTypes && issueTypes.length > 0) {
-            onChange(issueTypes[0].id);
+          if (!value && selectableTypes && selectableTypes.length > 0) {
+            onChange(selectableTypes[0].id);
           }
-        }, [value, issueTypes, onChange]);
+        }, [value, selectableTypes, onChange]);
 
         const comboButton = (
           <button

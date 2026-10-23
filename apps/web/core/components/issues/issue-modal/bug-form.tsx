@@ -39,7 +39,6 @@ import { WorkItemTemplateSelect } from "@/plane-web/components/issues/issue-moda
 import { useDebouncedDuplicateIssues } from "@/plane-web/hooks/use-debounced-duplicate-issues";
 import { ChevronRight } from "lucide-react";
 import { IssueTypeSelect } from "@/plane-web/components/issues/issue-modal";
-import { useProjectIssueTypes } from "@/hooks/store/use-project-issue-types";
 import { IssueService } from "@/services/issue/issue.service";
 
 export interface BugIssueFormProps {
@@ -209,14 +208,6 @@ export const BugIssueFormRoot: FC<BugIssueFormProps> = observer((props) => {
     setValue("assignee_ids", [String(currentUser.id)], { shouldDirty: false });
   }, [currentUser?.id, data?.id, getValues, setValue]);
 
-  const { issueTypes } = useProjectIssueTypes(workspaceSlug?.toString(), projectId ?? undefined);
-
-  useEffect(() => {
-    if (!issueTypes || issueTypes.length === 0) return;
-    const bugType = issueTypes.find((t) => t.name === "Bug");
-    if (bugType) setValue("type_id", bugType.id, { shouldValidate: true });
-  }, [issueTypes]);
-
   // 切换工作项类型时清空已填的自定义字段值，避免跨类型脏数据。
   useEffect(() => {
     const currentTypeId = watch("type_id");
@@ -340,7 +331,7 @@ export const BugIssueFormRoot: FC<BugIssueFormProps> = observer((props) => {
                       control={control as any}
                       projectId={projectId}
                       editorRef={editorRef}
-                      disabled={true}
+                      categoryName="缺陷"
                       handleFormChange={handleFormChange}
                       renderChevron
                     />
