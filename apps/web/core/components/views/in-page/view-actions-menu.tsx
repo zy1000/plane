@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Copy, Globe, Pencil, Star, StarOff, Trash2, User } from "lucide-react";
+import { Copy, Globe, Pencil, Pin, PinOff, Star, StarOff, Trash2, User } from "lucide-react";
 import { EViewAccess } from "@plane/types";
 import type { IProjectView } from "@plane/types";
 import { CustomMenu } from "@plane/ui";
@@ -7,6 +7,8 @@ import { CustomMenu } from "@plane/ui";
 type TViewActionsMenuProps = {
   view: IProjectView;
   isDefault: boolean;
+  /** 在页签栏里还是收在「更多」里 */
+  isInBar: boolean;
   canEdit: boolean;
   canDelete: boolean;
   canCreate: boolean;
@@ -17,6 +19,7 @@ type TViewActionsMenuProps = {
   onDuplicate: (view: IProjectView) => void;
   onToggleAccess: (view: IProjectView) => void;
   onSetDefault: (viewId: string | null) => void;
+  onToggleInBar: (view: IProjectView, inBar: boolean) => void;
   onDelete: (view: IProjectView) => void;
 };
 
@@ -28,6 +31,7 @@ export const ViewActionsMenu = (props: TViewActionsMenuProps) => {
   const {
     view,
     isDefault,
+    isInBar,
     canEdit,
     canDelete,
     canCreate,
@@ -38,6 +42,7 @@ export const ViewActionsMenu = (props: TViewActionsMenuProps) => {
     onDuplicate,
     onToggleAccess,
     onSetDefault,
+    onToggleInBar,
     onDelete,
   } = props;
   const isPublic = view.access === EViewAccess.PUBLIC;
@@ -75,6 +80,12 @@ export const ViewActionsMenu = (props: TViewActionsMenuProps) => {
         <span className={itemClass}>
           {isDefault ? <StarOff className={iconClass} /> : <Star className={iconClass} />}
           {isDefault ? "取消我的默认视图" : "设为我的默认视图"}
+        </span>
+      </CustomMenu.MenuItem>
+      <CustomMenu.MenuItem onClick={() => onToggleInBar(view, !isInBar)}>
+        <span className={itemClass}>
+          {isInBar ? <PinOff className={iconClass} /> : <Pin className={iconClass} />}
+          {isInBar ? "收进「更多」" : "固定到页签栏"}
         </span>
       </CustomMenu.MenuItem>
       {canEdit && (

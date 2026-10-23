@@ -77,6 +77,7 @@ export const ViewTabsRoot = observer(function ViewTabsRoot(props: TViewTabsRootP
         canSaveActive={!!tabs.activeView && tabs.canEditView(tabs.activeView)}
         canEditView={tabs.canEditView}
         canDeleteView={tabs.canDeleteView}
+        isViewInBar={tabs.isViewInBar}
         getOwnerName={getOwnerName}
         onSelect={tabs.selectView}
         onCreate={openCreate}
@@ -86,6 +87,7 @@ export const ViewTabsRoot = observer(function ViewTabsRoot(props: TViewTabsRootP
         onDuplicate={(view) => void tabs.duplicateView(view)}
         onToggleAccess={(view) => void tabs.toggleViewAccess(view)}
         onSetDefault={(viewId) => void tabs.setDefaultViewId(viewId)}
+        onToggleInBar={(view, inBar) => void tabs.setViewInBar(view, inBar)}
         onDelete={setViewToDelete}
         onManage={() => setIsManageOpen(true)}
       />
@@ -106,15 +108,15 @@ export const ViewTabsRoot = observer(function ViewTabsRoot(props: TViewTabsRootP
         isOpen={isManageOpen}
         allLabel={allLabel}
         views={tabs.views}
-        hiddenViewIds={tabs.hiddenViewIds}
         defaultViewId={tabs.defaultViewId}
         canCreate={tabs.canCreate}
         canEditView={tabs.canEditView}
         canDeleteView={tabs.canDeleteView}
+        isViewInBar={tabs.isViewInBar}
         getOwnerName={getOwnerName}
         onClose={() => setIsManageOpen(false)}
         onReorder={(viewIds) => void tabs.setOrder(viewIds)}
-        onToggleHidden={(viewId, hidden) => void tabs.setViewHidden(viewId, hidden)}
+        onToggleInBar={(view, inBar) => void tabs.setViewInBar(view, inBar)}
         onSetDefault={(viewId) => void tabs.setDefaultViewId(viewId)}
         onRename={openEdit}
         onDuplicate={(view) => void tabs.duplicateView(view)}

@@ -10,15 +10,15 @@ type TManageViewsModalProps = {
   isOpen: boolean;
   allLabel: string;
   views: IProjectView[];
-  hiddenViewIds: string[];
   defaultViewId: string | null;
   canCreate: boolean;
   canEditView: (view: IProjectView) => boolean;
   canDeleteView: (view: IProjectView) => boolean;
+  isViewInBar: (view: IProjectView) => boolean;
   getOwnerName: (userId: string) => string;
   onClose: () => void;
   onReorder: (viewIds: string[]) => void;
-  onToggleHidden: (viewId: string, hidden: boolean) => void;
+  onToggleInBar: (view: IProjectView, inBar: boolean) => void;
   onSetDefault: (viewId: string | null) => void;
   onRename: (view: IProjectView) => void;
   onDuplicate: (view: IProjectView) => void;
@@ -46,15 +46,15 @@ export const ManageViewsModal = (props: TManageViewsModalProps) => {
     isOpen,
     allLabel,
     views,
-    hiddenViewIds,
     defaultViewId,
     canCreate,
     canEditView,
     canDeleteView,
+    isViewInBar,
     getOwnerName,
     onClose,
     onReorder,
-    onToggleHidden,
+    onToggleInBar,
     onSetDefault,
     onRename,
     onDuplicate,
@@ -66,7 +66,7 @@ export const ManageViewsModal = (props: TManageViewsModalProps) => {
   const myViews = views.filter((view) => view.access !== EViewAccess.PUBLIC);
 
   const renderRow = (view: IProjectView) => {
-    const isHidden = hiddenViewIds.includes(view.id);
+    const isHidden = !isViewInBar(view);
     const isPublic = view.access === EViewAccess.PUBLIC;
     return (
       <div
@@ -95,7 +95,7 @@ export const ManageViewsModal = (props: TManageViewsModalProps) => {
         <Tooltip tooltipContent={isHidden ? "显示在页签栏" : "收进「更多」"}>
           <button
             type="button"
-            onClick={() => onToggleHidden(view.id, !isHidden)}
+            onClick={() => onToggleInBar(view, isHidden)}
             className={cn(
               "grid h-7 w-7 shrink-0 place-items-center rounded-md hover:bg-layer-3",
               isHidden ? "text-placeholder" : "text-secondary"
@@ -108,6 +108,7 @@ export const ManageViewsModal = (props: TManageViewsModalProps) => {
         <ViewActionsMenu
           view={view}
           isDefault={defaultViewId === view.id}
+          isInBar={!isHidden}
           canEdit={canEditView(view)}
           canDelete={canDeleteView(view)}
           canCreate={canCreate}
@@ -118,6 +119,7 @@ export const ManageViewsModal = (props: TManageViewsModalProps) => {
           onDuplicate={onDuplicate}
           onToggleAccess={onToggleAccess}
           onSetDefault={onSetDefault}
+          onToggleInBar={onToggleInBar}
           onDelete={onDelete}
         />
       </div>
@@ -130,7 +132,9 @@ export const ManageViewsModal = (props: TManageViewsModalProps) => {
         <div className="flex items-start justify-between border-b border-subtle px-6 pb-3 pt-5">
           <div className="flex flex-col gap-0.5">
             <h3 className="text-lg font-semibold text-primary">管理视图</h3>
-            <p className="text-xs text-tertiary">拖动调整页签顺序；关掉眼睛的视图收进「更多」。这些只影响你自己。</p>
+            <p className="text-xs text-tertiary">
+              拖动调整页签顺序；关掉眼睛的视图收进「更多」。别人建的公共视图默认收在「更多」，点亮眼睛才进页签栏。这些只影响你自己。
+            </p>
           </div>
           <button
             type="button"

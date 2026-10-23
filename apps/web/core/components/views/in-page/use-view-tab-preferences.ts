@@ -33,13 +33,25 @@ export const useViewTabPreferences = (workspaceSlug: string, projectId: string, 
 
   const setDefaultViewId = useCallback((viewId: string | null) => update({ default_view_id: viewId }), [update]);
 
-  const setViewHidden = useCallback(
-    (viewId: string, hidden: boolean) => {
-      const currentHidden = getProjectUserProperties(projectId)?.preferences?.views?.[scope]?.hidden_view_ids ?? [];
-      const next = hidden
-        ? Array.from(new Set([...currentHidden, viewId]))
-        : currentHidden.filter((id) => id !== viewId);
-      return update({ hidden_view_ids: next });
+  /**
+   * 视图在不在页签栏：自己的视图默认在栏里，收起记 hidden；别人的公共视图默认收在「更多」，拉出来记 pinned。
+   * 两张表互斥，改一张时顺手把另一张里的同一条清掉。
+   */
+  const setViewInBar = useCallback(
+    (viewId: string, inBar: boolean, isMine: boolean) => {
+      const latest = getProjectUserProperties(projectId)?.preferences?.views?.[scope];
+      const hidden = new Set(latest?.hidden_view_ids ?? []);
+      const pinned = new Set(latest?.pinned_view_ids ?? []);
+      if (isMine) {
+        if (inBar) hidden.delete(viewId);
+        else hidden.add(viewId);
+        pinned.delete(viewId);
+      } else {
+        if (inBar) pinned.add(viewId);
+        else pinned.delete(viewId);
+        hidden.delete(viewId);
+      }
+      return update({ hidden_view_ids: Array.from(hidden), pinned_view_ids: Array.from(pinned) });
     },
     [getProjectUserProperties, projectId, scope, update]
   );
@@ -50,9 +62,10 @@ export const useViewTabPreferences = (workspaceSlug: string, projectId: string, 
     isLoaded: !!userProperties,
     defaultViewId: preferences?.default_view_id ?? null,
     hiddenViewIds: preferences?.hidden_view_ids ?? EMPTY_IDS,
+    pinnedViewIds: preferences?.pinned_view_ids ?? EMPTY_IDS,
     order: preferences?.order ?? EMPTY_IDS,
     setDefaultViewId,
-    setViewHidden,
+    setViewInBar,
     setOrder,
   };
 };

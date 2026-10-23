@@ -135,13 +135,28 @@ export const useViewTabs = (params: TViewTabsParams) => {
     });
   }, [views, preferences.order]);
 
-  const { visibleViews, hiddenViews } = useMemo(() => {
-    const hiddenSet = new Set(preferences.hiddenViewIds);
-    return {
-      visibleViews: orderedViews.filter((view) => !hiddenSet.has(view.id)),
-      hiddenViews: orderedViews.filter((view) => hiddenSet.has(view.id)),
-    };
-  }, [orderedViews, preferences.hiddenViewIds]);
+  // 页签栏里放哪些：自己的视图默认在栏里（除非收起），别人建的公共视图默认收在「更多」（除非拉出来）
+  const isViewInBar = useCallback(
+    (view: IProjectView) =>
+      view.owned_by === currentUser?.id
+        ? !preferences.hiddenViewIds.includes(view.id)
+        : preferences.pinnedViewIds.includes(view.id),
+    [currentUser?.id, preferences.hiddenViewIds, preferences.pinnedViewIds]
+  );
+
+  const { visibleViews, hiddenViews } = useMemo(
+    () => ({
+      visibleViews: orderedViews.filter((view) => isViewInBar(view)),
+      hiddenViews: orderedViews.filter((view) => !isViewInBar(view)),
+    }),
+    [orderedViews, isViewInBar]
+  );
+
+  const setViewInBar = useCallback(
+    (view: IProjectView, inBar: boolean) =>
+      preferences.setViewInBar(view.id, inBar, view.owned_by === currentUser?.id),
+    [currentUser?.id, preferences]
+  );
 
   // permissions
   const isProjectAdmin = allowPermissions(
@@ -294,7 +309,7 @@ export const useViewTabs = (params: TViewTabsParams) => {
     canEditView,
     canDeleteView,
     defaultViewId: preferences.defaultViewId,
-    hiddenViewIds: preferences.hiddenViewIds,
+    isViewInBar,
     selectView,
     saveActiveView,
     discardChanges,
@@ -304,7 +319,7 @@ export const useViewTabs = (params: TViewTabsParams) => {
     toggleViewAccess,
     removeView,
     setDefaultViewId: preferences.setDefaultViewId,
-    setViewHidden: preferences.setViewHidden,
+    setViewInBar,
     setOrder: preferences.setOrder,
   };
 };

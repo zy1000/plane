@@ -153,9 +153,13 @@ export const FiltersRow = observer(function FiltersRow<K extends TFilterProperty
     </Header>
   );
 
+  // 收起时直接不渲染，不走离场过渡：离场要等 transitionend 才卸载，
+  // 切视图时主线程被列表重渲染占着，这一行会以透明状态空占着高度一秒多才塌下去
+  if (!filter.isVisible) return null;
+
   if (!filter.configManager.areConfigsReady && !hasAnyConditions) {
     return (
-      <RowTransition show={filter.isVisible}>
+      <RowTransition>
         <Loader>
           <Loader.Item height="44px" width="100%" className={cn({ "rounded-none": variant === "header" })} />
         </Loader>
@@ -163,7 +167,7 @@ export const FiltersRow = observer(function FiltersRow<K extends TFilterProperty
     );
   }
 
-  return <RowTransition show={filter.isVisible}>{variant === "modal" ? ModalVariant : HeaderVariant}</RowTransition>;
+  return <RowTransition>{variant === "modal" ? ModalVariant : HeaderVariant}</RowTransition>;
 });
 
 const COMMON_OPERATION_BUTTON_CLASSNAME = "py-1";
@@ -191,21 +195,17 @@ const ElementTransition = observer(function ElementTransition(props: TElementTra
 
 type TRowTransitionProps = {
   children: React.ReactNode;
-  show: boolean;
 };
 
-const RowTransition = observer(function RowTransition(props: TRowTransitionProps) {
-  return (
-    <Transition
-      show={props.show}
-      enter="transition-all duration-150 ease-out"
-      enterFrom="opacity-0 -translate-y-1"
-      enterTo="opacity-100 translate-y-0"
-      leave="transition-all duration-100 ease-in"
-      leaveFrom="opacity-100 translate-y-0"
-      leaveTo="opacity-0 -translate-y-1"
-    >
-      {props.children}
-    </Transition>
-  );
-});
+/** 只做进场：展开时滑入，收起由父级直接卸载 */
+const RowTransition = (props: TRowTransitionProps) => (
+  <Transition
+    show
+    appear
+    enter="transition-all duration-150 ease-out"
+    enterFrom="opacity-0 -translate-y-1"
+    enterTo="opacity-100 translate-y-0"
+  >
+    {props.children}
+  </Transition>
+);
