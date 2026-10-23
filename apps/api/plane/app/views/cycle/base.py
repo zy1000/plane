@@ -69,6 +69,7 @@ from plane.utils.analytics_plot import burndown_plot
 from plane.bgtasks.recent_visited_task import recent_visited_task
 from plane.utils.host import base_host
 from plane.utils.cycle_transfer_issues import transfer_cycle_issues
+from plane.utils.qa import compute_plan_result
 from plane.utils.cycle_status import CYCLE_STATUS_EMAIL_WHITELIST
 from plane.utils.requirement_project import container_requirement_counts
 from .. import BaseAPIView, BaseViewSet
@@ -299,16 +300,12 @@ class CycleViewSet(BaseViewSet):
             plans_to_update = []
             for plan in plans:
                 stats = plan_stats.get(plan.id) or {}
-                total = stats.get("case_count") or 0
-                if not total:
-                    new_result = "-"
-                else:
-                    threshold = plan.threshold if plan.threshold is not None else 100
-                    new_result = (
-                        "通过"
-                        if (stats.get("success_count", 0) / total) * 100 >= threshold
-                        else "不通过"
-                    )
+                new_result = compute_plan_result(
+                    plan.state,
+                    stats.get("success_count", 0),
+                    stats.get("case_count") or 0,
+                    plan.threshold,
+                )
                 if plan.result != new_result:
                     plan.result = new_result
                     plans_to_update.append(plan)

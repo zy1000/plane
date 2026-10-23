@@ -36,9 +36,11 @@ from plane.db.models import (
     TestReport,
 )
 from plane.utils.qa import (
+    compute_plan_result,
     invalid_workspace_member_ids,
     re_approval_case,
     recompute_plan_case_review_statuses,
+    sync_plan_states,
 )
 
 from .plan import *
@@ -185,6 +187,8 @@ class TestPlanCreateUpdateSerializer(ModelSerializer):
                     PlanCase.objects.get_or_create(plan=instance, case=case)
             if remove_ids:
                 PlanCase.objects.filter(plan=instance, case_id__in=remove_ids).delete()
+            # 用例集合变了，计划状态要跟着重算
+            sync_plan_states([instance.id])
         return instance
 
     class Meta:
@@ -289,13 +293,7 @@ class TestPlanDetailSerializer(ModelSerializer):
             plan=obj, result=PlanCase.Result.SUCCESS
         ).count()
         total_count = obj.plan_cases.count()
-        if not total_count:
-            return "-"
-        return (
-            "通过"
-            if ((success_count / total_count) * 100 >= obj.threshold)
-            else "不通过"
-        )
+        return compute_plan_result(obj.state, success_count, total_count, obj.threshold)
 
     def to_representation(self, instance):
         result = self.execute_result(instance)
@@ -397,13 +395,8 @@ class TestPlanListSerializer(ModelSerializer):
 
     def get_result(self, obj: TestPlan):
         stats = self._stats(obj)
-        total = stats["case_count"]
-        if not total:
-            return "-"
-        return (
-            "通过"
-            if (stats["success_count"] / total) * 100 >= obj.threshold
-            else "不通过"
+        return compute_plan_result(
+            obj.state, stats["success_count"], stats["case_count"], obj.threshold
         )
 
     class Meta:

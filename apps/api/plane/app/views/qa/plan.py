@@ -83,6 +83,7 @@ from plane.utils.qa import (
     invalid_workspace_member_ids as _invalid_workspace_member_ids,
     invalidate_plan_case_review_records,
     recompute_plan_case_review_statuses,
+    sync_plan_states,
 )
 from plane.utils.response import list_response
 from plane.app.views import BaseAPIView, BaseViewSet
@@ -666,7 +667,10 @@ class PlanView(BaseViewSet):
         qs = PlanCase.objects.filter(id__in=request.data["id"])
         if project_id:
             qs = qs.filter(plan__project_id=project_id)
+        # 作废后计划下可能不再有未执行用例，要重算状态；plan_id 得在删前取
+        plan_ids = set(qs.values_list("plan_id", flat=True))
         qs.delete(soft=False)
+        sync_plan_states(plan_ids)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(detail=False, methods=["get"], url_path="case-list")
@@ -885,16 +889,8 @@ class PlanView(BaseViewSet):
                     epoch=int(timezone.now().timestamp()),
                 )
 
-        # 修改计划状态
-        if not PlanCase.objects.filter(
-            plan_id=plan_id,
-            result=PlanCase.Result.NOT_START,
-            deleted_at__isnull=True,
-        ).exists():
-            plan.state = TestPlan.State.COMPLETED
-        else:
-            plan.state = TestPlan.State.PROGRESS
-        plan.save()
+        # 计划状态按用例结果派生（规则见 utils/qa.py::sync_plan_states）
+        sync_plan_states([plan.id])
         return Response(
             status=status.HTTP_201_CREATED,
             data={"records": created_records},
@@ -1274,6 +1270,7 @@ class PlanView(BaseViewSet):
                 PlanCase(plan=plan, case_id=case_id) for case_id in new_case_ids
             ]
             PlanCase.objects.bulk_create(new_plan_cases, batch_size=1000)
+            sync_plan_states([plan.id])
 
         return Response(status=status.HTTP_200_OK)
 
@@ -1378,6 +1375,8 @@ class PlanView(BaseViewSet):
                 ],
                 batch_size=1000,
             )
+            # 已完成的计划加了新用例要回到进行中
+            sync_plan_states([plan.id])
 
         return Response(status=status.HTTP_200_OK)
 
@@ -1496,6 +1495,7 @@ class PlanView(BaseViewSet):
                 ],
                 batch_size=1000,
             )
+            sync_plan_states([target_plan.id])
 
         return Response(
             {
@@ -1562,6 +1562,7 @@ class PlanView(BaseViewSet):
                 [PlanCase(plan=plan, case_id=case_id) for case_id in new_case_ids],
                 batch_size=1000,
             )
+            sync_plan_states([plan.id])
 
         plan.modules.add(*module_ids)
         return Response(status=status.HTTP_200_OK)
@@ -1626,6 +1627,7 @@ class PlanView(BaseViewSet):
                 [PlanCase(plan=plan, case_id=case_id) for case_id in new_case_ids],
                 batch_size=1000,
             )
+            sync_plan_states([plan.id])
 
         plan.releases.add(*release_ids)
         return Response(status=status.HTTP_200_OK)
@@ -1783,10 +1785,15 @@ class CaseAPIView(BaseAPIView):
                 repository__project_id=project_id,
             )
         )
+        # 硬删用例会级联删掉计划用例，受影响的计划状态要重算；plan_id 得在删前取
+        plan_ids = set(
+            PlanCase.objects.filter(case__in=cases).values_list("plan_id", flat=True)
+        )
         # Deletion activities cannot outlive a physically deleted case because
         # their foreign key cascades. Queuing them here also races with the
         # cascade and can surface as an IntegrityError during bulk deletion.
         cases.delete(soft=False)
+        sync_plan_states(plan_ids)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 

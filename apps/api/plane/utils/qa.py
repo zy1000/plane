@@ -12,6 +12,7 @@ from plane.db.models import (
     PlanCaseReviewRecord,
     ReviewApprovalType,
     TestCase,
+    TestPlan,
     WorkspaceMember,
 )
 
@@ -343,3 +344,81 @@ def build_review_case_rows(rows, current_user_id=None, include_assignees=True):
             }
         )
     return data
+
+
+# 计划下只要还有这些结果的用例，计划就不算完成
+PLAN_PENDING_RESULTS = (PlanCase.Result.NOT_START, PlanCase.Result.BLOCK)
+
+
+def sync_plan_states(plan_ids):
+    """按当前计划用例集合重算这些计划的状态，只写有变化的计划，返回改了的计划列表。
+
+    计划状态是派生值：所有会改动计划用例集合或执行结果的接口
+    （执行、加用例、作废、删用例、编辑计划的用例）结束前都要调一次，不要在别处单独写 state。
+
+    规则（只看有效的计划用例：自身未软删且用例未软删）：
+    - 没有「未执行」也没有「阻塞」 → 已完成（「无效」算已执行）
+    - 否则 → 进行中；但从未执行过的计划（当前仍是未开始且全部未执行）保持未开始
+    - 没有任何用例时不改状态
+    - 状态不会从进行中 / 已完成退回未开始（执行记录仍在，不丢历史）
+    """
+    plan_ids = list({pid for pid in (plan_ids or []) if pid})
+    if not plan_ids:
+        return []
+
+    plans = list(TestPlan.objects.filter(id__in=plan_ids).only("id", "state"))
+    if not plans:
+        return []
+
+    # order_by 必须显式清掉：PlanCase.Meta.ordering 的 created_at 会被带进 GROUP BY
+    rows = (
+        PlanCase.objects.filter(
+            plan_id__in=[plan.id for plan in plans], case__deleted_at__isnull=True
+        )
+        .values("plan_id", "result")
+        .annotate(count=Count("id"))
+        .order_by()
+    )
+    counts = defaultdict(lambda: {"total": 0, "not_started": 0, "pending": 0})
+    for row in rows:
+        entry = counts[row["plan_id"]]
+        entry["total"] += row["count"]
+        if row["result"] == PlanCase.Result.NOT_START:
+            entry["not_started"] += row["count"]
+        if row["result"] in PLAN_PENDING_RESULTS:
+            entry["pending"] += row["count"]
+
+    changed = []
+    for plan in plans:
+        entry = counts.get(plan.id)
+        if not entry:
+            continue
+        if entry["pending"] == 0:
+            state = TestPlan.State.COMPLETED
+        elif (
+            plan.state == TestPlan.State.NOT_START
+            and entry["not_started"] == entry["total"]
+        ):
+            state = TestPlan.State.NOT_START
+        else:
+            state = TestPlan.State.PROGRESS
+        if plan.state != state:
+            plan.state = state
+            changed.append(plan)
+
+    if changed:
+        TestPlan.objects.bulk_update(changed, ["state"], batch_size=1000)
+    return changed
+
+
+def compute_plan_result(state, success_count, total_count, threshold):
+    """计划的执行结果（通过 / 不通过）。
+
+    只有「已完成」的计划才下结论：成功数 / 用例总数 × 100 >= 阈值 为通过，否则不通过。
+    进行中 / 未开始、或没有用例的计划一律返回 "-"，避免加了一条未执行用例就被判「不通过」。
+    列表、详情、迭代详情三处都用这一个函数，不要再各写一份公式。
+    """
+    if state != TestPlan.State.COMPLETED or not total_count:
+        return "-"
+    threshold = 100 if threshold is None else threshold
+    return "通过" if (success_count / total_count) * 100 >= threshold else "不通过"
