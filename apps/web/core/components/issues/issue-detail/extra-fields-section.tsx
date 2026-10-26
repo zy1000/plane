@@ -6,7 +6,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { observer } from "mobx-react";
-import { Eye, EyeOff } from "lucide-react";
+import { ClipboardList, Eye, EyeOff } from "lucide-react";
 // hooks
 import { useLocalStorage } from "@plane/hooks";
 // types
@@ -246,10 +246,15 @@ export const IssueExtraFieldsSection = observer(function IssueExtraFieldsSection
     );
 
   return (
+    // 标题与字段名左缩 11px，对齐上方快捷操作按钮组的图标（1px 边框 + px-2.5）
     <section className="@container">
-      <div className="flex h-9 items-center gap-2 border-b border-subtle-1">
-        <span className="text-[15px] font-semibold text-primary">{title}</span>
-        <span className="text-13 text-tertiary tabular-nums">{activeFields.length}</span>
+      <div className="flex h-9 items-center gap-2 rounded-md bg-layer-1 pr-3 pl-[11px]">
+        {/* 标题字号、颜色与下方字段名一致 */}
+        <span className="inline-flex items-center gap-1.5 text-14 text-secondary">
+          <ClipboardList className="size-4 shrink-0" strokeWidth={2} />
+          <span>{title}</span>
+        </span>
+        <span className="text-14 text-tertiary tabular-nums">{activeFields.length}</span>
         <span className="flex-1" />
         {!isEditing && emptyCount > 0 && (
           <button
@@ -270,7 +275,7 @@ export const IssueExtraFieldsSection = observer(function IssueExtraFieldsSection
               <div
                 key={field.id}
                 className={cn(
-                  "grid min-w-0 grid-cols-[7.25rem_minmax(0,1fr)] gap-x-3 border-b border-subtle",
+                  "grid min-w-0 grid-cols-[7.25rem_minmax(0,1fr)] gap-x-3 border-b border-subtle pl-[11px]",
                   isEditing ? "items-center py-1.5" : "items-start py-2"
                 )}
               >
@@ -285,7 +290,7 @@ export const IssueExtraFieldsSection = observer(function IssueExtraFieldsSection
           <div
             key={field.id}
             className={cn(
-              "flex flex-col gap-1.5 py-2.5",
+              "flex flex-col gap-1.5 py-2.5 pl-[11px]",
               index < paragraphFields.length - 1 && "border-b border-subtle"
             )}
           >
@@ -295,7 +300,7 @@ export const IssueExtraFieldsSection = observer(function IssueExtraFieldsSection
         ))}
 
         {visibleFields.length === 0 && (
-          <div className="py-3 text-13 text-placeholder">{activeFields.length} 个字段都未填写</div>
+          <div className="py-3 pl-[11px] text-13 text-placeholder">{activeFields.length} 个字段都未填写</div>
         )}
       </div>
     </section>
