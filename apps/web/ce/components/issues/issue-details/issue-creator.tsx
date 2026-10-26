@@ -8,7 +8,9 @@ import type { FC } from "react";
 import Link from "next/link";
 // hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
-import { activityLinkClassName } from "@/components/issues/issue-detail/issue-activity/activity/actions/helpers/activity-link-styles";
+
+/** 活动流内可点击链接（与项目活动流保持一致） */
+const activityLinkClassName = () => "font-medium text-[#1677ff] hover:underline";
 
 type TIssueUser = {
   activityId: string;

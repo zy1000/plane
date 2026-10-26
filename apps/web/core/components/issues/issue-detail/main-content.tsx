@@ -21,7 +21,6 @@ import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useMember } from "@/hooks/store/use-member";
 import { useProject } from "@/hooks/store/use-project";
 import { useUser } from "@/hooks/store/user";
-import useReloadConfirmations from "@/hooks/use-reload-confirmation";
 import useSize from "@/hooks/use-window-size";
 // plane web components
 import { DeDupeIssuePopoverRoot } from "@/plane-web/components/de-dupe/duplicate-popover";
@@ -49,16 +48,34 @@ type Props = {
   projectId: string;
   issueId: string;
   issueOperations: TIssueOperations;
+  /** 有编辑权限（决定附件 / 子项等即时操作区能不能用） */
   isEditable: boolean;
   isArchived: boolean;
+  /** 处于编辑会话中（点了「编辑」且不在保存中）：标题 / 描述 / 属性 / 自定义字段才可改 */
+  isEditing: boolean;
+  /** 取消编辑后变化，让标题 / 描述编辑器重挂回到保存前的值 */
+  sessionKey: number;
+  editorRef: React.RefObject<EditorRefApi>;
+  isSubmitting: TNameDescriptionLoader;
+  setIsSubmitting: (value: TNameDescriptionLoader) => void;
+  onTitleChange: (value: string) => void;
 };
 
 export const IssueMainContent = observer(function IssueMainContent(props: Props) {
-  const { workspaceSlug, projectId, issueId, issueOperations, isEditable, isArchived } = props;
-  // refs
-  const editorRef = useRef<EditorRefApi>(null);
-  // states
-  const [isSubmitting, setIsSubmitting] = useState<TNameDescriptionLoader>("saved");
+  const {
+    workspaceSlug,
+    projectId,
+    issueId,
+    issueOperations,
+    isEditable,
+    isArchived,
+    isEditing,
+    sessionKey,
+    editorRef,
+    isSubmitting,
+    setIsSubmitting,
+    onTitleChange,
+  } = props;
   // hooks
   const windowSize = useSize();
   const { data: currentUser } = useUser();
@@ -70,11 +87,13 @@ export const IssueMainContent = observer(function IssueMainContent(props: Props)
     peekIssue,
   } = useIssueDetail();
   const { getProjectById } = useProject();
-  const { setShowAlert } = useReloadConfirmations(isSubmitting === "submitting");
   const { t } = useTranslation();
   // derived values
   const projectDetails = getProjectById(projectId);
   const issue = issueId ? getIssueById(issueId) : undefined;
+  const canEdit = isEditable && !isArchived;
+  // 非编辑态一律只读；离开提醒由编辑会话统一负责
+  const fieldsDisabled = !canEdit || !isEditing;
   // 描述折叠态：限制最大高度并提供「显示全部 / 显示更少」（对齐 peek 侧栏详情）
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
   const [isDescriptionOverflowing, setIsDescriptionOverflowing] = useState(false);
@@ -93,10 +112,9 @@ export const IssueMainContent = observer(function IssueMainContent(props: Props)
 
   useEffect(() => {
     if (isSubmitting === "submitted") {
-      setShowAlert(false);
       setTimeout(async () => setIsSubmitting("saved"), 2000);
-    } else if (isSubmitting === "submitting") setShowAlert(true);
-  }, [isSubmitting, setShowAlert, setIsSubmitting]);
+    }
+  }, [isSubmitting, setIsSubmitting]);
 
   useEffect(() => {
     setIsDescriptionExpanded(false);
@@ -138,7 +156,7 @@ export const IssueMainContent = observer(function IssueMainContent(props: Props)
           issueId={issueId}
           issue={issue}
           issueOperations={issueOperations}
-          disabled={!isEditable || isArchived}
+          disabled={fieldsDisabled}
         />
 
         {duplicateIssues?.length > 0 && (
@@ -155,14 +173,16 @@ export const IssueMainContent = observer(function IssueMainContent(props: Props)
         )}
 
         <IssueTitleInput
+          key={`${issue.id}-${sessionKey}`}
           workspaceSlug={workspaceSlug}
           projectId={issue.project_id}
           issueId={issue.id}
           isSubmitting={isSubmitting}
           setIsSubmitting={(value) => setIsSubmitting(value)}
           issueOperations={issueOperations}
-          disabled={isArchived || !isEditable}
+          disabled={fieldsDisabled}
           value={issue.name}
+          onChange={onTitleChange}
           containerClassName="-ml-3"
         />
 
@@ -172,7 +192,8 @@ export const IssueMainContent = observer(function IssueMainContent(props: Props)
             projectId={projectId}
             issueId={issueId}
             issueOperations={issueOperations}
-            disabled={isArchived || !isEditable}
+            disabled={fieldsDisabled}
+            dimmed={!canEdit}
           />
         </div>
 
@@ -195,7 +216,7 @@ export const IssueMainContent = observer(function IssueMainContent(props: Props)
             <DescriptionInput
               issueSequenceId={issue.sequence_id}
               containerClassName="-ml-3 border-none"
-              disabled={isArchived || !isEditable}
+              disabled={fieldsDisabled}
               editorRef={editorRef}
               entityId={issue.id}
               fileAssetType={EFileAssetType.ISSUE_DESCRIPTION}
@@ -206,7 +227,7 @@ export const IssueMainContent = observer(function IssueMainContent(props: Props)
                     : "<p></p>"
                   : "<p></p>"
               }
-              key={issue.id}
+              key={`${issue.id}-${sessionKey}`}
               onSubmit={async (value, isMigrationUpdate) => {
                 if (!issue.id || !issue.project_id) return;
                 await issueOperations.update(workspaceSlug, issue.project_id, issue.id, {
@@ -248,7 +269,8 @@ export const IssueMainContent = observer(function IssueMainContent(props: Props)
                 createdAt: issue.created_at ? new Date(issue.created_at) : new Date(),
                 createdByDisplayName: getUserDetails(issue.created_by ?? "")?.display_name ?? "",
                 id: issueId,
-                isRestoreDisabled: !isEditable || isArchived,
+                // 恢复历史版本等于改描述，只在编辑态开放，随保存一起提交
+                isRestoreDisabled: fieldsDisabled,
               }}
               fetchHandlers={{
                 listDescriptionVersions: (issueId) =>
@@ -268,7 +290,8 @@ export const IssueMainContent = observer(function IssueMainContent(props: Props)
           projectId={projectId}
           issueId={issueId}
           issueOperations={issueOperations}
-          disabled={!isEditable || isArchived}
+          disabled={fieldsDisabled}
+          dimmed={!canEdit}
         />
       </div>
 
@@ -287,7 +310,8 @@ export const IssueMainContent = observer(function IssueMainContent(props: Props)
           projectId={projectId}
           issueId={issueId}
           issueOperations={issueOperations}
-          disabled={!isEditable || isArchived}
+          disabled={fieldsDisabled}
+          dimmed={!canEdit}
           basicGroup={false}
         />
       )}

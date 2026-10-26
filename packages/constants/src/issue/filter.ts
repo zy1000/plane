@@ -7,7 +7,6 @@
 import type {
   IIssueFilterOptions,
   ILayoutDisplayFiltersOptions,
-  TIssueActivity,
   TIssueActivityComment,
   TWorkItemFilterProperty,
 } from "@plane/types";
@@ -463,74 +462,21 @@ export const BASE_ACTIVITY_FILTER_TYPES = [
   EActivityFilterType.DEFAULT,
 ];
 
+/** 工作项活动区的页签：全部 / 流转 / 评论 / 修改 / 工时记录 */
 export enum EActivityTab {
   ALL = "ALL",
-  ACTIVITY = "ACTIVITY",
-  COMMENT = "COMMENT",
-  TIMESHEET = "TIMESHEET",
   TRANSITION = "TRANSITION",
-  HISTORY = "HISTORY",
+  COMMENT = "COMMENT",
+  EDITS = "EDITS",
+  TIMESHEET = "TIMESHEET",
 }
 
+/** 算「流转」的记录：状态、工作流审批、归档 / 恢复、收件箱处理 */
 export const TRANSITION_ACTIVITY_FIELDS = [
   "state",
   "workflow_approval_request",
   "workflow_approval_action",
+  "archived_at",
+  "intake",
+  "inbox",
 ];
-
-export const HISTORY_ACTIVITY_FIELDS = [
-  "parent",
-  "link",
-  "attachment",
-  "relates_to",
-  "duplicate",
-  "blocked_by",
-  "blocking",
-];
-
-export const ACTIVITY_TAB_OPTIONS: { key: EActivityTab; labelTranslationKey: string; fallbackLabel: string }[] = [
-  { key: EActivityTab.ALL, labelTranslationKey: "common.all", fallbackLabel: "全部" },
-  { key: EActivityTab.ACTIVITY, labelTranslationKey: "common.updates", fallbackLabel: "活动" },
-  { key: EActivityTab.COMMENT, labelTranslationKey: "common.comments", fallbackLabel: "评论" },
-  { key: EActivityTab.TIMESHEET, labelTranslationKey: "common.timesheet", fallbackLabel: "工时记录" },
-  { key: EActivityTab.TRANSITION, labelTranslationKey: "common.transitions", fallbackLabel: "转换" },
-  { key: EActivityTab.HISTORY, labelTranslationKey: "common.history", fallbackLabel: "历史" },
-];
-
-/**
- * Classify a single activity/comment timeline item into one of the
- * activity tabs. Comments always belong to COMMENT. For activities, the
- * backing `field` is used: TRANSITION_ACTIVITY_FIELDS -> TRANSITION,
- * HISTORY_ACTIVITY_FIELDS -> HISTORY, otherwise ACTIVITY (including the
- * issue creation default activity where `field` is null/undefined).
- */
-export const classifyActivityItem = (
-  item: TIssueActivityComment,
-  getActivityById: (id: string) => TIssueActivity | undefined
-): EActivityTab => {
-  if (item.activity_type === EActivityFilterType.COMMENT) return EActivityTab.COMMENT;
-  const activity = getActivityById(item.id);
-  const field = activity?.field ?? null;
-  if (field && TRANSITION_ACTIVITY_FIELDS.includes(field)) return EActivityTab.TRANSITION;
-  if (field && HISTORY_ACTIVITY_FIELDS.includes(field)) return EActivityTab.HISTORY;
-  return EActivityTab.ACTIVITY;
-};
-
-export const filterActivityByTab = (
-  items: TIssueActivityComment[],
-  tab: EActivityTab,
-  getActivityById: (id: string) => TIssueActivity | undefined
-): TIssueActivityComment[] => {
-  if (tab === EActivityTab.ALL) return items;
-  return items.filter((item) => {
-    const category = classifyActivityItem(item, getActivityById);
-    if (tab === EActivityTab.ACTIVITY) {
-      return (
-        category === EActivityTab.ACTIVITY ||
-        category === EActivityTab.TRANSITION ||
-        category === EActivityTab.HISTORY
-      );
-    }
-    return category === tab;
-  });
-};

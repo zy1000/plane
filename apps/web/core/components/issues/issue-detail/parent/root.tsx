@@ -14,7 +14,7 @@ import type { TIssue } from "@plane/types";
 // ui
 import { ControlLink, CustomMenu } from "@plane/ui";
 // helpers
-import { generateWorkItemLink } from "@plane/utils";
+import { cn, generateWorkItemLink } from "@plane/utils";
 // hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useIssues } from "@/hooks/store/use-issues";
@@ -59,9 +59,6 @@ export const IssueParentDetail = observer(function IssueParentDetail(props: TIss
   const parentIssue = issueMap?.[issue.parent_id || ""] || undefined;
   const isParentEpic = parentIssue?.is_epic;
   const projectIdentifier = getProjectIdentifierById(parentIssue?.project_id);
-
-  // 无父项且不允许编辑时，不渲染组件
-  if (!parentIssue && disabled) return <></>;
 
   const workItemLink = parentIssue
     ? generateWorkItemLink({
@@ -152,10 +149,15 @@ export const IssueParentDetail = observer(function IssueParentDetail(props: TIss
             </div>
           </div>
         ) : (
+          // 只读态照常显示这一行，只是「添加父工作项」不可点
           <button
             type="button"
+            disabled={disabled}
             onClick={() => toggleParentIssueModal(issueId)}
-            className="inline-flex min-h-0 items-center gap-1.5 p-0 font-medium text-secondary hover:text-primary"
+            className={cn(
+              "inline-flex min-h-0 items-center gap-1.5 p-0 font-medium",
+              disabled ? "cursor-default text-tertiary" : "text-secondary hover:text-primary"
+            )}
           >
             <Network className="h-3 w-3 shrink-0" aria-hidden />
             <span className="leading-[inherit]">{t("issue.add.parent")}</span>

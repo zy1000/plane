@@ -5,9 +5,9 @@
  */
 
 import { observer } from "mobx-react";
-import { ListFilter } from "lucide-react";
+import { ChevronDown, Users } from "lucide-react";
+import { useTranslation } from "@plane/i18n";
 import { CheckIcon } from "@plane/propel/icons";
-import { getIconButtonStyling } from "@plane/propel/icon-button";
 import { Avatar, PopoverMenu } from "@plane/ui";
 import { cn, getFileURL } from "@plane/utils";
 import { useMember } from "@/hooks/store/use-member";
@@ -23,10 +23,12 @@ type TOperatorFilterOption =
   | { key: string; type: "user"; userId: string; label: string; avatarUrl?: string }
   | { key: "empty"; type: "empty"; label: string };
 
+/** 按操作人筛选：带字的小按钮（全部成员 / N 位成员），点开多选名单 */
 export const ActivityOperatorFilterRoot = observer(function ActivityOperatorFilterRoot(
   props: TActivityOperatorFilterRoot
 ) {
   const { operatorIds, selectedOperatorIds, onChange } = props;
+  const { t } = useTranslation();
   const { getUserDetails } = useMember();
 
   const hasActiveFilter = selectedOperatorIds.length > 0;
@@ -43,8 +45,8 @@ export const ActivityOperatorFilterRoot = observer(function ActivityOperatorFilt
   });
   const options: TOperatorFilterOption[] =
     userOptions.length > 0
-      ? [{ key: "all", type: "all", label: "全部操作人员" }, ...userOptions]
-      : [{ key: "empty", type: "empty", label: "暂无可筛选操作人员" }];
+      ? [{ key: "all", type: "all", label: t("issue_activity.operator_filter.all") }, ...userOptions]
+      : [{ key: "empty", type: "empty", label: t("issue_activity.operator_filter.empty") }];
 
   const toggleOperator = (userId: string) => {
     if (selectedSet.has(userId)) {
@@ -58,12 +60,19 @@ export const ActivityOperatorFilterRoot = observer(function ActivityOperatorFilt
     <PopoverMenu
       buttonClassName="outline-none"
       button={
-        <div className="relative" title="按操作人员筛选">
-          <span className={getIconButtonStyling("tertiary", "base")}>
-            <ListFilter className="size-4" />
-          </span>
-          {hasActiveFilter && <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-accent-primary" />}
-        </div>
+        <span
+          title={t("issue_activity.operator_filter.title")}
+          className={cn(
+            "flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-subtle bg-surface-1 px-2.5 text-13 whitespace-nowrap transition hover:bg-layer-1",
+            hasActiveFilter ? "text-primary" : "text-secondary"
+          )}
+        >
+          <Users className="size-3.5" />
+          {hasActiveFilter
+            ? t("issue_activity.operator_filter.selected", { count: selectedOperatorIds.length })
+            : t("issue_activity.operator_filter.all")}
+          <ChevronDown className="size-3 text-placeholder" />
+        </span>
       }
       panelClassName="w-56 p-2 rounded-md border border-subtle bg-surface-1"
       data={options}

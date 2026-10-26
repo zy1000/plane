@@ -32,6 +32,8 @@ type TPeekCorePropertyBar = {
   issueId: string;
   issueOperations: TIssueOperations;
   disabled: boolean;
+  /** 整条压暗（无权限 / 已归档）。不传时跟随 disabled；只是未进编辑态的只读不该压暗 */
+  dimmed?: boolean;
 };
 
 /**
@@ -40,7 +42,7 @@ type TPeekCorePropertyBar = {
 export const PeekOverviewCorePropertyBar = observer(function PeekOverviewCorePropertyBar(
   props: TPeekCorePropertyBar
 ) {
-  const { workspaceSlug, projectId, issueId, issueOperations, disabled } = props;
+  const { workspaceSlug, projectId, issueId, issueOperations, disabled, dimmed = disabled } = props;
   const { t } = useTranslation();
   const {
     issue: { getIssueById },
@@ -78,7 +80,7 @@ export const PeekOverviewCorePropertyBar = observer(function PeekOverviewCorePro
       <div
         className={cn(
           "mb-2 grid w-full min-w-0 grid-cols-3 items-stretch gap-y-1.5 text-body-xs-medium @2xl:grid-cols-6",
-          disabled && "opacity-60"
+          dimmed && "opacity-60"
         )}
       >
       <div className={fieldShell(0)}>
@@ -132,7 +134,7 @@ export const PeekOverviewCorePropertyBar = observer(function PeekOverviewCorePro
           onChange={(val) => issueOperations.update(workspaceSlug, projectId, issueId, { assignee_ids: val })}
           disabled={disabled}
           projectId={projectId}
-          placeholder={t("issue.add.assignee")}
+          placeholder={disabled ? "未设置" : t("issue.add.assignee")}
           multiple
           buttonVariant={issue?.assignee_ids && issue.assignee_ids.length > 1 ? "transparent-without-text" : "transparent-with-text"}
           className="group w-full min-w-0"

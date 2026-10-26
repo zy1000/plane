@@ -66,6 +66,10 @@ export type PeekOverviewHeaderProps = {
   toggleEditIssueModal: (value: boolean) => void;
   handleRestoreIssue: () => Promise<void>;
   isSubmitting: TNameDescriptionLoader;
+  /** 「编辑」/「保存 取消」按钮，由 IssueView 按编辑会话状态渲染 */
+  editActions?: React.ReactNode;
+  /** 关闭按钮的处理；编辑中有改动时要先确认，不传则直接 removeRoutePeekId */
+  onRequestClose?: () => void;
 };
 
 export const IssuePeekOverviewHeader = observer(function IssuePeekOverviewHeader(props: PeekOverviewHeaderProps) {
@@ -85,6 +89,8 @@ export const IssuePeekOverviewHeader = observer(function IssuePeekOverviewHeader
     toggleEditIssueModal,
     handleRestoreIssue,
     isSubmitting,
+    editActions,
+    onRequestClose,
   } = props;
   // ref
   const parentRef = useRef<HTMLDivElement>(null);
@@ -161,7 +167,7 @@ export const IssuePeekOverviewHeader = observer(function IssuePeekOverviewHeader
     >
       <div className="flex items-center gap-4">
         <Tooltip tooltipContent={t("common.close_peek_view")} isMobile={isMobile}>
-          <button onClick={removeRoutePeekId}>
+          <button onClick={onRequestClose ?? removeRoutePeekId}>
             <MoveRight className="h-4 w-4 text-tertiary hover:text-secondary" />
           </button>
         </Tooltip>
@@ -203,6 +209,7 @@ export const IssuePeekOverviewHeader = observer(function IssuePeekOverviewHeader
       <div className="flex items-center gap-x-4">
         <NameDescriptionUpdateStatus isSubmitting={isSubmitting} />
         <div className="flex items-center gap-2">
+          {editActions}
           {currentUser && !isArchived && (
             <>
               <IssueSubscription workspaceSlug={workspaceSlug} projectId={projectId} issueId={issueId} />

@@ -6,10 +6,8 @@ import { cn } from "@plane/utils";
 import { ReleaseDropdown } from "@/components/dropdowns/release/dropdown";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { StoreContext } from "@/lib/store-context";
-import { ReleaseService } from "@/services/release.service";
+import { changeIssueReleases } from "./release-operations";
 import type { TIssueOperations } from "./root";
-
-const releaseService = new ReleaseService();
 
 type TIssueReleaseSelect = {
   className?: string;
@@ -21,7 +19,7 @@ type TIssueReleaseSelect = {
 };
 
 export const IssueReleaseSelect = observer(function IssueReleaseSelect(props: TIssueReleaseSelect) {
-  const { className = "", workspaceSlug, projectId, issueId, disabled = false } = props;
+  const { className = "", workspaceSlug, projectId, issueId, issueOperations, disabled = false } = props;
   const { t } = useTranslation();
   const [isUpdating, setIsUpdating] = useState(false);
   const context = useContext(StoreContext);
@@ -48,19 +46,15 @@ export const IssueReleaseSelect = observer(function IssueReleaseSelect(props: TI
       }
     }
 
-    const newReleaseIds = currentReleaseIds
-      .filter((id) => !releasesToRemove.includes(id))
-      .concat(releasesToAdd);
-
-    context?.issue.issues.updateIssue(issueId, { release_ids: newReleaseIds });
-
     try {
-      await releaseService.addReleasesToIssue(workspaceSlug, projectId, issueId, {
-        releases: releasesToAdd,
-        removed_releases: releasesToRemove,
-      });
+      // 优先走 issueOperations：详情页编辑态下会先暂存，保存时才提交
+      if (issueOperations.changeReleasesInIssue) {
+        await issueOperations.changeReleasesInIssue(workspaceSlug, projectId, issueId, releasesToAdd, releasesToRemove);
+      } else {
+        await changeIssueReleases(context.issue.issues, workspaceSlug, projectId, issueId, releasesToAdd, releasesToRemove);
+      }
     } catch {
-      context?.issue.issues.updateIssue(issueId, { release_ids: currentReleaseIds });
+      // changeIssueReleases 已回滚本地值
     } finally {
       setIsUpdating(false);
     }

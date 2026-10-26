@@ -8,13 +8,10 @@ import { useEffect, useMemo } from "react";
 import { observer } from "mobx-react";
 import { Clock } from "lucide-react";
 import { E_SORT_ORDER } from "@plane/constants";
-import { Tooltip } from "@plane/propel/tooltip";
-import { Avatar } from "@plane/ui";
-import { calculateTimeAgo, cn, getFileURL, renderFormattedDate, renderFormattedTime } from "@plane/utils";
+import { useTranslation } from "@plane/i18n";
 import { useTimesheet } from "@/hooks/store/use-timesheet";
-import { usePlatformOS } from "@/hooks/use-platform-os";
 import type { TTimeSheet } from "@/services/issue/timesheet.service";
-import { ActivityFeedCollapsible } from "./activity-feed-collapsible";
+import { ActivityTime, ActorName, DotNode, TimelineRow } from "./timeline/timeline-primitives";
 
 type TIssueActivityTimesheetListProps = {
   workspaceSlug: string;
@@ -59,60 +56,35 @@ function formatTimesheetClock(timeStr: string): string {
   }
 }
 
-/** 在相对时间前加 "about "；date-fns 已带 about 时不再重复。 */
-function withAboutPrefix(ago: string): string {
-  const t = ago.trim();
-  if (!t) return "";
-  if (/^about\s/i.test(t)) return t;
-  return `about ${t}`;
-}
-
 type TTimesheetActivityItemProps = {
   timesheet: TTimeSheet;
-  ends?: "top" | "bottom";
+  workspaceSlug: string;
+  isFirst: boolean;
+  isLast: boolean;
 };
 
+/** 一条工时：灰点一行，「张三 登记了工时 2h 2026/09/05 08:30 — 10:30」 */
 function TimesheetActivityItem(props: TTimesheetActivityItemProps) {
-  const { timesheet, ends } = props;
-  const { isMobile } = usePlatformOS();
+  const { timesheet, workspaceSlug, isFirst, isLast } = props;
+  const { t } = useTranslation();
 
-  const userName = timesheet.member_detail?.display_name || "Unknown";
-  const avatarUrl = timesheet.member_detail?.avatar_url;
+  const userName = timesheet.member_detail?.display_name || "—";
   const hoursLabel = formatHours(timesheet.hours);
   const workDate = formatTimesheetWorkDate(timesheet.date);
   const workRange = `${formatTimesheetClock(timesheet.start_time)} — ${formatTimesheetClock(timesheet.end_time)}`;
-  const workPeriodLabel = `${workDate} ${workRange}`;
 
   return (
-    <div
-      className={cn(
-        "relative flex items-center gap-4 text-body-sm-regular",
-        ends === "top" ? "pb-2.5" : ends === "bottom" ? "pt-2.5" : "py-2.5"
-      )}
-    >
-      <div className="absolute top-0 bottom-0 left-[13px] w-px bg-layer-3" aria-hidden />
-      <div className="z-[4] flex h-7 w-7 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-subtle bg-layer-2 text-secondary shadow-raised-100">
-        <Avatar src={getFileURL(avatarUrl ?? "")} name={userName} size="sm" showTooltip={false} />
-      </div>
-      <div className="min-w-0 flex-1 text-secondary">
-        <span className="text-primary font-medium">{userName}</span>
-        <span> logged </span>
-        <span className="tabular-nums text-primary font-medium">{hoursLabel}</span>
-        <span className="ml-2 inline-block tabular-nums text-tertiary" title={workPeriodLabel}>
-          {workPeriodLabel}
+    <TimelineRow node={<DotNode />} isFirst={isFirst} isLast={isLast}>
+      <div className="flex min-h-7 flex-wrap items-center gap-x-1.5 gap-y-1 text-13 text-tertiary">
+        <ActorName name={userName} userId={timesheet.created_by ?? undefined} workspaceSlug={workspaceSlug} />
+        <span>{t("issue_activity.timesheet.logged")}</span>
+        <span className="font-medium text-primary tabular-nums">{hoursLabel}</span>
+        <span className="tabular-nums">
+          {workDate} {workRange}
         </span>
-        <span>
-          <Tooltip
-            isMobile={isMobile}
-            tooltipContent={`登记时段：${workPeriodLabel}；提交于 ${renderFormattedDate(timesheet.created_at) ?? ""} ${renderFormattedTime(timesheet.created_at)}`.trim()}
-          >
-            <span className="ml-3 inline-block whitespace-nowrap text-tertiary">
-              {withAboutPrefix(calculateTimeAgo(timesheet.created_at))}
-            </span>
-          </Tooltip>
-        </span>
+        <ActivityTime value={timesheet.created_at} />
       </div>
-    </div>
+    </TimelineRow>
   );
 }
 
@@ -120,6 +92,7 @@ export const IssueActivityTimesheetList = observer(function IssueActivityTimeshe
   props: TIssueActivityTimesheetListProps
 ) {
   const { workspaceSlug, projectId, issueId, sortOrder, operatorFilterIds = [], onOperatorIdsChange } = props;
+  const { t } = useTranslation();
 
   const { timesheets, isLoading, fetchTimesheets } = useTimesheet(workspaceSlug, projectId, issueId);
 
@@ -148,9 +121,7 @@ export const IssueActivityTimesheetList = observer(function IssueActivityTimeshe
 
     const selectedOperatorSet = new Set(operatorFilterIds);
     return timesheets.filter((timesheet) =>
-      [timesheet.created_by, timesheet.updated_by].some(
-        (userId) => !!userId && selectedOperatorSet.has(userId)
-      )
+      [timesheet.created_by, timesheet.updated_by].some((userId) => !!userId && selectedOperatorSet.has(userId))
     );
   }, [timesheets, operatorFilterIds]);
 
@@ -167,32 +138,34 @@ export const IssueActivityTimesheetList = observer(function IssueActivityTimeshe
 
   if (isLoading && ordered.length === 0) {
     return (
-      <div className="flex items-center justify-center gap-2 py-6 text-body-sm-regular text-placeholder">
+      <div className="flex items-center justify-center gap-2 py-6 text-13 text-placeholder">
         <Clock className="h-4 w-4" />
-        加载中…
+        {t("issue_activity.empty.loading")}
       </div>
     );
   }
 
   if (ordered.length === 0) {
     return (
-      <div className="py-6 text-center text-body-sm-regular text-placeholder">
-        {operatorFilterIds.length > 0 ? "暂无匹配操作人员的工时记录" : "暂无工时记录"}
+      <div className="py-6 text-center text-13 text-placeholder">
+        {operatorFilterIds.length > 0
+          ? t("issue_activity.empty.operator_timesheet")
+          : t("issue_activity.empty.timesheet")}
       </div>
     );
   }
 
   return (
-    <ActivityFeedCollapsible resetKey={`${issueId}:${sortOrder}`} listLength={ordered.length}>
-      <div>
-        {ordered.map((t, index) => (
-          <TimesheetActivityItem
-            key={t.id}
-            timesheet={t}
-            ends={index === 0 ? "top" : index === ordered.length - 1 ? "bottom" : undefined}
-          />
-        ))}
-      </div>
-    </ActivityFeedCollapsible>
+    <ul className="flex flex-col pt-1">
+      {ordered.map((timesheet, index) => (
+        <TimesheetActivityItem
+          key={timesheet.id}
+          timesheet={timesheet}
+          workspaceSlug={workspaceSlug}
+          isFirst={index === 0}
+          isLast={index === ordered.length - 1}
+        />
+      ))}
+    </ul>
   );
 });

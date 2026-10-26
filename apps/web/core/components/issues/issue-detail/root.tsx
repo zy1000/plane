@@ -4,13 +4,14 @@
  * See the LICENSE file for details.
  */
 
-import { useMemo } from "react";
+import { useContext, useMemo, useRef, useState } from "react";
 import { observer } from "mobx-react";
 // plane imports
 import { EUserPermissions, EUserPermissionsLevel, PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
+import type { EditorRefApi } from "@plane/editor";
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setPromiseToast, setToast } from "@plane/propel/toast";
-import type { TIssue } from "@plane/types";
+import type { TIssue, TNameDescriptionLoader } from "@plane/types";
 import { EIssuesStoreType } from "@plane/types";
 // assets
 import emptyIssue from "@/app/assets/empty-state/issue.svg?url";
@@ -22,6 +23,9 @@ import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useIssues } from "@/hooks/store/use-issues";
 import { useUserPermissions } from "@/hooks/store/user";
 import { useAppRouter } from "@/hooks/use-app-router";
+import { useIssueEditSession } from "@/hooks/use-issue-edit-session";
+// store
+import { StoreContext } from "@/lib/store-context";
 // local components
 import { IssuePeekOverview } from "../peek-overview";
 import { PeekOverviewProperties } from "../peek-overview/properties";
@@ -30,7 +34,9 @@ import {
   isWorkflowApprovalInitiated,
   type TIssueWorkflowUpdateError,
 } from "../workflow-error-utils";
+import { IssueEditModeActions } from "./edit-mode-actions";
 import { IssueMainContent } from "./main-content";
+import { changeIssueReleases } from "./release-operations";
 
 export type TIssueOperations = {
   fetch: (workspaceSlug: string, projectId: string, issueId: string, loader?: boolean) => Promise<void>;
@@ -53,6 +59,13 @@ export type TIssueOperations = {
     issueId: string,
     addModuleIds: string[],
     removeModuleIds: string[]
+  ) => Promise<void>;
+  changeReleasesInIssue?: (
+    workspaceSlug: string,
+    projectId: string,
+    issueId: string,
+    addReleaseIds: string[],
+    removeReleaseIds: string[]
   ) => Promise<void>;
 };
 
@@ -86,6 +99,10 @@ export const IssueDetailRoot = observer(function IssueDetailRoot(props: TIssueDe
   } = useIssues(EIssuesStoreType.ARCHIVED);
   const { allowPermissions } = useUserPermissions();
   const { issueDetailSidebarCollapsed } = useAppTheme();
+  const issueStore = useContext(StoreContext).issue.issues;
+  // 标题 / 描述的编辑器与保存状态提到这里，编辑会话保存时要读编辑器内容
+  const editorRef = useRef<EditorRefApi>(null);
+  const [isSubmitting, setIsSubmitting] = useState<TNameDescriptionLoader>("saved");
 
   const issueOperations: TIssueOperations = useMemo(
     () => ({
@@ -241,6 +258,24 @@ export const IssueDetailRoot = observer(function IssueDetailRoot(props: TIssueDe
           }
         }
       },
+      changeReleasesInIssue: async (
+        workspaceSlug: string,
+        projectId: string,
+        issueId: string,
+        addReleaseIds: string[],
+        removeReleaseIds: string[]
+      ) => {
+        try {
+          await changeIssueReleases(issueStore, workspaceSlug, projectId, issueId, addReleaseIds, removeReleaseIds);
+        } catch (error) {
+          console.log("Error in updating issue releases:", error);
+          setToast({
+            type: TOAST_TYPE.ERROR,
+            title: t("common.error.label"),
+            message: t("entity.update.failed", { entity: t("issue.label") }),
+          });
+        }
+      },
     }),
     [
       is_archived,
@@ -254,6 +289,7 @@ export const IssueDetailRoot = observer(function IssueDetailRoot(props: TIssueDe
       removeIssueFromCycle,
       changeModulesInIssue,
       removeIssueFromModule,
+      issueStore,
       t,
     ]
   );
@@ -267,6 +303,19 @@ export const IssueDetailRoot = observer(function IssueDetailRoot(props: TIssueDe
     workspaceSlug,
     projectId
   );
+  const canEdit = isEditable && !is_archived;
+  // 点「编辑」才可改，改动暂存本地，保存时一次提交
+  const session = useIssueEditSession({
+    workspaceSlug,
+    projectId,
+    issueId,
+    issueOperations,
+    editorRef,
+    isSubmitting,
+    setIsSubmitting,
+  });
+  const isEditing = session.isEditing && !session.isSaving;
+  const fieldsDisabled = !canEdit || !isEditing;
 
   return (
     <>
@@ -284,13 +333,24 @@ export const IssueDetailRoot = observer(function IssueDetailRoot(props: TIssueDe
         <div className="relative flex h-full w-full flex-col overflow-hidden">
           <div className="vertical-scrollbar flex h-full w-full overflow-auto">
             <div className="relative h-full w-full space-y-6 overflow-auto p-4 py-5">
+              {canEdit && (
+                <div className="sticky top-0 z-10 mb-0 flex justify-end bg-surface-1 pb-2">
+                  <IssueEditModeActions session={session} canEdit={canEdit} />
+                </div>
+              )}
               <IssueMainContent
                 workspaceSlug={workspaceSlug}
                 projectId={projectId}
                 issueId={issueId}
-                issueOperations={issueOperations}
+                issueOperations={session.operations}
                 isEditable={isEditable}
                 isArchived={is_archived}
+                isEditing={isEditing}
+                sessionKey={session.sessionKey}
+                editorRef={editorRef}
+                isSubmitting={isSubmitting}
+                setIsSubmitting={setIsSubmitting}
+                onTitleChange={session.onTitleChange}
               />
             </div>
             {!issueDetailSidebarCollapsed && (
@@ -303,8 +363,9 @@ export const IssueDetailRoot = observer(function IssueDetailRoot(props: TIssueDe
                   workspaceSlug={workspaceSlug}
                   projectId={projectId}
                   issueId={issueId}
-                  issueOperations={issueOperations}
-                  disabled={!isEditable || is_archived}
+                  issueOperations={session.operations}
+                  disabled={fieldsDisabled}
+                  dimmed={!canEdit}
                 />
               </div>
             )}

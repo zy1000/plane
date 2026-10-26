@@ -13,14 +13,22 @@ import type { TIssueExtraFieldType, TIssueExtraFieldValue } from "@plane/types";
 // ui
 import { ToggleSwitch } from "@plane/ui";
 // shared extra-field utilities
-import { ExtraFieldControl, findValueForField, getTextMode, isValueEmpty, upsertValue } from "@/components/issues/extra-fields";
+import {
+  ExtraFieldControl,
+  findValueForField,
+  getSelectOptions,
+  getTextMode,
+  isValueEmpty,
+  upsertValue,
+} from "@/components/issues/extra-fields";
 // hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useIssueTypeExtraFields } from "@/hooks/store/use-issue-type-extra-fields";
+import { useMember } from "@/hooks/store/use-member";
 // services
 import type { TTypeExtraField } from "@/services/project/project-issue-type.service";
 // utils
-import { cn } from "@plane/utils";
+import { cn, renderFormattedDate } from "@plane/utils";
 import type { TIssueOperations } from "./root";
 
 const HIDE_EMPTY_STORAGE_KEY = "plane:issue-extra-fields:hide-empty";
@@ -112,6 +120,53 @@ const FieldControlCell = (props: TFieldCellProps) => {
   return isDeferred ? <DeferredFieldCell {...props} /> : <ImmediateFieldCell {...props} />;
 };
 
+const toIdList = (value: unknown): string[] =>
+  Array.isArray(value) ? (value as string[]) : isValueEmpty(value) ? [] : [String(value)];
+
+/** 只读态：按字段类型把值排成文本 / 标签，空值统一「—」，不渲染灰掉的输入框 */
+const ReadOnlyFieldValue = observer(function ReadOnlyFieldValue({ field, value }: { field: TTypeExtraField; value: unknown }) {
+  const { getUserDetails } = useMember();
+  const empty = <span className="text-14 text-placeholder">—</span>;
+  const chip = (label: string, key: string) => (
+    <span
+      key={key}
+      className="inline-block h-6 max-w-full truncate rounded-md bg-layer-1 px-2 text-13 leading-6 font-medium text-primary"
+    >
+      {label}
+    </span>
+  );
+
+  switch (field.field_type) {
+    case "boolean":
+      return <span className="text-14 text-primary">{value === true || value === "true" || value === 1 ? "是" : "否"}</span>;
+    case "date":
+      if (isValueEmpty(value)) return empty;
+      return <span className="text-14 text-primary tabular-nums">{renderFormattedDate(value as string) ?? String(value)}</span>;
+    case "select": {
+      const options = getSelectOptions(field);
+      const keys = toIdList(value);
+      if (keys.length === 0) return empty;
+      return (
+        <span className="flex flex-wrap gap-1">
+          {keys.map((key) => chip(options.find((option) => option.key === key)?.label ?? key, key))}
+        </span>
+      );
+    }
+    case "user": {
+      const ids = toIdList(value);
+      if (ids.length === 0) return empty;
+      return (
+        <span className="text-14 text-primary">
+          {ids.map((id) => getUserDetails(id)?.display_name ?? id).join("、")}
+        </span>
+      );
+    }
+    default:
+      if (isValueEmpty(value)) return empty;
+      return <div className="text-14 break-words whitespace-pre-wrap text-primary">{String(value)}</div>;
+  }
+});
+
 // ─── 字段卡片 ─────────────────────────────────────────────────────────────────
 
 type TIssueExtraFieldsSectionProps = {
@@ -119,7 +174,10 @@ type TIssueExtraFieldsSectionProps = {
   projectId: string;
   issueId: string;
   issueOperations: TIssueOperations;
+  /** 只读：值按文本展示，不出输入控件 */
   disabled?: boolean;
+  /** 整块压暗（无权限 / 已归档）。不传时跟随 disabled；只是未进编辑态的只读不该压暗 */
+  dimmed?: boolean;
 };
 
 /**
@@ -129,7 +187,7 @@ type TIssueExtraFieldsSectionProps = {
 export const IssueExtraFieldsSection = observer(function IssueExtraFieldsSection(
   props: TIssueExtraFieldsSectionProps
 ) {
-  const { workspaceSlug, projectId, issueId, issueOperations, disabled } = props;
+  const { workspaceSlug, projectId, issueId, issueOperations, disabled, dimmed = disabled } = props;
 
   const {
     issue: { getIssueById },
@@ -177,17 +235,22 @@ export const IssueExtraFieldsSection = observer(function IssueExtraFieldsSection
   const shortFields = visibleFields.filter((f) => !isParagraphField(f));
   const paragraphFields = visibleFields.filter(isParagraphField);
 
-  const renderCell = (field: TTypeExtraField) => (
-    <FieldControlCell
-      key={`${issueId}-${field.id}`}
-      field={field}
-      projectId={projectId}
-      issueId={issueId}
-      value={findValueForField(values, field.id)}
-      onCommit={(next) => commit(field.id, field.field_type, next)}
-      disabled={disabled}
-    />
-  );
+  const renderCell = (field: TTypeExtraField) =>
+    disabled ? (
+      <div className={cn("flex min-w-0 items-center", isParagraphField(field) ? "py-1 leading-relaxed" : "min-h-7.5")}>
+        <ReadOnlyFieldValue field={field} value={findValueForField(values, field.id)} />
+      </div>
+    ) : (
+      <FieldControlCell
+        key={`${issueId}-${field.id}`}
+        field={field}
+        projectId={projectId}
+        issueId={issueId}
+        value={findValueForField(values, field.id)}
+        onCommit={(next) => commit(field.id, field.field_type, next)}
+        disabled={disabled}
+      />
+    );
 
   return (
     <section className="@container overflow-hidden rounded-lg border border-subtle">
@@ -205,7 +268,7 @@ export const IssueExtraFieldsSection = observer(function IssueExtraFieldsSection
         )}
       </div>
 
-      <div className={cn(disabled && "opacity-60")}>
+      <div className={cn(dimmed && "opacity-60")}>
         {shortFields.length > 0 && (
           <div className="grid grid-cols-1 gap-x-6 gap-y-3 px-4 py-4 @md:grid-cols-2 @2xl:grid-cols-3">
             {shortFields.map((field) => (

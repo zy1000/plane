@@ -36,13 +36,15 @@ interface IPeekOverviewProperties {
   projectId: string;
   issueId: string;
   disabled: boolean;
+  /** 整块压暗（无权限 / 已归档）。不传时跟随 disabled；只是未进编辑态的只读不该压暗 */
+  dimmed?: boolean;
   issueOperations: TIssueOperations;
   /** 「基本」组（状态/优先级/负责人/日期）：标题下属性条可见时隐藏，避免一页出现两份。false = 不渲染，字符串 = 外层 class（响应式显隐） */
   basicGroup?: boolean | string;
 }
 
 export const PeekOverviewProperties = observer(function PeekOverviewProperties(props: IPeekOverviewProperties) {
-  const { workspaceSlug, projectId, issueId, issueOperations, disabled, basicGroup = true } = props;
+  const { workspaceSlug, projectId, issueId, issueOperations, disabled, dimmed = disabled, basicGroup = true } = props;
   const { t } = useTranslation();
   // store hooks
   const { getProjectById } = useProject();
@@ -72,7 +74,7 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
   return (
     <div>
       <h6 className="text-body-sm-semibold text-primary">{t("common.properties")}</h6>
-      <div className={cn("mt-3 flex w-full flex-col gap-5", disabled && "opacity-60")}>
+      <div className={cn("mt-3 flex w-full flex-col gap-5", dimmed && "opacity-60")}>
         {basicGroup !== false && (
           <PeekOverviewBasicProperties
             className={typeof basicGroup === "string" ? basicGroup : undefined}
@@ -86,11 +88,12 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
 
         {/* 详情：工时、标签 */}
         <PropertyGroupSection title="详情">
+          {/* 工时是独立记录、即时生效，不进编辑会话，只受权限 / 归档限制 */}
           <IssueWorklogProperty
             workspaceSlug={workspaceSlug}
             projectId={projectId}
             issueId={issueId}
-            disabled={disabled}
+            disabled={dimmed}
           />
 
           {areEstimateEnabledByProjectId(projectId) && (
@@ -126,7 +129,16 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
               <span>{t("common.labels")}</span>
             </div>
             <div className="flex grow flex-wrap items-center gap-1 truncate">
-              <IssueLabel workspaceSlug={workspaceSlug} projectId={projectId} issueId={issueId} disabled={disabled} />
+              {/* 标签改动走 issueOperations，编辑态下才能被暂存到保存时一起提交 */}
+              <IssueLabel
+                workspaceSlug={workspaceSlug}
+                projectId={projectId}
+                issueId={issueId}
+                disabled={disabled}
+                onLabelUpdate={(labelIds) =>
+                  issueOperations.update(workspaceSlug, projectId, issueId, { label_ids: labelIds })
+                }
+              />
             </div>
           </div>
         </PropertyGroupSection>

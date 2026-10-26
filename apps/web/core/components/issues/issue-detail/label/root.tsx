@@ -26,7 +26,7 @@ export type TIssueLabel = {
   issueId: string;
   disabled: boolean;
   isInboxIssue?: boolean;
-  onLabelUpdate?: (labelIds: string[]) => void;
+  onLabelUpdate?: (labelIds: string[]) => void | Promise<void>;
   issueServiceType?: TIssueServiceType;
 };
 
@@ -60,7 +60,7 @@ export const IssueLabel = observer(function IssueLabel(props: TIssueLabel) {
     () => ({
       updateIssue: async (workspaceSlug: string, projectId: string, issueId: string, data: Partial<TIssue>) => {
         try {
-          if (onLabelUpdate) onLabelUpdate(data.label_ids || []);
+          if (onLabelUpdate) await onLabelUpdate(data.label_ids || []);
           else await updateIssue(workspaceSlug, projectId, issueId, data);
         } catch (error) {
           setToast({

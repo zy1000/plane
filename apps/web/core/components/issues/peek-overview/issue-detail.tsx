@@ -18,7 +18,6 @@ import { DescriptionInput } from "@/components/editor/rich-text/description-inpu
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useMember } from "@/hooks/store/use-member";
 import { useUser } from "@/hooks/store/user";
-import useReloadConfirmations from "@/hooks/use-reload-confirmation";
 // services
 import { WorkItemVersionService } from "@/services/issue";
 // local components
@@ -43,6 +42,11 @@ type Props = {
   setIsSubmitting: (value: TNameDescriptionLoader) => void;
   /** 标题下属性条外层 class：两栏布局时属性挪到右栏「基本」组，由调用方传 hidden */
   propertyBarClassName?: string;
+  /** 处于编辑会话中（点了「编辑」且不在保存中）：标题 / 描述 / 属性 / 自定义字段才可改 */
+  isEditing: boolean;
+  /** 取消编辑后变化，让标题 / 描述编辑器重挂回到保存前的值 */
+  sessionKey: number;
+  onTitleChange: (value: string) => void;
 };
 
 export const PeekOverviewIssueDetails = observer(function PeekOverviewIssueDetails(props: Props) {
@@ -57,6 +61,9 @@ export const PeekOverviewIssueDetails = observer(function PeekOverviewIssueDetai
     isSubmitting,
     setIsSubmitting,
     propertyBarClassName,
+    isEditing,
+    sessionKey,
+    onTitleChange,
   } = props;
   // store hooks
   const { data: currentUser } = useUser();
@@ -64,22 +71,19 @@ export const PeekOverviewIssueDetails = observer(function PeekOverviewIssueDetai
     issue: { getIssueById },
   } = useIssueDetail();
   const { getUserDetails } = useMember();
-  // reload confirmation
-  const { setShowAlert } = useReloadConfirmations(isSubmitting === "submitting");
-
+  // 离开提醒由编辑会话统一负责，这里只负责 2s 后把「已保存」收起
   useEffect(() => {
     if (isSubmitting === "submitted") {
-      setShowAlert(false);
       setTimeout(async () => {
         setIsSubmitting("saved");
       }, 2000);
-    } else if (isSubmitting === "submitting") {
-      setShowAlert(true);
     }
-  }, [isSubmitting, setShowAlert, setIsSubmitting]);
+  }, [isSubmitting, setIsSubmitting]);
 
   // derived values
   const issue = issueId ? getIssueById(issueId) : undefined;
+  const canEdit = !disabled && !isArchived;
+  const fieldsDisabled = !canEdit || !isEditing;
 
   // 描述折叠态：限制最大高度并提供 “显示全部 / 显示更少” 按钮
   const DESCRIPTION_COLLAPSED_MAX_HEIGHT = 320;
@@ -132,17 +136,19 @@ export const PeekOverviewIssueDetails = observer(function PeekOverviewIssueDetai
         issueId={issueId}
         issue={issue}
         issueOperations={issueOperations}
-        disabled={disabled || isArchived}
+        disabled={fieldsDisabled}
       />
       <IssueTitleInput
+        key={`${issue.id}-${sessionKey}`}
         workspaceSlug={workspaceSlug}
         projectId={issue.project_id}
         issueId={issue.id}
         isSubmitting={isSubmitting}
         setIsSubmitting={(value) => setIsSubmitting(value)}
         issueOperations={issueOperations}
-        disabled={disabled || isArchived}
+        disabled={fieldsDisabled}
         value={issue.name}
+        onChange={onTitleChange}
         containerClassName="-ml-3"
       />
 
@@ -152,7 +158,8 @@ export const PeekOverviewIssueDetails = observer(function PeekOverviewIssueDetai
           projectId={projectId}
           issueId={issueId}
           issueOperations={issueOperations}
-          disabled={disabled || isArchived}
+          disabled={fieldsDisabled}
+          dimmed={!canEdit}
         />
       </div>
 
@@ -171,12 +178,12 @@ export const PeekOverviewIssueDetails = observer(function PeekOverviewIssueDetai
           <DescriptionInput
             issueSequenceId={issue.sequence_id}
             containerClassName="-ml-3 border-none"
-            disabled={disabled || isArchived}
+            disabled={fieldsDisabled}
             editorRef={editorRef}
             entityId={issue.id}
             fileAssetType={EFileAssetType.ISSUE_DESCRIPTION}
             initialValue={issueDescription}
-            key={issue.id}
+            key={`${issue.id}-${sessionKey}`}
             onSubmit={async (value, isMigrationUpdate) => {
               if (!issue.id || !issue.project_id) return;
 
@@ -225,7 +232,8 @@ export const PeekOverviewIssueDetails = observer(function PeekOverviewIssueDetai
               createdAt: issue.created_at ? new Date(issue.created_at) : new Date(),
               createdByDisplayName: getUserDetails(issue.created_by ?? "")?.display_name ?? "",
               id: issueId,
-              isRestoreDisabled: disabled || isArchived,
+              // 恢复历史版本等于改描述，只在编辑态开放，随保存一起提交
+              isRestoreDisabled: fieldsDisabled,
             }}
             fetchHandlers={{
               listDescriptionVersions: (issueId) =>
@@ -255,7 +263,8 @@ export const PeekOverviewIssueDetails = observer(function PeekOverviewIssueDetai
           projectId={projectId}
           issueId={issueId}
           issueOperations={issueOperations}
-          disabled={disabled || isArchived}
+          disabled={fieldsDisabled}
+          dimmed={!canEdit}
         />
       </div>
     </div>

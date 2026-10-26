@@ -15,10 +15,12 @@ import { EIssueServiceType } from "@plane/types";
 import { cn } from "@plane/utils";
 // hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
+import { useIssueEditSession } from "@/hooks/use-issue-edit-session";
 import useKeypress from "@/hooks/use-keypress";
 import usePeekOverviewOutsideClickDetector from "@/hooks/use-peek-overview-outside-click";
 // local imports
 import type { TIssueOperations } from "../issue-detail";
+import { IssueEditModeActions } from "../issue-detail/edit-mode-actions";
 import { IssueActivity } from "../issue-detail/issue-activity";
 import { IssueDetailWidgets } from "../issue-detail-widgets";
 import { IssuePeekOverviewError } from "./error";
@@ -72,10 +74,31 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
   } = useIssueDetail();
   const { isAnyModalOpen: isAnyEpicModalOpen } = useIssueDetail(EIssueServiceType.EPICS);
   const issue = getIssueById(issueId);
+  // 点「编辑」才可改，改动暂存本地，保存时一次提交
+  const session = useIssueEditSession({
+    workspaceSlug,
+    projectId,
+    issueId,
+    issueOperations,
+    editorRef,
+    isSubmitting,
+    setIsSubmitting,
+  });
+  const canEdit = !disabled && !is_archived;
+  const isEditing = session.isEditing && !session.isSaving;
   // remove peek id
   const removeRoutePeekId = () => {
     setPeekIssue(undefined);
     if (embedIssue && embedRemoveCurrentNotification) embedRemoveCurrentNotification();
+  };
+  /** 关闭抽屉前先处理编辑会话：有改动要确认，确认后丢弃；返回是否真的关了 */
+  const requestClose = (): boolean => {
+    if (session.isEditing) {
+      if (session.hasChanges && !window.confirm("有未保存的修改，确定放弃并关闭吗？")) return false;
+      session.cancel();
+    }
+    removeRoutePeekId();
+    return true;
   };
 
   const toggleDeleteIssueModal = (value: boolean) => setIsDeleteIssueModalOpen(value);
@@ -92,7 +115,7 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
       const isAnyDropbarOpen = editorRef.current?.isAnyDropbarOpen();
       if (!embedIssue) {
         if (!isAnyModalOpen && !isAnyEpicModalOpen && !isAnyLocalModalOpen && !isAnyDropbarOpen) {
-          removeRoutePeekId();
+          requestClose();
         }
       }
     },
@@ -105,7 +128,7 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
     const dropdownElement = document.activeElement?.tagName === "INPUT";
     const isAnyDropbarOpen = editorRef.current?.isAnyDropbarOpen();
     if (!isAnyModalOpen && !dropdownElement && !isAnyDropbarOpen && !editorImageFullScreenModalElement) {
-      removeRoutePeekId();
+      if (!requestClose()) return;
       const issueElement = document.getElementById(`issue-${issueId}`);
       if (issueElement) issueElement?.focus();
     }
@@ -168,9 +191,12 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
                 issueId={issueId}
                 workspaceSlug={workspaceSlug}
                 projectId={projectId}
-                isSubmitting={isSubmitting}
+                // 编辑态下改动只是暂存，不显示「Saving / Saved」
+                isSubmitting={session.isEditing ? "saved" : isSubmitting}
                 disabled={disabled}
                 embedIssue={embedIssue}
+                editActions={<IssueEditModeActions session={session} canEdit={canEdit} />}
+                onRequestClose={() => void requestClose()}
               />
               {/* content */}
               <div className="vertical-scrollbar relative scrollbar-md h-full w-full overflow-hidden overflow-y-auto">
@@ -184,12 +210,15 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
                       workspaceSlug={workspaceSlug}
                       projectId={projectId}
                       issueId={issueId}
-                      issueOperations={issueOperations}
+                      issueOperations={session.operations}
                       disabled={disabled}
                       isArchived={is_archived}
                       isSubmitting={isSubmitting}
                       setIsSubmitting={(value) => setIsSubmitting(value)}
                       propertyBarClassName="@3xl/peek:hidden"
+                      isEditing={isEditing}
+                      sessionKey={session.sessionKey}
+                      onTitleChange={session.onTitleChange}
                     />
                     </div>
 
@@ -213,8 +242,9 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
                         workspaceSlug={workspaceSlug}
                         projectId={projectId}
                         issueId={issueId}
-                        issueOperations={issueOperations}
-                        disabled={disabled || is_archived}
+                        issueOperations={session.operations}
+                        disabled={!canEdit || !isEditing}
+                        dimmed={!canEdit}
                         basicGroup="hidden @3xl/peek:block"
                       />
                     </div>
@@ -238,12 +268,15 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
                           workspaceSlug={workspaceSlug}
                           projectId={projectId}
                           issueId={issueId}
-                          issueOperations={issueOperations}
+                          issueOperations={session.operations}
                           disabled={disabled}
                           isArchived={is_archived}
                           isSubmitting={isSubmitting}
                           setIsSubmitting={(value) => setIsSubmitting(value)}
                           propertyBarClassName="hidden"
+                          isEditing={isEditing}
+                          sessionKey={session.sessionKey}
+                          onTitleChange={session.onTitleChange}
                         />
 
                         <div className="py-2">
@@ -273,8 +306,9 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
                         workspaceSlug={workspaceSlug}
                         projectId={projectId}
                         issueId={issueId}
-                        issueOperations={issueOperations}
-                        disabled={disabled || is_archived}
+                        issueOperations={session.operations}
+                        disabled={!canEdit || !isEditing}
+                        dimmed={!canEdit}
                       />
                     </div>
                   </div>

@@ -36,11 +36,19 @@ export const LabelListItem = observer(function LabelListItem(props: TLabelListIt
   };
 
   if (!label) return <></>;
+  // 只读时用普通标签块展示，不走 Button 的 disabled 置灰样式
+  if (disabled)
+    return (
+      <span className="inline-flex h-5 items-center gap-1 rounded-sm bg-layer-3 px-1.5 text-secondary">
+        <LabelFilledIcon className="size-3" color={label.color ?? "#000000"} />
+        <span className="text-body-xs-regular">{label.name}</span>
+      </span>
+    );
   return (
-    <Button variant="tertiary" size="sm" key={labelId} onClick={handleLabel} disabled={disabled}>
+    <Button variant="tertiary" size="sm" key={labelId} onClick={handleLabel}>
       <LabelFilledIcon className="size-3" color={label.color ?? "#000000"} />
       <span className="text-body-xs-regular">{label.name}</span>
-      {!disabled && <CloseIcon className="h-2.5 w-2.5 transition-all group-hover:text-danger-primary" />}
+      <CloseIcon className="h-2.5 w-2.5 transition-all group-hover:text-danger-primary" />
     </Button>
   );
 });

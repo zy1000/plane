@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useContext } from "react";
 import { observer } from "mobx-react";
 import { usePathname } from "next/navigation";
 // Plane imports
@@ -19,9 +19,11 @@ import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useIssues } from "@/hooks/store/use-issues";
 import { useUserPermissions } from "@/hooks/store/user";
 import { useIssueStoreType } from "@/hooks/use-issue-layout-store";
+import { StoreContext } from "@/lib/store-context";
 import { useWorkItemProperties } from "@/plane-web/hooks/use-issue-properties";
 // local imports
 import type { TIssueOperations } from "../issue-detail";
+import { changeIssueReleases } from "../issue-detail/release-operations";
 import {
   extractIssueUpdateErrorMessage,
   isWorkflowApprovalInitiated,
@@ -54,6 +56,7 @@ export const IssuePeekOverview = observer(function IssuePeekOverview(props: IWor
   const issueStoreType = useIssueStoreType();
   const storeType = issueStoreFromProps ?? issueStoreType;
   const { issues } = useIssues(storeType);
+  const issueStore = useContext(StoreContext).issue.issues;
 
   useWorkItemProperties(
     peekIssue?.projectId,
@@ -258,9 +261,27 @@ export const IssuePeekOverview = observer(function IssuePeekOverview(props: IWor
           console.error("Error removing issue from module", error);
         }
       },
+      changeReleasesInIssue: async (
+        workspaceSlug: string,
+        projectId: string,
+        issueId: string,
+        addReleaseIds: string[],
+        removeReleaseIds: string[]
+      ) => {
+        try {
+          await changeIssueReleases(issueStore, workspaceSlug, projectId, issueId, addReleaseIds, removeReleaseIds);
+        } catch (error) {
+          console.error("Error updating issue releases", error);
+          setToast({
+            type: TOAST_TYPE.ERROR,
+            title: t("toast.error"),
+            message: t("entity.update.failed", { entity: t("issue.label", { count: 1 }) }),
+          });
+        }
+      },
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [fetchIssue, is_draft, issues, fetchActivities, pathname, removeRoutePeekId, restoreIssue]
+    [fetchIssue, is_draft, issues, issueStore, fetchActivities, pathname, removeRoutePeekId, restoreIssue]
   );
 
   const { isLoading } = useSWR(

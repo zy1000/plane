@@ -28,6 +28,8 @@ export type IssueTitleInputProps = {
   issueId: string;
   className?: string;
   containerClassName?: string;
+  /** 每次输入即回调（不防抖），供编辑会话在保存时拿到最新标题 */
+  onChange?: (value: string) => void;
 };
 
 export const IssueTitleInput = observer(function IssueTitleInput(props: IssueTitleInputProps) {
@@ -42,6 +44,7 @@ export const IssueTitleInput = observer(function IssueTitleInput(props: IssueTit
     projectId,
     className,
     containerClassName,
+    onChange,
   } = props;
   const { t } = useTranslation();
   // states
@@ -148,11 +151,18 @@ export const IssueTitleInput = observer(function IssueTitleInput(props: IssueTit
       setTitle(titleFromEvent);
       currentTitleRef.current = titleFromEvent;
       hasUnsavedChanges.current = true;
+      onChange?.(titleFromEvent);
     },
-    [setIsSubmitting]
+    [setIsSubmitting, onChange]
   );
 
-  if (disabled) return <div className="text-20 font-medium whitespace-pre-line">{title}</div>;
+  // 只读时直接显示已保存的值，不受本地未提交输入影响；容器与内边距和编辑态输入框保持一致，换行位置才不会变
+  if (disabled)
+    return (
+      <div className={cn("relative", containerClassName)}>
+        <div className={cn("px-3 text-20 font-medium whitespace-pre-line", className)}>{value ?? ""}</div>
+      </div>
+    );
 
   return (
     <div className="flex flex-col gap-1.5">

@@ -6,48 +6,59 @@
 
 import { memo } from "react";
 import { EActivityTab } from "@plane/constants";
+import { useTranslation } from "@plane/i18n";
 import { cn } from "@plane/utils";
+import type { TIssueTimelineCounts } from "@/hooks/store/use-issue-activity-timeline";
 
-type TTab = {
-  key: EActivityTab;
-  label: string;
+/** 页签 → i18n 片段（页签名与空态文案共用） */
+export const TAB_I18N_KEY: Record<EActivityTab, string> = {
+  [EActivityTab.ALL]: "all",
+  [EActivityTab.TRANSITION]: "transitions",
+  [EActivityTab.COMMENT]: "comments",
+  [EActivityTab.EDITS]: "edits",
+  [EActivityTab.TIMESHEET]: "timesheet",
 };
+
+const TABS: EActivityTab[] = [
+  EActivityTab.ALL,
+  EActivityTab.TRANSITION,
+  EActivityTab.COMMENT,
+  EActivityTab.EDITS,
+  EActivityTab.TIMESHEET,
+];
 
 type TActivityTabsProps = {
   activeTab: EActivityTab;
+  counts: TIssueTimelineCounts;
   onChange: (tab: EActivityTab) => void;
 };
 
-const TABS: TTab[] = [
-  { key: EActivityTab.ALL, label: "全部" },
-  { key: EActivityTab.ACTIVITY, label: "活动" },
-  { key: EActivityTab.COMMENT, label: "评论" },
-  { key: EActivityTab.TRANSITION, label: "转换" },
-  { key: EActivityTab.HISTORY, label: "历史" },
-  { key: EActivityTab.TIMESHEET, label: "工时记录" },
-];
-
+/** 全部 / 流转 / 评论 / 修改 / 工时记录，中间三个带条数 */
 export const ActivityTabs = memo(function ActivityTabs(props: TActivityTabsProps) {
-  const { activeTab, onChange } = props;
+  const { activeTab, counts, onChange } = props;
+  const { t } = useTranslation();
 
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-1">
+    <div className="flex min-w-0 flex-wrap items-center gap-0.5" role="tablist">
       {TABS.map((tab) => {
-        const isActive = activeTab === tab.key;
+        const isActive = activeTab === tab;
+        const count = tab in counts ? counts[tab as keyof TIssueTimelineCounts] : undefined;
         return (
           <button
-            key={tab.key}
+            key={tab}
             type="button"
-            onClick={() => onChange(tab.key)}
+            role="tab"
+            aria-selected={isActive}
+            onClick={() => onChange(tab)}
             className={cn(
-              "relative px-3 py-1.5 mb-1 text-body-xs-medium transition-colors outline-none rounded-md",
-              "after:absolute after:left-0 after:right-0 after:-bottom-[5px] after:h-0.5 after:rounded-full after:transition-colors",
-              isActive
-                ? "bg-layer-1-active text-primary after:bg-[var(--txt-primary)]"
-                : "text-secondary hover:bg-surface-2/60 hover:text-primary after:bg-transparent"
+              "flex h-8 items-center gap-1.5 rounded-md px-2.5 text-13 transition-colors outline-none",
+              isActive ? "bg-layer-1 font-medium text-primary" : "text-tertiary hover:bg-layer-1/60 hover:text-secondary"
             )}
           >
-            {tab.label}
+            {t(`issue_activity.tabs.${TAB_I18N_KEY[tab]}`)}
+            {count !== undefined && count > 0 && (
+              <span className={cn("text-12 tabular-nums", isActive ? "text-tertiary" : "text-placeholder")}>{count}</span>
+            )}
           </button>
         );
       })}
