@@ -41,6 +41,8 @@ type Props = {
   isArchived: boolean;
   isSubmitting: TNameDescriptionLoader;
   setIsSubmitting: (value: TNameDescriptionLoader) => void;
+  /** 标题下属性条外层 class：两栏布局时属性挪到右栏「基本」组，由调用方传 hidden */
+  propertyBarClassName?: string;
 };
 
 export const PeekOverviewIssueDetails = observer(function PeekOverviewIssueDetails(props: Props) {
@@ -54,6 +56,7 @@ export const PeekOverviewIssueDetails = observer(function PeekOverviewIssueDetai
     isArchived,
     isSubmitting,
     setIsSubmitting,
+    propertyBarClassName,
   } = props;
   // store hooks
   const { data: currentUser } = useUser();
@@ -143,7 +146,7 @@ export const PeekOverviewIssueDetails = observer(function PeekOverviewIssueDetai
         containerClassName="-ml-3"
       />
 
-      <div className="-ml-3">
+      <div className={cn("-ml-3", propertyBarClassName)}>
         <PeekOverviewCorePropertyBar
           workspaceSlug={workspaceSlug}
           projectId={projectId}

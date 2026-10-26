@@ -176,9 +176,9 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
               <div className="vertical-scrollbar relative scrollbar-md h-full w-full overflow-hidden overflow-y-auto">
                 {["side-peek", "modal"].includes(peekMode) ? (
                   // 抽屉够宽（≥ 48rem）时左内容、右属性两栏；窄时退回单栏，属性排在活动前
-                  <div className="@container px-8 py-5">
-                  <div className="relative grid grid-cols-1 gap-y-6 @3xl:grid-cols-[minmax(0,1fr)_280px] @3xl:grid-rows-[auto_auto_1fr] @3xl:gap-x-8">
-                    <div className="min-w-0 @3xl:col-start-1">
+                  <div className="@container/peek px-8 py-5">
+                  <div className="relative grid grid-cols-1 gap-y-6 @3xl/peek:grid-cols-[minmax(0,1fr)_280px] @3xl/peek:grid-rows-[auto_auto_1fr] @3xl/peek:gap-x-8">
+                    <div className="min-w-0 @3xl/peek:col-start-1">
                     <PeekOverviewIssueDetails
                       editorRef={editorRef}
                       workspaceSlug={workspaceSlug}
@@ -189,10 +189,11 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
                       isArchived={is_archived}
                       isSubmitting={isSubmitting}
                       setIsSubmitting={(value) => setIsSubmitting(value)}
+                      propertyBarClassName="@3xl/peek:hidden"
                     />
                     </div>
 
-                    <div className="min-w-0 @3xl:col-start-1">
+                    <div className="min-w-0 @3xl/peek:col-start-1">
                       <IssueDetailWidgets
                         workspaceSlug={workspaceSlug}
                         projectId={projectId}
@@ -204,7 +205,7 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
 
                     <div
                       className={cn(
-                        "min-w-0 @3xl:col-start-2 @3xl:row-span-3 @3xl:row-start-1 @3xl:border-l @3xl:border-subtle @3xl:pl-6",
+                        "min-w-0 @3xl/peek:col-start-2 @3xl/peek:row-span-3 @3xl/peek:row-start-1 @3xl/peek:border-l @3xl/peek:border-subtle @3xl/peek:pl-6",
                         is_archived && "pointer-events-none"
                       )}
                     >
@@ -214,10 +215,11 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
                         issueId={issueId}
                         issueOperations={issueOperations}
                         disabled={disabled || is_archived}
+                        basicGroup="hidden @3xl/peek:block"
                       />
                     </div>
 
-                    <div className="min-w-0 @3xl:col-start-1">
+                    <div className="min-w-0 @3xl/peek:col-start-1">
                       <IssueActivity
                         workspaceSlug={workspaceSlug}
                         projectId={projectId}
@@ -241,6 +243,7 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
                           isArchived={is_archived}
                           isSubmitting={isSubmitting}
                           setIsSubmitting={(value) => setIsSubmitting(value)}
+                          propertyBarClassName="hidden"
                         />
 
                         <div className="py-2">

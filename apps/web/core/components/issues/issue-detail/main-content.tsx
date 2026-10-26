@@ -16,6 +16,7 @@ import { cn, getTextContent } from "@plane/utils";
 import { DescriptionVersionsRoot } from "@/components/core/description-versions";
 import { DescriptionInput } from "@/components/editor/rich-text/description-input";
 // hooks
+import { useAppTheme } from "@/hooks/store/use-app-theme";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useMember } from "@/hooks/store/use-member";
 import { useProject } from "@/hooks/store/use-project";
@@ -62,6 +63,8 @@ export const IssueMainContent = observer(function IssueMainContent(props: Props)
   const windowSize = useSize();
   const { data: currentUser } = useUser();
   const { getUserDetails } = useMember();
+  // 右栏开着时状态/负责人等在右栏「基本」组，标题下属性条隐藏
+  const { issueDetailSidebarCollapsed } = useAppTheme();
   const {
     issue: { getIssueById },
     peekIssue,
@@ -163,7 +166,7 @@ export const IssueMainContent = observer(function IssueMainContent(props: Props)
           containerClassName="-ml-3"
         />
 
-        <div className="-ml-3">
+        <div className={cn("-ml-3", !issueDetailSidebarCollapsed && "hidden")}>
           <PeekOverviewCorePropertyBar
             workspaceSlug={workspaceSlug}
             projectId={projectId}
@@ -285,6 +288,7 @@ export const IssueMainContent = observer(function IssueMainContent(props: Props)
           issueId={issueId}
           issueOperations={issueOperations}
           disabled={!isEditable || isArchived}
+          basicGroup={false}
         />
       )}
 
