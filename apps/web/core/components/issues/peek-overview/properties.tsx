@@ -28,7 +28,7 @@ import { IssueModuleSelect } from "../issue-detail/module-select";
 import { IssueReleaseSelect } from "../issue-detail/release-select";
 import { IssueProductSelect } from "../issue-detail/product-select";
 import { IssueProductModuleSelect } from "../issue-detail/product-module-select";
-import { PeekOverviewBasicProperties } from "./basic-properties";
+import { PeekOverviewBasicProperties, PeekOverviewDateProperties } from "./basic-properties";
 import { PropertyGroupSection, StructureFieldLabel, StructureFieldValue } from "./property-field";
 
 interface IPeekOverviewProperties {
@@ -39,7 +39,7 @@ interface IPeekOverviewProperties {
   /** 整块压暗（无权限 / 已归档）。不传时跟随 disabled；只是未进编辑态的只读不该压暗 */
   dimmed?: boolean;
   issueOperations: TIssueOperations;
-  /** 「基本」组（状态/优先级/负责人/日期）：标题下属性条可见时隐藏，避免一页出现两份。false = 不渲染，字符串 = 外层 class（响应式显隐） */
+  /** 与标题下属性条重复的字段（类型/状态/优先级/负责人、开始/结束日期）：属性条可见时隐藏，避免一页出现两份。false = 不渲染，字符串 = 外层 class（响应式显隐）；工时、标签、估算始终显示 */
   basicGroup?: boolean | string;
 }
 
@@ -57,6 +57,7 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
   const issue = getIssueById(issueId);
   if (!issue) return <></>;
   const projectDetails = getProjectById(issue.project_id);
+  const estimateEnabled = areEstimateEnabledByProjectId(projectId);
   const createdByDetails = getUserDetails(issue?.created_by);
   const formatDateTime = (date: string | Date | undefined | null) => {
     if (!date) return null;
@@ -75,19 +76,15 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
     <div>
       <h6 className="text-body-sm-semibold text-primary">{t("common.properties")}</h6>
       <div className={cn("mt-3 flex w-full flex-col gap-5", dimmed && "opacity-60")}>
-        {basicGroup !== false && (
-          <PeekOverviewBasicProperties
-            className={typeof basicGroup === "string" ? basicGroup : undefined}
-            workspaceSlug={workspaceSlug}
-            projectId={projectId}
-            issueId={issueId}
-            issueOperations={issueOperations}
-            disabled={disabled}
-          />
-        )}
-
-        {/* 详情：工时、标签 */}
-        <PropertyGroupSection title="详情">
+        {/* 基本：类型/状态/优先级/负责人（与属性条重复的部分按 basicGroup 显隐）+ 工时、标签 */}
+        <PeekOverviewBasicProperties
+          core={basicGroup}
+          workspaceSlug={workspaceSlug}
+          projectId={projectId}
+          issueId={issueId}
+          issueOperations={issueOperations}
+          disabled={disabled}
+        >
           {/* 工时是独立记录、即时生效，不进编辑会话，只受权限 / 归档限制 */}
           <IssueWorklogProperty
             workspaceSlug={workspaceSlug}
@@ -95,33 +92,6 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
             issueId={issueId}
             disabled={dimmed}
           />
-
-          {areEstimateEnabledByProjectId(projectId) && (
-            <div className="flex w-full items-center gap-2">
-              <div className="flex h-7.5 w-30 shrink-0 items-center gap-1.5 text-body-xs-regular text-tertiary">
-                <EstimatePropertyIcon className="size-4 shrink-0" />
-                <span>{t("common.estimate")}</span>
-              </div>
-              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
-                <EstimateDropdown
-                  value={issue?.estimate_point ?? undefined}
-                  onChange={(val: string | undefined) =>
-                    issueOperations.update(workspaceSlug, projectId, issueId, { estimate_point: val })
-                  }
-                  projectId={projectId}
-                  disabled={disabled}
-                  buttonVariant="transparent-with-text"
-                  className="group w-full"
-                  buttonContainerClassName="w-full text-left h-7.5 rounded-sm"
-                  buttonClassName={`text-body-xs-medium justify-between ${issue?.estimate_point ? "" : "text-placeholder"}`}
-                  placeholder={t("common.none")}
-                  hideIcon
-                  dropdownArrow
-                  dropdownArrowClassName="h-3.5 w-3.5 hidden group-hover:inline"
-                />
-              </div>
-            </div>
-          )}
 
           <div className="flex w-full items-start gap-2">
             <div className="flex h-7.5 w-30 shrink-0 items-center gap-1.5 text-body-xs-regular text-tertiary">
@@ -141,7 +111,51 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
               />
             </div>
           </div>
-        </PropertyGroupSection>
+        </PeekOverviewBasicProperties>
+
+        {/* 工期：开始/结束日期（与属性条重复，按 basicGroup 显隐）+ 估算；两者都不显示时整组不出 */}
+        {(basicGroup !== false || estimateEnabled) && (
+          <div className={!estimateEnabled && typeof basicGroup === "string" ? basicGroup : undefined}>
+            <PropertyGroupSection title="工期">
+              {basicGroup !== false && (
+                <PeekOverviewDateProperties
+                  className={typeof basicGroup === "string" ? basicGroup : undefined}
+                  workspaceSlug={workspaceSlug}
+                  projectId={projectId}
+                  issueId={issueId}
+                  issueOperations={issueOperations}
+                  disabled={disabled}
+                />
+              )}
+              {estimateEnabled && (
+                <div className="flex w-full items-center gap-2">
+                  <div className="flex h-7.5 w-30 shrink-0 items-center gap-1.5 text-body-xs-regular text-tertiary">
+                    <EstimatePropertyIcon className="size-4 shrink-0" />
+                    <span>{t("common.estimate")}</span>
+                  </div>
+                  <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
+                    <EstimateDropdown
+                      value={issue?.estimate_point ?? undefined}
+                      onChange={(val: string | undefined) =>
+                        issueOperations.update(workspaceSlug, projectId, issueId, { estimate_point: val })
+                      }
+                      projectId={projectId}
+                      disabled={disabled}
+                      buttonVariant="transparent-with-text"
+                      className="group w-full"
+                      buttonContainerClassName="w-full text-left h-7.5 rounded-sm"
+                      buttonClassName={`text-body-xs-medium justify-between ${issue?.estimate_point ? "" : "text-placeholder"}`}
+                      placeholder={t("common.none")}
+                      hideIcon
+                      dropdownArrow
+                      dropdownArrowClassName="h-3.5 w-3.5 hidden group-hover:inline"
+                    />
+                  </div>
+                </div>
+              )}
+            </PropertyGroupSection>
+          </div>
+        )}
 
         {/* 项目结构：模块、迭代、发布 */}
         <PropertyGroupSection title="结构">

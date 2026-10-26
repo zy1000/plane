@@ -7,7 +7,7 @@ import { PageHead } from "@/components/core/page-title";
 import { Breadcrumbs } from "@plane/ui";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { TestHubEntityBar } from "@/components/qa/shared/testhub-entity-bar";
-import { Row, Col, Card, Input, Tag, Spin, message, Button, Table, Tooltip, Radio, Select, Modal, Checkbox, Upload, Dropdown } from "antd";
+import { Row, Col, Card, Input, Tag, Spin, message, Button, Table, Select, Modal, Dropdown } from "antd";
 import { DownOutlined } from "@ant-design/icons";
 import * as LucideIcons from "lucide-react";
 import debounce from "lodash-es/debounce";
@@ -32,8 +32,11 @@ import { WorkItemDisplayModal } from "../cases/work-item-display-modal";
 import { workItemTypeName } from "../cases/work-item-category";
 import { ReviewRecordsPanel } from "../review/review-records";
 import { CreateUpdateIssueModal } from "@/components/issues/issue-modal/modal";
-import { ExecutionRecordsPanel } from "./execution-records";
+import { ExecutionRecordsPanel, type ExecAttachment } from "./execution-records";
 import { usePendingExecutionFiles } from "./use-pending-execution-files";
+import { usePlanCaseRecords } from "./use-plan-case-records";
+import { ExecutionResultComposer } from "./execution-result-composer";
+import { ExecutionAttachmentsPanel } from "./execution-attachments-panel";
 import { BugIssueModal } from "@/components/issues/issue-modal/bug-modal";
 import { ExecutionCaseFilterBar, useExecutionCaseFilter } from "./execution-case-filter";
 import {
@@ -101,12 +104,6 @@ const StepTypeSwitcher: React.FC<{ mode: number; onChange: (mode: number) => voi
   </Dropdown>
 );
 
-const formatFileSize = (bytes: number): string => {
-  if (!bytes || bytes < 1024) return `${bytes || 0} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-};
-
 export default function TestExecutionPage() {
   const { workspaceSlug, projectId } = useParams() as { workspaceSlug?: string; projectId?: string };
   const router = useRouter();
@@ -114,7 +111,6 @@ export default function TestExecutionPage() {
   const searchParams = useSearchParams();
   const initialCaseId = searchParams.get("case_id") ?? undefined;
   const planId = searchParams.get("plan_id") ?? searchParams.get("planId") ?? "";
-  const reviewId = searchParams.get("review_id") ?? "";
   const repositoryId = searchParams.get("repositoryId") ?? "";
   // 列表页「显示 → 分组方式」经 URL 带过来；直接进 URL 或值非法时回落到默认的模块树
   const groupByParam = searchParams.get("group_by");
@@ -229,6 +225,24 @@ export default function TestExecutionPage() {
   const [isCreateDefectOpen, setIsCreateDefectOpen] = React.useState<boolean>(false);
   const { pendingFiles, add: addPendingFile, remove: removePendingFile, clear: clearPendingFiles, uploadAll: uploadPendingFiles } =
     usePendingExecutionFiles();
+  const {
+    records: execRecords,
+    loading: execRecordsLoading,
+    error: execRecordsError,
+    reload: reloadExecRecords,
+  } = usePlanCaseRecords(workspaceSlug, planId, selectedCaseId);
+  // 附件页签计数 = 待提交 + 各次执行的附件 + 用例附件
+  const attachmentTabCount =
+    pendingFiles.length +
+    execRecords.reduce((n, r) => n + (r.attachments?.length ?? 0), 0) +
+    attachments.length;
+  const resultOptions = React.useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(enumsData?.plan_case_result || {}).filter(([k]) => k !== "未执行")
+      ) as Record<string, string>,
+    [enumsData?.plan_case_result]
+  );
 
   const [mounted, setMounted] = React.useState(false);
   const leftRef = React.useRef<HTMLDivElement | null>(null);
@@ -396,6 +410,16 @@ export default function TestExecutionPage() {
     } catch {}
   };
 
+  const handleDownloadExecutionFile = async (file: ExecAttachment) => {
+    if (!workspaceSlug) return;
+    try {
+      const url = await planService.downloadExecutionFile(String(workspaceSlug), file.id);
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch (e: any) {
+      message.error(e?.message || e?.error || "下载失败");
+    }
+  };
+
   React.useEffect(() => {
     setMounted(true);
   }, []);
@@ -434,6 +458,16 @@ export default function TestExecutionPage() {
   React.useEffect(() => {
     if (initialCaseId) fetchCaseDetail(initialCaseId);
   }, [initialCaseId]);
+
+  // 地址栏 case_id 跟随当前用例，刷新后停在这条。用 replaceState 绕过路由：
+  // 走 router 会让 initialCaseId 变化，触发上面按 initialCaseId 重置整页的 effect
+  React.useEffect(() => {
+    if (!selectedCaseId) return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("case_id") === selectedCaseId) return;
+    url.searchParams.set("case_id", selectedCaseId);
+    window.history.replaceState(window.history.state, "", url.toString());
+  }, [selectedCaseId]);
 
   React.useEffect(() => {
     if (!selectedCaseId) return;
@@ -490,7 +524,8 @@ export default function TestExecutionPage() {
   // 树头切换分组：只改 URL 的 group_by，下面按 groupBy 重置选中并重拉的 effect 会接手
   const handleGroupByChange = (nextGroupBy: TPlanCaseGroupBy) => {
     if (nextGroupBy === groupBy) return;
-    const params = new URLSearchParams(searchParams.toString());
+    // 读真实地址栏：case_id 是绕过路由用 replaceState 写的，路由里的 searchParams 是旧值
+    const params = new URLSearchParams(window.location.search);
     params.set("group_by", nextGroupBy);
     router.replace(`${pathname}?${params.toString()}`);
   };
@@ -607,11 +642,6 @@ export default function TestExecutionPage() {
       .catch(() => setCurrentCount(0));
   }, [activeTab, workspaceSlug, selectedCaseId]);
 
-  const handleRadioChange = (e: any) => {
-    const val = String(e?.target?.value || "");
-    setReviewValue(val);
-  };
-
   React.useEffect(() => {
     const row = cases.find((item) => String(item.case) === String(selectedCaseId || ""));
     setIsCurrentUserAssignee(isPlanCaseAssignee(row, currentUser?.id));
@@ -655,9 +685,7 @@ export default function TestExecutionPage() {
       const nextCaseId = String(next.case);
       setSelectedCaseId(nextCaseId);
       await fetchCaseDetail(nextCaseId);
-      return;
     }
-    message.warning("已是最后一条用例");
   };
   const goToNextCaseRef = React.useRef(goToNextCase);
   goToNextCaseRef.current = goToNextCase;
@@ -744,6 +772,8 @@ export default function TestExecutionPage() {
           setReason("");
           setStepActualResultMap({});
           setStepExecResultMap({});
+          // 新的执行记录与刚上传的附件要出现在执行 / 附件页签
+          reloadExecRecords();
           await fetchCases(keyword, selectedRepositoryId, selectedModuleId, false, true);
           // 执行结果变了，「执行结果」分组树的计数要同步（非枚举分组时 no-op）
           void refreshGroupTree();
@@ -772,6 +802,7 @@ export default function TestExecutionPage() {
       refreshGroupTree,
       uploadPendingFiles,
       clearPendingFiles,
+      reloadExecRecords,
     ]
   );
 
@@ -1234,26 +1265,33 @@ export default function TestExecutionPage() {
                           <nav className="flex gap-4 overflow-x-auto">
                             {(
                               [
-                                { key: "basic", label: "基本信息" },
-                                { key: "req-link", label: "需求" },
-                                { key: "work", label: "工作项" },
-                                { key: "defect", label: "缺陷" },
-                                { key: "history", label: "执行" },
-                                { key: "review", label: "评审" },
-                                { key: "attachment", label: "附件" },
+                                { key: "basic", label: "基本信息", count: 0 },
+                                { key: "req-link", label: "需求", count: 0 },
+                                { key: "work", label: "工作项", count: 0 },
+                                { key: "defect", label: "缺陷", count: 0 },
+                                { key: "history", label: "执行", count: execRecords.length },
+                                { key: "review", label: "评审", count: 0 },
+                                { key: "attachment", label: "附件", count: attachmentTabCount },
                               ] as const
                             ).map((tab) => (
                               <button
                                 key={tab.key}
                                 type="button"
                                 onClick={() => setActiveTab(tab.key)}
-                                className={`px-2 py-3 text-sm leading-5 font-medium -mb-px border-b-2 whitespace-nowrap transition-colors ${
+                                className={`inline-flex items-center gap-1 px-2 py-3 text-sm leading-5 font-medium -mb-px border-b-2 whitespace-nowrap transition-colors ${
                                   activeTab === tab.key
                                     ? "text-accent-primary border-accent-strong"
                                     : "text-secondary border-transparent hover:text-accent-primary"
                                 }`}
                               >
                                 {tab.label}
+                                {tab.count > 0 && (
+                                  <span
+                                    className={`text-12 font-normal ${activeTab === tab.key ? "text-accent-primary" : "text-placeholder"}`}
+                                  >
+                                    {tab.count}
+                                  </span>
+                                )}
                               </button>
                             ))}
                           </nav>
@@ -1424,40 +1462,17 @@ export default function TestExecutionPage() {
                           >
                             {activeTab === "attachment" && (
                               <div id="attachments-section" className="min-h-[550px] scroll-mb-16">
-                                {attachments.length === 0 ? (
-                                  <div className="p-3 text-sm text-secondary">暂无附件</div>
-                                ) : (
-                                  <Table
-                                    size="small"
-                                    pagination={false}
-                                    rowKey={(r: any) => String(r?.id)}
-                                    dataSource={attachments}
-                                    columns={[
-                                      {
-                                        title: "文件名",
-                                        dataIndex: ["attributes", "name"],
-                                        key: "name",
-                                        render: (_: any, record: any) => (
-                                          <span className="truncate block max-w-[480px]">
-                                            {String(record?.attributes?.name || record?.filename || record?.id)}
-                                          </span>
-                                        ),
-                                      },
-                                      {
-                                        title: "操作",
-                                        key: "action",
-                                        width: 120,
-                                        render: (_: any, record: any) => (
-                                          <Tooltip title="下载">
-                                            <Button type="link" size="small" onClick={() => handleDownloadAttachment(record)}>
-                                              下载
-                                            </Button>
-                                          </Tooltip>
-                                        ),
-                                      },
-                                    ]}
-                                  />
-                                )}
+                                <ExecutionAttachmentsPanel
+                                  pendingFiles={pendingFiles}
+                                  onRemovePending={removePendingFile}
+                                  onGoSubmit={() => setActiveTab("basic")}
+                                  records={execRecords}
+                                  recordsLoading={execRecordsLoading}
+                                  resultColorMap={enumsData?.plan_case_result || {}}
+                                  onDownloadExecutionFile={handleDownloadExecutionFile}
+                                  caseAttachments={attachments}
+                                  onDownloadCaseAttachment={handleDownloadAttachment}
+                                />
                               </div>
                             )}
                           </Transition>
@@ -1474,10 +1489,12 @@ export default function TestExecutionPage() {
                             {activeTab === "history" && (
                               /* 每次执行的复核结论挂在对应的执行记录卡片下 */
                               <ExecutionRecordsPanel
-                                key={`${selectedCaseId}-${recordsRefreshKey}`}
+                                key={selectedCaseId}
                                 workspaceSlug={workspaceSlug}
-                                reviewId={reviewId}
-                                caseId={selectedCaseId}
+                                records={execRecords}
+                                loading={execRecordsLoading}
+                                error={execRecordsError}
+                                onReload={reloadExecRecords}
                                 reviewerCount={planReviewerCount}
                               />
                             )}
@@ -1509,123 +1526,26 @@ export default function TestExecutionPage() {
                 </div>
 
                 {selectedCaseId && !detailLoading && caseDetail && activeTab === "basic" ? (
-                  <div className="sticky bottom-0 w-full shrink-0 bg-surface-1" style={{ borderTop: "1px solid #f0f0f0" }}>
-                    <div className="p-4">
-                      <div className="px-0 py-3 flex flex-col gap-3">
-                        <Radio.Group onChange={handleRadioChange} value={reviewValue} disabled={!selectedCaseId || !isCurrentUserAssignee}>
-                          {Object.keys(enumsData?.plan_case_result || {})
-                            .filter((k) => k !== "未执行")
-                            .map((k, idx) => (
-                              <Radio key={k} value={k} className={idx > 0 ? "ml-6" : undefined}>
-                                <Tag color={(enumsData?.plan_case_result || {})[k]}>{k}</Tag>
-                              </Radio>
-                            ))}
-                        </Radio.Group>
-                        <div
-                          onDoubleClick={() => {
-                            setReasonDraft(reason);
-                            setReasonModalOpen(true);
-                          }}
-                        >
-                          <Input.TextArea
-                            value={reason}
-                            onChange={(e) => setReason(e.target.value)}
-                            autoSize={{ minRows: 1, maxRows: 1 }}
-                            placeholder="请输入原因（双击可全屏输入）"
-                            allowClear
-                            disabled={!isCurrentUserAssignee}
-                            className="resize-none"
-                            onKeyDownCapture={(e) => {
-                              if (e.ctrlKey || e.metaKey || e.altKey || e.key === "Escape" || e.key === "Tab") return;
-                              e.stopPropagation();
-                            }}
-                          />
-                        </div>
-                        {!isCurrentUserAssignee && (
-                          <div className="text-xs text-danger-primary">当前用例仅执行人可提交执行结果</div>
-                        )}
-                        {pendingFiles.length > 0 && (
-                          <div className="rounded-md border border-subtle bg-layer-1/60 px-3 py-2">
-                            <div className="mb-2 flex items-center justify-between gap-3">
-                              <div className="flex items-center gap-2 text-xs font-medium text-secondary">
-                                <span className="flex size-5 items-center justify-center rounded bg-surface-1 text-accent-primary">
-                                  <LucideIcons.Paperclip size={13} />
-                                </span>
-                                <span>待上传附件</span>
-                                <span className="text-placeholder">提交结果成功后自动绑定</span>
-                              </div>
-                              <span className="text-xs text-placeholder">共 {pendingFiles.length} 个</span>
-                            </div>
-                            <div className="flex max-h-20 flex-wrap gap-2 overflow-y-auto vertical-scrollbar scrollbar-sm pr-1">
-                              {pendingFiles.map((pf) => (
-                                <Tooltip key={pf.id} title={`${pf.file.name}（${formatFileSize(pf.file.size)}）`}>
-                                  <div className="group flex max-w-[260px] items-center gap-2 rounded border border-subtle bg-surface-1 px-2 py-1.5 text-xs shadow-sm transition-colors hover:border-accent-strong">
-                                    <LucideIcons.FileText size={13} className="shrink-0 text-secondary" />
-                                    <div className="min-w-0">
-                                      <div className="truncate text-primary">{pf.file.name}</div>
-                                      <div className="text-[11px] leading-4 text-placeholder">{formatFileSize(pf.file.size)}</div>
-                                    </div>
-                                    <button
-                                      type="button"
-                                      aria-label="移除附件"
-                                      onClick={() => removePendingFile(pf.id)}
-                                      className="ml-1 flex size-4 shrink-0 items-center justify-center rounded text-placeholder transition-colors hover:bg-layer-2 hover:text-danger-primary"
-                                    >
-                                      <LucideIcons.X size={12} />
-                                    </button>
-                                  </div>
-                                </Tooltip>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={handleSubmitReview}
-                              disabled={!selectedCaseId || submitLoading || !isCurrentUserAssignee}
-                              className="text-on-color bg-accent-primary hover:bg-accent-primary-hover focus:text-on-color focus:bg-accent-primary-hover px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                              {submitLoading ? "提交中..." : "提交结果"}
-                            </button>
-                            <Tooltip title="为当前用例创建一个缺陷工作项">
-                              <button
-                                type="button"
-                                onClick={handleOpenCreateDefect}
-                                disabled={!workspaceSlug}
-                                className="text-on-color bg-accent-primary hover:bg-accent-primary-hover focus:text-on-color focus:bg-accent-primary-hover px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center disabled:opacity-50 disabled:cursor-not-allowed"
-                              >
-                                新增缺陷
-                              </button>
-                            </Tooltip>
-                            <Tooltip title="附件将在提交结果成功后才上传并绑定">
-                              <Upload
-                                multiple
-                                showUploadList={false}
-                                beforeUpload={(file) => {
-                                  addPendingFile(file as unknown as File);
-                                  return false;
-                                }}
-                              >
-                                <button
-                                  type="button"
-                                  disabled={!selectedCaseId || !isCurrentUserAssignee}
-                                  className="border border-subtle text-secondary hover:bg-layer-1 px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                  <LucideIcons.Paperclip size={13} />
-                                  上传附件
-                                </button>
-                              </Upload>
-                            </Tooltip>
-                            <Checkbox checked={autoNext} onChange={(e) => setAutoNext(e.target.checked)}>
-                              执行后自动切换下一条
-                            </Checkbox>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+                  <ExecutionResultComposer
+                    resultOptions={resultOptions}
+                    result={reviewValue}
+                    onResultChange={setReviewValue}
+                    reason={reason}
+                    onReasonChange={setReason}
+                    onExpandReason={() => {
+                      setReasonDraft(reason);
+                      setReasonModalOpen(true);
+                    }}
+                    pendingFiles={pendingFiles}
+                    onAddFiles={(files) => files.forEach(addPendingFile)}
+                    onRemoveFile={removePendingFile}
+                    autoNext={autoNext}
+                    onAutoNextChange={setAutoNext}
+                    canSubmit={isCurrentUserAssignee}
+                    submitLoading={submitLoading}
+                    onSubmit={handleSubmitReview}
+                    onCreateDefect={handleOpenCreateDefect}
+                  />
                 ) : null}
               </div>
             </Col>

@@ -6,7 +6,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { observer } from "mobx-react";
-import { AlignLeft, Eye, EyeOff, Type } from "lucide-react";
+import { Eye, EyeOff } from "lucide-react";
 // hooks
 import { useLocalStorage } from "@plane/hooks";
 // types
@@ -14,7 +14,6 @@ import type { TIssueExtraFieldType, TIssueExtraFieldValue } from "@plane/types";
 // shared extra-field utilities
 import {
   ExtraFieldControl,
-  FIELD_TYPE_ICON,
   findValueForField,
   getSelectOptions,
   getTextMode,
@@ -43,7 +42,7 @@ const getSectionTitle = (typeName: string | undefined) => {
   return base ? `${base}信息` : "自定义字段";
 };
 
-// ─── 单个字段：标签（类型图标 + 名称）、值 ─────────────────────────────────────
+// ─── 单个字段：标签（名称）、值 ─────────────────────────────────────
 
 type TFieldCellProps = {
   field: TTypeExtraField;
@@ -55,17 +54,11 @@ type TFieldCellProps = {
 };
 
 const FieldLabel = ({ field, required }: { field: TTypeExtraField; required: boolean }) => {
-  const Icon = isParagraphField(field)
-    ? AlignLeft
-    : field.field_type === "text"
-      ? Type
-      : FIELD_TYPE_ICON[field.field_type];
   return (
     <div
       className="flex min-h-[22px] min-w-0 items-center gap-2 text-14 text-secondary"
       title={field.description || field.name}
     >
-      <Icon className="size-4 shrink-0 text-placeholder" />
       <span className="truncate">{field.name}</span>
       {required && <span className="-ml-1.5 text-danger-primary">*</span>}
     </div>
@@ -297,7 +290,7 @@ export const IssueExtraFieldsSection = observer(function IssueExtraFieldsSection
             )}
           >
             <FieldLabel field={field} required={isEditing && field.is_required} />
-            <div className="pl-6">{renderValue(field)}</div>
+            <div>{renderValue(field)}</div>
           </div>
         ))}
 

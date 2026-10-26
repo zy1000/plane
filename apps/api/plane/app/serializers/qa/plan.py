@@ -124,12 +124,26 @@ class PlanCaseRecordSerializer(ModelSerializer):
     file_count = serializers.SerializerMethodField()
     # 本次执行对应的复核记录；需要视图侧 prefetch 才不会 N+1
     review_records = PlanCaseReviewRecordSerializer(many=True, read_only=True)
+    # 本次执行的附件；视图侧 prefetch 到 uploaded_assets，没 prefetch 时为空列表
+    attachments = serializers.SerializerMethodField()
 
     def get_file_count(self, obj: PlanCaseRecord):
         count = getattr(obj, "file_count", None)
         if count is not None:
             return int(count)
         return 0
+
+    def get_attachments(self, obj: PlanCaseRecord):
+        return [
+            {
+                "id": str(asset.id),
+                "name": (asset.attributes or {}).get("name") or "",
+                "size": int(asset.size or 0),
+                "type": (asset.attributes or {}).get("type") or "",
+                "created_at": asset.created_at,
+            }
+            for asset in getattr(obj, "uploaded_assets", [])
+        ]
 
     class Meta:
         model = PlanCaseRecord

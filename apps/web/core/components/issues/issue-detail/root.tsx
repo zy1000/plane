@@ -34,7 +34,7 @@ import {
   isWorkflowApprovalInitiated,
   type TIssueWorkflowUpdateError,
 } from "../workflow-error-utils";
-import { IssueEditModeActions } from "./edit-mode-actions";
+import { IssueEditModeActionsPortal } from "./edit-mode-actions";
 import { IssueMainContent } from "./main-content";
 import { changeIssueReleases } from "./release-operations";
 
@@ -333,11 +333,8 @@ export const IssueDetailRoot = observer(function IssueDetailRoot(props: TIssueDe
         <div className="relative flex h-full w-full flex-col overflow-hidden">
           <div className="vertical-scrollbar flex h-full w-full overflow-auto">
             <div className="relative h-full w-full space-y-6 overflow-auto p-4 py-5">
-              {canEdit && (
-                <div className="sticky top-0 z-10 mb-0 flex justify-end bg-surface-1 pb-2">
-                  <IssueEditModeActions session={session} canEdit={canEdit} />
-                </div>
-              )}
+              {/* 编辑 / 保存按钮放在路由 header「订阅」旁边 */}
+              <IssueEditModeActionsPortal session={session} canEdit={canEdit} />
               <IssueMainContent
                 workspaceSlug={workspaceSlug}
                 projectId={projectId}

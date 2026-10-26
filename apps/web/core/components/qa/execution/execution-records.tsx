@@ -12,10 +12,18 @@ import { PlanCaseReviewRecordList } from "@/components/qa/plans/plan-case-review
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { ButtonAvatars } from "@/components/dropdowns/member/avatar";
 import { useMember } from "@/hooks/store/use-member";
-import { useSearchParams } from "next/navigation";
 import { getEnums } from "@/app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/util";
+import { FileTypeBadge, formatFileSize } from "./execution-file-ui";
 
-type ExecRecord = {
+export type ExecAttachment = {
+  id: string;
+  name: string;
+  size: number;
+  type?: string;
+  created_at?: string;
+};
+
+export type ExecRecord = {
   id: string;
   result: string;
   reason?: string | null;
@@ -26,6 +34,8 @@ type ExecRecord = {
   file_count?: number;
   /** 本次执行的复核记录，随执行记录接口一起下发 */
   review_records?: TPlanCaseReviewRecord[];
+  /** 本次执行的附件，计划执行记录接口才下发；没有时退回 file_count 计数按钮 */
+  attachments?: ExecAttachment[];
 };
 
 type ExecutionRecordDetailTab = "steps" | "files" | "history";
@@ -48,8 +58,12 @@ type FileItem = {
 
 type Props = {
   workspaceSlug: string | undefined;
-  reviewId: string | undefined;
-  caseId: string | undefined;
+  /** 执行记录由页面统一拉取（附件页签、页签计数也要用），这里只负责展示 */
+  records: ExecRecord[];
+  loading: boolean;
+  error: string | null;
+  /** 详情弹窗里增删附件后重新拉取 */
+  onReload: () => void;
   className?: string;
   /** 所属计划的复核人数，用于复核记录区的通过进度 */
   reviewerCount?: number;
@@ -97,6 +111,10 @@ type ExecutionRecordListProps = {
   reviewStatusColorMap?: Record<string, string>;
   /** 计划的复核人数；有值时复核记录区显示通过进度 */
   reviewerCount?: number;
+  /** 点击卡片里的附件 */
+  onDownloadFile?: (file: ExecAttachment) => void;
+  /** 显示「第 N 次执行」；records 须是同一计划用例的全部记录（按时间倒序） */
+  showSequence?: boolean;
 };
 
 export const ExecutionRecordList: React.FC<ExecutionRecordListProps> = ({
@@ -107,6 +125,8 @@ export const ExecutionRecordList: React.FC<ExecutionRecordListProps> = ({
   showDetailAction = true,
   reviewStatusColorMap,
   reviewerCount,
+  onDownloadFile,
+  showSequence = false,
 }) => {
   const { getUserDetails } = useMember();
 
@@ -122,12 +142,13 @@ export const ExecutionRecordList: React.FC<ExecutionRecordListProps> = ({
 
   return (
     <div className={cn("flex flex-col gap-4", className)}>
-      {records.map((r) => {
+      {records.map((r, idx) => {
         const uid = r.assignee ? String(r.assignee) : r.created_by ? String(r.created_by) : null;
         const user = uid ? getUserDetails(uid) : undefined;
         const name = user?.display_name || "未知用户";
-        const time = r.created_at ? renderFormattedDate(r.created_at, "YYYY-MM-DD HH:mm:ss") : "";
+        const time = r.created_at ? renderFormattedDate(r.created_at, "yyyy-MM-dd HH:mm") : "";
         const fileCount = Number(r.file_count ?? 0);
+        const attachments = r.attachments;
         const reviewRecords = r.review_records ?? [];
         return (
           <div key={String(r.id)} className="flex flex-col rounded-md bg-surface-1 p-4 shadow-sm">
@@ -150,18 +171,40 @@ export const ExecutionRecordList: React.FC<ExecutionRecordListProps> = ({
                   />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium truncate">{name}</div>
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className="text-sm font-medium truncate">{name}</span>
+                    {showSequence && (
+                      <span className="shrink-0 text-13 text-placeholder">第 {records.length - idx} 次执行</span>
+                    )}
+                  </div>
                   {r.reason ? (
                     <div className="text-sm text-secondary whitespace-pre-wrap break-words">
                       {String(r.reason)}
                     </div>
                   ) : null}
                   <div className="text-xs text-placeholder mt-2">{time}</div>
+                  {attachments && attachments.length > 0 && (
+                    <div className="mt-2.5 flex flex-wrap gap-2">
+                      {attachments.map((f) => (
+                        <button
+                          key={f.id}
+                          type="button"
+                          title={`下载 ${f.name}`}
+                          onClick={() => onDownloadFile?.(f)}
+                          className="inline-flex h-9 max-w-[240px] items-center gap-2 rounded-lg border border-subtle bg-surface-1 pr-3 pl-[5px] transition-colors hover:border-strong hover:bg-layer-1"
+                        >
+                          <FileTypeBadge name={f.name} size="sm" />
+                          <span className="truncate text-13 text-primary">{f.name}</span>
+                          <span className="shrink-0 text-12 text-placeholder">{formatFileSize(f.size)}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="flex-shrink-0">
                 <div className="flex items-center gap-2">
-                  {fileCount > 0 ? (
+                  {!attachments && fileCount > 0 ? (
                     <Tooltip title={`查看附件（${fileCount}）`} mouseEnterDelay={0.2} placement="top">
                       <button
                         type="button"
@@ -470,6 +513,7 @@ export const ExecutionRecordDetailModal: React.FC<ExecutionRecordDetailModalProp
                 reviewStatusColorMap={reviewStatusColorMap}
                 reviewerCount={reviewerCount}
                 showDetailAction={false}
+                onDownloadFile={(f) => void handleDownloadFile(f.id, f.name)}
                 onOpenDetail={(r, tab) => {
                   setActiveRecord({ id: String(r.id), steps: r.steps });
                   setDetailTab(tab ?? "steps");
@@ -569,14 +613,9 @@ export const ExecutionRecordDetailModal: React.FC<ExecutionRecordDetailModalProp
 };
 
 export const ExecutionRecordsPanel: React.FC<Props> = (props) => {
-  const { workspaceSlug, reviewId, caseId, className = "", reviewerCount } = props;
+  const { workspaceSlug, records, loading, error, onReload, className = "", reviewerCount } = props;
   const planService = React.useMemo(() => new PlanApiService(), []);
-  const searchParams = useSearchParams();
-  const planId = searchParams.get("plan_id") ?? searchParams.get("planId") ?? "";
 
-  const [loading, setLoading] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
-  const [records, setRecords] = React.useState<ExecRecord[]>([]);
   const [resultColorMap, setResultColorMap] = React.useState<Record<string, string>>({});
   const [reviewStatusColorMap, setReviewStatusColorMap] = React.useState<Record<string, string>>({});
 
@@ -611,6 +650,19 @@ export const ExecutionRecordsPanel: React.FC<Props> = (props) => {
     [normalizeSteps]
   );
 
+  const handleDownloadFile = React.useCallback(
+    async (file: ExecAttachment) => {
+      if (!workspaceSlug) return;
+      try {
+        const url = await planService.downloadExecutionFile(String(workspaceSlug), file.id);
+        window.open(url, "_blank", "noopener,noreferrer");
+      } catch (e: any) {
+        message.error(e?.message || e?.error || "下载失败");
+      }
+    },
+    [workspaceSlug, planService]
+  );
+
   const fetchEnums = async () => {
     if (!workspaceSlug) return;
     try {
@@ -621,52 +673,9 @@ export const ExecutionRecordsPanel: React.FC<Props> = (props) => {
     } catch {}
   };
 
-  const fetchRecords = async () => {
-    if (!workspaceSlug || !caseId || !planId) return;
-    try {
-      setLoading(true);
-      setError(null);
-      const data = await planService.getPlanCaseRecord(String(workspaceSlug), {
-        plan_id: String(planId),
-        case_id: String(caseId),
-      });
-      const list = Array.isArray(data) ? (data as ExecRecord[]) : [];
-      const needCount = list.filter((r) => r.file_count == null && r.id);
-      if (needCount.length === 0) {
-        setRecords(list);
-      } else {
-        const counts = await Promise.all(
-          needCount.map((r) =>
-            planService
-              .getExecutionFileCount(String(workspaceSlug), String(r.id))
-              .catch(() => 0)
-          )
-        );
-        const countMap = new Map(needCount.map((r, i) => [String(r.id), counts[i]]));
-        setRecords(
-          list.map((r) => ({
-            ...r,
-            file_count: r.file_count ?? countMap.get(String(r.id)) ?? 0,
-          }))
-        );
-      }
-    } catch (e: any) {
-      const msg = e?.message || e?.detail || e?.error || "获取执行记录失败";
-      setError(msg);
-      message.error(msg);
-      setRecords([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   React.useEffect(() => {
     fetchEnums();
   }, [workspaceSlug]);
-
-  React.useEffect(() => {
-    fetchRecords();
-  }, [workspaceSlug, reviewId, caseId, planId]);
 
   return (
     <>
@@ -677,7 +686,7 @@ export const ExecutionRecordsPanel: React.FC<Props> = (props) => {
           className
         )}
       >
-        {loading ? (
+        {loading && records.length === 0 ? (
           <div className="flex items-center justify-center py-10">
             <Spin />
           </div>
@@ -690,6 +699,8 @@ export const ExecutionRecordsPanel: React.FC<Props> = (props) => {
             reviewStatusColorMap={reviewStatusColorMap}
             reviewerCount={reviewerCount}
             onOpenDetail={openStepsModal}
+            onDownloadFile={(f) => void handleDownloadFile(f)}
+            showSequence
           />
         )}
       </div>
@@ -700,6 +711,8 @@ export const ExecutionRecordsPanel: React.FC<Props> = (props) => {
           setStepsModalRecordId(null);
           setStepsModalSteps([]);
           setStepsModalTab("steps");
+          // 弹窗里可能增删了执行附件，卡片上的附件要跟着刷新
+          onReload();
         }}
         record={
           stepsModalRecordId

@@ -1215,8 +1215,20 @@ class PlanView(BaseViewSet):
                     queryset=PlanCaseReviewRecord.objects.filter(
                         deleted_at__isnull=True
                     ).select_related("reviewer"),
-                )
+                ),
+                # 执行附件直接随记录下发，执行页签与附件页签不用再逐条拉
+                Prefetch(
+                    "assets",
+                    queryset=FileAsset.objects.filter(
+                        is_deleted=False,
+                        is_uploaded=True,
+                        entity_type=FileAsset.EntityTypeContext.PLAN_CASE_RECORD_FILE,
+                    ).order_by("created_at"),
+                    to_attr="uploaded_assets",
+                ),
             )
+            # 带 Count 聚合时 Django 不再套用 Meta.ordering，必须显式排序，前端按位置算「第 N 次执行」
+            .order_by("-created_at")
         )
         serializer = PlanCaseRecordSerializer(instance=records, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
