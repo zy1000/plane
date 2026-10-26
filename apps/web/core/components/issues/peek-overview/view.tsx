@@ -175,7 +175,10 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
               {/* content */}
               <div className="vertical-scrollbar relative scrollbar-md h-full w-full overflow-hidden overflow-y-auto">
                 {["side-peek", "modal"].includes(peekMode) ? (
-                  <div className="relative flex flex-col gap-3 space-y-3 px-8 py-5">
+                  // 抽屉够宽（≥ 48rem）时左内容、右属性两栏；窄时退回单栏，属性排在活动前
+                  <div className="@container px-8 py-5">
+                  <div className="relative grid grid-cols-1 gap-y-6 @3xl:grid-cols-[minmax(0,1fr)_280px] @3xl:grid-rows-[auto_auto_1fr] @3xl:gap-x-8">
+                    <div className="min-w-0 @3xl:col-start-1">
                     <PeekOverviewIssueDetails
                       editorRef={editorRef}
                       workspaceSlug={workspaceSlug}
@@ -187,8 +190,9 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
                       isSubmitting={isSubmitting}
                       setIsSubmitting={(value) => setIsSubmitting(value)}
                     />
+                    </div>
 
-                    <div className="py-2">
+                    <div className="min-w-0 @3xl:col-start-1">
                       <IssueDetailWidgets
                         workspaceSlug={workspaceSlug}
                         projectId={projectId}
@@ -198,20 +202,30 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
                       />
                     </div>
 
-                    <PeekOverviewProperties
-                      workspaceSlug={workspaceSlug}
-                      projectId={projectId}
-                      issueId={issueId}
-                      issueOperations={issueOperations}
-                      disabled={disabled || is_archived}
-                    />
+                    <div
+                      className={cn(
+                        "min-w-0 @3xl:col-start-2 @3xl:row-span-3 @3xl:row-start-1 @3xl:border-l @3xl:border-subtle @3xl:pl-6",
+                        is_archived && "pointer-events-none"
+                      )}
+                    >
+                      <PeekOverviewProperties
+                        workspaceSlug={workspaceSlug}
+                        projectId={projectId}
+                        issueId={issueId}
+                        issueOperations={issueOperations}
+                        disabled={disabled || is_archived}
+                      />
+                    </div>
 
-                    <IssueActivity
-                      workspaceSlug={workspaceSlug}
-                      projectId={projectId}
-                      issueId={issueId}
-                      disabled={is_archived}
-                    />
+                    <div className="min-w-0 @3xl:col-start-1">
+                      <IssueActivity
+                        workspaceSlug={workspaceSlug}
+                        projectId={projectId}
+                        issueId={issueId}
+                        disabled={is_archived}
+                      />
+                    </div>
+                  </div>
                   </div>
                 ) : (
                   <div className="vertical-scrollbar flex h-full w-full overflow-auto">

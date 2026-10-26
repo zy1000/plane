@@ -32,6 +32,7 @@ import { IssueDetailWidgets } from "../issue-detail-widgets";
 import { PeekOverviewCorePropertyBar } from "../peek-overview/core-property-bar";
 import { PeekOverviewProperties } from "../peek-overview/properties";
 import { IssueTitleInput } from "../title-input";
+import { IssueExtraFieldsSection } from "./extra-fields-section";
 import { IssueActivity } from "./issue-activity";
 import { IssueParentDetail } from "./parent";
 import { IssueReaction } from "./reactions";
@@ -258,6 +259,14 @@ export const IssueMainContent = observer(function IssueMainContent(props: Props)
             />
           )}
         </div>
+
+        <IssueExtraFieldsSection
+          workspaceSlug={workspaceSlug}
+          projectId={projectId}
+          issueId={issueId}
+          issueOperations={issueOperations}
+          disabled={!isEditable || isArchived}
+        />
       </div>
 
       <IssueDetailWidgets

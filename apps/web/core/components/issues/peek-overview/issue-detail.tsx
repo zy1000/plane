@@ -23,6 +23,7 @@ import useReloadConfirmations from "@/hooks/use-reload-confirmation";
 import { WorkItemVersionService } from "@/services/issue";
 // local components
 import type { TIssueOperations } from "../issue-detail";
+import { IssueExtraFieldsSection } from "../issue-detail/extra-fields-section";
 import { IssueParentDetail } from "../issue-detail/parent";
 import { IssueReaction } from "../issue-detail/reactions";
 import { IssueTitleInput } from "../title-input";
@@ -243,6 +244,16 @@ export const PeekOverviewIssueDetails = observer(function PeekOverviewIssueDetai
             workspaceSlug={workspaceSlug}
           />
         )}
+      </div>
+
+      <div className="pt-2">
+        <IssueExtraFieldsSection
+          workspaceSlug={workspaceSlug}
+          projectId={projectId}
+          issueId={issueId}
+          issueOperations={issueOperations}
+          disabled={disabled || isArchived}
+        />
       </div>
     </div>
   );

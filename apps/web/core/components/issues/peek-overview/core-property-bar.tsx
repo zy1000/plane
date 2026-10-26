@@ -64,18 +64,20 @@ export const PeekOverviewCorePropertyBar = observer(function PeekOverviewCorePro
   };
 
   // 与 IssueTitleInput 的 TextArea（px-3）+ 容器 -ml-3 的文本起点一致；首列补 pl-3，并去掉状态按钮左侧默认内边距，避免相对标题再右偏
+  // 宽（≥ 42rem）一行 6 格；窄（抽屉两栏时的左栏）两行各 3 格，第 4 格是第二行行首，不画分隔线
   const fieldShell = (index: number) =>
     cn(
-      "flex min-h-7 min-w-0 flex-1 items-stretch",
+      "flex min-h-7 min-w-0 items-stretch",
       index === 0 && "pl-3",
-      index > 0 && "border-l border-subtle pl-2.5"
+      index === 3 && "pl-3 @2xl:border-l @2xl:border-subtle @2xl:pl-2.5",
+      index > 0 && index !== 3 && "border-l border-subtle pl-2.5"
     );
 
   return (
-    <>
+    <div className="@container">
       <div
         className={cn(
-          "mb-2 flex w-full min-w-0 flex-nowrap items-stretch text-body-xs-medium",
+          "mb-2 grid w-full min-w-0 grid-cols-3 items-stretch gap-y-1.5 text-body-xs-medium @2xl:grid-cols-6",
           disabled && "opacity-60"
         )}
       >
@@ -202,6 +204,6 @@ export const PeekOverviewCorePropertyBar = observer(function PeekOverviewCorePro
       <StateTransitionAssigneeModal
         {...stateTransitionGuard.modalProps}
       />
-    </>
+    </div>
   );
 });

@@ -117,12 +117,25 @@ type TExtraFieldControlProps = {
    * compact=false (default) — modal style: border-with-text, h-[38px].
    */
   compact?: boolean;
+  /**
+   * 仅 compact 生效：sm（默认）= 侧栏 13px；md = 详情页字段卡片 14px，单选/多选值显示成浅灰标签。
+   */
+  size?: "sm" | "md";
 };
 
 export const ExtraFieldControl = (props: TExtraFieldControlProps) => {
-  const { field, value, onChange, disabled, error, projectId, compact = false } = props;
+  const { field, value, onChange, disabled, error, projectId, compact = false, size = "sm" } = props;
   const fieldType = field.field_type;
   const inputId = `extra-field-${field.id}`;
+  const isMd = compact && size === "md";
+  // 数字字号：cn() 会把 text-body-* 与 text-placeholder 等当同组互斥，md 用数字字号避开
+  const compactText = isMd ? "text-14 font-medium" : "text-body-xs-medium";
+  const compactInputText = isMd ? "text-14" : "text-body-xs-regular";
+  const optionChip = (label: string, key?: string) => (
+    <span key={key} className="inline-block h-6 max-w-full truncate rounded-md bg-layer-1 px-2 text-13 leading-6 font-medium text-primary">
+      {label}
+    </span>
+  );
 
   if (fieldType === "text") {
     const textMode = getTextMode(field.options);
@@ -140,7 +153,11 @@ export const ExtraFieldControl = (props: TExtraFieldControlProps) => {
           className={cn(
             "w-full resize-y",
             compact
-              ? "min-h-7.5 !border-transparent !bg-transparent px-1.5 py-1 text-body-xs-regular hover:!border-subtle focus:!border-subtle"
+              ? cn(
+                  "!border-transparent !bg-transparent px-1.5 py-1 hover:!border-subtle focus:!border-subtle",
+                  isMd ? "min-h-16 leading-relaxed" : "min-h-7.5",
+                  compactInputText
+                )
               : "min-h-[88px]"
           )}
         />
@@ -159,7 +176,10 @@ export const ExtraFieldControl = (props: TExtraFieldControlProps) => {
         className={cn(
           "w-full",
           compact &&
-            "h-7.5 !border-transparent !bg-transparent px-1.5 py-1 text-body-xs-regular hover:!border-subtle focus:!border-subtle"
+            cn(
+              "h-7.5 !border-transparent !bg-transparent px-1.5 py-1 hover:!border-subtle focus:!border-subtle",
+              compactInputText
+            )
         )}
       />
     );
@@ -186,7 +206,10 @@ export const ExtraFieldControl = (props: TExtraFieldControlProps) => {
         className={cn(
           "w-full",
           compact &&
-            "h-7.5 !border-transparent !bg-transparent px-1.5 py-1 text-body-xs-regular hover:!border-subtle focus:!border-subtle"
+            cn(
+              "h-7.5 !border-transparent !bg-transparent px-1.5 py-1 hover:!border-subtle focus:!border-subtle",
+              compactInputText
+            )
         )}
       />
     );
@@ -217,7 +240,7 @@ export const ExtraFieldControl = (props: TExtraFieldControlProps) => {
         buttonContainerClassName={cn("w-full", compact && "max-w-full text-left h-7.5 rounded-sm")}
         buttonClassName={
           compact
-            ? "justify-between gap-1.5 !h-7.5 !w-full !px-1.5 !py-0 text-body-xs-medium"
+            ? `justify-between gap-1.5 !h-7.5 !w-full !px-1.5 !py-0 ${compactText}`
             : "!h-[38px] !w-full !px-3 !py-2 !rounded !text-13"
         }
         labelClassName={cn(compact && !hasDate && "text-placeholder")}
@@ -258,12 +281,25 @@ export const ExtraFieldControl = (props: TExtraFieldControlProps) => {
             const arr = (val as string[] | undefined) ?? [];
             const labels = arr.map((k) => selectOpts.find((o) => o.key === k)?.label ?? k);
             const empty = arr.length === 0;
+            if (isMd && !empty) {
+              return (
+                <span className="flex w-full min-w-0 items-center justify-between gap-1.5">
+                  <span className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
+                    {labels.map((label, i) => optionChip(label, `${arr[i]}`))}
+                  </span>
+                  <ChevronDownIcon
+                    className="hidden h-3.5 w-3.5 shrink-0 text-secondary group-hover:inline"
+                    aria-hidden
+                  />
+                </span>
+              );
+            }
             return (
               <span className="flex w-full min-w-0 items-center justify-between gap-1.5">
                 <span
                   className={cn(
                     "min-w-0 flex-1 truncate",
-                    compact ? "text-body-xs-medium" : "text-13",
+                    compact ? compactText : "text-13",
                     compact && empty && "text-placeholder",
                     !compact && empty && "text-tertiary"
                   )}
@@ -282,7 +318,10 @@ export const ExtraFieldControl = (props: TExtraFieldControlProps) => {
           buttonContainerClassName={cn(
             "w-full rounded border-[0.5px] text-left",
             compact
-              ? "h-7.5 border-transparent !px-1.5 !py-0 hover:border-subtle"
+              ? cn(
+                  "border-transparent !px-1.5 hover:border-subtle",
+                  isMd ? "min-h-7.5 !py-0.5" : "h-7.5 !py-0"
+                )
               : "border-custom-border-300 px-3 py-2",
             { "border-danger-strong": !!error }
           )}
@@ -300,19 +339,23 @@ export const ExtraFieldControl = (props: TExtraFieldControlProps) => {
         value={typeof value === "string" ? value : null}
         onChange={(next: string | null) => onChange(next)}
         label={
+          isMd && selected ? (
+            optionChip(selected.label)
+          ) : (
           <span
-            className={cn("min-w-0 truncate", compact ? "text-body-xs-medium" : "text-13", {
+            className={cn("min-w-0 truncate", compact ? compactText : "text-13", {
               "text-placeholder": compact && !selected,
               "text-tertiary": !compact && !selected,
             })}
           >
             {selected ? selected.label : field.description || "请选择"}
           </span>
+          )
         }
         buttonClassName={cn(
           compact
             ? cn(
-                "w-full min-w-0 justify-between gap-1.5 !h-7.5 rounded-sm border-transparent bg-layer-transparent !px-1.5 !py-0 text-body-xs-medium hover:border-transparent hover:bg-layer-transparent-hover focus-visible:bg-layer-transparent-active",
+                `w-full min-w-0 justify-between gap-1.5 !h-7.5 rounded-sm border-transparent bg-layer-transparent !px-1.5 !py-0 ${compactText} hover:border-transparent hover:bg-layer-transparent-hover focus-visible:bg-layer-transparent-active`,
                 error && "border border-danger-strong hover:border-danger-strong"
               )
             : cn("w-full", { "border-danger-strong": !!error })
@@ -353,7 +396,7 @@ export const ExtraFieldControl = (props: TExtraFieldControlProps) => {
           buttonContainerClassName={cn("w-full", compact && "max-w-full text-left h-7.5 rounded-sm")}
           buttonClassName={cn(
             compact
-              ? "justify-between gap-1.5 !h-7.5 !w-full !px-1.5 !py-0 text-body-xs-medium"
+              ? `justify-between gap-1.5 !h-7.5 !w-full !px-1.5 !py-0 ${compactText}`
               : "!h-[38px] !w-full !px-3 !py-2 !rounded !text-13"
           )}
           labelClassName={cn(compact && userEmpty && "text-placeholder")}
@@ -378,7 +421,7 @@ export const ExtraFieldControl = (props: TExtraFieldControlProps) => {
         buttonContainerClassName={cn("w-full", compact && "max-w-full text-left h-7.5 rounded-sm")}
         buttonClassName={cn(
           compact
-            ? "justify-between gap-1.5 !h-7.5 !w-full !px-1.5 !py-0 text-body-xs-medium"
+            ? `justify-between gap-1.5 !h-7.5 !w-full !px-1.5 !py-0 ${compactText}`
             : "!h-[38px] !w-full !px-3 !py-2 !rounded !text-13"
         )}
         labelClassName={cn(compact && userEmpty && "text-placeholder")}
