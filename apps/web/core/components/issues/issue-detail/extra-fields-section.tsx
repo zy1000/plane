@@ -6,7 +6,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { observer } from "mobx-react";
-import { ClipboardList, Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff } from "lucide-react";
 // hooks
 import { useLocalStorage } from "@plane/hooks";
 // types
@@ -250,10 +250,7 @@ export const IssueExtraFieldsSection = observer(function IssueExtraFieldsSection
     <section className="@container">
       <div className="flex h-9 items-center gap-2 rounded-md bg-layer-1 pr-3 pl-[11px]">
         {/* 标题字号、颜色与下方字段名一致 */}
-        <span className="inline-flex items-center gap-1.5 text-14 text-secondary">
-          <ClipboardList className="size-4 shrink-0" strokeWidth={2} />
-          <span>{title}</span>
-        </span>
+        <span className="text-14 text-secondary">{title}</span>
         <span className="text-14 text-tertiary tabular-nums">{activeFields.length}</span>
         <span className="flex-1" />
         {!isEditing && emptyCount > 0 && (
