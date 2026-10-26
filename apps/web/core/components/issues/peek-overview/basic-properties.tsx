@@ -164,7 +164,7 @@ export const PeekOverviewBasicProperties = observer(function PeekOverviewBasicPr
                 })
               }
               maxDate={getDate(issue.target_date)}
-              placeholder={t("issue.add.start_date")}
+              placeholder="未设置"
               buttonVariant="transparent-with-text"
               disabled={disabled}
               className="group w-full"
@@ -187,7 +187,7 @@ export const PeekOverviewBasicProperties = observer(function PeekOverviewBasicPr
                     })
                   }
                   minDate={getDate(issue.start_date)}
-                  placeholder={t("issue.add.due_date")}
+                  placeholder="未设置"
                   buttonVariant="transparent-with-text"
                   disabled={disabled}
                   className="group w-full"
