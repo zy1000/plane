@@ -6,15 +6,15 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { observer } from "mobx-react";
+import { AlignLeft, Eye, EyeOff, Type } from "lucide-react";
 // hooks
 import { useLocalStorage } from "@plane/hooks";
 // types
 import type { TIssueExtraFieldType, TIssueExtraFieldValue } from "@plane/types";
-// ui
-import { ToggleSwitch } from "@plane/ui";
 // shared extra-field utilities
 import {
   ExtraFieldControl,
+  FIELD_TYPE_ICON,
   findValueForField,
   getSelectOptions,
   getTextMode,
@@ -25,6 +25,7 @@ import {
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useIssueTypeExtraFields } from "@/hooks/store/use-issue-type-extra-fields";
 import { useMember } from "@/hooks/store/use-member";
+import { useProjectIssueTypes } from "@/hooks/store/use-project-issue-types";
 // services
 import type { TTypeExtraField } from "@/services/project/project-issue-type.service";
 // utils
@@ -36,7 +37,13 @@ const HIDE_EMPTY_STORAGE_KEY = "plane:issue-extra-fields:hide-empty";
 const isParagraphField = (field: TTypeExtraField) =>
   field.field_type === "text" && getTextMode(field.options) === "paragraph";
 
-// ─── 单个字段：标签在上、控件在下 ─────────────────────────────────────────────
+/** 区块标题按类型叫：「缺陷(软件)」→「缺陷信息」；取不到类型名时仍叫「自定义字段」 */
+const getSectionTitle = (typeName: string | undefined) => {
+  const base = typeName?.replace(/\s*[(（][^()（）]*[)）]\s*$/, "").trim();
+  return base ? `${base}信息` : "自定义字段";
+};
+
+// ─── 单个字段：标签（类型图标 + 名称）、值 ─────────────────────────────────────
 
 type TFieldCellProps = {
   field: TTypeExtraField;
@@ -47,12 +54,23 @@ type TFieldCellProps = {
   disabled?: boolean;
 };
 
-const FieldLabel = ({ field }: { field: TTypeExtraField }) => (
-  <div className="mb-1 flex items-center gap-0.5 text-12 text-tertiary" title={field.description || undefined}>
-    <span className="truncate">{field.name}</span>
-    {field.is_required && <span className="text-danger-primary">*</span>}
-  </div>
-);
+const FieldLabel = ({ field, required }: { field: TTypeExtraField; required: boolean }) => {
+  const Icon = isParagraphField(field)
+    ? AlignLeft
+    : field.field_type === "text"
+      ? Type
+      : FIELD_TYPE_ICON[field.field_type];
+  return (
+    <div
+      className="flex min-h-[22px] min-w-0 items-center gap-2 text-14 text-secondary"
+      title={field.description || field.name}
+    >
+      <Icon className="size-4 shrink-0 text-placeholder" />
+      <span className="truncate">{field.name}</span>
+      {required && <span className="-ml-1.5 text-danger-primary">*</span>}
+    </div>
+  );
+};
 
 /** 文本 / 数字：失焦或回车（段落除外）才提交 */
 const DeferredFieldCell = observer(function DeferredFieldCell(props: TFieldCellProps) {
@@ -84,14 +102,13 @@ const DeferredFieldCell = observer(function DeferredFieldCell(props: TFieldCellP
   );
 
   return (
-    <div className="-ml-1.5 min-w-0" onBlur={handleBlur} onKeyDown={handleKeyDown}>
+    <div className="min-w-0" onBlur={handleBlur} onKeyDown={handleKeyDown}>
       <ExtraFieldControl
         field={field}
         value={localValue}
         onChange={(next) => setLocalValue(next)}
         disabled={disabled}
         projectId={projectId}
-        compact
         size="md"
       />
     </div>
@@ -101,14 +118,13 @@ const DeferredFieldCell = observer(function DeferredFieldCell(props: TFieldCellP
 const ImmediateFieldCell = observer(function ImmediateFieldCell(props: TFieldCellProps) {
   const { field, projectId, value, onCommit, disabled } = props;
   return (
-    <div className="-ml-1.5 flex min-h-7.5 min-w-0 items-center">
+    <div className="flex min-w-0 items-center">
       <ExtraFieldControl
         field={field}
         value={value}
         onChange={(next) => onCommit(next)}
         disabled={disabled}
         projectId={projectId}
-        compact
         size="md"
       />
     </div>
@@ -123,51 +139,32 @@ const FieldControlCell = (props: TFieldCellProps) => {
 const toIdList = (value: unknown): string[] =>
   Array.isArray(value) ? (value as string[]) : isValueEmpty(value) ? [] : [String(value)];
 
-/** 只读态：按字段类型把值排成文本 / 标签，空值统一「—」，不渲染灰掉的输入框 */
+/** 只读态：值一律排成纯文本，空值「未填写」，不渲染灰掉的输入框 */
 const ReadOnlyFieldValue = observer(function ReadOnlyFieldValue({ field, value }: { field: TTypeExtraField; value: unknown }) {
   const { getUserDetails } = useMember();
-  const empty = <span className="text-14 text-placeholder">—</span>;
-  const chip = (label: string, key: string) => (
-    <span
-      key={key}
-      className="inline-block h-6 max-w-full truncate rounded-md bg-layer-1 px-2 text-13 leading-6 font-medium text-primary"
-    >
-      {label}
-    </span>
-  );
+  const text = (content: string) => <span className="font-medium break-all text-primary">{content}</span>;
+
+  if (field.field_type === "boolean") return text(value === true || value === "true" || value === 1 ? "是" : "否");
+  if (isValueEmpty(value)) return <span className="text-tertiary">未填写</span>;
 
   switch (field.field_type) {
-    case "boolean":
-      return <span className="text-14 text-primary">{value === true || value === "true" || value === 1 ? "是" : "否"}</span>;
     case "date":
-      if (isValueEmpty(value)) return empty;
-      return <span className="text-14 text-primary tabular-nums">{renderFormattedDate(value as string) ?? String(value)}</span>;
+      return <span className="font-medium text-primary tabular-nums">{renderFormattedDate(value as string) ?? String(value)}</span>;
     case "select": {
       const options = getSelectOptions(field);
-      const keys = toIdList(value);
-      if (keys.length === 0) return empty;
-      return (
-        <span className="flex flex-wrap gap-1">
-          {keys.map((key) => chip(options.find((option) => option.key === key)?.label ?? key, key))}
-        </span>
-      );
+      return text(toIdList(value).map((key) => options.find((option) => option.key === key)?.label ?? key).join("、"));
     }
-    case "user": {
-      const ids = toIdList(value);
-      if (ids.length === 0) return empty;
-      return (
-        <span className="text-14 text-primary">
-          {ids.map((id) => getUserDetails(id)?.display_name ?? id).join("、")}
-        </span>
-      );
-    }
+    case "user":
+      return text(toIdList(value).map((id) => getUserDetails(id)?.display_name ?? id).join("、"));
     default:
-      if (isValueEmpty(value)) return empty;
-      return <div className="text-14 break-words whitespace-pre-wrap text-primary">{String(value)}</div>;
+      if (isParagraphField(field)) {
+        return <div className="leading-relaxed break-words whitespace-pre-wrap text-primary">{String(value)}</div>;
+      }
+      return text(String(value));
   }
 });
 
-// ─── 字段卡片 ─────────────────────────────────────────────────────────────────
+// ─── 字段区块 ─────────────────────────────────────────────────────────────────
 
 type TIssueExtraFieldsSectionProps = {
   workspaceSlug: string;
@@ -182,7 +179,8 @@ type TIssueExtraFieldsSectionProps = {
 
 /**
  * 工作项类型的自定义字段，放在详情主区描述下方：
- * 短字段按容器宽度 1/2/3 列网格，段落文本各占一整行；「隐藏未填」按人记在 localStorage。
+ * 去框的属性清单，标签在左、值在右，容器够宽时两列；段落文本各占一整行。
+ * 「隐藏未填」按人记在 localStorage，只作用于查看态，编辑态总是列出全部字段。
  */
 export const IssueExtraFieldsSection = observer(function IssueExtraFieldsSection(
   props: TIssueExtraFieldsSectionProps
@@ -200,6 +198,7 @@ export const IssueExtraFieldsSection = observer(function IssueExtraFieldsSection
     issue?.type_id ?? null,
     issue?.type_extra_fields ?? null
   );
+  const { issueTypes } = useProjectIssueTypes(workspaceSlug, projectId);
 
   const { storedValue: hideEmptyStored, setValue: setHideEmpty } = useLocalStorage<boolean>(
     HIDE_EMPTY_STORAGE_KEY,
@@ -226,21 +225,19 @@ export const IssueExtraFieldsSection = observer(function IssueExtraFieldsSection
   const activeFields = fields.filter((f) => f.is_active !== false);
   if (activeFields.length === 0) return null;
 
+  const isEditing = !disabled;
+  const title = getSectionTitle(issueTypes?.find((type) => type.id === issue.type_id)?.name);
   const values = (issue.extra_field_values ?? []) as TIssueExtraFieldValue[];
   // 布尔字段没有「未填」：关着也是一个值
   const isEmptyField = (field: TTypeExtraField) =>
     field.field_type !== "boolean" && isValueEmpty(findValueForField(values, field.id));
   const emptyCount = activeFields.filter(isEmptyField).length;
-  const visibleFields = hideEmpty ? activeFields.filter((f) => !isEmptyField(f)) : activeFields;
+  const visibleFields = hideEmpty && !isEditing ? activeFields.filter((f) => !isEmptyField(f)) : activeFields;
   const shortFields = visibleFields.filter((f) => !isParagraphField(f));
   const paragraphFields = visibleFields.filter(isParagraphField);
 
-  const renderCell = (field: TTypeExtraField) =>
-    disabled ? (
-      <div className={cn("flex min-w-0 items-center", isParagraphField(field) ? "py-1 leading-relaxed" : "min-h-7.5")}>
-        <ReadOnlyFieldValue field={field} value={findValueForField(values, field.id)} />
-      </div>
-    ) : (
+  const renderValue = (field: TTypeExtraField) =>
+    isEditing ? (
       <FieldControlCell
         key={`${issueId}-${field.id}`}
         field={field}
@@ -248,33 +245,44 @@ export const IssueExtraFieldsSection = observer(function IssueExtraFieldsSection
         issueId={issueId}
         value={findValueForField(values, field.id)}
         onCommit={(next) => commit(field.id, field.field_type, next)}
-        disabled={disabled}
       />
+    ) : (
+      <div className="min-w-0 text-14 leading-[22px]">
+        <ReadOnlyFieldValue field={field} value={findValueForField(values, field.id)} />
+      </div>
     );
 
   return (
-    <section className="@container overflow-hidden rounded-lg border border-subtle">
-      <div className="flex h-11 items-center gap-2 border-b border-subtle bg-layer-1 px-4">
-        <span className="text-14 font-semibold text-primary">自定义字段</span>
-        <span className="rounded-full border border-subtle bg-layer-2 px-1.5 text-12 leading-[18px] font-medium text-secondary tabular-nums">
-          {activeFields.length}
-        </span>
+    <section className="@container">
+      <div className="flex h-9 items-center gap-2 border-b border-subtle-1">
+        <span className="text-[15px] font-semibold text-primary">{title}</span>
+        <span className="text-13 text-tertiary tabular-nums">{activeFields.length}</span>
         <span className="flex-1" />
-        {(emptyCount > 0 || hideEmpty) && (
-          <label className="flex cursor-pointer items-center gap-2 text-13 text-secondary select-none">
-            <ToggleSwitch value={hideEmpty} onChange={(next) => setHideEmpty(next)} size="sm" />
-            隐藏未填
-          </label>
+        {!isEditing && emptyCount > 0 && (
+          <button
+            type="button"
+            className="flex h-7 items-center gap-1.5 rounded-md px-2 text-13 text-secondary hover:bg-layer-transparent-hover"
+            onClick={() => setHideEmpty(!hideEmpty)}
+          >
+            {hideEmpty ? <Eye className="size-3.5" /> : <EyeOff className="size-3.5" />}
+            {hideEmpty ? `显示未填 ${emptyCount}` : "隐藏未填"}
+          </button>
         )}
       </div>
 
       <div className={cn(dimmed && "opacity-60")}>
         {shortFields.length > 0 && (
-          <div className="grid grid-cols-1 gap-x-6 gap-y-3 px-4 py-4 @md:grid-cols-2 @2xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-x-12 @2xl:grid-cols-2">
             {shortFields.map((field) => (
-              <div key={field.id} className="min-w-0">
-                <FieldLabel field={field} />
-                {renderCell(field)}
+              <div
+                key={field.id}
+                className={cn(
+                  "grid min-w-0 grid-cols-[7.25rem_minmax(0,1fr)] gap-x-3 border-b border-subtle",
+                  isEditing ? "items-center py-1.5" : "items-start py-2"
+                )}
+              >
+                <FieldLabel field={field} required={isEditing && field.is_required} />
+                {renderValue(field)}
               </div>
             ))}
           </div>
@@ -283,15 +291,18 @@ export const IssueExtraFieldsSection = observer(function IssueExtraFieldsSection
         {paragraphFields.map((field, index) => (
           <div
             key={field.id}
-            className={cn("px-4 py-3", (shortFields.length > 0 || index > 0) && "border-t border-subtle")}
+            className={cn(
+              "flex flex-col gap-1.5 py-2.5",
+              index < paragraphFields.length - 1 && "border-b border-subtle"
+            )}
           >
-            <FieldLabel field={field} />
-            {renderCell(field)}
+            <FieldLabel field={field} required={isEditing && field.is_required} />
+            <div className="pl-6">{renderValue(field)}</div>
           </div>
         ))}
 
         {visibleFields.length === 0 && (
-          <div className="px-4 py-4 text-13 text-placeholder">{activeFields.length} 个字段都未填写</div>
+          <div className="py-3 text-13 text-placeholder">{activeFields.length} 个字段都未填写</div>
         )}
       </div>
     </section>
