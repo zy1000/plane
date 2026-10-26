@@ -54,7 +54,18 @@ export interface IProjectView {
   is_locked: boolean;
   anchor?: string;
   owned_by: string;
+  /** 研发模式视图挂在模式方案上（project 为空），跟随该模式的项目共用；项目视图为空 */
+  issue_scheme?: string | null;
+  /** 研发模式视图是从哪个项目存上去的 */
+  source_project?: string | null;
 }
+
+/** 模板中心「视图」页签里的研发模式视图 */
+export type TSchemeView = IProjectView & {
+  source_project_detail: { id: string; name: string; identifier: string } | null;
+  /** 「在项目中打开」去哪个项目：优先存上来的那个，自己不在就换一个自己参与的跟随项目；都没有为空 */
+  open_project_id: string | null;
+};
 
 export interface IPublishedProjectView extends Omit<IProjectView, "rich_filters"> {
   filters: IIssueFilterOptions;

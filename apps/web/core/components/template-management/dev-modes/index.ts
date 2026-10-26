@@ -13,6 +13,7 @@ export * from "./dev-mode-stage-templates-panel";
 export * from "./dev-mode-stages-panel";
 export * from "./dev-mode-sub-nav";
 export * from "./dev-mode-type-properties";
+export * from "./dev-mode-views-panel";
 export * from "./dev-modes-grid";
 export * from "./dev-modes-overview";
 export * from "./routes";

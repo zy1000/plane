@@ -5,7 +5,10 @@ import { Button } from "@plane/propel/button";
 import type { IProjectView } from "@plane/types";
 import { CustomMenu, Tooltip } from "@plane/ui";
 import { cn } from "@plane/utils";
+import { isModeView } from "./mode-view";
+import { ModeViewUpdateButton } from "./mode-view-update-button";
 import { MoreViewsPopover } from "./more-views-popover";
+import type { TViewSummaryRow } from "./types";
 import {
   VIEW_MENU_ITEM_CLASS,
   VIEW_MENU_OPTIONS_CLASS,
@@ -39,6 +42,14 @@ type TViewTabsBarProps = {
   onToggleInBar: (view: IProjectView, inBar: boolean) => void;
   onDelete: (view: IProjectView) => void;
   onManage: () => void;
+  /** 研发模式视图 */
+  modeName: string;
+  modeFollowingCount?: number;
+  /** 当前研发模式视图改过的部分 */
+  modeChanges: TViewSummaryRow[];
+  canUpdateModeView: (view: IProjectView) => boolean;
+  onUpdateModeView: () => Promise<void> | void;
+  onSaveAsProjectView: (view: IProjectView) => void;
 };
 
 /** 右侧「更多 / 新建」要占的宽度，量页签时先扣掉 */
@@ -123,6 +134,12 @@ export const ViewTabsBar = (props: TViewTabsBarProps) => {
     onToggleInBar,
     onDelete,
     onManage,
+    modeName,
+    modeFollowingCount,
+    modeChanges,
+    canUpdateModeView,
+    onUpdateModeView,
+    onSaveAsProjectView,
   } = props;
   // refs
   const containerRef = useRef<HTMLDivElement>(null);
@@ -199,7 +216,9 @@ export const ViewTabsBar = (props: TViewTabsBarProps) => {
           canDelete={canDeleteView(view)}
           canCreate={canCreate}
           className="shrink-0"
-          customButton={<ViewTabContent icon={viewIcon(view, true)} label={view.name} withChevron />}
+          customButton={
+            <ViewTabContent icon={viewIcon(view, true)} label={view.name} isModeView={isModeView(view)} withChevron />
+          }
           customButtonClassName={getViewTabClassName(true)}
           onRename={onRename}
           onDuplicate={onDuplicate}
@@ -208,6 +227,8 @@ export const ViewTabsBar = (props: TViewTabsBarProps) => {
           onToggleInBar={onToggleInBar}
           onDelete={onDelete}
           onManage={onManage}
+          modeName={modeName}
+          onSaveAsProjectView={onSaveAsProjectView}
         />
       );
     return (
@@ -217,7 +238,12 @@ export const ViewTabsBar = (props: TViewTabsBarProps) => {
         onClick={() => onSelect(view.id)}
         className={getViewTabClassName(isActive)}
       >
-        <ViewTabContent icon={viewIcon(view, isActive)} label={view.name} isDirty={isActive && isDirty} />
+        <ViewTabContent
+          icon={viewIcon(view, isActive)}
+          label={view.name}
+          isModeView={isModeView(view)}
+          isDirty={isActive && isDirty}
+        />
       </button>
     );
   };
@@ -258,9 +284,15 @@ export const ViewTabsBar = (props: TViewTabsBarProps) => {
   };
 
   /** 量宽行里的副本：样式与真页签一致（当前页签带 ▾ 或改动点） */
-  const renderGhost = (key: string, label: string, isActive: boolean, icon: ReactNode) => (
+  const renderGhost = (key: string, label: string, isActive: boolean, icon: ReactNode, isMode = false) => (
     <span key={key} className={getViewTabClassName(isActive)}>
-      <ViewTabContent icon={icon} label={label} isDirty={isActive && isDirty} withChevron={isActive && !isDirty} />
+      <ViewTabContent
+        icon={icon}
+        label={label}
+        isModeView={isMode}
+        isDirty={isActive && isDirty}
+        withChevron={isActive && !isDirty}
+      />
     </span>
   );
 
@@ -276,8 +308,17 @@ export const ViewTabsBar = (props: TViewTabsBarProps) => {
         className="pointer-events-none absolute top-0 left-0 flex h-0 items-center gap-1 overflow-hidden opacity-0"
       >
         {renderGhost("all", allLabel, isAllActive, allIcon(isAllActive))}
-        {views.map((view) => renderGhost(view.id, view.name, view.id === activeViewId, viewIcon(view, false)))}
-        {activeOutsideBar && renderGhost("extra", activeOutsideBar.name, true, viewIcon(activeOutsideBar, true))}
+        {views.map((view) =>
+          renderGhost(view.id, view.name, view.id === activeViewId, viewIcon(view, false), isModeView(view))
+        )}
+        {activeOutsideBar &&
+          renderGhost(
+            "extra",
+            activeOutsideBar.name,
+            true,
+            viewIcon(activeOutsideBar, true),
+            isModeView(activeOutsideBar)
+          )}
       </div>
 
       <div ref={containerRef} data-view-tabs-strip className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
@@ -324,7 +365,29 @@ export const ViewTabsBar = (props: TViewTabsBarProps) => {
           <Button variant="ghost" size="lg" onClick={onDiscard}>
             放弃
           </Button>
-          {activeView && canSaveActive ? (
+          {activeView && isModeView(activeView) ? (
+            // 研发模式视图：成员只能另存；研发模式维护人还能把改动更新到研发模式
+            <>
+              {canCreate && (
+                <Button
+                  variant={canUpdateModeView(activeView) ? "secondary" : "primary"}
+                  size="lg"
+                  onClick={onCreate}
+                >
+                  另存为新视图
+                </Button>
+              )}
+              {canUpdateModeView(activeView) && (
+                <ModeViewUpdateButton
+                  viewName={activeView.name}
+                  modeName={modeName}
+                  followingCount={modeFollowingCount}
+                  changes={modeChanges}
+                  onConfirm={onUpdateModeView}
+                />
+              )}
+            </>
+          ) : activeView && canSaveActive ? (
             <SaveSplitButton
               viewName={activeView.name}
               canCreate={canCreate}

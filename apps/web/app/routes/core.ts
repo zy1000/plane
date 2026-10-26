@@ -192,6 +192,11 @@ export const coreRoutes: RouteConfigEntry[] = [
               ":workspaceSlug/templates/dev-modes/:devModeId/issue-scheme/workflows/:workflowId",
               "./(all)/[workspaceSlug]/(projects)/templates/dev-modes/[devModeId]/issue-scheme/workflows/[workflowId]/page.tsx"
             ),
+            // 研发模式视图：跟随本模式的项目共用的页内视图
+            route(
+              ":workspaceSlug/templates/dev-modes/:devModeId/views",
+              "./(all)/[workspaceSlug]/(projects)/templates/dev-modes/[devModeId]/views/page.tsx"
+            ),
           ]),
           route(
             ":workspaceSlug/templates/test-cases",

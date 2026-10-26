@@ -12,10 +12,12 @@ from plane.app.permissions import IssueSchemeConfigPermission, WorkspaceEntityPe
 from plane.app.serializers.issue_type import IssueTypeCategorySerializer, IssueTypeSerializer
 from plane.db.models import (
     IssueType,
+    State,
     Workspace,
 )
 from plane.db.models.issue_type import IssueTypeCategory
 from plane.utils.issue_scheme import in_use_response_data, is_referenced, issue_type_references
+from plane.utils.scheme_views import prune_mode_view_references
 from plane.utils.project.defaults import (
     bulk_create_issue_state,
     create_default_bug_workflow,
@@ -138,7 +140,14 @@ class IssueTypeViewSet(IssueSchemeScopeMixin, BaseAPIView):
             data = in_use_response_data(refs, "工作项类型")
             data["msg"] = data["error"]
             return Response(data, status=status.HTTP_409_CONFLICT)
+        # 类型的状态随类型一起删，研发模式视图里用到类型或这些状态的条件要一并处理
+        state_ids = State.all_state_objects.filter(issue_type_id=issue_type.id).values_list("id", flat=True)
+        removed_ids = [issue_type.id, *state_ids]
+        scheme_id = issue_type.scheme_id
         issue_type.delete(soft=False)
+        prune_mode_view_references(
+            scheme_id, removed_ids, delete_views=request.query_params.get("delete_views") == "true"
+        )
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 

@@ -37,7 +37,8 @@ export interface IStateResponse {
 export type TStateOperationsCallbacks = {
   createState: (data: Partial<IState>) => Promise<IState>;
   updateState: (stateId: string, data: Partial<IState>) => Promise<IState | undefined>;
-  deleteState: (stateId: string) => Promise<void>;
+  /** deleteViews：模式方案里用到它的研发模式视图一起删（模板中心） */
+  deleteState: (stateId: string, options?: { deleteViews?: boolean }) => Promise<void>;
   moveStatePosition: (stateId: string, data: Partial<IState>) => Promise<void>;
   markStateAsDefault: (stateId: string) => Promise<void>;
 };

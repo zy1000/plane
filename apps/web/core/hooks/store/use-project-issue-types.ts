@@ -122,10 +122,10 @@ export const useProjectIssueTypes = (workspaceSlug: string | undefined, projectI
   );
 
   const deleteIssueType = useCallback(
-    async (issueTypeId: string) => {
+    async (issueTypeId: string, options?: { deleteViews?: boolean }) => {
       if (!workspaceSlug || !projectId) return;
 
-      await projectIssueTypeService.deleteProjectIssueType(workspaceSlug, projectId, issueTypeId);
+      await projectIssueTypeService.deleteProjectIssueType(workspaceSlug, projectId, issueTypeId, options);
       setIssueTypes((prev) => prev?.filter((issueType) => issueType.id !== issueTypeId));
     },
     [workspaceSlug, projectId]

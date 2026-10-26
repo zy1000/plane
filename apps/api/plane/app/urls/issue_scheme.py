@@ -10,6 +10,11 @@ from plane.app.views import StateViewSet
 from plane.app.views.issue.issue_type import IssueTypeViewSet, ProjectIssueTypeListCreateAPIEndpoint
 from plane.app.views.issue.issue_type_field import IssueExtraViewSet
 from plane.app.views.issue_scheme.base import IssueSchemeDetailEndpoint, ProjectIssueSchemeDetachEndpoint
+from plane.app.views.view.scheme import (
+    IssueSchemeViewDetailEndpoint,
+    IssueSchemeViewListEndpoint,
+    IssueSchemeViewReorderEndpoint,
+)
 from plane.app.views.workflow.base import WorkflowAPIView, WorkflowFlowchartAPIView, WorkflowTransitionAPIView
 
 SCHEME = "workspaces/<str:slug>/issue-schemes/<uuid:issue_scheme_id>"
@@ -47,6 +52,10 @@ urlpatterns = [
         StateViewSet.as_view({"post": "mark_as_default"}),
         name="scheme-state-mark-default",
     ),
+    # ---- 研发模式视图（模板中心「视图」页签）----
+    path(f"{SCHEME}/views/", IssueSchemeViewListEndpoint.as_view(), name="scheme-views"),
+    path(f"{SCHEME}/views/reorder/", IssueSchemeViewReorderEndpoint.as_view(), name="scheme-views-reorder"),
+    path(f"{SCHEME}/views/<uuid:pk>/", IssueSchemeViewDetailEndpoint.as_view(), name="scheme-view"),
     path(f"{SCHEME}/workflows/", WorkflowAPIView.as_view(), name="scheme-workflows"),
     path(f"{SCHEME}/workflows/flowchart/", WorkflowFlowchartAPIView.as_view(), name="scheme-workflows-flowchart"),
     path(

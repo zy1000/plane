@@ -5,7 +5,7 @@
  */
 
 import { API_BASE_URL } from "@plane/constants";
-import type { TIssueSchemeLite } from "@plane/types";
+import type { TIssueSchemeLite, TSchemeView } from "@plane/types";
 import { APIService } from "@/services/api.service";
 
 /** 模式方案概况（模板中心「工作项配置」页头） */
@@ -32,6 +32,40 @@ export class IssueSchemeService extends APIService {
 
   async getIssueScheme(workspaceSlug: string, schemeId: string): Promise<TIssueSchemeDetail> {
     return this.get(`/api/workspaces/${workspaceSlug}/issue-schemes/${schemeId}/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 模式方案上的研发模式视图（全部页面），按排序 */
+  async getSchemeViews(workspaceSlug: string, schemeId: string): Promise<TSchemeView[]> {
+    return this.get(`/api/workspaces/${workspaceSlug}/issue-schemes/${schemeId}/views/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async renameSchemeView(workspaceSlug: string, schemeId: string, viewId: string, name: string): Promise<void> {
+    return this.patch(`/api/workspaces/${workspaceSlug}/issue-schemes/${schemeId}/views/${viewId}/`, { name })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async deleteSchemeView(workspaceSlug: string, schemeId: string, viewId: string): Promise<void> {
+    return this.delete(`/api/workspaces/${workspaceSlug}/issue-schemes/${schemeId}/views/${viewId}/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 按给出的顺序重排（同一页面内的视图） */
+  async reorderSchemeViews(workspaceSlug: string, schemeId: string, viewIds: string[]): Promise<void> {
+    return this.post(`/api/workspaces/${workspaceSlug}/issue-schemes/${schemeId}/views/reorder/`, { view_ids: viewIds })
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;

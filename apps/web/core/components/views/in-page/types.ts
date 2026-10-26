@@ -13,6 +13,8 @@ export type TSaveViewInput = {
   name: string;
   access: EViewAccess;
   isDefault: boolean;
+  /** 「谁能看到」选了「研发模式全部项目」 */
+  shareToMode?: boolean;
 };
 
 export type TViewSummaryRow = {

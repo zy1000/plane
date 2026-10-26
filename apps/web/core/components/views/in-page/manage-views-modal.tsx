@@ -19,6 +19,7 @@ import type { IProjectView } from "@plane/types";
 import { EModalPosition, EModalWidth, ModalCore, Sortable } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { ButtonAvatars } from "@/components/dropdowns/member/avatar";
+import { isModeView, ModeViewBadge } from "./mode-view";
 import { ViewActionsMenu } from "./view-actions-menu";
 import { ViewLayoutIcon } from "./view-tab-parts";
 
@@ -41,6 +42,8 @@ type TManageViewsModalProps = {
   onToggleAccess: (view: IProjectView) => void;
   onDelete: (view: IProjectView) => void;
   onCreate: () => void;
+  modeName: string;
+  onSaveAsProjectView: (view: IProjectView) => void;
 };
 
 const SectionTitle = ({ title, count, hint }: { title: string; count: number; hint: string }) => (
@@ -51,6 +54,13 @@ const SectionTitle = ({ title, count, hint }: { title: string; count: number; hi
     </span>
     <span className="ml-auto text-12 font-normal text-tertiary">{hint}</span>
   </div>
+);
+
+const ModeChip = () => (
+  <span className="inline-flex h-5.5 shrink-0 items-center gap-1 rounded bg-warning-subtle px-1.5 text-12 text-warning-primary">
+    <ModeViewBadge className="size-3 bg-transparent" />
+    研发模式
+  </span>
 );
 
 const AccessChip = ({ isPublic }: { isPublic: boolean }) => (
@@ -92,6 +102,8 @@ export const ManageViewsModal = (props: TManageViewsModalProps) => {
     onToggleAccess,
     onDelete,
     onCreate,
+    modeName,
+    onSaveAsProjectView,
   } = props;
   // state
   const [query, setQuery] = useState("");
@@ -137,7 +149,7 @@ export const ManageViewsModal = (props: TManageViewsModalProps) => {
           </span>
         )}
         <span className="flex w-44 shrink-0 items-center gap-2 text-12 text-secondary">
-          <AccessChip isPublic={isPublic} />
+          {isModeView(view) ? <ModeChip /> : <AccessChip isPublic={isPublic} />}
           {isPublic && (
             <>
               <ButtonAvatars showTooltip userIds={view.owned_by} size="sm" />
@@ -182,6 +194,8 @@ export const ManageViewsModal = (props: TManageViewsModalProps) => {
           onSetDefault={onSetDefault}
           onToggleInBar={onToggleInBar}
           onDelete={onDelete}
+          modeName={modeName}
+          onSaveAsProjectView={onSaveAsProjectView}
         />
       </div>
     );

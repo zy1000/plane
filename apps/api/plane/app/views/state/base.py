@@ -21,6 +21,7 @@ from plane.app.views.issue_scheme.scope import IssueSchemeScopeMixin
 from plane.db.models import State
 from plane.utils.cache import invalidate_cache
 from plane.utils.issue_scheme import in_use_response_data, is_referenced, state_references
+from plane.utils.scheme_views import prune_mode_view_references
 
 
 class StateViewSet(IssueSchemeScopeMixin, BaseViewSet):
@@ -140,7 +141,12 @@ class StateViewSet(IssueSchemeScopeMixin, BaseViewSet):
         if is_referenced(refs):
             return Response(in_use_response_data(refs, "状态"), status=status.HTTP_409_CONFLICT)
 
+        # 硬删除后 Django 会把实例主键置空，id 要先取出来
+        state_id, scheme_id = state.id, state.scheme_id
         state.delete(soft=False)
+        prune_mode_view_references(
+            scheme_id, [state_id], delete_views=request.query_params.get("delete_views") == "true"
+        )
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 

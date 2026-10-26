@@ -6,6 +6,7 @@ import type { IProjectView } from "@plane/types";
 import { Tooltip } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { ButtonAvatars } from "@/components/dropdowns/member/avatar";
+import { isModeView, ModeViewBadge } from "./mode-view";
 import { getViewTabClassName, ViewLayoutIcon } from "./view-tab-parts";
 
 type TMoreViewsPopoverProps = {
@@ -77,7 +78,9 @@ export const MoreViewsPopover = (props: TMoreViewsPopoverProps) => {
         className="flex h-9 min-w-0 flex-1 items-center gap-2.5 pr-1 pl-2.5 text-left text-13 text-primary"
       >
         <ViewLayoutIcon view={view} className="text-tertiary" />
-        <span className="min-w-0 flex-1 truncate">{view.name}</span>
+        <span className="min-w-0 truncate">{view.name}</span>
+        {isModeView(view) && <ModeViewBadge />}
+        <span className="flex-1" />
         {view.access === EViewAccess.PUBLIC && (
           <span className="flex shrink-0 items-center gap-1.5 text-12 text-tertiary">
             <ButtonAvatars showTooltip userIds={view.owned_by} size="sm" />

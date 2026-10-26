@@ -15,7 +15,12 @@ export class ViewService extends APIService {
     super(API_BASE_URL);
   }
 
-  async createView(workspaceSlug: string, projectId: string, data: Partial<IProjectView>): Promise<any> {
+  /** share_to_mode：存到研发模式（跟随该模式的项目都能看到），只有研发模式维护人能用 */
+  async createView(
+    workspaceSlug: string,
+    projectId: string,
+    data: Partial<IProjectView> & { share_to_mode?: boolean }
+  ): Promise<any> {
     return this.post(`/api/workspaces/${workspaceSlug}/projects/${projectId}/views/`, data)
       .then((response) => response?.data)
       .catch((error) => {
@@ -41,6 +46,17 @@ export class ViewService extends APIService {
 
   async getViews(workspaceSlug: string, projectId: string, scope: TViewScope = "issues"): Promise<IProjectView[]> {
     return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/views/`, { params: { scope } })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 本项目能看到的研发模式视图（不分页面），只取 id，给「切换为项目自定义」弹窗计数 */
+  async getProjectModeViews(workspaceSlug: string, projectId: string): Promise<Pick<IProjectView, "id">[]> {
+    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/views/`, {
+      params: { scope: "all", mode_only: "true", fields: "id" },
+    })
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;

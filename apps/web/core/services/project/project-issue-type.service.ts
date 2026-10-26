@@ -224,8 +224,18 @@ export class ProjectIssueTypeService extends APIService {
   }
 
   // 新增：删除工作项类型
-  async deleteProjectIssueType(workspaceSlug: string, projectId: string, issueTypeId: string): Promise<any> {
-    return this.delete(`${issueConfigBasePath(workspaceSlug, projectId)}/issue-types/${issueTypeId}/`)
+  /** deleteViews：模式方案里用到它的研发模式视图一起删；不传则只从视图条件里去掉它 */
+  async deleteProjectIssueType(
+    workspaceSlug: string,
+    projectId: string,
+    issueTypeId: string,
+    options?: { deleteViews?: boolean }
+  ): Promise<any> {
+    return this.delete(
+      `${issueConfigBasePath(workspaceSlug, projectId)}/issue-types/${issueTypeId}/`,
+      undefined,
+      options?.deleteViews ? { params: { delete_views: "true" } } : {}
+    )
       .then((response) => {
         this.removeFromCache(projectId, issueTypeId);
         return response?.data;

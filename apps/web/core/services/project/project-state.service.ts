@@ -76,8 +76,18 @@ export class ProjectStateService extends APIService {
       });
   }
 
-  async deleteState(workspaceSlug: string, projectId: string, stateId: string): Promise<any> {
-    return this.delete(`${issueConfigBasePath(workspaceSlug, projectId)}/states/${stateId}/`)
+  /** deleteViews：模式方案里用到它的研发模式视图一起删；不传则只从视图条件里去掉它 */
+  async deleteState(
+    workspaceSlug: string,
+    projectId: string,
+    stateId: string,
+    options?: { deleteViews?: boolean }
+  ): Promise<any> {
+    return this.delete(
+      `${issueConfigBasePath(workspaceSlug, projectId)}/states/${stateId}/`,
+      undefined,
+      options?.deleteViews ? { params: { delete_views: "true" } } : {}
+    )
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;

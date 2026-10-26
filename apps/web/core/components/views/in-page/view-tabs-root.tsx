@@ -1,11 +1,12 @@
 import { useCallback, useState } from "react";
 import { observer } from "mobx-react";
-import type { IProjectView } from "@plane/types";
+import type { IProjectView, TViewScope } from "@plane/types";
 import { AlertModalCore } from "@plane/ui";
 import { useMember } from "@/hooks/store/use-member";
 import { ManageViewsModal } from "./manage-views-modal";
+import { getProjectLocalFilterLabels } from "./mode-view";
 import { SaveViewModal } from "./save-view-modal";
-import type { TSaveViewInput, TViewSnapshot, TViewSummaryRow, TViewTabsParams } from "./types";
+import type { TSaveViewInput, TViewSnapshot, TViewSnapshotKey, TViewSummaryRow, TViewTabsParams } from "./types";
 import { useViewTabs } from "./use-view-tabs";
 import { ViewTabsBar } from "./view-tabs-bar";
 
@@ -16,7 +17,21 @@ type TViewTabsRootProps = TViewTabsParams & {
   getSummary?: (snapshot: TViewSnapshot) => TViewSummaryRow[];
 };
 
-type TSaveModalState = { mode: "create" } | { mode: "edit"; view: IProjectView } | null;
+type TSaveModalState = { mode: "create"; initialName?: string } | { mode: "edit"; view: IProjectView } | null;
+
+/** 「存到研发模式」提示里的页面名 */
+const PAGE_LABELS: Record<TViewScope, string> = {
+  issues: "工作项页",
+  defects: "缺陷页",
+  requirements: "需求页",
+};
+
+/** 视图记住的三部分各对应摘要里的哪一行 */
+const SUMMARY_KIND_OF_PART: Record<TViewSnapshotKey, TViewSummaryRow["kind"]> = {
+  rich_filters: "filters",
+  display_filters: "layout",
+  display_properties: "properties",
+};
 
 /**
  * 页内视图页签：页签栏 + 保存 / 编辑弹窗 + 管理面板 + 删除确认。
@@ -40,6 +55,9 @@ export const ViewTabsRoot = observer(function ViewTabsRoot(props: TViewTabsRootP
 
   // 不 memo：current 里是 MobX 对象，按 key 改时引用不变
   const summary = params.current && getSummary ? getSummary(params.current) : undefined;
+  const changedKinds = new Set(tabs.changedParts.map((part) => SUMMARY_KIND_OF_PART[part]));
+  const modeChanges = summary?.filter((row) => changedKinds.has(row.kind)) ?? [];
+  const blockedFilterLabels = getProjectLocalFilterLabels(params.current?.rich_filters);
 
   const handleSaveSubmit = async (input: TSaveViewInput) => {
     if (!saveModal) return;
@@ -60,6 +78,12 @@ export const ViewTabsRoot = observer(function ViewTabsRoot(props: TViewTabsRootP
 
   const openCreate = () => setSaveModal({ mode: "create" });
   const openEdit = (view: IProjectView) => setSaveModal({ mode: "edit", view });
+  /** 研发模式视图「另存为本项目视图」：先切到它，再按它现在的设置新建一个本项目视图 */
+  const openSaveAsProjectView = (view: IProjectView) => {
+    if (tabs.activeViewId !== view.id) tabs.selectView(view.id);
+    setIsManageOpen(false);
+    setSaveModal({ mode: "create", initialName: view.name });
+  };
 
   return (
     <>
@@ -88,15 +112,31 @@ export const ViewTabsRoot = observer(function ViewTabsRoot(props: TViewTabsRootP
         onToggleInBar={(view, inBar) => void tabs.setViewInBar(view, inBar)}
         onDelete={setViewToDelete}
         onManage={() => setIsManageOpen(true)}
+        modeName={tabs.mode.modeName}
+        modeFollowingCount={tabs.mode.followingCount}
+        modeChanges={modeChanges}
+        canUpdateModeView={tabs.canUpdateModeView}
+        onUpdateModeView={tabs.saveActiveView}
+        onSaveAsProjectView={openSaveAsProjectView}
       />
 
       <SaveViewModal
         isOpen={!!saveModal}
         mode={saveModal?.mode ?? "create"}
-        initialName={saveModal?.mode === "edit" ? saveModal.view.name : ""}
+        initialName={saveModal?.mode === "edit" ? saveModal.view.name : (saveModal?.initialName ?? "")}
         initialAccess={saveModal?.mode === "edit" ? saveModal.view.access : undefined}
         initialIsDefault={saveModal?.mode === "edit" ? tabs.defaultViewId === saveModal.view.id : false}
         summary={summary}
+        modeOption={
+          tabs.canShareToMode
+            ? {
+                name: tabs.mode.modeName,
+                followingCount: tabs.mode.followingCount,
+                pageLabel: PAGE_LABELS[params.scope],
+              }
+            : undefined
+        }
+        blockedFilterLabels={blockedFilterLabels}
         onClose={() => setSaveModal(null)}
         onSubmit={handleSaveSubmit}
       />
@@ -123,6 +163,8 @@ export const ViewTabsRoot = observer(function ViewTabsRoot(props: TViewTabsRootP
           setIsManageOpen(false);
           openCreate();
         }}
+        modeName={tabs.mode.modeName}
+        onSaveAsProjectView={openSaveAsProjectView}
       />
 
       <AlertModalCore

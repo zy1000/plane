@@ -7,6 +7,7 @@ import { EViewAccess } from "@plane/types";
 import type { IProjectView } from "@plane/types";
 import { useProjectView } from "@/hooks/store/use-project-view";
 import { useUser, useUserPermissions } from "@/hooks/store/user";
+import { isModeView, useModeViewContext } from "./mode-view";
 import type { TSaveViewInput, TViewSnapshot, TViewSnapshotKey, TViewTabsParams } from "./types";
 import { useViewTabPreferences } from "./use-view-tab-preferences";
 
@@ -51,6 +52,16 @@ export const snapshotOfView = (view: IProjectView): TViewSnapshot => ({
 
 const toastError = (message: string) => setToast({ type: TOAST_TYPE.ERROR, title: "操作失败", message });
 
+/** 接口报错优先用后端给的说明（如「迭代、标签是本项目自己的…」） */
+const getErrorMessage = (error: unknown, fallback: string) =>
+  (error as { error?: string } | undefined)?.error ?? fallback;
+
+/** 模板中心「在项目中打开」带过来的 ?view=，进页时直接停在这个视图 */
+const readRequestedViewId = (): string | null => {
+  if (typeof window === "undefined") return null;
+  return new URLSearchParams(window.location.search).get("view");
+};
+
 export const useViewTabs = (params: TViewTabsParams) => {
   const {
     workspaceSlug,
@@ -67,6 +78,7 @@ export const useViewTabs = (params: TViewTabsParams) => {
   const { data: currentUser } = useUser();
   const { allowPermissions, allowProjectPermissionKeys } = useUserPermissions();
   const preferences = useViewTabPreferences(workspaceSlug, projectId, scope);
+  const mode = useModeViewContext(workspaceSlug, projectId);
   // state
   const [activeViewId, setActiveViewId] = useState<string | null>(null);
   const initializedKeyRef = useRef<string>();
@@ -90,9 +102,14 @@ export const useViewTabs = (params: TViewTabsParams) => {
     initializedKeyRef.current = key;
 
     const stored = readStoredActive(projectId, scope);
+    const requested = readRequestedViewId();
     let next: string | null = null;
     let shouldApply = false;
-    if (stored === ACTIVE_ALL) {
+    if (requested && views.some((view) => view.id === requested)) {
+      next = requested;
+      shouldApply = true;
+      writeStoredActive(projectId, scope, requested);
+    } else if (stored === ACTIVE_ALL) {
       next = null;
     } else if (stored && views.some((view) => view.id === stored)) {
       next = stored;
@@ -116,10 +133,15 @@ export const useViewTabs = (params: TViewTabsParams) => {
   const activeView = useMemo(() => views?.find((view) => view.id === activeViewId) ?? null, [views, activeViewId]);
 
   // 不做 useMemo：current 里的 display_filters 是 MobX 对象，按 key 改时引用不变，缓存会算旧值
+  /** 当前视图哪几部分被改过（「更新到研发模式」确认里列出来） */
+  const changedParts: TViewSnapshotKey[] =
+    current && activeView
+      ? compareKeys.filter((key) => !isEqual(normalizePart(current[key]), normalizePart(activeView[key])))
+      : [];
   const isDirty = (() => {
     if (!current) return false;
     if (!activeView) return Object.keys(normalizePart(current.rich_filters)).length > 0;
-    return compareKeys.some((key) => !isEqual(normalizePart(current[key]), normalizePart(activeView[key])));
+    return changedParts.length > 0;
   })();
 
   const orderedViews = useMemo(() => {
@@ -135,13 +157,18 @@ export const useViewTabs = (params: TViewTabsParams) => {
     });
   }, [views, preferences.order]);
 
-  // 页签栏里放哪些：自己的视图默认在栏里（除非收起），别人建的公共视图默认收在「更多」（除非拉出来）
+  /** 默认就在页签栏的：自己的视图、研发模式视图；别人建的公共视图默认收在「更多」 */
+  const isInBarByDefault = useCallback(
+    (view: IProjectView) => view.owned_by === currentUser?.id || isModeView(view),
+    [currentUser?.id]
+  );
+
   const isViewInBar = useCallback(
     (view: IProjectView) =>
-      view.owned_by === currentUser?.id
+      isInBarByDefault(view)
         ? !preferences.hiddenViewIds.includes(view.id)
         : preferences.pinnedViewIds.includes(view.id),
-    [currentUser?.id, preferences.hiddenViewIds, preferences.pinnedViewIds]
+    [isInBarByDefault, preferences.hiddenViewIds, preferences.pinnedViewIds]
   );
 
   const { visibleViews, hiddenViews } = useMemo(
@@ -153,9 +180,8 @@ export const useViewTabs = (params: TViewTabsParams) => {
   );
 
   const setViewInBar = useCallback(
-    (view: IProjectView, inBar: boolean) =>
-      preferences.setViewInBar(view.id, inBar, view.owned_by === currentUser?.id),
-    [currentUser?.id, preferences]
+    (view: IProjectView, inBar: boolean) => preferences.setViewInBar(view.id, inBar, isInBarByDefault(view)),
+    [isInBarByDefault, preferences]
   );
 
   // permissions
@@ -166,15 +192,23 @@ export const useViewTabs = (params: TViewTabsParams) => {
     projectId
   );
   const canCreate = allowProjectPermissionKeys([PROJECT_VIEWS_CREATE_PERMISSION_KEY], workspaceSlug, projectId);
+  // 研发模式视图在项目里不能改名、改可见范围、删除（去模板中心），只有研发模式维护人能把改动更新上去
   const canEditView = useCallback(
     (view: IProjectView) =>
-      view.owned_by === currentUser?.id || (view.access === EViewAccess.PUBLIC && isProjectAdmin),
+      !isModeView(view) &&
+      (view.owned_by === currentUser?.id || (view.access === EViewAccess.PUBLIC && isProjectAdmin)),
     [currentUser?.id, isProjectAdmin]
   );
   const canDeleteView = useCallback(
-    (view: IProjectView) => view.owned_by === currentUser?.id || isProjectAdmin,
+    (view: IProjectView) => !isModeView(view) && (view.owned_by === currentUser?.id || isProjectAdmin),
     [currentUser?.id, isProjectAdmin]
   );
+  const canUpdateModeView = useCallback(
+    (view: IProjectView) => isModeView(view) && mode.isFollowing && mode.canManage,
+    [mode.canManage, mode.isFollowing]
+  );
+  /** 「谁能看到」里出现「研发模式全部项目」 */
+  const canShareToMode = canCreate && mode.isFollowing && mode.canManage;
 
   // actions
   const selectView = useCallback(
@@ -198,13 +232,20 @@ export const useViewTabs = (params: TViewTabsParams) => {
 
   const saveActiveView = useCallback(async () => {
     if (!activeView) return;
+    const toMode = isModeView(activeView);
     try {
       await updateView(workspaceSlug, projectId, activeView.id, buildPayload());
-      setToast({ type: TOAST_TYPE.SUCCESS, title: "已保存", message: `视图「${activeView.name}」已更新` });
-    } catch {
-      toastError("视图没有保存成功，请重试");
+      setToast({
+        type: TOAST_TYPE.SUCCESS,
+        title: "已保存",
+        message: toMode
+          ? `研发模式视图「${activeView.name}」已更新，跟随${mode.modeName}的项目一起生效`
+          : `视图「${activeView.name}」已更新`,
+      });
+    } catch (error) {
+      toastError(getErrorMessage(error, "视图没有保存成功，请重试"));
     }
-  }, [activeView, buildPayload, projectId, updateView, workspaceSlug]);
+  }, [activeView, buildPayload, mode.modeName, projectId, updateView, workspaceSlug]);
 
   const discardChanges = useCallback(() => {
     apply(activeView ? snapshotOfView(activeView) : null);
@@ -216,21 +257,28 @@ export const useViewTabs = (params: TViewTabsParams) => {
         const created = await createView(workspaceSlug, projectId, {
           name: input.name.trim(),
           description: "",
-          access: input.access,
+          access: input.shareToMode ? EViewAccess.PUBLIC : input.access,
           scope,
           ...buildPayload(),
+          ...(input.shareToMode ? { share_to_mode: true } : {}),
         });
         setActiveViewId(created.id);
         writeStoredActive(projectId, scope, created.id);
         if (input.isDefault) await preferences.setDefaultViewId(created.id);
-        setToast({ type: TOAST_TYPE.SUCCESS, title: "已保存", message: `视图「${created.name}」已创建` });
+        setToast({
+          type: TOAST_TYPE.SUCCESS,
+          title: "已保存",
+          message: input.shareToMode
+            ? `视图「${created.name}」已存到${mode.modeName}，跟随的项目都能看到`
+            : `视图「${created.name}」已创建`,
+        });
         return created;
-      } catch {
-        toastError("视图没有创建成功，请重试");
+      } catch (error) {
+        toastError(getErrorMessage(error, "视图没有创建成功，请重试"));
         return undefined;
       }
     },
-    [buildPayload, createView, preferences, projectId, scope, workspaceSlug]
+    [buildPayload, createView, mode.modeName, preferences, projectId, scope, workspaceSlug]
   );
 
   const updateViewMeta = useCallback(
@@ -305,9 +353,13 @@ export const useViewTabs = (params: TViewTabsParams) => {
     activeViewId,
     activeView,
     isDirty,
+    changedParts,
     canCreate,
     canEditView,
     canDeleteView,
+    canUpdateModeView,
+    canShareToMode,
+    mode,
     defaultViewId: preferences.defaultViewId,
     isViewInBar,
     selectView,

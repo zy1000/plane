@@ -148,11 +148,11 @@ export const ProjectStateRoot = observer(function ProjectStateRoot(props: TProje
         }
         return updateState(workspaceSlug, projectId, stateId, data);
       },
-      deleteState: async (stateId: string) => {
+      deleteState: async (stateId: string, options?: { deleteViews?: boolean }) => {
         if (!statePermissions.canDeleteState) {
           throw PROJECT_PERMISSION_DENIED_ERROR;
         }
-        return deleteState(workspaceSlug, projectId, stateId);
+        return deleteState(workspaceSlug, projectId, stateId, options);
       },
       moveStatePosition: async (stateId: string, data: Partial<IState>) => {
         if (!statePermissions.canEditState) {

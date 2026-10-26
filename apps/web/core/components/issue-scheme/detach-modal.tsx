@@ -6,6 +6,7 @@
 
 import { useState } from "react";
 import { AlertTriangle } from "lucide-react";
+import useSWR from "swr";
 // plane imports
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
@@ -13,8 +14,10 @@ import type { IProject } from "@plane/types";
 import { EModalPosition, EModalWidth, Input, ModalCore } from "@plane/ui";
 // services
 import { IssueSchemeService } from "@/services/project/issue-scheme.service";
+import { ViewService } from "@/services/view.service";
 
 const issueSchemeService = new IssueSchemeService();
+const viewService = new ViewService();
 
 type Props = {
   isOpen: boolean;
@@ -35,6 +38,13 @@ export function IssueSchemeDetachModal({ isOpen, workspaceSlug, project, devMode
   const [confirmText, setConfirmText] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const canSubmit = confirmText.trim().toUpperCase() === project.identifier?.toUpperCase();
+  // 研发模式视图会拷成本项目的公共视图，弹窗里写清有几个
+  const { data: modeViews } = useSWR(
+    isOpen ? `PROJECT_MODE_VIEWS_${workspaceSlug}_${project.id}` : null,
+    () => viewService.getProjectModeViews(workspaceSlug, project.id),
+    { revalidateOnFocus: false }
+  );
+  const modeViewCount = modeViews?.length ?? 0;
 
   const handleClose = () => {
     if (isSubmitting) return;
@@ -80,6 +90,7 @@ export function IssueSchemeDetachModal({ isOpen, workspaceSlug, project, devMode
           <ul className="list-disc space-y-1 pl-5">
             <li>研发模式里的修改不再同步到本项目，配置要在本项目里自己维护；</li>
             <li>已有工作项的类型、状态、属性值保持不变；</li>
+            {modeViewCount > 0 && <li>研发模式的 {modeViewCount} 个视图拷成本项目的公共视图，页签位置不变；</li>}
             <li className="font-medium text-primary">切换后不能改回跟随研发模式。</li>
           </ul>
         </div>

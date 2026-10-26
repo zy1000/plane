@@ -1,9 +1,10 @@
 import type { ReactNode } from "react";
-import { Check, Copy, Pencil, Pin, PinOff, SlidersHorizontal, Star, Trash2, User, Users } from "lucide-react";
+import { Blend, Check, Copy, CopyPlus, Pencil, Pin, PinOff, SlidersHorizontal, Star, Trash2, User, Users } from "lucide-react";
 import { EViewAccess } from "@plane/types";
 import type { IProjectView } from "@plane/types";
 import { CustomMenu } from "@plane/ui";
 import { cn } from "@plane/utils";
+import { isModeView } from "./mode-view";
 
 type TViewActionsMenuProps = {
   view: IProjectView;
@@ -27,6 +28,10 @@ type TViewActionsMenuProps = {
   onDelete: (view: IProjectView) => void;
   /** 管理面板里的行菜单不传 */
   onManage?: () => void;
+  /** 研发模式视图所属模式的名字 */
+  modeName?: string;
+  /** 研发模式视图：另存一份成本项目的视图 */
+  onSaveAsProjectView?: (view: IProjectView) => void;
 };
 
 export const VIEW_MENU_OPTIONS_CLASS = "w-64 rounded-lg border-subtle px-1.5 py-1.5 shadow-overlay-200";
@@ -57,9 +62,20 @@ export const ViewActionsMenu = (props: TViewActionsMenuProps) => {
     onToggleInBar,
     onDelete,
     onManage,
+    modeName,
+    onSaveAsProjectView,
   } = props;
   const isPublic = view.access === EViewAccess.PUBLIC;
-  const hasEditGroup = canEdit || canCreate;
+  const isMode = isModeView(view);
+  const canSaveAsProjectView = isMode && canCreate && !!onSaveAsProjectView;
+  const hasEditGroup = isMode ? canSaveAsProjectView : canEdit || canCreate;
+
+  const subtitle = isMode
+    ? `${modeName ?? "研发模式"} · 研发模式视图`
+    : isPublic
+      ? `公共视图 · ${ownerName} 创建`
+      : "个人视图 · 只有你能看到";
+  const SubtitleIcon = isMode ? Blend : isPublic ? Users : User;
 
   return (
     <CustomMenu
@@ -75,18 +91,24 @@ export const ViewActionsMenu = (props: TViewActionsMenuProps) => {
       <div className="flex flex-col gap-1 px-2.5 pt-1.5 pb-2">
         <span className="truncate text-14 font-semibold text-primary">{view.name}</span>
         <span className="flex items-center gap-1.5 text-12 text-tertiary">
-          {isPublic ? <Users className="size-3.5 shrink-0" /> : <User className="size-3.5 shrink-0" />}
-          <span className="truncate">{isPublic ? `公共视图 · ${ownerName} 创建` : "个人视图 · 只有你能看到"}</span>
+          <SubtitleIcon className={cn("size-3.5 shrink-0", isMode && "text-warning-primary")} />
+          <span className="truncate">{subtitle}</span>
         </span>
       </div>
       <ViewMenuSeparator />
+      {canSaveAsProjectView && (
+        <CustomMenu.MenuItem className={VIEW_MENU_ITEM_CLASS} onClick={() => onSaveAsProjectView?.(view)}>
+          <CopyPlus className={iconClass} />
+          另存为本项目视图
+        </CustomMenu.MenuItem>
+      )}
       {canEdit && (
         <CustomMenu.MenuItem className={VIEW_MENU_ITEM_CLASS} onClick={() => onRename(view)}>
           <Pencil className={iconClass} />
           重命名
         </CustomMenu.MenuItem>
       )}
-      {canCreate && (
+      {canCreate && !isMode && (
         <CustomMenu.MenuItem className={VIEW_MENU_ITEM_CLASS} onClick={() => onDuplicate(view)}>
           <Copy className={iconClass} />
           复制为新视图

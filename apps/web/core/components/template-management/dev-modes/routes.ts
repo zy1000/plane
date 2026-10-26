@@ -1,6 +1,6 @@
 /**
  * 研发模式各页的路径与选中判定。路径集中在这里，左栏、页签、跳转都从这里取，别再手写字符串。
- * `devModesBasePath` 是「全部模式对比」，模式页的三个页签是 阶段与评审（索引）/ 工作项 / 组件。
+ * `devModesBasePath` 是「全部模式对比」，模式页的页签是 阶段与评审（索引）/ 工作项 / 视图 / 组件。
  */
 
 export const devModesBasePath = (workspaceSlug: string) => `/${workspaceSlug}/templates/dev-modes`;
@@ -23,6 +23,18 @@ export const devModeIssueSchemePath = (workspaceSlug: string, devModeId: string)
 
 export const devModeIssueSchemeWorkflowPath = (workspaceSlug: string, devModeId: string, workflowId: string) =>
   `${devModeIssueSchemePath(workspaceSlug, devModeId)}/workflows/${workflowId}`;
+
+/** 「视图」页签：研发模式视图；页面分段用 `?scope=` */
+export const devModeViewsPath = (workspaceSlug: string, devModeId: string) =>
+  `${devModeDetailPath(workspaceSlug, devModeId)}/views`;
+
+/** 研发模式视图「在项目中打开」：项目里对应页面，`?view=` 让页签直接停在这个视图 */
+export const projectViewPagePath = (
+  workspaceSlug: string,
+  projectId: string,
+  scope: "issues" | "defects" | "requirements",
+  viewId: string
+) => `/${workspaceSlug}/projects/${projectId}/${scope}?view=${viewId}`;
 
 /** 评审模板库里某个阶段类型的维护入口（阶段页右栏的「评审模板库」链接） */
 export const reviewTemplatesPath = (workspaceSlug: string, stageTypeId?: string) =>

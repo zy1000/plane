@@ -27,8 +27,18 @@ import { devModesBasePath } from "./routes";
 export const DevModeDetailShell = observer(function DevModeDetailShell() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { workspaceSlug, devModeId, devMode, isLoading, isMutating, error, fetchDevMode, updateDevMode, issueTypesStore } =
-    useDevModeDetailContext();
+  const {
+    workspaceSlug,
+    devModeId,
+    devMode,
+    isLoading,
+    isMutating,
+    error,
+    fetchDevMode,
+    updateDevMode,
+    issueTypesStore,
+    schemeViewsStore,
+  } = useDevModeDetailContext();
   const { modes } = useTemplateCenter();
   const { canManageDevModes } = useTemplatePermissions(workspaceSlug);
   const [isEditing, setIsEditing] = useState(false);
@@ -118,6 +128,7 @@ export const DevModeDetailShell = observer(function DevModeDetailShell() {
             devModeId={devModeId}
             stageCount={devMode.stages.length}
             typeCount={issueTypesStore.issueTypes?.length}
+            viewCount={schemeViewsStore.views?.length}
             featureOnCount={featureOnCount}
             featureTotal={DEV_MODE_FEATURE_KEYS.length}
           />

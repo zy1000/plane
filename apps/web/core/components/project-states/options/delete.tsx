@@ -16,6 +16,10 @@ import { Tooltip } from "@plane/propel/tooltip";
 import type { IState, TStateOperationsCallbacks } from "@plane/types";
 import { AlertModalCore } from "@plane/ui";
 import { cn } from "@plane/utils";
+// components
+import { useOptionalDevModeDetailContext } from "@/components/template-management/dev-modes/context";
+import { ModeViewReferences } from "@/components/template-management/dev-modes/mode-view-references";
+import { viewReferencesAny } from "@/components/template-management/dev-modes/use-scheme-views";
 // hooks
 import { usePlatformOS } from "@/hooks/use-platform-os";
 
@@ -35,8 +39,14 @@ export const StateDelete = observer(function StateDelete(props: TStateDelete) {
   // states
   const [isDeleteModal, setIsDeleteModal] = useState(false);
   const [isDelete, setIsDelete] = useState(false);
+  const [deleteViews, setDeleteViews] = useState(true);
+  // 在模板中心（模式页）里删状态时，提示用到它的研发模式视图
+  const devModeContext = useOptionalDevModeDetailContext();
   // derived values
   const isDeleteDisabled = disabled || state.default || totalStates === 1;
+  const referencingViews = (devModeContext?.schemeViewsStore.views ?? []).filter((view) =>
+    viewReferencesAny(view, [state.id])
+  );
 
   const handleDeleteState = async () => {
     if (isDeleteDisabled) return;
@@ -44,7 +54,8 @@ export const StateDelete = observer(function StateDelete(props: TStateDelete) {
     setIsDelete(true);
 
     try {
-      await deleteStateCallback(state.id);
+      await deleteStateCallback(state.id, { deleteViews: referencingViews.length > 0 && deleteViews });
+      if (devModeContext) void devModeContext.schemeViewsStore.refresh();
     } catch (error: unknown) {
       if (isProjectPermissionError(error)) {
         setToast({
@@ -99,6 +110,11 @@ export const StateDelete = observer(function StateDelete(props: TStateDelete) {
           <>
             Are you sure you want to delete state- <span className="font-medium text-primary">{state?.name}</span>? All
             of the data related to the state will be permanently removed. This action cannot be undone.
+            <ModeViewReferences
+              views={referencingViews}
+              deleteViews={deleteViews}
+              onDeleteViewsChange={setDeleteViews}
+            />
           </>
         }
       />
@@ -110,7 +126,10 @@ export const StateDelete = observer(function StateDelete(props: TStateDelete) {
           isDeleteDisabled ? "bg-surface-2 text-secondary" : "text-danger-primary hover:bg-layer-1"
         )}
         disabled={isDeleteDisabled}
-        onClick={() => setIsDeleteModal(true)}
+        onClick={() => {
+          setDeleteViews(true);
+          setIsDeleteModal(true);
+        }}
       >
         <Tooltip
           tooltipContent={

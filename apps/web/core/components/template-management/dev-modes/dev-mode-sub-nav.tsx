@@ -1,6 +1,12 @@
 import { Link, useLocation } from "react-router";
 import { cn } from "@plane/utils";
-import { devModeFeaturesPath, devModeIssueSchemePath, devModeStagesPath, isDevModeSubPageActive } from "./routes";
+import {
+  devModeFeaturesPath,
+  devModeIssueSchemePath,
+  devModeStagesPath,
+  devModeViewsPath,
+  isDevModeSubPageActive,
+} from "./routes";
 
 type TSubNavItem = {
   key: string;
@@ -13,7 +19,7 @@ type TSubNavItem = {
 };
 
 /**
- * 模式页的一层页签（方案 A）：阶段与评审 · 工作项 · 组件。
+ * 模式页的一层页签（方案 A）：阶段与评审 · 工作项 · 视图 · 组件。
  *
  * 原来「工作项配置」下面还有一层「类型与属性 / 状态 / 工作流」页签，现在工作项页里改成
  * 「左边选类型、右边分段看属性 / 状态 / 工作流」，页签只剩这一层。
@@ -23,6 +29,7 @@ export function DevModeSubNav({
   devModeId,
   stageCount,
   typeCount,
+  viewCount,
   featureOnCount,
   featureTotal,
 }: {
@@ -31,6 +38,7 @@ export function DevModeSubNav({
   stageCount: number;
   /** 还没拉回来时 undefined，不显示计数 */
   typeCount: number | undefined;
+  viewCount: number | undefined;
   featureOnCount: number;
   featureTotal: number;
 }) {
@@ -49,6 +57,13 @@ export function DevModeSubNav({
       label: "工作项",
       href: devModeIssueSchemePath(workspaceSlug, devModeId),
       count: typeCount === undefined ? "" : `${typeCount} 类型`,
+      isIndex: false,
+    },
+    {
+      key: "views",
+      label: "视图",
+      href: devModeViewsPath(workspaceSlug, devModeId),
+      count: viewCount === undefined ? "" : String(viewCount),
       isIndex: false,
     },
     {

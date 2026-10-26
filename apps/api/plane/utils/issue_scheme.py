@@ -33,6 +33,7 @@ from plane.db.models.cycle import CycleUserProperties
 from plane.db.models.module import ModuleUserProperties
 from plane.db.models.release import ReleaseUserProperties
 from plane.db.models.workflow import TransitionRecordStatus, WorkflowPrincipalKind
+from plane.utils.scheme_views import copy_mode_views_to_project
 
 logger = logging.getLogger("plane.api")
 
@@ -338,6 +339,8 @@ def detach_project_scheme(project_id, actor=None):
 
         target = IssueScheme.objects.create(workspace_id=project.workspace_id, name=project.name, project_id=project.id)
         id_map = copy_scheme(source, target, actor_id=actor_id)
+        # 研发模式视图拷成本项目的公共视图，条件里的模式方案 id 由下面的重映射一起换掉
+        copy_mode_views_to_project(source.id, project.id)
         remap_project_refs(project.id, id_map)
         Project.all_objects.filter(pk=project.id).update(issue_scheme_id=target.id)
         logger.info(

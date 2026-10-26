@@ -20,7 +20,9 @@ import type { TWorkflow } from "@/services/project/project-workflow.service";
 import { useTemplatePermissions } from "../permissions";
 import { useDevModeDetailContext } from "./context";
 import { DevModeTypeProperties } from "./dev-mode-type-properties";
+import { ModeViewReferences } from "./mode-view-references";
 import { devModeIssueSchemePath, devModeIssueSchemeWorkflowPath } from "./routes";
+import { viewReferencesAny } from "./use-scheme-views";
 
 const workflowService = new ProjectWorkflowService();
 
@@ -43,7 +45,7 @@ const TypeDetail = observer(function TypeDetail({
   onSegmentChange: (segment: TSegment) => void;
   onDeleted: () => void;
 }) {
-  const { workspaceSlug, devModeId, scopeKey, issueTypesStore } = useDevModeDetailContext();
+  const { workspaceSlug, devModeId, scopeKey, issueTypesStore, schemeViewsStore } = useDevModeDetailContext();
   const { canManageDevModes: canEdit } = useTemplatePermissions(workspaceSlug);
   const fieldsStore = useProjectIssueTypeFields(workspaceSlug, scopeKey);
   const workflowsStore = useProjectWorkflows(workspaceSlug, scopeKey);
@@ -52,6 +54,7 @@ const TypeDetail = observer(function TypeDetail({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteViews, setDeleteViews] = useState(true);
 
   // 分段上的状态数：key 与 ProjectStateRoot 的一致，切到「状态」段不再重复请求
   useSWR(
@@ -74,6 +77,13 @@ const TypeDetail = observer(function TypeDetail({
     0
   );
   const workflows = workflowsStore.getWorkflowsByIssueTypeId(issueType.id);
+  // 类型的状态随类型一起删，用到类型或这些状态的研发模式视图都要提示
+  const typeStateIds = Object.values(getGroupedProjectStatesByIssueTypeId(scopeKey, issueType.id) ?? {})
+    .flat()
+    .map((state) => state.id);
+  const referencingViews = (schemeViewsStore.views ?? []).filter((view) =>
+    viewReferencesAny(view, [issueType.id, ...typeStateIds])
+  );
   const counts: Record<TSegment, number> = { props: typeFields.length, states: stateCount, workflows: workflows.length };
 
   if (!scopeKey) return null;
@@ -101,7 +111,10 @@ const TypeDetail = observer(function TypeDetail({
   const handleDelete = async () => {
     setIsDeleting(true);
     try {
-      await issueTypesStore.deleteIssueType(issueType.id);
+      await issueTypesStore.deleteIssueType(issueType.id, {
+        deleteViews: referencingViews.length > 0 && deleteViews,
+      });
+      void schemeViewsStore.refresh();
       setIsDeleteOpen(false);
       onDeleted();
     } catch (error) {
@@ -154,7 +167,10 @@ const TypeDetail = observer(function TypeDetail({
                     icon: <Trash2 className="size-3.5" />,
                     tone: "danger",
                     disabled: issueType.is_default,
-                    onClick: () => setIsDeleteOpen(true),
+                    onClick: () => {
+                      setDeleteViews(true);
+                      setIsDeleteOpen(true);
+                    },
                   },
                 ]}
               />
@@ -217,6 +233,11 @@ const TypeDetail = observer(function TypeDetail({
           <>
             确定要删除工作项类型<span className="font-medium text-primary">「{issueType.name}」</span>
             吗？跟随本模式的项目会一起失去这个类型，此操作不可撤销。
+            <ModeViewReferences
+              views={referencingViews}
+              deleteViews={deleteViews}
+              onDeleteViewsChange={setDeleteViews}
+            />
           </>
         }
         handleClose={() => !isDeleting && setIsDeleteOpen(false)}

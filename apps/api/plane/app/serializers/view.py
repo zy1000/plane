@@ -64,6 +64,8 @@ class IssueViewSerializer(DynamicBaseSerializer):
         read_only_fields = [
             "workspace",
             "project",
+            "issue_scheme",
+            "source_project",
             "query",
             "owned_by",
             "is_locked",

@@ -71,6 +71,14 @@ class IssueView(WorkspaceBaseModel):
         db_index=True,
         choices=(("issues", "Issues"), ("defects", "Defects"), ("requirements", "Requirements")),
     )
+    # 研发模式视图：挂在模式方案上（project 为空），跟随该方案的项目共用；项目视图、工作区视图为空
+    issue_scheme = models.ForeignKey(
+        "db.IssueScheme", on_delete=models.CASCADE, null=True, blank=True, related_name="views"
+    )
+    # 研发模式视图是从哪个项目存上去的，模板中心「在项目中打开」优先回到这里
+    source_project = models.ForeignKey(
+        "db.Project", on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
     sort_order = models.FloatField(default=65535)
     logo_props = models.JSONField(default=dict)
     owned_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="views")
@@ -92,10 +100,14 @@ class IssueView(WorkspaceBaseModel):
                 largest_sort_order = IssueView.objects.filter(project=self.project).aggregate(
                     largest=models.Max("sort_order")
                 )["largest"]
-            else:
-                largest_sort_order = IssueView.objects.filter(workspace=self.workspace, project__isnull=True).aggregate(
+            elif self.issue_scheme_id:
+                largest_sort_order = IssueView.objects.filter(issue_scheme_id=self.issue_scheme_id).aggregate(
                     largest=models.Max("sort_order")
                 )["largest"]
+            else:
+                largest_sort_order = IssueView.objects.filter(
+                    workspace=self.workspace, project__isnull=True, issue_scheme__isnull=True
+                ).aggregate(largest=models.Max("sort_order"))["largest"]
             if largest_sort_order is not None:
                 self.sort_order = largest_sort_order + 10000
 
@@ -103,4 +115,4 @@ class IssueView(WorkspaceBaseModel):
 
     def __str__(self):
         """Return name of the View"""
-        return f"{self.name} <{self.project.name}>"
+        return f"{self.name} <{self.project.name if self.project else self.workspace_id}>"
