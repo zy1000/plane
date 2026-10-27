@@ -92,7 +92,7 @@ const IssueRow = ({
           variant="secondary"
         />
         <Tooltip tooltipContent={issue.name} isMobile={isMobile}>
-          <span className="w-0 flex-1 truncate text-13 text-primary">{issue.name}</span>
+          <span className="w-0 flex-1 truncate text-14 text-primary">{issue.name}</span>
         </Tooltip>
 
         <div className="flex shrink-0 items-center gap-2" onClick={stop}>

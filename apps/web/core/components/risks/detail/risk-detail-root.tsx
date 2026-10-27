@@ -23,8 +23,9 @@ import { RiskContent } from "./risk-content";
 import { RiskIssues } from "./risk-issues";
 import type { TRiskPeekMode } from "./risk-peek-mode";
 import { RiskPeekModeSelect } from "./risk-peek-mode";
-import { RiskSaveStatus } from "./risk-save-status";
+import { MISSING_CLASS, RiskEditActions } from "./risk-detail-fields";
 import { RiskSidebar } from "./risk-sidebar";
+import { useRiskEditSession } from "./use-risk-edit-session";
 
 /** 独立详情页的地址；抽屉里「在新页面中打开」、缺陷详情里点风险都指到这里 */
 export const riskDetailPath = (workspaceSlug: string, projectId: string, riskId: string) =>
@@ -33,9 +34,9 @@ export const riskDetailPath = (workspaceSlug: string, projectId: string, riskId:
 /** 风险列表页：删除后独立页回这里 */
 export const risksListPath = (workspaceSlug: string, projectId: string) => `/${workspaceSlug}/projects/${projectId}/risks`;
 
-/** 标题：编辑态与只读态同一个盒子，切换时不跳；悬停出浅底，聚焦才出蓝边 —— 与右栏就地编辑格同一口径 */
+/** 标题：查看与编辑同一个盒子，切换时文字不跳；编辑时才出边框 */
 const TITLE_CLASS =
-  "-mx-2 h-9 min-w-0 rounded-md border border-transparent px-2 text-20 leading-snug font-semibold text-primary";
+  "-mx-2.5 h-10 w-[calc(100%+1.25rem)] min-w-0 rounded-md border border-transparent px-2.5 text-20 leading-snug font-semibold text-primary";
 
 /** 头一行的图标按钮（关闭 / 在新页面中打开 / ⋯），28px 方块 */
 const HEAD_ICON_CLASS =
@@ -94,11 +95,11 @@ export type TRiskDetailRootProps = {
 /**
  * 风险详情本体。抽屉（`RiskDrawer`）与独立详情页（`/projects/:projectId/risks/:riskId`）都是它，只差外壳。
  *
- * 布局：头（抽屉才有的一行 + 标题行）、身（左栏正文 + 右栏 312px 属性卡片）。
- * 正文放「要读的」（描述 / 影响描述 / 应对措施、附件、关联缺陷、活动），右栏放「要查的」（状态、人、评估、日期）。
+ * 布局：头（抽屉才有的一行 + 标题行）、身（左栏正文 + 右栏 320px 属性卡片）。
+ * 正文放「要读的」（描述、评估、应对，再接附件、关联缺陷、活动），右栏放「要查的」（状态、人、日期）。
  *
- * 所有写入都是「随手改」：成功只在顶栏显示保存状态（hook 维护），失败才弹 toast；
- * 删除走确认弹窗 + toast。
+ * 字段改动走「编辑 → 取消 / 保存」会话（同工作项详情）：查看时全部只读，保存一次提交改过的字段，失败弹 toast 并留在编辑态。
+ * 附件、关联缺陷、评论不进会话，照旧即时生效；删除走确认弹窗 + toast。
  */
 export const RiskDetailRoot = ({
   variant,
@@ -117,7 +118,6 @@ export const RiskDetailRoot = ({
   const { t } = useTranslation();
   const router = useAppRouter();
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
-  const [titleDraft, setTitleDraft] = useState("");
   const {
     detail,
     attachments,
@@ -127,8 +127,6 @@ export const RiskDetailRoot = ({
     isLoading,
     isMutating,
     error,
-    saveState,
-    retryLastSave,
     updateRisk,
     resyncRisk,
     deleteRisk,
@@ -145,11 +143,6 @@ export const RiskDetailRoot = ({
   // 独立页：编号与保存状态挂到路由顶栏；抽屉里这两个挂点不存在，拿到的是 null
   const titleHost = useRiskHeaderSlot(RISK_DETAIL_HEADER_TITLE_ID);
   const actionsHost = useRiskHeaderSlot(RISK_DETAIL_HEADER_ACTIONS_ID);
-
-  // 换一条风险、或标题存完回灌时跟上
-  useEffect(() => {
-    setTitleDraft(detail?.name ?? "");
-  }, [detail?.id, detail?.name]);
 
   // 关联 / 解除缺陷只改了这里的 issue_count，列表那一行的计数也要跟上（字段保存走 handleUpdate 回传）
   const issueCountRef = useRef<number | undefined>(undefined);
@@ -170,7 +163,7 @@ export const RiskDetailRoot = ({
   const toastError = (err: unknown) =>
     setToast({ type: TOAST_TYPE.ERROR, title: t("toast.error"), message: translateRiskError(t, err) });
 
-  /** 随手改：成功只看顶栏保存状态，失败才弹 toast */
+  /** 写入失败统一弹 toast，返回 undefined */
   const runSave = async <T,>(save: () => Promise<T>) => {
     try {
       return await save();
@@ -180,13 +173,21 @@ export const RiskDetailRoot = ({
     }
   };
 
-  /** 返回保存后的详情（失败是 undefined）：正文编辑器要等保存成功才真删被移走的图片 */
+  /** 返回保存后的详情（失败是 undefined，已弹 toast）：编辑会话据此决定退不退出编辑 */
   const handleUpdate = (payload: TUpdateRiskPayload) =>
     runSave(async () => {
       const next = await updateRisk(payload);
       if (next) onUpdated?.(next);
       return next;
     });
+
+  const session = useRiskEditSession(detail, handleUpdate);
+
+  const handleSaveEdit = async () => {
+    if ((await session.save()) === "invalid") {
+      setToast({ type: TOAST_TYPE.ERROR, title: t(`${RISK_I18N}.detail.required_missing`) });
+    }
+  };
 
   /** 推简道云失败后重新排队；成功只是「已排队」，结果等后台任务回填 */
   const handleResync = () =>
@@ -234,7 +235,7 @@ export const RiskDetailRoot = ({
   }
 
   const detailPath = riskDetailPath(workspaceSlug, projectId, detail.id);
-  const saveStatus = <RiskSaveStatus state={saveState} onRetry={() => void runSave(retryLastSave)} />;
+  const editActions = canEdit && <RiskEditActions session={session} onSave={() => void handleSaveEdit()} />;
   const moreMenu = canEdit && <MoreMenu onDelete={() => setIsDeleteOpen(true)} />;
   // 推送失败才出「重新同步」；原因在编号的悬停提示里
   const resyncButton = canEdit && detail.sync_status === "failed" && (
@@ -251,12 +252,12 @@ export const RiskDetailRoot = ({
   return (
     <>
       {isDrawer ? (
-        /* 头一行：编号 · 状态 · 保存状态 在左；模式切换 / 在新页面中打开 / ⋯ / 关闭 在右 */
-        <div className="flex h-11 shrink-0 items-center gap-1 border-b border-subtle px-4 text-13 text-tertiary">
+        /* 头一行：编号 · 状态 在左；编辑（取消 / 保存）· 模式切换 / 在新页面中打开 / ⋯ / 关闭 在右 */
+        <div className="flex h-12 shrink-0 items-center gap-1 border-b border-subtle px-4 text-13 text-tertiary">
           <CodeAndStatus detail={detail} />
           {resyncButton && <span className="ml-2">{resyncButton}</span>}
-          <span className="ml-2">{saveStatus}</span>
           <span className="ml-auto flex shrink-0 items-center gap-1 pl-3">
+            {editActions && <span className="mr-2 flex">{editActions}</span>}
             {onPeekModeChange && <RiskPeekModeSelect mode={peekMode} onChange={onPeekModeChange} />}
             <Tooltip tooltipContent={t(`${RISK_I18N}.detail.open_in_page`)}>
               <Link to={detailPath} onClick={onClose} aria-label={t(`${RISK_I18N}.detail.open_in_page`)} className={HEAD_ICON_CLASS}>
@@ -285,7 +286,7 @@ export const RiskDetailRoot = ({
             createPortal(
               <>
                 {resyncButton}
-                {saveStatus}
+                {editActions}
                 {moreMenu}
               </>,
               actionsHost
@@ -293,82 +294,83 @@ export const RiskDetailRoot = ({
         </>
       )}
 
-      {/* 标题行：20px 加粗，就地编辑，失焦保存；清空了回滚 —— 列表里不能剩一行空白 */}
+      {/* 标题行：20px 加粗；点「编辑」后才变输入框，清空了保存时标红拦下 */}
       <div className="flex shrink-0 items-center border-b border-subtle px-7 py-4">
-        {canEdit ? (
+        {session.isEditing && session.value ? (
           <input
-            value={titleDraft}
-            onChange={(event) => setTitleDraft(event.target.value)}
-            onBlur={() => {
-              const next = titleDraft.trim();
-              if (!next) setTitleDraft(detail.name);
-              else if (next !== detail.name) handleUpdate({ name: next });
-            }}
-            // 左右各伸出 8px（-mx-2），宽度要补回来，否则右边会溢出一截
+            value={session.value.name}
+            onChange={(event) => session.patch({ name: event.target.value })}
+            aria-label={t(`${RISK_I18N}.form.name_placeholder`)}
             className={cn(
               TITLE_CLASS,
-              "w-[calc(100%+1rem)] hover:bg-layer-2 focus:border-accent-strong focus:bg-surface-1 focus:outline-none"
+              "border-subtle-1 bg-layer-2 hover:border-strong focus:border-accent-strong focus:outline-none",
+              session.isMissing("name") && MISSING_CLASS
             )}
           />
         ) : (
-          <h2 className={cn(TITLE_CLASS, "flex w-[calc(100%+1rem)] items-center truncate")}>{detail.name}</h2>
+          <h2 className={cn(TITLE_CLASS, "flex items-center truncate")}>{detail.name}</h2>
         )}
       </div>
 
       {/* 身：正文与属性栏各自滚动。stage-review-drawer-body 借的是 globals.css 里把编辑器正文压到 14px 的那条规则 */}
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
         <div className="stage-review-drawer-body flex min-w-0 flex-1 flex-col gap-6 overflow-y-auto px-7 pt-5 pb-8">
-          <RiskContent
-            detail={detail}
-            editable={canEdit}
-            onUpdate={handleUpdate}
-          />
+          <RiskContent session={session} />
 
-          <RiskAttachments
-            workspaceSlug={workspaceSlug}
-            projectId={projectId}
-            attachments={attachments}
-            editable={canEdit}
-            onUpload={(file, onProgress) => runSave(() => uploadAttachment(file, onProgress))}
-            onDownload={(assetId) => void downloadAttachment(assetId)}
-            onDelete={(assetId) => runSave(() => deleteAttachment(assetId))}
-            getFileURL={getAttachmentUrl}
-          />
+          {/* 附件 / 关联缺陷 / 活动：各段之间一条分隔线，标题同一档（13 号加粗） */}
+          <div className="flex flex-col">
+            <div className="border-t border-subtle pt-2 pb-4">
+              <RiskAttachments
+                workspaceSlug={workspaceSlug}
+                projectId={projectId}
+                attachments={attachments}
+                editable={canEdit}
+                onUpload={(file, onProgress) => runSave(() => uploadAttachment(file, onProgress))}
+                onDownload={(assetId) => void downloadAttachment(assetId)}
+                onDelete={(assetId) => runSave(() => deleteAttachment(assetId))}
+                getFileURL={getAttachmentUrl}
+              />
+            </div>
 
-          <RiskIssues
-            workspaceSlug={workspaceSlug}
-            projectId={projectId}
-            issues={issues}
-            editable={canEdit}
-            // 关联失败要把错误抛回去：选缺陷的弹窗靠它判断要不要关、保不保留勾选
-            onLink={async (issueIds) => {
-              try {
-                await linkIssues(issueIds);
-              } catch (err) {
-                toastError(err);
-                throw err;
-              }
-            }}
-            onUnlink={(issueId) => void runSave(() => unlinkIssue(issueId))}
-          />
+            <div className="border-t border-subtle pt-2 pb-4">
+              <RiskIssues
+                workspaceSlug={workspaceSlug}
+                projectId={projectId}
+                issues={issues}
+                editable={canEdit}
+                // 关联失败要把错误抛回去：选缺陷的弹窗靠它判断要不要关、保不保留勾选
+                onLink={async (issueIds) => {
+                  try {
+                    await linkIssues(issueIds);
+                  } catch (err) {
+                    toastError(err);
+                    throw err;
+                  }
+                }}
+                onUnlink={(issueId) => void runSave(() => unlinkIssue(issueId))}
+              />
+            </div>
 
-          <RiskActivity
-            riskId={detail.id}
-            workspaceSlug={workspaceSlug}
-            workspaceId={workspaceId}
-            projectId={projectId}
-            issues={issues}
-            comments={comments}
-            activities={activities}
-            editable={canEdit}
-            isMutating={isMutating}
-            currentUserId={currentUserId}
-            onCreateComment={(commentHtml) => runSave(() => createComment(commentHtml))}
-            onDeleteComment={(commentId) => void runSave(() => deleteComment(commentId))}
-          />
+            <div className="border-t border-subtle pt-4">
+              <RiskActivity
+                riskId={detail.id}
+                workspaceSlug={workspaceSlug}
+                workspaceId={workspaceId}
+                projectId={projectId}
+                issues={issues}
+                comments={comments}
+                activities={activities}
+                editable={canEdit}
+                isMutating={isMutating}
+                currentUserId={currentUserId}
+                onCreateComment={(commentHtml) => runSave(() => createComment(commentHtml))}
+                onDeleteComment={(commentId) => void runSave(() => deleteComment(commentId))}
+              />
+            </div>
+          </div>
         </div>
 
-        <RiskSidebar projectId={projectId} detail={detail} editable={canEdit} onUpdate={handleUpdate} />
+        <RiskSidebar projectId={projectId} detail={detail} session={session} />
       </div>
 
       <DeleteRiskModal

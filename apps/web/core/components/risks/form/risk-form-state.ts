@@ -1,4 +1,12 @@
-import type { ERiskCategory, ERiskLevel, ERiskStrategy, TCreateRiskPayload, TRiskDetail, TRiskScale } from "@plane/types";
+import type {
+  ERiskCategory,
+  ERiskLevel,
+  ERiskStrategy,
+  TCreateRiskPayload,
+  TRiskDetail,
+  TRiskScale,
+  TUpdateRiskPayload,
+} from "@plane/types";
 import { ERiskStatus } from "@plane/types";
 import { RISK_REQUIRED_FIELDS } from "../constants";
 
@@ -108,3 +116,19 @@ export const toRiskPayload = (value: TRiskFormValue): TCreateRiskPayload => ({
   planned_handle_date: value.plannedHandleDate,
   actual_close_date: value.actualCloseDate,
 });
+
+/**
+ * 详情「编辑 → 保存」只发改过的字段：拿进入编辑时的值和当前值各拼一份 payload 逐项比，
+ * 没动的不发（不会盖掉别人同时改的字段，轨迹也只记真改了的）。等级没变就不带，后端按两项自己推算。
+ */
+export const toRiskUpdatePayload = (base: TRiskFormValue, value: TRiskFormValue): TUpdateRiskPayload => {
+  const before = toRiskPayload(base) as Record<string, unknown>;
+  const after = toRiskPayload(value) as Record<string, unknown>;
+  const payload: Record<string, unknown> = {};
+  for (const [key, next] of Object.entries(after)) {
+    const prev = before[key];
+    const isSame = Array.isArray(next) && Array.isArray(prev) ? next.join(",") === prev.join(",") : next === prev;
+    if (!isSame) payload[key] = next;
+  }
+  return payload as TUpdateRiskPayload;
+};

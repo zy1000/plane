@@ -11,7 +11,7 @@ import { useProject } from "@/hooks/store/use-project";
 import { useAppRouter } from "@/hooks/use-app-router";
 import { CommonProjectBreadcrumbs } from "@/plane-web/components/breadcrumbs/common";
 
-/** 独立详情页顶栏：面包屑到「风险」，末段编号与右侧保存状态由详情组件 portal 进来 */
+/** 独立详情页顶栏：面包屑到「风险」，末段编号与右侧「编辑 / 取消 / 保存」由详情组件 portal 进来 */
 export const RiskDetailHeader = observer(function RiskDetailHeader() {
   const router = useAppRouter();
   const { workspaceSlug, projectId } = useParams();

@@ -1,4 +1,5 @@
 import type { ERiskCategory, ERiskLevel, ERiskStatus, ERiskStrategy, TRiskScale } from "@plane/types";
+import { renderFormattedDate, renderFormattedDateTime } from "@plane/utils";
 
 /** 文案都在 i18n 的 `risk` 命名空间下 */
 export const RISK_I18N = "risk";
@@ -21,6 +22,13 @@ export const riskScaleLabelKey = (scale: TRiskScale) => `${RISK_I18N}.scale.${SC
 export const riskProbabilityRangeKey = (scale: TRiskScale) => `${RISK_I18N}.probability_range.${SCALE_KEYS[scale]}`;
 
 export type TRiskScaleField = "impact_level" | "probability";
+
+/** 详情里日期只有一种写法，与列表一致：日期字段 `2026-10-24` */
+export const formatRiskDate = (value: string | null | undefined) => renderFormattedDate(value, "yyyy-MM-dd") ?? "";
+
+/** 时间戳（活动、评论、创建 / 更新）按本地时区写成 `2026-10-26 18:54`；`withTime=false` 只要日期 */
+export const formatRiskDateTime = (value: string | null | undefined, withTime = true) =>
+  renderFormattedDateTime(value).slice(0, withTime ? 16 : 10);
 
 /** 一档的完整文案：影响程度「4-高」，发生概率「4-高(51-70%)」 */
 export const getRiskScaleLabel = (t: (key: string) => string, field: TRiskScaleField, scale: TRiskScale) =>

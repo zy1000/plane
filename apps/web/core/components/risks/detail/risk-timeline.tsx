@@ -11,13 +11,13 @@ import type {
   TRiskScale,
 } from "@plane/types";
 import { RISK_LEVELS, RISK_STATUSES } from "@plane/types";
-import { cn, renderFormattedDate } from "@plane/utils";
-import { HistoryTime } from "@/components/requirements/requirement-detail/requirement-history-timeline";
+import { cn } from "@plane/utils";
 import { useMember } from "@/hooks/store/use-member";
 import { TimelineRailRow } from "../../stage-reviews/detail/stage-review-timeline-rail";
 import { RiskLevelBadge, RiskStatusBadge } from "../badges";
 import type { TRiskScaleField } from "../constants";
-import { getRiskScaleLabel, RISK_I18N, riskCategoryLabelKey, riskStrategyLabelKey } from "../constants";
+import { formatRiskDate, getRiskScaleLabel, RISK_I18N, riskCategoryLabelKey, riskStrategyLabelKey } from "../constants";
+import { RiskTime } from "./risk-detail-fields";
 
 /**
  * 时间线上的一行：左边 28px 轨道放节点，右边正文。风险没有阶段概念，轨道一律灰色；
@@ -75,7 +75,7 @@ const useDisplayValue = () => {
     if (MEMBER_FIELDS.includes(field)) {
       return getUserDetails(value)?.display_name ?? t(`${RISK_I18N}.activity.unknown_user`);
     }
-    if (DATE_FIELDS.includes(field)) return renderFormattedDate(value) ?? value;
+    if (DATE_FIELDS.includes(field)) return formatRiskDate(value) || value;
     if (TEXT_FIELDS.includes(field) && value.length > TEXT_PREVIEW_LENGTH) {
       return <span title={value}>{`${value.slice(0, TEXT_PREVIEW_LENGTH)}…`}</span>;
     }
@@ -248,7 +248,7 @@ export const RiskActivityRow = ({
     >
       <div className="flex min-h-7 flex-wrap items-center gap-x-1.5 gap-y-1 text-13 text-secondary">
         {body}
-        <HistoryTime value={activity.created_at} className="ml-auto pl-2" />
+        <RiskTime value={activity.created_at} className="ml-auto pl-2" />
       </div>
     </RiskTimelineRow>
   );

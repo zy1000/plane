@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "@plane/i18n";
 import type { TRiskActivity, TRiskComment, TRiskLinkedIssue } from "@plane/types";
 import { cn } from "@plane/utils";
-import { Block, EmptyLine } from "../../stage-reviews/detail/stage-review-content";
+import { EmptyLine } from "../../stage-reviews/detail/stage-review-content";
 import { RISK_I18N } from "../constants";
 import { RiskCommentCard, RiskCommentComposer } from "./risk-comments";
 import { RiskActivityRow } from "./risk-timeline";
@@ -104,7 +104,11 @@ export const RiskActivity = ({
   );
 
   return (
-    <Block title={t(`${RISK_I18N}.detail.activity`)} count={counts.all} action={tabs}>
+    <section className="flex flex-col gap-2">
+      <div className="flex min-h-8 flex-wrap items-center gap-2">
+        <h4 className="text-13 font-semibold text-secondary">{t(`${RISK_I18N}.detail.activity`)}</h4>
+        <div className="ml-auto flex items-center">{tabs}</div>
+      </div>
       {shown.length === 0 ? (
         <EmptyLine text={t(`${RISK_I18N}.detail.${activeTab.empty}`)} />
       ) : (
@@ -145,6 +149,6 @@ export const RiskActivity = ({
           onCreate={onCreateComment}
         />
       )}
-    </Block>
+    </section>
   );
 };

@@ -6,11 +6,11 @@ import { TrashIcon } from "@plane/propel/icons";
 import { Tooltip } from "@plane/propel/tooltip";
 import type { TRiskAttachment } from "@plane/types";
 import { AlertModalCore, Avatar, CircularProgressIndicator, CustomMenu } from "@plane/ui";
-import { cn, convertBytesToSize, getFileExtension, getFileURL, renderFormattedDate } from "@plane/utils";
+import { cn, convertBytesToSize, getFileExtension, getFileURL } from "@plane/utils";
 import { getUserAvatarFallbackBackgroundColor } from "@/helpers/user-avatar.helper";
 import { getFileIcon } from "@/components/icons";
 import { usePlatformOS } from "@/hooks/use-platform-os";
-import { RISK_I18N } from "../constants";
+import { RISK_I18N, formatRiskDateTime } from "../constants";
 import type { TRiskUploadItem } from "./use-risk-upload-queue";
 
 /**
@@ -54,12 +54,17 @@ export const RiskAttachmentRow = ({
     >
       <span className="flex shrink-0">{getFileIcon(getFileExtension(name), 18)}</span>
       <Tooltip tooltipContent={name} isMobile={isMobile}>
-        <span className="min-w-0 truncate font-medium text-secondary">{name}</span>
+        {/* 详情页里文件名是内容（14 号），弹窗里沿用原来的 13 号 */}
+        <span className={cn("min-w-0 truncate", variant === "widget" ? "text-14 text-primary" : "font-medium text-secondary")}>
+          {name}
+        </span>
       </Tooltip>
       {size !== undefined && (
         <>
           <span className="size-1.5 shrink-0 rounded-full bg-layer-3" />
-          <span className="shrink-0 text-placeholder tabular-nums">{convertBytesToSize(size)}</span>
+          <span className={cn("shrink-0 text-placeholder tabular-nums", variant === "widget" && "text-12")}>
+            {convertBytesToSize(size)}
+          </span>
         </>
       )}
       <span className="flex-1" />
@@ -129,13 +134,13 @@ export const RiskUploadState = ({
   }
 };
 
-/** 上传人头像，悬停「张三 于 2026年10月13日 上传」 */
+/** 上传人头像，悬停「张三 于 2026-10-13 上传」 */
 export const RiskAttachmentUploader = ({ asset }: { asset: TRiskAttachment }) => {
-  const { t, currentLocale } = useTranslation();
+  const { t } = useTranslation();
   const { isMobile } = usePlatformOS();
   const user = asset.created_by_detail;
   if (!user) return null;
-  const date = renderFormattedDate(asset.created_at, currentLocale.toLowerCase().startsWith("zh") ? "yyyy年M月d日" : undefined);
+  const date = formatRiskDateTime(asset.created_at, false);
   return (
     <Tooltip tooltipContent={t(`${RISK_I18N}.detail.uploaded_by`, { name: user.display_name, date })} isMobile={isMobile}>
       <span className="flex">

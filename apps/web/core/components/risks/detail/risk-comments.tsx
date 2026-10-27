@@ -7,11 +7,11 @@ import { EFileAssetType } from "@plane/types";
 import { Avatar } from "@plane/ui";
 import { cn, getFileURL, isCommentEmpty } from "@plane/utils";
 import { LiteTextEditor } from "@/components/editor/lite-text";
-import { HistoryTime } from "@/components/requirements/requirement-detail/requirement-history-timeline";
 import { useEditorAsset } from "@/hooks/store/use-editor-asset";
 import { FileService } from "@/services/file.service";
 import { useUser } from "@/hooks/store/user";
 import { RISK_I18N } from "../constants";
+import { RiskTime } from "./risk-detail-fields";
 import { RiskTimelineRow } from "./risk-timeline";
 
 /**
@@ -163,7 +163,7 @@ export const RiskCommentCard = ({
     >
       <div className="group min-w-0 rounded-lg border border-subtle bg-surface-1 px-3.5 py-2.5">
         <div className="flex min-w-0 items-center gap-2">
-          <span className="truncate text-14 font-medium text-primary">
+          <span className="truncate text-13 font-medium text-primary">
             {comment.actor_detail?.display_name ?? t(`${RISK_I18N}.activity.unknown_user`)}
           </span>
           <span className="ml-auto flex shrink-0 items-center gap-1">
@@ -180,7 +180,7 @@ export const RiskCommentCard = ({
                 <Trash2 className="size-3.5" />
               </button>
             )}
-            <HistoryTime value={comment.created_at} />
+            <RiskTime value={comment.created_at} />
           </span>
         </div>
         {/* 正文里的图片只存了 asset id（<image-component src="id">），直接塞 HTML 显示不出来，

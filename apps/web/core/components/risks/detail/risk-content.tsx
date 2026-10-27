@@ -1,231 +1,173 @@
-import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "@plane/i18n";
-import type { TRiskDetail, TUpdateRiskPayload } from "@plane/types";
+import type { ERiskStrategy, TRiskScale } from "@plane/types";
+import { ERiskLevel, RISK_SCALES, RISK_STRATEGIES, computeRiskLevel } from "@plane/types";
 import { cn } from "@plane/utils";
-import { Block, EmptyLine } from "../../stage-reviews/detail/stage-review-content";
-import { RISK_I18N } from "../constants";
-import { RiskAssessmentField } from "../form/risk-assessment-field";
-import { RiskStrategySegmented } from "../form/risk-strategy-segmented";
+import type { TRiskScaleField } from "../constants";
+import {
+  RISK_I18N,
+  RISK_LEVEL_STYLE,
+  riskLevelLabelKey,
+  riskProbabilityRangeKey,
+  riskScaleLabelKey,
+  riskStrategyLabelKey,
+} from "../constants";
+import type { TRiskFormValue } from "../form/risk-form-state";
 import { AutoGrowTextArea } from "../form/risk-text-area-field";
+import type { TRiskEditSession } from "./use-risk-edit-session";
+import { EDIT_BOX_CLASS, MISSING_CLASS, RiskEditSelect, RiskFieldRow, RiskViewText } from "./risk-detail-fields";
 
-/**
- * 编辑区的外壳：平时没有框，悬停出一圈淡边，聚焦出蓝边 —— 与标题、右栏就地编辑格同一口径。
- */
-const FIELD_BOX_CLASS =
-  "-mx-2.5 rounded-lg border border-transparent px-2.5 py-1.5 transition hover:border-subtle focus-within:border-accent-strong";
-const FIELD_LINE_CLASS =
-  "min-h-7 [font-family:var(--font-style)] text-[length:var(--font-size-regular)] leading-[var(--line-height-regular)]";
+/** 等级按低 → 高排，和五档的 1 → 5 同向 */
+const LEVEL_ORDER: ERiskLevel[] = [ERiskLevel.LOW, ERiskLevel.MEDIUM, ERiskLevel.HIGH];
 
-type TTextField = "description" | "impact_description" | "response_measures";
+/** 编辑态下拉统一 280px 宽（等级旁还要放来源标签） */
+const SELECT_WIDTH_CLASS = "w-70 max-w-full";
 
-/** 三段纯文本：风险描述必填，另两段可空；空且只读时整块不出 */
-const DESCRIPTION_FIELD = {
-  key: "description",
-  labelKey: "description",
-  placeholderKey: "form.editor_placeholder",
-  required: true,
-} as const;
-const IMPACT_DESCRIPTION_FIELD = {
-  key: "impact_description",
-  labelKey: "impact_description",
-  placeholderKey: "detail.impact_description_placeholder",
-  required: false,
-} as const;
-const RESPONSE_MEASURES_FIELD = {
-  key: "response_measures",
-  labelKey: "response_measures",
-  placeholderKey: "detail.response_measures_placeholder",
-  required: false,
-} as const;
-type TTextFieldConfig = { key: TTextField; labelKey: string; placeholderKey: string; required: boolean };
+type TTextKey = "description" | "impactDescription" | "responseMeasures" | "riskLoss" | "triggerFactors";
 
-/**
- * 详情正文，顺序同新建弹窗左栏：风险描述 → 评估（影响程度 / 发生概率 / 风险等级）→ 影响描述 → 应对措施
- * → 风险损失 → 触发因素 → 风险管理策略。附件 / 关联缺陷 / 活动由 risk-detail-root 接在后面。
- *
- * 全部就地编辑、改了直接保存：三段文本和单行文本失焦保存，评估卡片和策略点了就存。
- * 评估卡片与弹窗是同一个组件：改影响程度 / 发生概率只发这一项，后端重新推算等级；
- * 改等级只发 risk_level（手动调整）。访客只读。
- */
-export const RiskContent = ({
-  detail,
-  editable,
-  onUpdate,
-}: {
-  detail: TRiskDetail;
-  editable: boolean;
-  onUpdate: (payload: TUpdateRiskPayload) => void;
-}) => {
+/** 五档的一项：「3-中」，发生概率后面带淡色区间「31-50%」 */
+const ScaleLabel = ({ field, scale }: { field: TRiskScaleField; scale: TRiskScale }) => {
   const { t } = useTranslation();
-  const textProps = { detail, editable, onUpdate };
   return (
     <>
-      <TextField field={DESCRIPTION_FIELD} {...textProps} />
-      <RiskAssessmentField
-        impactLevel={detail.impact_level}
-        probability={detail.probability}
-        riskLevel={detail.risk_level}
-        disabled={!editable}
-        onChange={(next) => {
-          if (next.impactLevel !== undefined) onUpdate({ impact_level: next.impactLevel });
-          else if (next.probability !== undefined) onUpdate({ probability: next.probability });
-          else if (next.riskLevel) onUpdate({ risk_level: next.riskLevel });
-        }}
-      />
-      <TextField field={IMPACT_DESCRIPTION_FIELD} {...textProps} />
-      <TextField field={RESPONSE_MEASURES_FIELD} {...textProps} />
-      <InlineTextField
-        title={t(`${RISK_I18N}.fields.risk_loss`)}
-        value={detail.risk_loss}
-        placeholder={t(`${RISK_I18N}.detail.risk_loss_placeholder`)}
-        editable={editable}
-        onSave={(next) => onUpdate({ risk_loss: next })}
-      />
-      <InlineTextField
-        title={t(`${RISK_I18N}.fields.trigger_factors`)}
-        value={detail.trigger_factors}
-        placeholder={t(`${RISK_I18N}.detail.trigger_factors_placeholder`)}
-        editable={editable}
-        onSave={(next) => onUpdate({ trigger_factors: next })}
-      />
-      <Block title={t(`${RISK_I18N}.fields.strategy`)}>
-        <RiskStrategySegmented
-          value={detail.strategy}
-          disabled={!editable}
-          onChange={(next) => onUpdate({ strategy: next })}
-        />
-      </Block>
+      {t(riskScaleLabelKey(scale))}
+      {field === "probability" && <span className="ml-2 text-tertiary">{t(riskProbabilityRangeKey(scale))}</span>}
+    </>
+  );
+};
+
+/** 等级：圆点 + 文字（颜色只在圆点上，同右栏的状态） */
+const LevelLabel = ({ level }: { level: ERiskLevel }) => {
+  const { t } = useTranslation();
+  return (
+    <>
+      <span className={cn("size-1.75 shrink-0 rounded-full", RISK_LEVEL_STYLE[level].square)} />
+      {t(riskLevelLabelKey(level))}
     </>
   );
 };
 
 /**
- * 单行文本（风险损失 / 触发因素）：外壳同多行文本（平时无框、悬停淡边、聚焦蓝边），失焦保存，没改不发请求。
- * 空且只读时整块不出（同可空的两段文本）。
+ * 详情正文，左标签、右值，顺序同新建弹窗左栏：风险描述 → 影响程度 → 发生概率 → 风险等级 → 影响描述
+ * → 应对措施 → 风险损失 → 触发因素 → 风险管理策略。附件 / 关联缺陷 / 活动由 risk-detail-root 接在后面。
+ *
+ * 查看时全是纯文本（空着写「未填写」）；点顶栏「编辑」后换成带边框的输入框 / 下拉，改动进草稿，「保存」一次提交。
+ * 改影响程度 / 发生概率会按两项重新推算等级（覆盖手动值）；等级也能单独改，与推算值不同即「手动调整」。
  */
-const InlineTextField = ({
-  title,
-  value,
-  placeholder,
-  editable,
-  onSave,
-}: {
-  title: string;
-  value: string;
-  placeholder: string;
-  editable: boolean;
-  onSave: (next: string) => void;
-}) => {
-  const [draft, setDraft] = useState(value);
-  useEffect(() => setDraft(value), [value]);
-
-  if (!editable) {
-    if (!value) return null;
-    return (
-      <Block title={title}>
-        <p className={cn(FIELD_LINE_CLASS, "break-words text-secondary")}>{value}</p>
-      </Block>
-    );
-  }
-  return (
-    <Block title={title}>
-      <input
-        value={draft}
-        maxLength={255}
-        placeholder={placeholder}
-        aria-label={title}
-        onChange={(event) => setDraft(event.target.value)}
-        onBlur={() => {
-          const next = draft.trim();
-          if (next !== value) onSave(next);
-          else setDraft(value);
-        }}
-        className={cn(
-          FIELD_BOX_CLASS,
-          "w-[calc(100%+1.25rem)] bg-transparent text-14 text-primary outline-none placeholder:text-placeholder"
-        )}
-      />
-    </Block>
-  );
-};
-
-/**
- * 一段多行文本：随内容长高、超过上限在框里滚，失焦保存。描述是必填项，清空了不发请求、回滚到已保存的值。
- */
-const TextField = ({
-  field,
-  detail,
-  editable,
-  onUpdate,
-}: {
-  field: TTextFieldConfig;
-  detail: TRiskDetail;
-  editable: boolean;
-  onUpdate: (payload: TUpdateRiskPayload) => void;
-}) => {
+export const RiskContent = ({ session }: { session: TRiskEditSession }) => {
   const { t } = useTranslation();
-  const saved = detail[field.key] ?? "";
-  const [draft, setDraft] = useState(saved);
+  const { value, isEditing, patch, isMissing } = session;
+  if (!value) return null;
 
-  /**
-   * 换一条风险时整个重置；保存回来时只在手上没改过（草稿还等于上一次同步的值）才回灌 ——
-   * 失焦发出第一版后又接着改，第一版的响应回来不能把第二版冲掉，否则下次失焦看到
-   * `draft === saved` 就不发请求，第二版静默丢失。
-   */
-  const lastSyncedRef = useRef({ id: detail.id, saved });
-  useEffect(() => {
-    const previous = lastSyncedRef.current;
-    lastSyncedRef.current = { id: detail.id, saved };
-    if (previous.id !== detail.id) {
-      setDraft(saved);
-      return;
-    }
-    setDraft((current) => (current === previous.saved ? saved : current));
-  }, [detail.id, saved]);
+  const computedLevel = computeRiskLevel(value.impactLevel, value.probability);
+  const isManualLevel = Boolean(computedLevel && value.riskLevel && value.riskLevel !== computedLevel);
 
-  const title = t(`${RISK_I18N}.detail.${field.labelKey}`);
+  const changeScale = (next: { impactLevel: TRiskScale } | { probability: TRiskScale }) => {
+    const impact = "impactLevel" in next ? next.impactLevel : value.impactLevel;
+    const probability = "probability" in next ? next.probability : value.probability;
+    patch({ ...next, riskLevel: computeRiskLevel(impact, probability) ?? value.riskLevel });
+  };
 
-  if (!editable) {
-    // 可空的两段空着就不占地；描述是必填，空着（老数据）时留一行占位
-    if (!saved) {
-      if (!field.required) return null;
-      return (
-        <Block title={title}>
-          <EmptyLine text={t(`${RISK_I18N}.detail.unset`)} />
-        </Block>
-      );
-    }
+  const textRow = (key: TTextKey, label: string, options: { multiline?: boolean; required?: boolean } = {}) => (
+    <RiskFieldRow label={label} required={options.required} isEditing={isEditing}>
+      {!isEditing ? (
+        <RiskViewText>{value[key]}</RiskViewText>
+      ) : options.multiline ? (
+        <AutoGrowTextArea
+          value={value[key]}
+          aria-label={label}
+          onChange={(event) => patch({ [key]: event.target.value } as Partial<TRiskFormValue>)}
+          className={cn(
+            EDIT_BOX_CLASS,
+            "-mx-2.5 max-h-[480px] min-h-14 w-[calc(100%+1.25rem)] overflow-y-auto px-2.5 py-[5px] leading-[22px]",
+            options.required && isMissing("description") && MISSING_CLASS
+          )}
+        />
+      ) : (
+        <input
+          value={value[key]}
+          maxLength={255}
+          aria-label={label}
+          onChange={(event) => patch({ [key]: event.target.value } as Partial<TRiskFormValue>)}
+          className={cn(EDIT_BOX_CLASS, "-mx-2.5 h-8 w-[calc(100%+1.25rem)] px-2.5")}
+        />
+      )}
+    </RiskFieldRow>
+  );
+
+  const scaleRow = (field: TRiskScaleField) => {
+    const current = field === "impact_level" ? value.impactLevel : value.probability;
+    const missing = isMissing(field);
     return (
-      <Block title={title}>
-        <p className={cn(FIELD_LINE_CLASS, "break-words whitespace-pre-wrap text-secondary")}>{saved}</p>
-      </Block>
+      <RiskFieldRow label={t(`${RISK_I18N}.fields.${field}`)} required isEditing={isEditing}>
+        {isEditing ? (
+          <RiskEditSelect<TRiskScale>
+            value={current}
+            options={RISK_SCALES.map((scale) => ({ value: scale, label: <ScaleLabel field={field} scale={scale} /> }))}
+            missing={missing}
+            className={cn("-ml-2.5", SELECT_WIDTH_CLASS)}
+            onChange={(next) => {
+              if (!next) return;
+              changeScale(field === "impact_level" ? { impactLevel: next } : { probability: next });
+            }}
+          />
+        ) : (
+          <RiskViewText>{current ? <ScaleLabel field={field} scale={current} /> : null}</RiskViewText>
+        )}
+      </RiskFieldRow>
     );
-  }
+  };
+
+  const sourceTag = computedLevel && value.riskLevel && (
+    <span className="shrink-0 text-12 text-tertiary">
+      {t(`${RISK_I18N}.fields.${isManualLevel ? "risk_level_manual" : "risk_level_auto"}`)}
+    </span>
+  );
 
   return (
-    <Block title={title}>
-      <AutoGrowTextArea
-        value={draft}
-        placeholder={t(`${RISK_I18N}.${field.placeholderKey}`)}
-        aria-label={title}
-        onChange={(event) => setDraft(event.target.value)}
-        onBlur={() => {
-          const next = draft.trim();
-          if (next === saved || (field.required && !next)) {
-            setDraft(saved);
-            return;
-          }
-          setDraft(next);
-          const payload: TUpdateRiskPayload = {};
-          payload[field.key] = next;
-          onUpdate(payload);
-        }}
-        className={cn(
-          FIELD_BOX_CLASS,
-          FIELD_LINE_CLASS,
-          "w-[calc(100%+1.25rem)] max-h-[480px] overflow-y-auto text-primary placeholder:text-placeholder"
+    <div className={cn("flex flex-col", isEditing ? "gap-2.5" : "gap-1.5")}>
+      {textRow("description", t(`${RISK_I18N}.detail.description`), { multiline: true, required: true })}
+      {scaleRow("impact_level")}
+      {scaleRow("probability")}
+
+      <RiskFieldRow label={t(`${RISK_I18N}.fields.risk_level`)} isEditing={isEditing}>
+        {isEditing ? (
+          <div className="flex items-center gap-3">
+            <RiskEditSelect<ERiskLevel>
+              value={value.riskLevel}
+              options={LEVEL_ORDER.map((level) => ({ value: level, label: <LevelLabel level={level} /> }))}
+              className={cn("-ml-2.5", SELECT_WIDTH_CLASS)}
+              onChange={(next) => next && patch({ riskLevel: next })}
+            />
+            {sourceTag}
+          </div>
+        ) : value.riskLevel ? (
+          <div className="flex min-h-8 items-center gap-2 text-14 text-primary">
+            <LevelLabel level={value.riskLevel} />
+            <span className="ml-1">{sourceTag}</span>
+          </div>
+        ) : (
+          <RiskViewText className="text-placeholder">{t(`${RISK_I18N}.fields.risk_level_unset`)}</RiskViewText>
         )}
-      />
-    </Block>
+      </RiskFieldRow>
+
+      {textRow("impactDescription", t(`${RISK_I18N}.detail.impact_description`), { multiline: true })}
+      {textRow("responseMeasures", t(`${RISK_I18N}.detail.response_measures`), { multiline: true })}
+      {textRow("riskLoss", t(`${RISK_I18N}.fields.risk_loss`))}
+      {textRow("triggerFactors", t(`${RISK_I18N}.fields.trigger_factors`))}
+
+      <RiskFieldRow label={t(`${RISK_I18N}.fields.strategy`)} isEditing={isEditing}>
+        {isEditing ? (
+          <RiskEditSelect<ERiskStrategy>
+            value={value.strategy}
+            options={RISK_STRATEGIES.map((strategy) => ({ value: strategy, label: t(riskStrategyLabelKey(strategy)) }))}
+            clearable
+            className={cn("-ml-2.5", SELECT_WIDTH_CLASS)}
+            onChange={(next) => patch({ strategy: next })}
+          />
+        ) : (
+          <RiskViewText>{value.strategy ? t(riskStrategyLabelKey(value.strategy)) : null}</RiskViewText>
+        )}
+      </RiskFieldRow>
+    </div>
   );
 };
