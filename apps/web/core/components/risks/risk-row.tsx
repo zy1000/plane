@@ -65,7 +65,7 @@ export const RiskRow = observer(function RiskRow({
       </td>
       <td className={cn(PLAIN_TD, "max-w-0")}>
         <span className="flex min-w-0 items-center gap-2">
-          <span className="truncate text-[13.5px] font-semibold text-primary" title={risk.name}>
+          <span className="truncate text-13 text-primary" title={risk.name}>
             {risk.name}
           </span>
           {risk.issue_count > 0 && (
