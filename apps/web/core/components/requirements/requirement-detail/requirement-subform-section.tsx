@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ArrowDownToLine, ArrowUpToLine, ChevronDown, ChevronRight, MoreHorizontal, Plus, Trash2 } from "lucide-react";
+import { ArrowDownToLine, ArrowUpToLine, ChevronRight, MoreHorizontal, Plus, Trash2 } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
 import { useLocalStorage } from "@plane/hooks";
 import { useTranslation } from "@plane/i18n";
@@ -226,10 +226,10 @@ export const RequirementSubformSection = (props: TProps) => {
             }}
             className="min-w-0 overflow-hidden rounded-md border border-subtle"
           >
-            {/* 标题行：折叠箭头 + 表名 + 行数，右侧「添加行」；与抽屉其它区块标题同一节奏 */}
+            {/* 标题行：表名 + 行数，右侧「添加行」+ 折叠箭头；与抽屉其它区块标题同一节奏 */}
             <div
               className={cn(
-                "flex h-10 items-center gap-2 bg-surface-2 px-3",
+                "flex h-10 items-center gap-2 bg-surface-2 pr-1.5 pl-3",
                 isOpen && "border-b border-subtle"
               )}
             >
@@ -238,11 +238,6 @@ export const RequirementSubformSection = (props: TProps) => {
                 onClick={() => toggle(form.id)}
                 className="flex min-w-0 flex-1 items-center gap-2 text-left text-body-xs-semibold text-primary"
               >
-                {isOpen ? (
-                  <ChevronDown className="size-3.5 shrink-0 text-tertiary" />
-                ) : (
-                  <ChevronRight className="size-3.5 shrink-0 text-tertiary" />
-                )}
                 <span className="truncate">{form.name}</span>
                 {form.is_required && <span className="shrink-0 text-danger-primary">*</span>}
                 <span className="shrink-0 text-caption-md-regular font-normal text-tertiary">
@@ -261,6 +256,16 @@ export const RequirementSubformSection = (props: TProps) => {
                   {t("requirement_detail.subform.add_row")}
                 </button>
               )}
+              <button
+                type="button"
+                onClick={() => toggle(form.id)}
+                aria-expanded={isOpen}
+                aria-label={isOpen ? "收起" : "展开"}
+                title={isOpen ? "收起" : "展开"}
+                className="flex size-7 shrink-0 items-center justify-center rounded-md text-tertiary transition-colors hover:bg-layer-transparent-hover hover:text-secondary"
+              >
+                <ChevronRight className={cn("size-3.5 transition-transform duration-200", isOpen && "rotate-90")} />
+              </button>
             </div>
 
             {isOpen && columns.length > 0 && (rows.length > 0 || !readOnly) && (

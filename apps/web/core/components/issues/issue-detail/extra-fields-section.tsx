@@ -6,7 +6,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { observer } from "mobx-react";
-import { Eye, EyeOff } from "lucide-react";
+import { ChevronRight, Eye, EyeOff } from "lucide-react";
 // hooks
 import { useLocalStorage } from "@plane/hooks";
 // types
@@ -32,6 +32,7 @@ import { cn, renderFormattedDate } from "@plane/utils";
 import type { TIssueOperations } from "./root";
 
 const HIDE_EMPTY_STORAGE_KEY = "plane:issue-extra-fields:hide-empty";
+const COLLAPSED_STORAGE_KEY = "plane:issue-extra-fields:collapsed";
 
 const isParagraphField = (field: TTypeExtraField) =>
   field.field_type === "text" && getTextMode(field.options) === "paragraph";
@@ -174,6 +175,7 @@ type TIssueExtraFieldsSectionProps = {
  * 工作项类型的自定义字段，放在详情主区描述下方：
  * 去框的属性清单，标签在左、值在右，容器够宽时两列；段落文本各占一整行。
  * 「隐藏未填」按人记在 localStorage，只作用于查看态，编辑态总是列出全部字段。
+ * 标题行最右的箭头收起/展开整块，同样按人记在 localStorage。
  */
 export const IssueExtraFieldsSection = observer(function IssueExtraFieldsSection(
   props: TIssueExtraFieldsSectionProps
@@ -198,6 +200,11 @@ export const IssueExtraFieldsSection = observer(function IssueExtraFieldsSection
     false
   );
   const hideEmpty = hideEmptyStored === true;
+  const { storedValue: collapsedStored, setValue: setCollapsed } = useLocalStorage<boolean>(
+    COLLAPSED_STORAGE_KEY,
+    false
+  );
+  const collapsed = collapsedStored === true;
 
   const commit = useCallback(
     async (fieldId: string, fieldType: TIssueExtraFieldType, nextValue: TIssueExtraFieldValue["value"]) => {
@@ -253,7 +260,7 @@ export const IssueExtraFieldsSection = observer(function IssueExtraFieldsSection
         <span className="text-14 text-secondary">{title}</span>
         <span className="text-14 text-tertiary tabular-nums">{activeFields.length}</span>
         <span className="flex-1" />
-        {!isEditing && emptyCount > 0 && (
+        {!collapsed && !isEditing && emptyCount > 0 && (
           <button
             type="button"
             className="flex h-7 items-center gap-1.5 rounded-md px-2 text-13 text-secondary hover:bg-layer-transparent-hover"
@@ -263,9 +270,19 @@ export const IssueExtraFieldsSection = observer(function IssueExtraFieldsSection
             {hideEmpty ? `显示未填 ${emptyCount}` : "隐藏未填"}
           </button>
         )}
+        <button
+          type="button"
+          className="-mr-2 flex size-7 shrink-0 items-center justify-center rounded-md text-tertiary hover:bg-layer-transparent-hover hover:text-secondary"
+          onClick={() => setCollapsed(!collapsed)}
+          aria-expanded={!collapsed}
+          aria-label={collapsed ? "展开" : "收起"}
+          title={collapsed ? "展开" : "收起"}
+        >
+          <ChevronRight className={cn("size-3.5 transition-transform duration-200", !collapsed && "rotate-90")} />
+        </button>
       </div>
 
-      <div className={cn(dimmed && "opacity-60")}>
+      <div className={cn(collapsed && "hidden", dimmed && "opacity-60")}>
         {shortFields.length > 0 && (
           <div className="grid grid-cols-1 gap-x-12 @2xl:grid-cols-2">
             {shortFields.map((field) => (

@@ -3054,7 +3054,7 @@ export default {
       impact_description: "影响描述",
       risk_loss: "风险损失",
       trigger_factors: "触发因素",
-      strategy: "风险管理策略",
+      strategy: "管理策略",
       is_in_risk_production: "是否列入风险生产 / 送样",
       is_in_risk_production_short: "生产 / 送样",
       response_measures: "应对措施",
