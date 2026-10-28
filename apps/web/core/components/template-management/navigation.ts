@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { ClipboardCheck, FlaskConical, Library, Tags, Workflow } from "lucide-react";
+import { ClipboardCheck, FlaskConical, Layers, Library, Rows2, Tags, Workflow } from "lucide-react";
 import {
   WORKSPACE_CASE_TEMPLATE_READ_PERMISSION_KEYS,
   WORKSPACE_DEV_MODE_READ_PERMISSION_KEYS,
@@ -7,12 +7,21 @@ import {
   WORKSPACE_REVIEW_TEMPLATE_READ_PERMISSION_KEYS,
 } from "@plane/constants";
 
-export type TTemplateManagementTabKey = "libraries" | "product-categories" | "test-cases" | "reviews" | "dev-modes";
+export type TTemplateManagementTabKey =
+  | "libraries"
+  | "product-categories"
+  | "test-cases"
+  | "reviews"
+  | "issue-types"
+  | "issue-fields"
+  | "dev-modes";
 
 export type TTemplateManagementNavigationItem = {
   key: TTemplateManagementTabKey;
   icon: LucideIcon;
-  i18nKey: string;
+  /** 有 i18n key 用 key；新加的页签直接写中文名 */
+  i18nKey?: string;
+  label?: string;
   /** 持有其中任一工作区 key 才显示这个 tab */
   permissionKeys: string[];
 };
@@ -42,6 +51,19 @@ export const TEMPLATE_MANAGEMENT_NAVIGATION_ITEMS: TTemplateManagementNavigation
     icon: ClipboardCheck,
     i18nKey: "workspace_templates.navigation.reviews",
     permissionKeys: WORKSPACE_REVIEW_TEMPLATE_READ_PERMISSION_KEYS,
+  },
+  {
+    // 工作项类型库：所有研发模式共用，模式只关联其中一部分；读写口径同研发模式
+    key: "issue-types",
+    icon: Layers,
+    label: "工作项类型",
+    permissionKeys: WORKSPACE_DEV_MODE_READ_PERMISSION_KEYS,
+  },
+  {
+    key: "issue-fields",
+    icon: Rows2,
+    label: "通用字段",
+    permissionKeys: WORKSPACE_DEV_MODE_READ_PERMISSION_KEYS,
   },
   {
     // 紧挨「评审」：模式的阶段配置直接引用评审树上的节点，维护两者的是同一批人

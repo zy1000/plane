@@ -87,12 +87,16 @@ def get_project_issue_type_key_descriptors(permission_keys):
 
 
 def map_template_permission_keys_to_project(project, workspace_role, permission_keys):
+    from plane.utils.issue_scheme import project_visible_type_q
+
     target_issue_types = list(
         IssueType.objects.filter(
             scheme_id=project.issue_scheme_id,
             deleted_at__isnull=True,
             is_active=True,
-        ).only("id", "name", "system_key")
+        )
+        .filter(project_visible_type_q(project.id))
+        .only("id", "name", "system_key")
     )
     target_issue_type_id_by_name = {
         issue_type.name: issue_type.id for issue_type in target_issue_types

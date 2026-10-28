@@ -107,6 +107,11 @@ export const useDevModeDetail = (workspaceSlug: string | undefined, devModeId: s
     [workspaceSlug, devModeId]
   );
 
+  /** 只改本地（如「工作项」页关联数变化后同步页签计数），不发请求 */
+  const patchDevMode = useCallback((patch: Partial<TDevModeDetail>) => {
+    setDevMode((current) => (current ? { ...current, ...patch } : current));
+  }, []);
+
   // ---- 阶段 ----------------------------------------------------------------
 
   const createStage = useCallback(
@@ -295,6 +300,7 @@ export const useDevModeDetail = (workspaceSlug: string | undefined, devModeId: s
     workloadRemaining,
     fetchDevMode,
     updateDevMode,
+    patchDevMode,
     createStage,
     bulkCreateStages,
     updateStage,

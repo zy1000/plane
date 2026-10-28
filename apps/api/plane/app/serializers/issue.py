@@ -54,7 +54,7 @@ from plane.db.seed_data.issue_scheme import (
     STORY as SYSTEM_STORY,
     TASK as SYSTEM_TASK,
 )
-from plane.utils.issue_scheme import project_scheme_id
+from plane.utils.issue_scheme import is_type_visible_to_project, project_scheme_id
 from plane.utils.issue_product import (
     apply_resolved_product_fields,
     product_module_queryset,
@@ -264,10 +264,8 @@ class IssueCreateSerializer(BaseSerializer):
         ):
             raise serializers.ValidationError("State is not valid please pass a valid state_id")
 
-        # 类型必须在本项目所用的方案里
-        if attrs.get("type") and str(attrs["type"].scheme_id) != str(
-            project_scheme_id(self.context.get("project_id"))
-        ):
+        # 类型必须在本项目所用的方案里（跟随项目：还要被所属研发模式关联）
+        if attrs.get("type") and not is_type_visible_to_project(attrs["type"].id, self.context.get("project_id")):
             raise serializers.ValidationError("Issue type is not valid please pass a valid type_id")
 
         if attrs.get("state"):

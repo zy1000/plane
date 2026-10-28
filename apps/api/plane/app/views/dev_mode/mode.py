@@ -9,7 +9,7 @@ from plane.app.serializers.dev_mode import (
     count_projects_using,
 )
 from plane.app.views.base import BaseViewSet
-from plane.utils.issue_scheme import seed_issue_scheme
+from plane.utils.issue_scheme import ensure_issue_type_library, ensure_mode_type_links
 from plane.db.models import DevMode, DevModeStage, Workspace
 from plane.utils.dev_mode import ensure_dev_modes
 
@@ -40,6 +40,11 @@ class DevModeViewSet(BaseViewSet):
                 stages_count=Count(
                     "stages",
                     filter=Q(stages__deleted_at__isnull=True),
+                    distinct=True,
+                ),
+                issue_types_count=Count(
+                    "issue_type_links",
+                    filter=Q(issue_type_links__issue_type__deleted_at__isnull=True),
                     distinct=True,
                 ),
                 templates_count=Count(
@@ -115,8 +120,9 @@ class DevModeViewSet(BaseViewSet):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         dev_mode = serializer.save(workspace=workspace, is_system=False)
-        # 新模式的方案由 DevMode.save() 建，这里补上种子内容（五个类型、默认状态、缺陷字段与工作流）
-        seed_issue_scheme(dev_mode.issue_scheme, created_by=request.user)
+        # 新模式指向工作区的类型库（DevMode.save()），库还空着就生成种子，再默认关联五个系统类型
+        ensure_issue_type_library(dev_mode.workspace_id, created_by=request.user)
+        ensure_mode_type_links(dev_mode)
         return Response(
             self.get_serializer(self._get_dev_mode(dev_mode.pk)).data,
             status=status.HTTP_201_CREATED,

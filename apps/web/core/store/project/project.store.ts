@@ -55,6 +55,7 @@ export interface IProjectStore {
 
   // helper actions
   processProjectAfterCreation: (workspaceSlug: string, data: TProject) => void;
+  setFollowingProjectsVisibleTypes: (devModeId: string, issueTypeIds: string[]) => void;
 
   // fetch actions
   fetchPartialProjects: (workspaceSlug: string) => Promise<TPartialProject[]>;
@@ -121,6 +122,7 @@ export class ProjectStore implements IProjectStore {
       currentProjectNextSequenceId: computed,
       // helper actions
       processProjectAfterCreation: action,
+      setFollowingProjectsVisibleTypes: action,
       // fetch actions
       fetchPartialProjects: action,
       fetchProjects: action,
@@ -301,6 +303,18 @@ export class ProjectStore implements IProjectStore {
    * @param workspaceSlug
    * @param data
    */
+  /**
+   * 研发模式的类型关联变了：跟随该模式的项目能用的类型（visible_issue_type_ids）就地改掉，
+   * 按项目过滤状态等地方不用等整页刷新。项目自定义的（visible_issue_type_ids 为 null）不动。
+   */
+  setFollowingProjectsVisibleTypes = (devModeId: string, issueTypeIds: string[]) => {
+    Object.values(this.projectMap).forEach((project) => {
+      if (project?.dev_mode === devModeId && Array.isArray(project.visible_issue_type_ids)) {
+        set(this.projectMap, [project.id, "visible_issue_type_ids"], [...issueTypeIds]);
+      }
+    });
+  };
+
   processProjectAfterCreation = (workspaceSlug: string, data: TProject) => {
     runInAction(() => {
       set(this.projectMap, [data.id], data);

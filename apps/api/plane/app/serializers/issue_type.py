@@ -4,8 +4,11 @@ from rest_framework import serializers
 
 # Module imports
 from .base import BaseSerializer
-from plane.db.models import IssueType, Project, TypeExtraField, TypeExtraFieldValue
-from plane.db.models.issue_type import IssueTypeCategory
+from plane.db.models import IssueFieldDefinition, IssueType, Project, TypeExtraField, TypeExtraFieldValue
+from plane.db.models.issue_type import LIBRARY_FIELD_DEFINITION_COLUMNS, IssueTypeCategory
+
+#: 绑定了库字段的类型字段只能改这些
+LIBRARY_BOUND_EDITABLE_FIELDS = {"sort_order", "issue_type"}
 
 
 class TypeExtraFieldSerializer(BaseSerializer):
@@ -18,11 +21,14 @@ class TypeExtraFieldSerializer(BaseSerializer):
         queryset=IssueType.objects.none(),
         source="issue_type",
     )
+    # 非空 = 绑定了通用字段库里的字段，定义由库统一维护
+    library_field_id = serializers.UUIDField(read_only=True)
 
     class Meta:
         model = TypeExtraField
         fields = [
             "id",
+            "library_field_id",
             "project",
             "project_id",
             "scheme_id",
@@ -96,6 +102,15 @@ class TypeExtraFieldSerializer(BaseSerializer):
             raise serializers.ValidationError(
                 {"issue_type_id": "工作项类型不属于当前项目"}
             )
+        # 绑定库字段的行：定义只能到字段库改，这里只能调排序
+        if self.instance is not None and self.instance.library_field_id:
+            changed = [
+                key
+                for key, value in attrs.items()
+                if key not in LIBRARY_BOUND_EDITABLE_FIELDS and getattr(self.instance, key, None) != value
+            ]
+            if changed or (attrs.get("issue_type") and attrs["issue_type"].id != self.instance.issue_type_id):
+                raise serializers.ValidationError({"error": "字段库字段请到字段库修改"})
 
         return attrs
 
@@ -220,3 +235,52 @@ class IssueTypeSerializer(BaseSerializer):
             "updated_at",
         ]
         read_only_fields = ["workspace", "system_key", "created_at", "updated_at"]
+
+
+class IssueFieldDefinitionSerializer(BaseSerializer):
+    """通用字段库的字段。``used_by`` / ``binding_count`` 由视图补。"""
+
+    workspace_id = serializers.UUIDField(read_only=True)
+
+    class Meta:
+        model = IssueFieldDefinition
+        fields = [
+            "id",
+            "workspace_id",
+            "name",
+            "description",
+            "logo_props",
+            "field_type",
+            "is_required",
+            "is_active",
+            "sort_order",
+            "options",
+            "default_value",
+            "validation",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "workspace_id", "created_at", "updated_at"]
+
+    def validate_name(self, value):
+        name = (value or "").strip()
+        if not name:
+            raise serializers.ValidationError("字段名称不能为空")
+        workspace_id = self.context.get("workspace_id")
+        duplicates = IssueFieldDefinition.objects.filter(workspace_id=workspace_id, name=name)
+        if self.instance is not None:
+            duplicates = duplicates.exclude(pk=self.instance.pk)
+        if duplicates.exists():
+            raise serializers.ValidationError("字段库里已有同名字段")
+        if self.instance is not None and name != self.instance.name:
+            # 改名后不能和某个已绑定类型下的私有字段重名（同类型字段名唯一）
+            bound_type_ids = self.instance.bindings.filter(deleted_at__isnull=True).values_list("issue_type_id", flat=True)
+            clash = (
+                TypeExtraField.objects.filter(issue_type_id__in=list(bound_type_ids), name=name)
+                .exclude(library_field_id=self.instance.pk)
+                .select_related("issue_type")
+                .first()
+            )
+            if clash is not None:
+                raise serializers.ValidationError(f"类型「{clash.issue_type.name}」里已有同名字段")
+        return name

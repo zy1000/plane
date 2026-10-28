@@ -331,11 +331,13 @@ class _RowResolver:
         self.project_id = project.id
         self.user = user
 
-        # 缓存：项目内所有 IssueType。type_by_name 以名称小写为键，避免大小写敏感。
+        # 缓存：项目内能用的 IssueType（跟随项目只含所属研发模式关联的类型）。type_by_name 以名称小写为键，避免大小写敏感。
+        from plane.utils.issue_scheme import project_visible_type_q
+
         self._issue_types = list(
             IssueType.objects.filter(
                 scheme__projects=self.project_id, deleted_at__isnull=True
-            )
+            ).filter(project_visible_type_q(self.project_id))
         )
         self.type_by_name: dict[str, IssueType] = {
             it.name.strip().lower(): it for it in self._issue_types

@@ -1,30 +1,31 @@
-# 工作项方案批次 4（docs/issue-scheme/）：给研发模式的空方案生成种子内容。
+# 工作项类型库：确保每个有研发模式的工作区都有类型库且已生成种子，并给还没有任何类型关联的模式关联系统类型。
 #
-# 新建模式（模板中心接口）时会自动生成；存量模式在批次 1 只建了空壳，上线时跑一次本命令补齐。
-# 漏跑也不会坏：新项目跟随一个空模式方案时，建项目流程会先补生成（utils.issue_scheme.prepare_project_issue_scheme）。
-# 幂等：方案里已有任何类型就跳过。
+# 上线时跑一次。漏跑也不会坏：打开模板中心类型库 / 模式工作项页、新建跟随项目时都会按需补上
+# （utils.issue_scheme.ensure_issue_type_library / ensure_mode_type_links）。幂等，可重复执行。
 
 from django.core.management import BaseCommand
 
 from plane.db.models import DevMode
-from plane.utils.issue_scheme import seed_issue_scheme
+from plane.utils.issue_scheme import ensure_issue_type_library, ensure_mode_type_links
 
 
 class Command(BaseCommand):
-    help = "给研发模式的空工作项方案生成种子内容（五个类型、默认状态、缺陷字段与缺陷默认工作流）。可重复执行。"
+    help = "确保工作项类型库已生成种子，并给没有关联类型的研发模式关联系统类型。可重复执行。"
 
     def add_arguments(self, parser):
         parser.add_argument("--workspace", type=str, default="", help="只处理这个工作区（slug），默认全部")
 
     def handle(self, *args, **options):
-        modes = DevMode.objects.select_related("issue_scheme", "workspace").order_by("workspace__slug", "created_at")
+        modes = DevMode.objects.select_related("workspace").order_by("workspace__slug", "created_at")
         if options["workspace"]:
             modes = modes.filter(workspace__slug=options["workspace"])
-        seeded = skipped = 0
+        linked = 0
+        seen = set()
         for mode in modes:
-            if seed_issue_scheme(mode.issue_scheme):
-                seeded += 1
-                self.stdout.write(f"已生成  {mode.workspace.slug} / {mode.name}")
-            else:
-                skipped += 1
-        self.stdout.write(self.style.SUCCESS(f"完成：生成 {seeded} 个，已有内容跳过 {skipped} 个"))
+            if mode.workspace_id not in seen:
+                ensure_issue_type_library(mode.workspace_id)
+                seen.add(mode.workspace_id)
+            if ensure_mode_type_links(mode):
+                linked += 1
+                self.stdout.write(f"已关联  {mode.workspace.slug} / {mode.name}")
+        self.stdout.write(self.style.SUCCESS(f"完成：{len(seen)} 个工作区，新关联 {linked} 个模式"))

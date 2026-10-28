@@ -15,14 +15,11 @@ export const devModeFeaturesPath = (workspaceSlug: string, devModeId: string) =>
   `${devModeDetailPath(workspaceSlug, devModeId)}/features`;
 
 /**
- * 「工作项」页签：模式方案的类型、属性、状态、工作流（docs/issue-scheme/ 4.1）。
- * 选中类型用 `?type=`，属性 / 状态 / 工作流分段用 `?tab=`；流转配置是它下面的子路径。
+ * 「工作项」页签：本模式关联的类型库类型（关联 / 取消关联 / 排序 / 新建）。
+ * 类型本身的属性、状态、工作流在类型库页维护（issue-types/routes.ts）。路径段沿用旧名 issue-scheme。
  */
 export const devModeIssueSchemePath = (workspaceSlug: string, devModeId: string) =>
   `${devModeDetailPath(workspaceSlug, devModeId)}/issue-scheme`;
-
-export const devModeIssueSchemeWorkflowPath = (workspaceSlug: string, devModeId: string, workflowId: string) =>
-  `${devModeIssueSchemePath(workspaceSlug, devModeId)}/workflows/${workflowId}`;
 
 /** 「视图」页签：研发模式视图；页面分段用 `?scope=` */
 export const devModeViewsPath = (workspaceSlug: string, devModeId: string) =>

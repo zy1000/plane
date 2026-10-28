@@ -43,8 +43,10 @@ export type TDevMode = {
   icon_props: TLogoProps;
   features: TDevModeFeatures;
   is_system: boolean;
-  /** 模式方案 id：跟随本模式的项目共用的工作项配置（模板中心「工作项配置」页签） */
+  /** 工作区「工作项类型库」方案 id：所有模式都指向同一个库，类型 / 状态 / 工作流 / 字段都在库里维护 */
   issue_scheme?: string | null;
+  /** 本模式关联的类型库类型数（模式页「工作项」页签计数） */
+  issue_type_count: number;
   /** 阶段数 */
   stage_count: number;
   /** 该模式下所有阶段勾选的评审节点总数 */

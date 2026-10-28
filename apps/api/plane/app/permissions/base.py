@@ -208,9 +208,13 @@ def allow_workspace_self_or_permission(permission_key, user_kwarg="user_id"):
 
 def _get_all_issue_type_permission_keys_for_project(project_id: str) -> set:
     """当前项目下所有未删除 IssueType 衍生出来的全部 project.issue_type.<id_hex>.<action> 集合。"""
-    issue_type_ids = IssueType.objects.filter(
-        scheme__projects=project_id, deleted_at__isnull=True
-    ).values_list("id", flat=True)
+    from plane.utils.issue_scheme import project_visible_type_q
+
+    issue_type_ids = (
+        IssueType.objects.filter(scheme__projects=project_id, deleted_at__isnull=True)
+        .filter(project_visible_type_q(project_id))
+        .values_list("id", flat=True)
+    )
     return {
         build_issue_type_permission_key(issue_type_id, action)
         for issue_type_id in issue_type_ids

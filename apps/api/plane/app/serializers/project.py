@@ -163,6 +163,21 @@ class ProjectExtendedDetailMixin(serializers.Serializer):
     # 工作项方案：由 Project.save() 建 / 由脱离接口换，任何项目接口都不能直接写
     issue_scheme = serializers.PrimaryKeyRelatedField(read_only=True)
     issue_scheme_detail = IssueSchemeLiteSerializer(source="issue_scheme", read_only=True)
+    # 跟随研发模式时本项目能用的类型（所属模式关联的类型 id）；项目自定义为 null（方案里的全部可用）。
+    # 类型库被多个模式共用，前端按项目取状态 / 类型时要用它过滤
+    visible_issue_type_ids = serializers.SerializerMethodField()
+
+    def get_visible_issue_type_ids(self, obj):
+        from plane.utils.issue_scheme import mode_linked_type_ids
+
+        if obj.issue_scheme_id is None or obj.issue_scheme.project_id is not None:
+            return None
+        # 同一次序列化里按模式缓存，列表不逐个项目查
+        cache = self.context.setdefault("_mode_linked_type_ids", {}) if isinstance(self.context, dict) else {}
+        if obj.dev_mode_id not in cache:
+            cache.update(mode_linked_type_ids([obj.dev_mode_id]))
+            cache.setdefault(obj.dev_mode_id, [])
+        return cache[obj.dev_mode_id]
 
 
 class ProjectSerializer(ProjectExtendedDetailMixin, BaseSerializer):
@@ -780,9 +795,13 @@ class ProjectRolePermissionBindingSerializer(serializers.Serializer):
         return [key for key in normalized_keys if key in existing_keys]
 
     def _get_project_issue_type_keys(self, project) -> set:
-        issue_type_ids = IssueType.objects.filter(
-            scheme_id=project.issue_scheme_id, deleted_at__isnull=True
-        ).values_list("id", flat=True)
+        from plane.utils.issue_scheme import project_visible_type_q
+
+        issue_type_ids = (
+            IssueType.objects.filter(scheme_id=project.issue_scheme_id, deleted_at__isnull=True)
+            .filter(project_visible_type_q(project.id))
+            .values_list("id", flat=True)
+        )
         return {
             build_issue_type_permission_key(issue_type_id, action)
             for issue_type_id in issue_type_ids

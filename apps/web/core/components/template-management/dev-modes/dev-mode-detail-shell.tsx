@@ -36,7 +36,6 @@ export const DevModeDetailShell = observer(function DevModeDetailShell() {
     error,
     fetchDevMode,
     updateDevMode,
-    issueTypesStore,
     schemeViewsStore,
   } = useDevModeDetailContext();
   const { modes } = useTemplateCenter();
@@ -127,7 +126,7 @@ export const DevModeDetailShell = observer(function DevModeDetailShell() {
             workspaceSlug={workspaceSlug}
             devModeId={devModeId}
             stageCount={devMode.stages.length}
-            typeCount={issueTypesStore.issueTypes?.length}
+            typeCount={devMode.issue_type_count}
             viewCount={schemeViewsStore.views?.length}
             featureOnCount={featureOnCount}
             featureTotal={DEV_MODE_FEATURE_KEYS.length}

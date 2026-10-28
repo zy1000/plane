@@ -59,7 +59,6 @@ from plane.bgtasks.issue_activities_task import issue_activity
 from plane.bgtasks.issue_description_version_task import issue_description_version_task
 from plane.bgtasks.recent_visited_task import recent_visited_task
 from plane.bgtasks.webhook_task import model_activity
-from plane.db.seed_data.issue_scheme import TASK as SYSTEM_TASK
 from plane.db.models import (
     CycleIssue,
     FileAsset,
@@ -81,7 +80,6 @@ from plane.db.models import (
     TransitionRecordStatus,
     TypeExtraField,
     UserRecentVisit,
-    IssueType,
     State,
 )
 from plane.utils.filters import (
@@ -111,6 +109,7 @@ from plane.utils.workflow import (
     reset_pending_transition_votes_if_content_changed,
 )
 from plane.db.models import State as StateModel
+from plane.utils.issue_scheme import project_default_issue_type
 
 from .. import BaseAPIView, BaseViewSet
 
@@ -516,14 +515,7 @@ class IssueViewSet(BaseViewSet):
         project = Project.objects.get(pk=project_id)
         data = dict(request.data)
         if not data.get("type_id"):
-            default_issue_type = (
-                IssueType.objects.filter(
-                    scheme_id=project.issue_scheme_id, is_default=True, deleted_at__isnull=True
-                ).first()
-                or IssueType.objects.filter(
-                    scheme_id=project.issue_scheme_id, system_key=SYSTEM_TASK, deleted_at__isnull=True
-                ).first()
-            )
+            default_issue_type = project_default_issue_type(project.id)
             if default_issue_type is None:
                 return Response(
                     {"error": "Issue type is not valid please pass a valid type_id"},

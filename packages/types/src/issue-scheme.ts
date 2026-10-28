@@ -15,3 +15,65 @@ export type TIssueSchemeLite = {
   name: string;
   is_project_owned: boolean;
 };
+
+/** 研发模式摘要：类型库「用于」、类型库所属的模式列表 */
+export type TIssueSchemeDevModeBrief = {
+  id: string;
+  name: string;
+};
+
+/**
+ * 工作区的「工作项类型库」（`GET /api/workspaces/<slug>/issue-type-library/`）。
+ *
+ * 每个工作区只有一个，所有研发模式的 `issue_scheme` 都指向它；类型 / 状态 / 工作流 / 字段的增删改
+ * 照旧走方案作用域接口（`/issue-schemes/<id>/...`）。
+ */
+export type TIssueTypeLibrary = {
+  id: string;
+  name: string;
+  type_count: number;
+  dev_modes: TIssueSchemeDevModeBrief[];
+};
+
+/** 模式关联行里的类型摘要 */
+export type TDevModeIssueTypeBrief = {
+  id: string;
+  name: string;
+  description?: string;
+  logo_props?: {
+    icon?: { name?: string; color?: string; background_color?: string };
+    in_use?: string;
+  };
+  category_id?: number | string | null;
+  category_name?: string | null;
+  is_default?: boolean;
+  system_key?: string | null;
+};
+
+/** 研发模式关联的一个类型库类型（`/dev-modes/<id>/issue-types/`，按 sort_order） */
+export type TDevModeIssueType = {
+  id: string;
+  issue_type_id: string;
+  sort_order: number;
+  issue_type: TDevModeIssueTypeBrief;
+  state_count: number;
+  field_count: number;
+  workflow_count: number;
+  /** 跟随该模式的项目里这个类型的工作项数；大于 0 时不能取消关联 */
+  issue_count: number;
+};
+
+/** 在模式里新建类型：建进类型库并追加关联到该模式 */
+export type TCreateDevModeIssueTypePayload = {
+  name: string;
+  description?: string;
+  logo_props?: TDevModeIssueTypeBrief["logo_props"];
+  category_id: number | string | null;
+};
+
+/** 取消关联被拦（409 DEV_MODE_TYPE_IN_USE）时，各类型还在用的工作项数 */
+export type TDevModeIssueTypeBlocked = {
+  issue_type_id: string;
+  name: string;
+  issue_count: number;
+};

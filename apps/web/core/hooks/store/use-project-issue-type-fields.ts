@@ -13,6 +13,32 @@ const getErrorMessage = (error: unknown, fallback: string) => {
   return fallback;
 };
 
+type TBoundFieldsListener = (createdFields: TTypeExtraField[]) => void;
+
+/**
+ * 同一作用域的字段列表可能同时有几个实例（项目设置、模板中心类型详情各自持有一份）。
+ * 「从字段库添加」只拿得到作用域，拿不到具体实例，绑定成功后按作用域广播新建的行，各实例就地追加。
+ */
+const boundFieldsListeners = new Map<string, Set<TBoundFieldsListener>>();
+const scopeListenerKey = (workspaceSlug: string, projectId: string) => `${workspaceSlug}:${projectId}`;
+
+/** 把字段库字段批量绑定到某个类型；projectId 同 useProjectIssueTypeFields（项目 id 或方案作用域键） */
+export const bindLibraryFieldsToIssueType = async (
+  workspaceSlug: string,
+  projectId: string,
+  issueTypeId: string,
+  libraryFieldIds: string[]
+) => {
+  const createdFields = await new ProjectIssueTypeService().bindLibraryFields(
+    workspaceSlug,
+    projectId,
+    issueTypeId,
+    libraryFieldIds
+  );
+  boundFieldsListeners.get(scopeListenerKey(workspaceSlug, projectId))?.forEach((listener) => listener(createdFields));
+  return createdFields;
+};
+
 export const useProjectIssueTypeFields = (workspaceSlug: string | undefined, projectId: string | undefined) => {
   const [fields, setFields] = useState<TTypeExtraField[] | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(false);
@@ -71,6 +97,24 @@ export const useProjectIssueTypeFields = (workspaceSlug: string | undefined, pro
   useEffect(() => {
     fetchFields();
   }, [fetchFields]);
+
+  useEffect(() => {
+    if (!workspaceSlug || !projectId) return;
+    const key = scopeListenerKey(workspaceSlug, projectId);
+    const listener: TBoundFieldsListener = (createdFields) =>
+      setFields((prev) => {
+        if (!prev) return prev;
+        const existingIds = new Set(prev.map((field) => field.id));
+        return [...prev, ...createdFields.filter((field) => !existingIds.has(field.id))];
+      });
+    const listeners = boundFieldsListeners.get(key) ?? new Set<TBoundFieldsListener>();
+    listeners.add(listener);
+    boundFieldsListeners.set(key, listeners);
+    return () => {
+      listeners.delete(listener);
+      if (listeners.size === 0 && boundFieldsListeners.get(key) === listeners) boundFieldsListeners.delete(key);
+    };
+  }, [workspaceSlug, projectId]);
 
   return {
     fields,

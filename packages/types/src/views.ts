@@ -54,8 +54,8 @@ export interface IProjectView {
   is_locked: boolean;
   anchor?: string;
   owned_by: string;
-  /** 研发模式视图挂在模式方案上（project 为空），跟随该模式的项目共用；项目视图为空 */
-  issue_scheme?: string | null;
+  /** 研发模式视图挂在研发模式上（project 为空），跟随该模式的项目共用；项目视图为空 */
+  dev_mode?: string | null;
   /** 研发模式视图是从哪个项目存上去的 */
   source_project?: string | null;
 }

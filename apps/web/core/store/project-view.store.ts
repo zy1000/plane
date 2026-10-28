@@ -54,7 +54,7 @@ export interface IProjectViewStore {
   deleteView: (workspaceSlug: string, projectId: string, viewId: string) => Promise<any>;
   updateFilters: <T extends keyof TViewFilters>(filterKey: T, filterValue: TViewFilters[T]) => void;
   clearAllFilters: () => void;
-  syncSchemeViews: (schemeId: string, views: IProjectView[]) => void;
+  syncModeViews: (devModeId: string, views: IProjectView[]) => void;
   // favorites actions
   addViewToFavorites: (workspaceSlug: string, projectId: string, viewId: string) => Promise<any>;
   removeViewFromFavorites: (workspaceSlug: string, projectId: string, viewId: string) => Promise<any>;
@@ -93,7 +93,7 @@ export class ProjectViewStore implements IProjectViewStore {
       // actions
       updateFilters: action,
       clearAllFilters: action,
-      syncSchemeViews: action,
+      syncModeViews: action,
       // favorites actions
       addViewToFavorites: action,
       removeViewFromFavorites: action,
@@ -140,13 +140,13 @@ export class ProjectViewStore implements IProjectViewStore {
 
     const project = this.rootStore.projectRoot.project.getProjectById(projectId);
     // 项目自定义后模式视图已经拷进项目，旧的那份不再算本项目的
-    const modeSchemeId = project?.issue_scheme_detail?.is_project_owned === false ? project.issue_scheme : null;
-    const isModeView = (view: IProjectView) => !!view.issue_scheme;
+    const modeId = project?.issue_scheme_detail?.is_project_owned === false ? project.dev_mode : null;
+    const isModeView = (view: IProjectView) => !!view.dev_mode;
     return Object.values(this.viewMap ?? {})
       .filter(
         (view) =>
           getViewScope(view) === scope &&
-          (view?.project === projectId || (!!modeSchemeId && !view.project && view.issue_scheme === modeSchemeId))
+          (view?.project === projectId || (!!modeId && !view.project && view.dev_mode === modeId))
       )
       .sort(
         (a, b) =>
@@ -200,14 +200,14 @@ export class ProjectViewStore implements IProjectViewStore {
     });
 
   /**
-   * 模板中心拿到某个模式方案的研发模式视图后，同步到这里已缓存的那几条：
+   * 模板中心拿到某个研发模式的研发模式视图后，同步到这里已缓存的那几条：
    * 删掉的移除、改名 / 排序 / 条件变了的跟着改，回到项目页不用整页刷新
    */
-  syncSchemeViews = (schemeId: string, views: IProjectView[]) => {
+  syncModeViews = (devModeId: string, views: IProjectView[]) => {
     const latest = new Map(views.map((view) => [view.id, view]));
     runInAction(() => {
       Object.values(this.viewMap).forEach((view) => {
-        if (view?.issue_scheme !== schemeId || view.project) return;
+        if (view?.dev_mode !== devModeId || view.project) return;
         const fresh = latest.get(view.id);
         if (fresh) set(this.viewMap, [view.id], { ...view, ...fresh });
         else delete this.viewMap[view.id];

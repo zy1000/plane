@@ -10,23 +10,51 @@ from plane.app.permissions import PermissionKey, allow_fine_permission
 from plane.app.serializers.issue_scheme import IssueSchemeLiteSerializer
 from plane.app.views.base import BaseAPIView
 from plane.db.models import DevMode, IssueScheme, Project
+from plane.db.models import IssueType, Workspace
 from plane.utils.issue_scheme import (
     ISSUE_SCHEME_DETACH_BLOCKED_BY_PENDING_APPROVALS,
     DetachBlocked,
     detach_project_scheme,
+    ensure_issue_type_library,
     following_project_count,
-    seed_issue_scheme,
 )
+
+#: 读研发模式（含类型库、字段库）：查看或维护任一即可
+DEV_MODE_READ_KEYS = (PermissionKey.WORKSPACE_DEV_MODE_VIEW, PermissionKey.WORKSPACE_DEV_MODE_MANAGE)
+
+
+def _library_payload(scheme):
+    return {
+        "id": str(scheme.id),
+        "name": scheme.name,
+        "type_count": IssueType.objects.filter(scheme=scheme).count(),
+        "following_project_count": following_project_count(scheme.id),
+        "dev_modes": [
+            {"id": str(mode["id"]), "name": mode["name"]}
+            for mode in DevMode.objects.filter(issue_scheme=scheme).order_by("created_at").values("id", "name")
+        ],
+    }
+
+
+class IssueTypeLibraryEndpoint(BaseAPIView):
+    """GET workspaces/<slug>/issue-type-library/：本工作区的工作项类型库（没有就建并生成种子）。"""
+
+    @allow_fine_permission(*DEV_MODE_READ_KEYS, level="WORKSPACE")
+    def get(self, request, slug):
+        workspace = Workspace.objects.filter(slug=slug).first()
+        if workspace is None:
+            return Response({"error": "Workspace not found."}, status=status.HTTP_404_NOT_FOUND)
+        library = ensure_issue_type_library(workspace.id, created_by=request.user)
+        return Response(_library_payload(library), status=status.HTTP_200_OK)
 
 
 class IssueSchemeDetailEndpoint(BaseAPIView):
-    """GET workspaces/<slug>/issue-schemes/<issue_scheme_id>/：模式方案概况（模板中心页头用）。"""
+    """GET workspaces/<slug>/issue-schemes/<issue_scheme_id>/：类型库概况。"""
 
     @allow_fine_permission(PermissionKey.WORKSPACE_DEV_MODE_VIEW)
     def get(self, request, slug, issue_scheme_id):
         scheme = IssueScheme.objects.get(pk=issue_scheme_id, workspace__slug=slug, project__isnull=True)
-        # 存量模式在批次 1 只建了空壳：第一次打开就补上种子内容（幂等，已有类型跳过）
-        seed_issue_scheme(scheme, created_by=request.user)
+        ensure_issue_type_library(scheme.workspace_id, created_by=request.user)
         return Response(
             {
                 **IssueSchemeLiteSerializer(scheme).data,

@@ -33,7 +33,7 @@ function RailLink({ href, icon: Icon, label, isActive }: { href: string; icon: L
 }
 
 /**
- * 模板中心左栏（方案 A）：资产库三项 + 研发模式逐个列出。
+ * 模板中心左栏（方案 A）：资产库各项 + 研发模式逐个列出。
  *
  * 顶部页签撤掉后，模板中心各页之间都靠它切换；研发模式不再有「列表页 → 详情页」那一跳，
  * 点模式名直接进模式页，「全部模式对比」是原来的列表页。
@@ -79,7 +79,7 @@ export const TemplateRail = observer(function TemplateRail({ workspaceSlug }: { 
                   key={item.key}
                   href={href}
                   icon={item.icon}
-                  label={t(item.i18nKey)}
+                  label={item.i18nKey ? t(item.i18nKey) : (item.label ?? item.key)}
                   isActive={current === href || current.startsWith(`${href}/`)}
                 />
               );

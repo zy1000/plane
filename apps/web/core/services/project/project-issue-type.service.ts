@@ -37,6 +37,8 @@ export type TIssueType = {
   category_id?: number | string | null;
   /** IssueTypeCategory 的名称 */
   category_name?: string | null;
+  /** 类型库（方案作用域）接口才有：关联了这个类型的研发模式 */
+  linked_dev_modes?: { id: string; name: string }[];
   created_at?: string;
   updated_at?: string;
 };
@@ -60,6 +62,8 @@ export type TTypeExtraField = {
   options?: Record<string, unknown>;
   default_value?: unknown;
   validation?: Record<string, unknown>;
+  /** 绑定的通用字段库字段；非空时这一行的定义只读（只能调排序或移除），改定义去字段库 */
+  library_field_id?: string | null;
   created_at?: string;
   updated_at?: string;
 };
@@ -101,6 +105,17 @@ export const getCachedTypeExtraFields = (
 
 const clearExtraFieldsCacheForProject = (slug: string, projectId: string) => {
   const prefix = `${slug}:${projectId}:`;
+  for (const key of typeExtraFieldsCache.keys()) {
+    if (key.startsWith(prefix)) typeExtraFieldsCache.delete(key);
+  }
+  for (const key of typeExtraFieldsInflight.keys()) {
+    if (key.startsWith(prefix)) typeExtraFieldsInflight.delete(key);
+  }
+};
+
+/** 字段库字段改定义 / 删除后，整个工作区所有作用域的类型字段缓存都可能过期 */
+export const clearExtraFieldsCacheForWorkspace = (slug: string) => {
+  const prefix = `${slug}:`;
   for (const key of typeExtraFieldsCache.keys()) {
     if (key.startsWith(prefix)) typeExtraFieldsCache.delete(key);
   }
@@ -304,6 +319,26 @@ export class ProjectIssueTypeService extends APIService {
       .then((response) => {
         clearExtraFieldsCacheForProject(workspaceSlug, projectId);
         return response?.data;
+      })
+      .catch((error) => {
+        throw getErrorPayload(error);
+      });
+  }
+
+  /** 把字段库字段批量绑定到某个类型，返回新建的类型字段（同类型已有同名字段 400） */
+  async bindLibraryFields(
+    workspaceSlug: string,
+    projectId: string,
+    issueTypeId: string,
+    libraryFieldIds: string[]
+  ): Promise<TTypeExtraField[]> {
+    return this.post(`${issueConfigBasePath(workspaceSlug, projectId)}/type-extra-fields/bind-library/`, {
+      issue_type: issueTypeId,
+      library_field_ids: libraryFieldIds,
+    })
+      .then((response) => {
+        clearExtraFieldsCacheForProject(workspaceSlug, projectId);
+        return response?.data ?? [];
       })
       .catch((error) => {
         throw getErrorPayload(error);

@@ -60,6 +60,7 @@ class DevModeSerializer(BaseSerializer):
     template_count = serializers.SerializerMethodField()
     project_count = serializers.SerializerMethodField()
     stage_brief = serializers.SerializerMethodField()
+    issue_type_count = serializers.SerializerMethodField()
 
     class Meta:
         model = DevMode
@@ -71,8 +72,9 @@ class DevModeSerializer(BaseSerializer):
             "icon_props",
             "features",
             "is_system",
-            # 模式方案 id：模板中心「工作项配置」页签按它取类型 / 状态 / 工作流
+            # 工作区的类型库方案 id（同工作区所有模式相同）
             "issue_scheme",
+            "issue_type_count",
             "stage_count",
             "template_count",
             "project_count",
@@ -85,6 +87,7 @@ class DevModeSerializer(BaseSerializer):
             "workspace_id",
             "is_system",
             "issue_scheme",
+            "issue_type_count",
             "stage_count",
             "template_count",
             "project_count",
@@ -98,6 +101,12 @@ class DevModeSerializer(BaseSerializer):
         if workspace is None:
             raise serializers.ValidationError("Workspace is required.")
         return workspace
+
+    def get_issue_type_count(self, obj):
+        annotated = getattr(obj, "issue_types_count", None)
+        if annotated is not None:
+            return annotated
+        return obj.issue_type_links.filter(issue_type__deleted_at__isnull=True).count()
 
     def get_stage_count(self, obj):
         annotated = getattr(obj, "stages_count", None)

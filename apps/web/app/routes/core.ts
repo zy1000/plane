@@ -173,6 +173,20 @@ export const coreRoutes: RouteConfigEntry[] = [
             "./(all)/[workspaceSlug]/(projects)/templates/product-categories/page.tsx"
           ),
           route(":workspaceSlug/templates/reviews", "./(all)/[workspaceSlug]/(projects)/templates/reviews/page.tsx"),
+          // 工作项类型库：所有研发模式共用的类型 / 状态 / 工作流 / 字段，流转配置是它的子页
+          route(
+            ":workspaceSlug/templates/issue-types",
+            "./(all)/[workspaceSlug]/(projects)/templates/issue-types/page.tsx"
+          ),
+          route(
+            ":workspaceSlug/templates/issue-types/workflows/:workflowId",
+            "./(all)/[workspaceSlug]/(projects)/templates/issue-types/workflows/[workflowId]/page.tsx"
+          ),
+          // 通用字段库
+          route(
+            ":workspaceSlug/templates/issue-fields",
+            "./(all)/[workspaceSlug]/(projects)/templates/issue-fields/page.tsx"
+          ),
           route(
             ":workspaceSlug/templates/dev-modes",
             "./(all)/[workspaceSlug]/(projects)/templates/dev-modes/page.tsx"
@@ -187,14 +201,10 @@ export const coreRoutes: RouteConfigEntry[] = [
               ":workspaceSlug/templates/dev-modes/:devModeId/features",
               "./(all)/[workspaceSlug]/(projects)/templates/dev-modes/[devModeId]/features/page.tsx"
             ),
-            // 工作项配置：模式方案的类型与字段 / 状态 / 工作流，流转配置是它的子页
+            // 工作项：本模式关联的类型库类型（类型本身在 templates/issue-types 维护）
             route(
               ":workspaceSlug/templates/dev-modes/:devModeId/issue-scheme",
               "./(all)/[workspaceSlug]/(projects)/templates/dev-modes/[devModeId]/issue-scheme/page.tsx"
-            ),
-            route(
-              ":workspaceSlug/templates/dev-modes/:devModeId/issue-scheme/workflows/:workflowId",
-              "./(all)/[workspaceSlug]/(projects)/templates/dev-modes/[devModeId]/issue-scheme/workflows/[workflowId]/page.tsx"
             ),
             // 研发模式视图：跟随本模式的项目共用的页内视图
             route(
@@ -820,6 +830,12 @@ export const coreRoutes: RouteConfigEntry[] = [
   route(":workspaceSlug/templates/requirements/*", "routes/redirects/core/requirement-types.tsx"),
   route(":workspaceSlug/templates/requirement-types", "routes/redirects/core/requirement-types.tsx"),
   route(":workspaceSlug/templates/requirement-types/*", "routes/redirects/core/requirement-types.tsx"),
+
+  // 工作流流转配置：模式方案下的旧路径 → 工作项类型库 /templates/issue-types/workflows/:workflowId
+  route(
+    ":workspaceSlug/templates/dev-modes/:devModeId/issue-scheme/workflows/:workflowId",
+    "routes/redirects/core/dev-mode-issue-scheme-workflow.tsx"
+  ),
 
   // API tokens redirect: /:workspaceSlug/settings/api-tokens
   // → /settings/profile/api-tokens

@@ -12,7 +12,7 @@ import { Link } from "react-router";
 import { Button } from "@plane/propel/button";
 // components
 import { TypeIcon } from "@/components/common/type-icon-picker";
-import { devModeIssueSchemePath } from "@/components/template-management/dev-modes/routes";
+import { issueTypeLibraryBasePath } from "@/components/template-management/issue-types/routes";
 // hooks
 import { useProject } from "@/hooks/store/use-project";
 import { useUserPermissions } from "@/hooks/store/user";
@@ -28,7 +28,7 @@ type Props = {
 
 /**
  * 跟随研发模式时挂在项目设置「工作项类型 / 状态 / 工作流」三页顶部的说明条（docs/issue-scheme/ 5.2）：
- * 这三页只读，改配置去模板中心；有项目设置编辑权限的人可以切换为项目自定义（单向）。
+ * 这三页只读，改配置去模板中心的工作项类型库；有项目设置编辑权限的人可以切换为项目自定义（单向）。
  * 项目自定义时不渲染。
  */
 export const IssueSchemeFollowBanner = observer(function IssueSchemeFollowBanner({ workspaceSlug, projectId }: Props) {
@@ -55,11 +55,9 @@ export const IssueSchemeFollowBanner = observer(function IssueSchemeFollowBanner
             </>
           )}
           <span>，这里只能查看。</span>
-          {devMode && (
-            <Link to={devModeIssueSchemePath(workspaceSlug, devMode.id)} className="underline underline-offset-2">
-              去模板中心修改
-            </Link>
-          )}
+          <Link to={issueTypeLibraryBasePath(workspaceSlug)} className="underline underline-offset-2">
+            去模板中心修改
+          </Link>
         </span>
         {canDetach && (
           <Button variant="secondary" size="lg" onClick={() => setIsDetachOpen(true)}>

@@ -11,6 +11,7 @@ import { cn, renderFormattedDate } from "@plane/utils";
 import { ButtonAvatars } from "@/components/dropdowns/member/avatar";
 import { ViewLayoutIcon } from "@/components/views/in-page/view-tab-parts";
 import { useMember } from "@/hooks/store/use-member";
+import { useProjectIssueTypes } from "@/hooks/store/use-project-issue-types";
 import { useProjectState } from "@/hooks/store/use-project-state";
 import { useTemplatePermissions } from "../permissions";
 import { useDevModeDetailContext } from "./context";
@@ -117,7 +118,9 @@ const RenameSchemeViewModal = ({
 export const DevModeViewsPanel = observer(function DevModeViewsPanel() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { workspaceSlug, scopeKey, issueTypesStore, schemeViewsStore } = useDevModeDetailContext();
+  const { workspaceSlug, scopeKey, schemeViewsStore } = useDevModeDetailContext();
+  // 条件里的类型名：类型都在类型库里，按库的作用域拉
+  const issueTypesStore = useProjectIssueTypes(workspaceSlug, scopeKey);
   const { canManageDevModes: canEdit } = useTemplatePermissions(workspaceSlug);
   const { fetchProjectStates, getStateById } = useProjectState();
   const { getUserDetails } = useMember();
@@ -126,7 +129,7 @@ export const DevModeViewsPanel = observer(function DevModeViewsPanel() {
   const [deleting, setDeleting] = useState<TSchemeView | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // 条件里的状态名：状态挂在类型下，列表接口不传类型只回无类型的状态，所以按方案的每个类型各拉一次
+  // 条件里的状态名：状态挂在类型下，列表接口不传类型只回无类型的状态，所以按类型库的每个类型各拉一次
   const issueTypeIds = (issueTypesStore.issueTypes ?? []).map((issueType) => issueType.id);
   useSWR(
     scopeKey && issueTypeIds.length > 0 ? `SCHEME_VIEW_STATES_${workspaceSlug}_${scopeKey}_${issueTypeIds.join(",")}` : null,

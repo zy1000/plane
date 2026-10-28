@@ -1,6 +1,6 @@
-"""研发模式视图：挂在模式方案上的页内视图（IssueView.issue_scheme，project 为空）。
+"""研发模式视图：挂在研发模式上的页内视图（IssueView.dev_mode，project 为空）。
 
-跟随同一模式方案的项目类型、状态 id 都一样，所以视图条件原样共用；迭代、模块、发布、标签是各项目
+跟随同一模式的项目都指向工作区的类型库，类型、状态 id 都一样，所以视图条件原样共用；迭代、模块、发布、标签是各项目
 自己的数据，带这些条件的视图不能存到研发模式。
 
 富筛选的存法：单条件 ``{"<字段>__<操作符>": "id1,id2"}``，多条件 ``{"and": [单条件, ...]}``。
@@ -98,24 +98,24 @@ def strip_ids(rich_filters, ids):
     return stripped, stripped != rich_filters
 
 
-def following_mode_scheme_id(project_id):
-    """项目跟随研发模式时返回模式方案 id，项目自定义（或项目不存在）返回 None。"""
+def following_dev_mode_id(project_id):
+    """项目跟随研发模式时返回模式 id，项目自定义（或项目不存在）返回 None。"""
     return (
         Project.objects.filter(pk=project_id, issue_scheme__project__isnull=True)
-        .values_list("issue_scheme_id", flat=True)
+        .values_list("dev_mode_id", flat=True)
         .first()
     )
 
 
 def prune_mode_view_references(scheme_id, ids, delete_views=False):
-    """模式方案删掉类型 / 状态后，处理用到它们的研发模式视图：删掉视图，或者从条件里去掉这些 id。
+    """类型库删掉类型 / 状态后，处理用到它们的研发模式视图：删掉视图，或者从条件里去掉这些 id。
 
-    项目方案的删除也走同一个接口，但项目视图不在这里处理（只有模式方案才有研发模式视图）。
+    项目方案的删除也走同一个接口，但项目视图不在这里处理（只有类型库的类型 / 状态会出现在研发模式视图里）。
     """
-    scheme_is_mode = IssueScheme.objects.filter(pk=scheme_id, project__isnull=True).exists()
-    if not scheme_is_mode:
+    scheme_is_library = IssueScheme.objects.filter(pk=scheme_id, project__isnull=True).exists()
+    if not scheme_is_library:
         return
-    for view in IssueView.objects.filter(issue_scheme_id=scheme_id):
+    for view in IssueView.objects.filter(dev_mode__issue_scheme_id=scheme_id, project__isnull=True):
         if not references_any(view.rich_filters, ids):
             continue
         if delete_views:
@@ -125,14 +125,16 @@ def prune_mode_view_references(scheme_id, ids, delete_views=False):
         view.save(update_fields=["rich_filters", "query", "updated_at"])
 
 
-def copy_mode_views_to_project(scheme_id, project_id):
+def copy_mode_views_to_project(dev_mode_id, project_id):
     """项目切换为项目自定义时，把研发模式视图拷成本项目的公共视图，排在项目原有视图前面（页签位置不变）。
 
-    返回 {模式视图 id: 项目视图 id}。须在脱离的事务里、重映射之前调：拷出来的条件还是模式方案的 id，
+    返回 {模式视图 id: 项目视图 id}。须在脱离的事务里、重映射之前调：拷出来的条件还是类型库的 id，
     随后由 remap_project_refs 换成项目方案的。
     """
     project = Project.objects.get(pk=project_id)
-    mode_views = list(IssueView.objects.filter(issue_scheme_id=scheme_id, project__isnull=True).order_by("sort_order"))
+    if not dev_mode_id:
+        return {}
+    mode_views = list(IssueView.objects.filter(dev_mode_id=dev_mode_id, project__isnull=True).order_by("sort_order"))
     if not mode_views:
         return {}
     lowest = IssueView.objects.filter(project_id=project_id).aggregate(lowest=Min("sort_order"))["lowest"]

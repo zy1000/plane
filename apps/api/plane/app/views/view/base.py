@@ -54,7 +54,7 @@ from .. import BaseViewSet
 from plane.db.models import UserFavorite
 from plane.utils.filters import ComplexFilterBackend
 from plane.utils.filters import IssueFilterSet
-from plane.utils.scheme_views import following_mode_scheme_id, project_local_filter_labels
+from plane.utils.scheme_views import following_dev_mode_id, project_local_filter_labels
 
 #: 带了项目自有条件（迭代 / 模块 / 发布 / 标签）的视图不能存到研发模式
 MODE_VIEW_PROJECT_LOCAL_FILTERS = "MODE_VIEW_PROJECT_LOCAL_FILTERS"
@@ -86,7 +86,7 @@ class WorkspaceViewViewSet(BaseViewSet):
             super()
             .get_queryset()
             .filter(workspace__slug=self.kwargs.get("slug"))
-            .filter(project__isnull=True, issue_scheme__isnull=True)
+            .filter(project__isnull=True, dev_mode__isnull=True)
             .filter(Q(owned_by=self.request.user) | Q(access=1))
             .order_by(self.request.GET.get("order_by", "-created_at"))
             .distinct()
@@ -107,7 +107,7 @@ class WorkspaceViewViewSet(BaseViewSet):
     def partial_update(self, request, slug, pk):
         with transaction.atomic():
             workspace_view = IssueView.objects.select_for_update().get(
-                pk=pk, workspace__slug=slug, project__isnull=True, issue_scheme__isnull=True
+                pk=pk, workspace__slug=slug, project__isnull=True, dev_mode__isnull=True
             )
 
             if workspace_view.is_locked:
@@ -143,7 +143,7 @@ class WorkspaceViewViewSet(BaseViewSet):
     @allow_workspace_member
     def destroy(self, request, slug, pk):
         workspace_view = IssueView.objects.get(
-            pk=pk, workspace__slug=slug, project__isnull=True, issue_scheme__isnull=True
+            pk=pk, workspace__slug=slug, project__isnull=True, dev_mode__isnull=True
         )
 
         if workspace_view.owned_by == request.user:
@@ -289,11 +289,11 @@ class IssueViewViewSet(BaseViewSet):
     def perform_create(self, serializer):
         serializer.save(project_id=self.kwargs.get("project_id"), owned_by=self.request.user)
 
-    def _mode_scheme_id(self):
-        """项目跟随研发模式时的模式方案 id，一次请求只查一次。"""
-        if not hasattr(self, "_cached_mode_scheme_id"):
-            self._cached_mode_scheme_id = following_mode_scheme_id(self.kwargs.get("project_id"))
-        return self._cached_mode_scheme_id
+    def _mode_id(self):
+        """项目跟随研发模式时的模式 id，一次请求只查一次。"""
+        if not hasattr(self, "_cached_mode_id"):
+            self._cached_mode_id = following_dev_mode_id(self.kwargs.get("project_id"))
+        return self._cached_mode_id
 
     def _can_manage_dev_modes(self, slug):
         return has_workspace_permission(self.request.user, slug, PermissionKey.WORKSPACE_DEV_MODE_MANAGE)
@@ -319,9 +319,9 @@ class IssueViewViewSet(BaseViewSet):
         )
         # 本项目的视图 + 所跟随研发模式的视图（模式视图都是公共的）
         belongs = Q(project_id=project_id)
-        mode_scheme_id = self._mode_scheme_id()
-        if mode_scheme_id:
-            belongs |= Q(issue_scheme_id=mode_scheme_id, project__isnull=True)
+        mode_id = self._mode_id()
+        if mode_id:
+            belongs |= Q(dev_mode_id=mode_id, project__isnull=True)
         return self.filter_queryset(
             super()
             .get_queryset()
@@ -351,7 +351,7 @@ class IssueViewViewSet(BaseViewSet):
         if scope != "all":
             queryset = queryset.filter(scope=scope)
         if request.GET.get("mode_only") == "true":
-            queryset = queryset.filter(issue_scheme__isnull=False)
+            queryset = queryset.filter(dev_mode__isnull=False)
         project = Project.objects.get(id=project_id)
         if (
                 ProjectMember.objects.filter(
@@ -414,7 +414,7 @@ class IssueViewViewSet(BaseViewSet):
     def partial_update(self, request, slug, project_id, pk):
         with transaction.atomic():
             issue_view = IssueView.objects.select_for_update().filter(pk=pk, workspace__slug=slug).first()
-            if issue_view and issue_view.issue_scheme_id:
+            if issue_view and issue_view.dev_mode_id:
                 return self._update_mode_view(request, slug, issue_view)
             if not issue_view or issue_view.project_id != project_id:
                 return Response({"error": "View not found"}, status=status.HTTP_404_NOT_FOUND)
@@ -468,7 +468,7 @@ class IssueViewViewSet(BaseViewSet):
 
     def _update_mode_view(self, request, slug, issue_view):
         """在跟随项目里改研发模式视图的条件 / 布局 / 显示字段：要有研发模式的编辑权限，跟随该模式的项目一起变。"""
-        if issue_view.issue_scheme_id != self._mode_scheme_id():
+        if issue_view.dev_mode_id != self._mode_id():
             return Response({"error": "View not found"}, status=status.HTTP_404_NOT_FOUND)
         if not self._can_manage_dev_modes(slug):
             return Response(
@@ -487,9 +487,9 @@ class IssueViewViewSet(BaseViewSet):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     def _create_mode_view(self, request, slug, project_id):
-        """「谁能看到」选「研发模式全部项目」：视图挂到模式方案上，跟随该模式的项目都能看到。"""
-        scheme_id = self._mode_scheme_id()
-        if not scheme_id:
+        """「谁能看到」选「研发模式全部项目」：视图挂到研发模式上，跟随该模式的项目都能看到。"""
+        mode_id = self._mode_id()
+        if not mode_id:
             return Response(
                 {"error": "项目没有跟随研发模式，不能存到研发模式"},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -509,7 +509,7 @@ class IssueViewViewSet(BaseViewSet):
         view = serializer.save(
             workspace_id=workspace_id,
             project=None,
-            issue_scheme_id=scheme_id,
+            dev_mode_id=mode_id,
             source_project_id=project_id,
             owned_by=request.user,
             access=1,

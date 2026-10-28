@@ -38,6 +38,7 @@ from plane.db.models import (
 )
 from plane.db.models.workflow import WorkflowTransitionRequiredField
 from plane.utils.workflow.transition import approve_transition_record
+from plane.utils.issue_scheme import project_visible_type_q
 
 SPECIAL_APPROVER_PREFIX = "special:"
 SPECIAL_APPROVER_ID_MAP = {
@@ -65,7 +66,11 @@ class WorkflowAPIView(IssueSchemeScopeMixin, BaseAPIView):
     }
 
     def get_scheme_queryset(self):
-        return Workflow.objects.filter(scheme_id=self.get_scheme_id())
+        queryset = Workflow.objects.filter(scheme_id=self.get_scheme_id())
+        if not self.is_scheme_route:
+            # 跟随项目只看得到所属研发模式关联的类型的工作流
+            queryset = queryset.filter(project_visible_type_q(self.kwargs.get("project_id"), "issue_type_id"))
+        return queryset
 
     @allow_fine_permission(PermissionKey.WORKFLOW_VIEW, PermissionKey.PROJECT_SETTINGS_VIEW)
     def get(self, request, slug, project_id=None, issue_scheme_id=None):
@@ -466,6 +471,8 @@ class WorkflowFlowchartAPIView(IssueSchemeScopeMixin, BaseAPIView):
         )
         if issue_type_id:
             workflows = workflows.filter(issue_type_id=issue_type_id)
+        if not self.is_scheme_route:
+            workflows = workflows.filter(project_visible_type_q(project_id, "issue_type_id"))
 
         workflows = list(workflows)
 

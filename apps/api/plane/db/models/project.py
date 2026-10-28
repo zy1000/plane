@@ -131,8 +131,8 @@ class Project(BaseModel):
         related_name="projects",
         verbose_name="研发模式",
     )
-    # 项目当前使用的工作项方案：指向模式方案 = 跟随，指向自己的项目方案 = 项目自定义。
-    # 由 save() 建 / 由脱离接口换，任何项目接口都不能直接写。批次 4 起新项目改为指向 dev_mode.issue_scheme。
+    # 项目当前使用的工作项方案：指向工作区的类型库 = 跟随研发模式（只看得到模式关联的类型），
+    # 指向自己的项目方案 = 项目自定义。由 save() 取 dev_mode.issue_scheme / 由脱离接口换，任何项目接口都不能直接写。
     # related_name="projects" 是按项目取类型 / 状态的查询约定（scheme__projects=<project_id>），别改。
     issue_scheme = models.ForeignKey(
         "db.IssueScheme",
@@ -303,7 +303,7 @@ class Project(BaseModel):
         from .issue_scheme import IssueScheme
 
         with transaction.atomic():
-            # 没指定方案 = 跟随研发模式：指向模式方案（docs/issue-scheme/ 5.1）。覆盖所有建项目的路径
+            # 没指定方案 = 跟随研发模式：指向类型库（模式的 issue_scheme）。覆盖所有建项目的路径
             # （接口、简道云同步、测试）。要项目自定义的路径（workspace_seed、dummy_data 会写自己的状态）
             # 在保存前用 utils.issue_scheme.attach_own_scheme 先建好自己的方案。
             if self.issue_scheme_id is None:

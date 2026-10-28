@@ -160,16 +160,26 @@ export class StateStore implements IStateStore {
   }
 
   /**
-   * 状态是否属于某个项目。状态归工作项方案，跟随研发模式的项目共用模式方案的状态，
-   * 所以按项目所用的方案（TProject.issue_scheme）比 scheme_id；项目信息还没加载时退回比 project_id
-   * （项目自定义时两者等价）。
+   * 状态是否属于某个项目。状态归工作项方案，跟随研发模式的项目共用工作区的类型库，
+   * 所以按项目所用的方案（TProject.issue_scheme）比 scheme_id，再按 visible_issue_type_ids 去掉模式没关联的类型；
+   * 项目信息还没加载时退回比 project_id（项目自定义时两者等价）。
    */
-  private isStateOfProject = (state: { scheme_id?: string | null; project_id: string }, projectId: string) => {
+  private isStateOfProject = (
+    state: { scheme_id?: string | null; project_id: string; issue_type_id?: string | null },
+    projectId: string
+  ) => {
     // 模板中心的方案作用域（`scheme:<id>`）：直接比方案
     const scopedSchemeId = getSchemeIdFromScopeKey(projectId);
     if (scopedSchemeId) return state.scheme_id === scopedSchemeId;
-    const schemeId = this.rootStore.projectRoot.project.getProjectById(projectId)?.issue_scheme;
-    if (schemeId && state.scheme_id) return state.scheme_id === schemeId;
+    const project = this.rootStore.projectRoot.project.getProjectById(projectId);
+    const schemeId = project?.issue_scheme;
+    if (schemeId && state.scheme_id) {
+      if (state.scheme_id !== schemeId) return false;
+      // 跟随研发模式：类型库被多个模式共用，只算所属模式关联了的类型的状态（triage 没有类型，照算）
+      const visibleTypeIds = project?.visible_issue_type_ids;
+      if (Array.isArray(visibleTypeIds) && state.issue_type_id) return visibleTypeIds.includes(state.issue_type_id);
+      return true;
+    }
     return state.project_id === projectId;
   };
 

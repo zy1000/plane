@@ -50,6 +50,11 @@ urlpatterns = [
         name="project-type-extra-fields",
     ),
     path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/type-extra-fields/bind-library/",
+        IssueExtraViewSet.as_view({"post": "bind_library"}),
+        name="project-type-extra-fields-bind-library",
+    ),
+    path(
         "workspaces/<str:slug>/projects/<uuid:project_id>/type-extra-fields/<uuid:pk>/",
         IssueExtraViewSet.as_view(
             {

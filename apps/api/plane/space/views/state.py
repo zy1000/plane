@@ -13,6 +13,7 @@ from rest_framework.response import Response
 # Module imports
 from .base import BaseAPIView
 from plane.db.models import DeployBoard, State
+from plane.utils.issue_scheme import project_visible_type_q
 
 
 class ProjectStatesEndpoint(BaseAPIView):
@@ -23,10 +24,15 @@ class ProjectStatesEndpoint(BaseAPIView):
         if not deploy_board:
             return Response({"error": "Invalid anchor"}, status=status.HTTP_404_NOT_FOUND)
 
-        states = State.objects.filter(
-            ~Q(name="Triage"),
-            workspace__slug=deploy_board.workspace.slug,
-            scheme__projects=deploy_board.project_id,
-        ).values("name", "group", "color", "id", "sequence")
+        states = (
+            State.objects.filter(
+                ~Q(name="Triage"),
+                workspace__slug=deploy_board.workspace.slug,
+                scheme__projects=deploy_board.project_id,
+            )
+            # 跟随项目只公开所属研发模式关联的类型的状态
+            .filter(Q(issue_type__isnull=True) | project_visible_type_q(deploy_board.project_id, "issue_type_id"))
+            .values("name", "group", "color", "id", "sequence")
+        )
 
         return Response(states, status=status.HTTP_200_OK)

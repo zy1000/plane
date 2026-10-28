@@ -36,7 +36,7 @@ export function DevModeSubNav({
   workspaceSlug: string;
   devModeId: string;
   stageCount: number;
-  /** 还没拉回来时 undefined，不显示计数 */
+  /** 关联的类型库类型数；后端没给时 undefined，不显示计数 */
   typeCount: number | undefined;
   viewCount: number | undefined;
   featureOnCount: number;
@@ -56,7 +56,7 @@ export function DevModeSubNav({
       key: "work_items",
       label: "工作项",
       href: devModeIssueSchemePath(workspaceSlug, devModeId),
-      count: typeCount === undefined ? "" : `${typeCount} 类型`,
+      count: typeCount === undefined ? "" : String(typeCount),
       isIndex: false,
     },
     {

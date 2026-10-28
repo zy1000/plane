@@ -7,7 +7,7 @@ from collections import Counter
 
 # Django imports
 from django.core.exceptions import ValidationError
-from django.db import models
+from django.db import models, transaction
 from django.db.models import Q
 from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
@@ -15,6 +15,7 @@ from django.dispatch import receiver
 # Module imports
 from plane.db.seed_data.issue_scheme import TEMPLATE_IDENTITY_PREFIX
 
+from .base import BaseModel
 from .issue_scheme import SchemeBaseModel
 from .project import ProjectBaseModel
 
@@ -259,6 +260,76 @@ class IssueType(SchemeBaseModel):
         return self.name
 
 
+#: 库字段统一定义、同步到绑定行的列（绑定行自己只管 sort_order）
+LIBRARY_FIELD_DEFINITION_COLUMNS = (
+    "name",
+    "description",
+    "logo_props",
+    "field_type",
+    "is_required",
+    "is_active",
+    "options",
+    "default_value",
+    "validation",
+)
+
+
+class IssueFieldDefinition(BaseModel):
+    """通用字段库：工作区级的字段定义，保证同一个字段在各工作项类型里完全一致。
+
+    类型通过 ``TypeExtraField.library_field`` 绑定库字段。绑定行冗余存一份定义列
+    （``LIBRARY_FIELD_DEFINITION_COLUMNS``），读侧（字段值校验、必填、导出、需求网格、流转必填字段）
+    照旧读 TypeExtraField，不需要知道库的存在；库字段保存时在同一事务里把定义写到全部绑定行。
+    类型照样可以建不绑库的私有字段。
+    """
+
+    workspace = models.ForeignKey(
+        "db.Workspace", on_delete=models.CASCADE, related_name="issue_field_definitions"
+    )
+    name = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    logo_props = models.JSONField(default=dict)
+    field_type = models.CharField(max_length=30, choices=(
+        ("text", "Text"),
+        ("number", "Number"),
+        ("date", "Date"),
+        ("boolean", "Boolean"),
+        ("select", "Select"),
+        ("user", "User"),
+    ), default="text")
+    is_required = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=True)
+    sort_order = models.FloatField(default=65535)
+    options = models.JSONField(default=dict, blank=True)
+    default_value = models.JSONField(null=True, blank=True)
+    validation = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["workspace", "name"],
+                condition=Q(deleted_at__isnull=True),
+                name="issue_field_definition_unique_workspace_name",
+            )
+        ]
+        verbose_name = "Issue Field Definition"
+        verbose_name_plural = "Issue Field Definitions"
+        db_table = "issue_field_definitions"
+        ordering = ("sort_order", "created_at")
+
+    def __str__(self):
+        return self.name
+
+    def definition_values(self):
+        return {column: getattr(self, column) for column in LIBRARY_FIELD_DEFINITION_COLUMNS}
+
+    def save(self, *args, **kwargs):
+        with transaction.atomic():
+            super().save(*args, **kwargs)
+            # 定义同步到全部绑定行（含软删的，免得恢复后带着旧定义）
+            TypeExtraField.all_objects.filter(library_field_id=self.pk).update(**self.definition_values())
+
+
 class TypeExtraField(SchemeBaseModel):
     # 与 issue_type.scheme 恒一致
     scheme = models.ForeignKey(
@@ -293,6 +364,14 @@ class TypeExtraField(SchemeBaseModel):
     options = models.JSONField(default=dict, blank=True)
     default_value = models.JSONField(null=True, blank=True)
     validation = models.JSONField(default=dict, blank=True)
+    # 绑定的库字段：非空时上面的定义列由库同步、只读（serializer 拦），本行只管 sort_order；空 = 本类型私有字段
+    library_field = models.ForeignKey(
+        "db.IssueFieldDefinition",
+        on_delete=models.RESTRICT,
+        null=True,
+        blank=True,
+        related_name="bindings",
+    )
 
     class Meta:
         constraints = [

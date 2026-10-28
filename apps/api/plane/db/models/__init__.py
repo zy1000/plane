@@ -126,7 +126,7 @@ from .sticky import Sticky
 
 from .description import Description, DescriptionVersion
 
-from .issue_type import IssueType, TypeExtraField, TypeExtraFieldValue
+from .issue_type import IssueFieldDefinition, IssueType, TypeExtraField, TypeExtraFieldValue
 from .qa import *
 from .ldap import LdapConfig
 from .workflow import (
@@ -206,7 +206,7 @@ from .stage_review import (
 )
 from .stage_type import StageType
 from .product_category import ProductCategory, ProductCategoryModule
-from .dev_mode import DevMode, DevModeStage, DevModeStageTemplate
+from .dev_mode import DevMode, DevModeIssueType, DevModeStage, DevModeStageTemplate
 from .project_stage import ProjectStage, ProjectStageStatus
 from .risk import (
     Risk,

@@ -114,10 +114,17 @@ def ensure_dev_modes(workspace, actor=None):
                 created += 1
                 if spec["seed_all_stages"]:
                     _seed_stages(dev_mode, stage_types, templates_by_stage, actor_id)
-            return created
     except IntegrityError:
         logger.info("dev modes already seeded concurrently (workspace=%s)", workspace.id)
         return 0
+
+    # 模式都指向工作区的类型库：生成库的种子内容，再给每个模式关联五个系统类型
+    from plane.utils.issue_scheme import ensure_issue_type_library, ensure_mode_type_links
+
+    ensure_issue_type_library(workspace.id, created_by=actor)
+    for dev_mode in DevMode.objects.filter(workspace_id=workspace.id):
+        ensure_mode_type_links(dev_mode)
+    return created
 
 
 def _seed_stages(dev_mode, stage_types, templates_by_stage, actor_id):

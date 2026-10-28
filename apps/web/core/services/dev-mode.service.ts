@@ -1,12 +1,15 @@
 import { API_BASE_URL } from "@plane/constants";
 import type {
+  TCreateDevModeIssueTypePayload,
   TCreateDevModePayload,
   TCreateDevModeStagePayload,
   TDevMode,
   TDevModeDetail,
+  TDevModeIssueType,
   TDevModeStage,
   TDevModeStageBulkCreateResult,
   TDevModeStageTemplateNode,
+  TSchemeView,
   TUpdateDevModePayload,
   TUpdateDevModeStagePayload,
 } from "@plane/types";
@@ -138,6 +141,78 @@ export class DevModeService extends APIService {
   /** 整段重排：传该模式内完整的有序 id 列表 */
   async reorderStages(workspaceSlug: string, devModeId: string, stageIds: string[]): Promise<void> {
     return this.post(`${this.base(workspaceSlug)}${devModeId}/stages/reorder/`, { stage_ids: stageIds })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  // ---- 关联的工作项类型（类型本身在工作区类型库里） ----------------------------
+
+  /** 本模式关联的类型库类型，按 sort_order，带状态 / 字段 / 工作流 / 在用工作项数 */
+  async listIssueTypes(workspaceSlug: string, devModeId: string): Promise<TDevModeIssueType[]> {
+    return this.get(`${this.base(workspaceSlug)}${devModeId}/issue-types/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /**
+   * 整体替换关联与排序：按顺序传类型 id。
+   * 要取消的类型还有工作项在用时 409（code: DEV_MODE_TYPE_IN_USE，blocked 列出各类型的在用数）
+   */
+  async setIssueTypes(workspaceSlug: string, devModeId: string, issueTypeIds: string[]): Promise<TDevModeIssueType[]> {
+    return this.put(`${this.base(workspaceSlug)}${devModeId}/issue-types/`, { issue_type_ids: issueTypeIds })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 在类型库新建类型并追加关联到本模式，返回新的一行 */
+  async createIssueType(
+    workspaceSlug: string,
+    devModeId: string,
+    payload: TCreateDevModeIssueTypePayload
+  ): Promise<TDevModeIssueType> {
+    return this.post(`${this.base(workspaceSlug)}${devModeId}/issue-types/`, payload)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  // ---- 研发模式视图（跟随本模式的项目共用的页内视图） ------------------------
+
+  /** 本模式的研发模式视图（全部页面），按排序 */
+  async listViews(workspaceSlug: string, devModeId: string): Promise<TSchemeView[]> {
+    return this.get(`${this.base(workspaceSlug)}${devModeId}/views/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async renameView(workspaceSlug: string, devModeId: string, viewId: string, name: string): Promise<void> {
+    return this.patch(`${this.base(workspaceSlug)}${devModeId}/views/${viewId}/`, { name })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async deleteView(workspaceSlug: string, devModeId: string, viewId: string): Promise<void> {
+    return this.delete(`${this.base(workspaceSlug)}${devModeId}/views/${viewId}/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 按给出的顺序重排（同一页面内的视图） */
+  async reorderViews(workspaceSlug: string, devModeId: string, viewIds: string[]): Promise<void> {
+    return this.post(`${this.base(workspaceSlug)}${devModeId}/views/reorder/`, { view_ids: viewIds })
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;

@@ -24,6 +24,7 @@ from plane.db.models.issue_type import (
     build_issue_type_permission_key,
 )
 from plane.utils.project.role_import import build_project_role_permissions
+from plane.utils.issue_scheme import project_visible_type_q
 
 
 class ProjectRoleViewSet(BaseViewSet):
@@ -235,9 +236,11 @@ class ProjectRolePermissionAPIView(BaseAPIView):
         Permission 表是全局的，issue_type 权限会包含其他项目的条目，
         因此需要结合 IssueType 表按 project 过滤可见范围。
         """
-        issue_type_ids = IssueType.objects.filter(
-            scheme_id=project.issue_scheme_id, deleted_at__isnull=True
-        ).values_list("id", flat=True)
+        issue_type_ids = (
+            IssueType.objects.filter(scheme_id=project.issue_scheme_id, deleted_at__isnull=True)
+            .filter(project_visible_type_q(project.id))
+            .values_list("id", flat=True)
+        )
         return {
             build_issue_type_permission_key(issue_type_id, action)
             for issue_type_id in issue_type_ids

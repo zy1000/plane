@@ -48,6 +48,7 @@ from plane.app.views.base import BaseAPIView, BaseViewSet
 from plane.bgtasks.recent_visited_task import recent_visited_task
 from plane.bgtasks.webhook_task import model_activity, webhook_activity
 from plane.db.models import (
+    DevModeIssueType,
     UserFavorite,
     DeployBoard,
     Intake,
@@ -84,6 +85,7 @@ from plane.db.models.issue_type import (
     build_issue_type_permission_key,
 )
 from plane.utils.host import base_host
+from plane.utils.issue_scheme import mode_linked_type_ids
 from plane.utils.paginator import CustomPaginator
 from plane.utils.requirement_project import linked_products_by_project
 from plane.utils.project.defaults import setup_new_project
@@ -232,11 +234,20 @@ class ProjectViewSet(BaseViewSet):
         if privileged_project_ids:
             issue_type_permission_keys = {}
             # 类型归方案：先取项目 → 方案，再按方案取类型（共用方案的多个项目得到同一组 key）
+            # 跟随项目（指向类型库）只算所属研发模式关联的类型
             project_ids_by_scheme = {}
-            for project_id, scheme_id in Project.all_objects.filter(
+            following_mode_by_project = {}
+            for project_id, scheme_id, dev_mode_id, scheme_project_id in Project.all_objects.filter(
                 pk__in=privileged_project_ids
-            ).values_list("id", "issue_scheme_id"):
+            ).values_list("id", "issue_scheme_id", "dev_mode_id", "issue_scheme__project_id"):
                 project_ids_by_scheme.setdefault(scheme_id, []).append(str(project_id))
+                if scheme_project_id is None:
+                    following_mode_by_project[str(project_id)] = dev_mode_id
+            mode_type_ids = {}
+            for dev_mode_id, issue_type_id in DevModeIssueType.objects.filter(
+                dev_mode_id__in=set(following_mode_by_project.values())
+            ).values_list("dev_mode_id", "issue_type_id"):
+                mode_type_ids.setdefault(dev_mode_id, set()).add(issue_type_id)
             issue_type_rows = IssueType.objects.filter(
                 scheme_id__in=list(project_ids_by_scheme), deleted_at__isnull=True
             ).values_list("scheme_id", "id")
@@ -247,6 +258,10 @@ class ProjectViewSet(BaseViewSet):
                     for action, _ in ISSUE_TYPE_PERMISSION_ACTIONS
                 }
                 for project_id in project_ids_by_scheme.get(scheme_id, []):
+                    if project_id in following_mode_by_project and issue_type_id not in mode_type_ids.get(
+                        following_mode_by_project[project_id], set()
+                    ):
+                        continue
                     issue_type_permission_keys.setdefault(project_id, set()).update(type_keys)
 
             static_permission_keys = set(PermissionKey.values())
@@ -569,6 +584,8 @@ class ProjectViewSet(BaseViewSet):
         products_by_project = linked_products_by_project(
             [row["id"] for row in project_rows]
         )
+        # 跟随项目能用的类型按模式取一次（类型库被多个模式共用）
+        visible_type_ids_by_mode = mode_linked_type_ids({row["dev_mode"] for row in project_rows if row.get("dev_mode")})
         for row in project_rows:
             row.update(stats_by_project[row["id"]])
             row["permission_keys"] = sorted(
@@ -586,6 +603,12 @@ class ProjectViewSet(BaseViewSet):
             # 与 ProjectExtendedDetailMixin.issue_scheme_detail 同形状
             scheme_name = row.pop("issue_scheme_name")
             scheme_project = row.pop("issue_scheme_project")
+            # 与 ProjectExtendedDetailMixin.visible_issue_type_ids 同语义
+            row["visible_issue_type_ids"] = (
+                visible_type_ids_by_mode.get(row["dev_mode"], [])
+                if row["issue_scheme"] is not None and scheme_project is None
+                else None
+            )
             row["issue_scheme_detail"] = (
                 {
                     "id": row["issue_scheme"],

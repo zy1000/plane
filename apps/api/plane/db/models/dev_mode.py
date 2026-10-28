@@ -14,7 +14,7 @@
 """
 
 from django.core.exceptions import ValidationError
-from django.db import models, transaction
+from django.db import models
 from django.db.models import Q
 
 from plane.db.seed_data.dev_modes import normalize_features
@@ -44,8 +44,8 @@ class DevMode(BaseModel):
     # 九个布尔 key，形状由 seed_data.dev_modes.normalize_features 收敛
     features = models.JSONField(default=dict, blank=True, verbose_name="组件开关")
     is_system = models.BooleanField(default=False, verbose_name="是否预置")
-    # 模式方案：跟随本模式的项目共用的工作项配置。创建时由 save() 自动建，不可换。
-    # 批次 4 之前只是空壳（内容在批次 4 生成）。
+    # 工作区的「工作项类型库」方案：同工作区所有模式都指向同一个（创建时由 save() 取 / 建），
+    # 跟随项目经它取类型、状态、工作流、字段；本模式用库里的哪些类型由 DevModeIssueType 决定。
     issue_scheme = models.ForeignKey(
         "db.IssueScheme",
         on_delete=models.RESTRICT,
@@ -71,34 +71,16 @@ class DevMode(BaseModel):
 
         # 九个 key 恒定齐全：读侧（前端 chip、批次 3 的项目开关取交集）就不用到处兜底
         self.features = normalize_features(self.features)
-        # 模式方案随模式一起建：预置（ensure_dev_modes）、接口新建、ORM 直建都走这里。
-        # IssueScheme 不反向引用模式，先建方案再插模式行没有先后问题；
-        # 包一个事务，模式行撞了重名约束时方案一起回滚，不留孤儿。
-        with transaction.atomic():
-            if self.issue_scheme_id is None:
-                self.issue_scheme = IssueScheme.objects.create(
-                    workspace_id=self.workspace_id, name=self.name
-                )
-            elif not self._state.adding:
-                IssueScheme.objects.filter(pk=self.issue_scheme_id, project__isnull=True).exclude(
-                    name=self.name
-                ).update(name=self.name)
-            super().save(*args, **kwargs)
+        # 指向本工作区的类型库方案：预置（ensure_dev_modes）、接口新建、ORM 直建都走这里
+        if self.issue_scheme_id is None:
+            self.issue_scheme = IssueScheme.get_or_create_library(self.workspace_id)
+        super().save(*args, **kwargs)
 
     def delete(self, using=None, soft=False, *args, **kwargs):
-        from .issue_scheme import IssueScheme
-
         # 只硬删，同 StageType.delete：软删级联任务把 RESTRICT 当 CASCADE 处理，
-        # 软删一个模式会顺手把它的阶段、勾选连同（批次 3 之后）引用它的项目一起软删。
-        scheme_id = self.issue_scheme_id
-        result = super().delete(using=using, soft=False, *args, **kwargs)
-        # 模式方案跟着软删。能走到这里说明没有项目引用本模式（DevModeViewSet.destroy 的检查），
-        # 跟随项目恒属于本模式，所以也没有项目指向这个方案；别处还在用（两模式共用）就留着。
-        if scheme_id and not DevMode.all_objects.filter(issue_scheme_id=scheme_id).exists():
-            scheme = IssueScheme.objects.filter(pk=scheme_id, project__isnull=True).first()
-            if scheme is not None:
-                scheme.delete()
-        return result
+        # 软删一个模式会顺手把它的阶段、勾选连同引用它的项目一起软删。
+        # 类型库是全工作区共用的，不跟着删；本模式的类型关联随 CASCADE 硬删。
+        return super().delete(using=using, soft=False, *args, **kwargs)
 
     def __str__(self):
         return self.name
@@ -231,3 +213,46 @@ class DevModeStageTemplate(BaseModel):
 
     def __str__(self):
         return f"{self.dev_mode_stage_id} - {self.template_id}"
+
+
+class DevModeIssueType(BaseModel):
+    """研发模式关联的工作项类型（类型都在工作区的类型库方案里）。
+
+    跟随该模式的项目只看得到这里关联的类型（``utils.issue_scheme.project_visible_type_ids``）。
+    纯连接行，硬删；同一类型可以被多个模式关联，改类型本身对所有关联模式生效。
+    取消关联前要确认跟随项目里没有该类型的工作项（``views/dev_mode/issue_type.py``）。
+    """
+
+    dev_mode = models.ForeignKey(
+        DevMode,
+        on_delete=models.CASCADE,
+        related_name="issue_type_links",
+        verbose_name="所属研发模式",
+    )
+    issue_type = models.ForeignKey(
+        "db.IssueType",
+        # 删库类型前接口会先挡（仍被模式关联 → 409），这里兜底跟着删
+        on_delete=models.CASCADE,
+        related_name="dev_mode_links",
+        verbose_name="工作项类型",
+    )
+    sort_order = models.FloatField(default=DEFAULT_SORT_ORDER, verbose_name="排序")
+
+    class Meta:
+        db_table = "dev_mode_issue_types"
+        ordering = ("sort_order", "created_at", "id")
+        verbose_name = "Dev Mode Issue Type"
+        verbose_name_plural = "Dev Mode Issue Types"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["dev_mode", "issue_type"],
+                condition=Q(deleted_at__isnull=True),
+                name="dev_mode_issue_type_unique_active",
+            ),
+        ]
+
+    def delete(self, using=None, soft=False, *args, **kwargs):
+        return super().delete(using=using, soft=False, *args, **kwargs)
+
+    def __str__(self):
+        return f"{self.dev_mode_id} - {self.issue_type_id}"

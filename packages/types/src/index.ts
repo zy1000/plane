@@ -47,6 +47,7 @@ export * from "./stage-review";
 export * from "./stage-type";
 export * from "./dev-mode";
 export * from "./issue-scheme";
+export * from "./issue-field-library";
 export * from "./project-stage";
 export * from "./risk";
 export * from "./page";

@@ -101,6 +101,8 @@ export interface IPartialProject {
   /** 工作项方案 id */
   issue_scheme?: string | null;
   issue_scheme_detail?: TIssueSchemeLite | null;
+  /** 跟随研发模式时本项目能用的类型 id（所属模式关联的类型）；项目自定义为 null（方案里的全部可用） */
+  visible_issue_type_ids?: string[] | null;
 }
 
 export interface IProject extends IPartialProject {

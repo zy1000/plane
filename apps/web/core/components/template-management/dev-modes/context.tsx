@@ -1,18 +1,16 @@
 import { createContext, useContext } from "react";
 import { useDevModeDetail } from "@/hooks/store/use-dev-mode-detail";
-import { useDevModeIssueScheme } from "@/hooks/store/use-dev-mode-issue-scheme";
-import { useProjectIssueTypes } from "@/hooks/store/use-project-issue-types";
+import { toIssueSchemeScopeKey } from "@/services/project/issue-scheme-scope";
 import { useSchemeViews } from "./use-scheme-views";
 
-type TDevModeDetailContext = ReturnType<typeof useDevModeDetail> &
-  ReturnType<typeof useDevModeIssueScheme> & {
-    workspaceSlug: string;
-    devModeId: string;
-    /** 模式方案的工作项类型：页签计数与「工作项」页共用一个实例，增删改两边同步 */
-    issueTypesStore: ReturnType<typeof useProjectIssueTypes>;
-    /** 研发模式视图：「视图」页签、页签计数、删类型 / 状态时的提示共用 */
-    schemeViewsStore: ReturnType<typeof useSchemeViews>;
-  };
+type TDevModeDetailContext = ReturnType<typeof useDevModeDetail> & {
+  workspaceSlug: string;
+  devModeId: string;
+  /** 工作项类型库的作用域键（模式的 issue_scheme 就是库）：视图条件里解析类型 / 状态名用 */
+  scopeKey: string | undefined;
+  /** 研发模式视图：「视图」页签、页签计数、删类型 / 状态时的提示共用 */
+  schemeViewsStore: ReturnType<typeof useSchemeViews>;
+};
 
 const DevModeDetailContext = createContext<TDevModeDetailContext | undefined>(undefined);
 
@@ -31,17 +29,15 @@ export function DevModeDetailProvider({
   devModeId: string;
 }) {
   const detail = useDevModeDetail(workspaceSlug, devModeId);
-  const issueScheme = useDevModeIssueScheme(workspaceSlug, detail.devMode?.issue_scheme);
-  const issueTypesStore = useProjectIssueTypes(workspaceSlug, issueScheme.scopeKey);
-  const schemeViewsStore = useSchemeViews(workspaceSlug, detail.devMode?.issue_scheme);
+  const schemeViewsStore = useSchemeViews(workspaceSlug, devModeId);
+  const libraryId = detail.devMode?.issue_scheme;
 
   // 这些 hook 每次渲染都回新对象，useMemo 拦不住，直接拼
   const value: TDevModeDetailContext = {
     ...detail,
-    ...issueScheme,
     workspaceSlug,
     devModeId,
-    issueTypesStore,
+    scopeKey: libraryId ? toIssueSchemeScopeKey(libraryId) : undefined,
     schemeViewsStore,
   };
 

@@ -26,7 +26,7 @@ from plane.db.models import (
     User,
     EstimatePoint,
 )
-from plane.utils.issue_scheme import project_scheme_id
+from plane.utils.issue_scheme import is_type_visible_to_project, project_default_issue_type
 from plane.utils.content_validator import (
     validate_html_content,
     validate_binary_data,
@@ -128,7 +128,7 @@ class IssueSerializer(BaseSerializer):
             raise serializers.ValidationError("State is not valid please pass a valid state_id")
 
         # Check state belongs to the issue's type when the state is type-scoped
-        if data.get("type") and str(data["type"].scheme_id) != str(project_scheme_id(self.context.get("project_id"))):
+        if data.get("type") and not is_type_visible_to_project(data["type"].id, self.context.get("project_id")):
             raise serializers.ValidationError("Issue type is not valid please pass a valid type_id")
 
         if data.get("state"):
@@ -173,7 +173,7 @@ class IssueSerializer(BaseSerializer):
 
         if not issue_type:
             # Get default issue type
-            issue_type = IssueType.objects.filter(scheme__projects=project_id, is_default=True).first()
+            issue_type = project_default_issue_type(project_id)
             issue_type = issue_type
 
         issue = Issue.objects.create(**validated_data, project_id=project_id, type=issue_type)

@@ -9,6 +9,8 @@ from collections import defaultdict
 # Django imports
 from django.db.utils import IntegrityError
 
+from django.db.models import Q
+
 # Third party imports
 from rest_framework.response import Response
 from rest_framework import status
@@ -20,7 +22,12 @@ from plane.app.permissions import ROLE, allow_permission, allow_fine_permission,
 from plane.app.views.issue_scheme.scope import IssueSchemeScopeMixin
 from plane.db.models import State
 from plane.utils.cache import invalidate_cache
-from plane.utils.issue_scheme import in_use_response_data, is_referenced, state_references
+from plane.utils.issue_scheme import (
+    in_use_response_data,
+    is_referenced,
+    project_visible_type_q,
+    state_references,
+)
 from plane.utils.scheme_views import prune_mode_view_references
 
 
@@ -42,6 +49,11 @@ class StateViewSet(IssueSchemeScopeMixin, BaseViewSet):
                 scheme__projects__project_projectmember__member=self.request.user,
                 scheme__projects__project_projectmember__is_active=True,
                 scheme__projects__archived_at__isnull=True,
+            )
+            # 跟随项目只看得到所属研发模式关联的类型的状态（triage 没有类型，照常可见）
+            queryset = queryset.filter(
+                Q(issue_type__isnull=True)
+                | project_visible_type_q(self.kwargs.get("project_id"), "issue_type_id")
             )
         return self.filter_queryset(queryset.select_related("scheme", "workspace").distinct())
 
