@@ -25,6 +25,7 @@ import { getSettingsRequirementTypePath } from "@/components/workspace/settings/
 import { useLibraryItems } from "@/hooks/store/use-library-items";
 import { useRequirementModules } from "@/hooks/store/use-requirement-modules";
 import { useTemplatePermissions } from "../permissions";
+import { ProductCategoryTag } from "../product-categories/product-category-tag";
 import { useRequirementLibrariesContext } from "./context";
 
 /**
@@ -158,6 +159,17 @@ export const RequirementLibraryPage = observer(function RequirementLibraryPage()
                           </Link>
                         </Tooltip>
                       )}
+                      {library?.product_category_detail && (
+                        <Link
+                          to={`/${workspaceSlug}/templates/product-categories?category=${library.product_category_detail.id}`}
+                          className="flex min-w-0 max-w-40 shrink-0"
+                        >
+                          <ProductCategoryTag
+                            name={library.product_category_detail.name}
+                            className="h-auto rounded-full py-0.5 text-11 font-normal hover:text-primary"
+                          />
+                        </Link>
+                      )}
                     </div>
                   }
                   isLast
@@ -223,6 +235,7 @@ export const RequirementLibraryPage = observer(function RequirementLibraryPage()
               selectedModuleId={selectedModuleId}
               onSelect={setSelectedModuleId}
               readonly={!canManageLibraries}
+              lockedRootCategoryName={library?.product_category_detail?.name}
             />
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
               {library && (

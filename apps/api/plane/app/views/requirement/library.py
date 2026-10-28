@@ -22,6 +22,7 @@ class RequirementLibraryViewSet(BaseViewSet):
     search_fields = ["name", "identifier"]
     filterset_fields = {
         "requirement_type_id": ["exact"],
+        "product_category_id": ["exact"],
         "is_active": ["exact"],
     }
 
@@ -30,7 +31,13 @@ class RequirementLibraryViewSet(BaseViewSet):
             super()
             .get_queryset()
             .filter(workspace__slug=self.workspace_slug)
-            .select_related("workspace", "requirement_type", "created_by", "updated_by")
+            .select_related(
+                "workspace",
+                "requirement_type",
+                "product_category",
+                "created_by",
+                "updated_by",
+            )
             .annotate(
                 # 条目是软删除，join 不会自动带上 deleted_at 过滤 —— 不加的话
                 # 清空过的库会一直显示历史条目数

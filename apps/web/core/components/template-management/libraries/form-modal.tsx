@@ -9,20 +9,23 @@ import { CustomSearchSelect, EModalPosition, EModalWidth, ModalCore } from "@pla
 import { cn } from "@plane/utils";
 import { IdentifierInput, isValidIdentifier } from "@/components/common/identifier-input";
 import { getSettingsRequirementTypePath } from "@/components/workspace/settings/requirement-types/navigation";
+import { useProductCategories } from "@/hooks/store/use-product-categories";
 import { useRequirementTypes } from "@/hooks/store/use-requirement-types";
 import { useRequirementLibrariesContext } from "./context";
+import { ProductCategoryModulesPreview, ProductCategoryReadonly, ProductCategorySelect } from "./product-category-select";
 
 type TFieldErrors = {
   name?: string;
   identifier?: string;
   requirementType?: string;
+  productCategory?: string;
 };
 
 /**
  * 标准库的创建 / 编辑弹窗，挂在 libraries 路由的 layout 里，列表页与条目页共用。
  *
  * 创建与编辑走同一张表单：name / identifier / description 两边都可改；
- * requirement_type 只在创建时可选，编辑时只读展示（后端 validate 也会拒绝改动）。
+ * requirement_type 与 product_category 只在创建时可选，编辑时只读展示（后端 validate 也会拒绝改动）。
  */
 export function RequirementLibraryFormModal() {
   const { t } = useTranslation();
@@ -44,7 +47,13 @@ export function RequirementLibraryFormModal() {
   const [identifier, setIdentifier] = useState("");
   const [description, setDescription] = useState("");
   const [requirementTypeId, setRequirementTypeId] = useState("");
+  const [productCategoryId, setProductCategoryId] = useState<string | null>(null);
   const [errors, setErrors] = useState<TFieldErrors>({});
+  // 只在创建弹窗打开时拉分类：编辑时分类只读，库上自带名称
+  const { categories: productCategories, isLoading: isProductCategoriesLoading } = useProductCategories(
+    isOpen && !isEditMode ? workspaceSlug : undefined
+  );
+  const selectedProductCategory = productCategories.find((category) => category.id === productCategoryId) ?? null;
 
   const handleClose = () => {
     setIsCreateModalOpen(false);
@@ -57,6 +66,7 @@ export function RequirementLibraryFormModal() {
     setIdentifier(libraryToEdit?.identifier ?? "");
     setDescription(libraryToEdit?.description ?? "");
     setRequirementTypeId(libraryToEdit?.requirement_type_id ?? "");
+    setProductCategoryId(libraryToEdit?.product_category_id ?? null);
     setErrors({});
   }, [isOpen, libraryToEdit]);
 
@@ -114,6 +124,7 @@ export function RequirementLibraryFormModal() {
         name: normalizedName,
         identifier,
         requirement_type_id: requirementTypeId,
+        product_category_id: productCategoryId,
         description: description.trim(),
       });
       handleClose();
@@ -128,6 +139,7 @@ export function RequirementLibraryFormModal() {
         name?: string[];
         identifier?: string[];
         requirement_type_id?: string[];
+        product_category_id?: string[];
         error?: string;
       };
       // 后端返回 REQUIREMENT_LIBRARY_IDENTIFIER_ALREADY_EXISTS / _INVALID 两种错误码
@@ -143,6 +155,7 @@ export function RequirementLibraryFormModal() {
       if (payload?.name?.[0]) serverErrors.name = payload.name[0];
       if (identifierMessage) serverErrors.identifier = identifierMessage;
       if (payload?.requirement_type_id?.[0]) serverErrors.requirementType = payload.requirement_type_id[0];
+      if (payload?.product_category_id?.[0]) serverErrors.productCategory = payload.product_category_id[0];
       if (Object.keys(serverErrors).length > 0) {
         setErrors(serverErrors);
       } else {
@@ -224,87 +237,110 @@ export function RequirementLibraryFormModal() {
           {/* 条目编号已改为逐条手填，标识符不再是编号前缀，预览块随之撤掉 */}
           {errors.identifier && <p className="mt-1.5 text-11 text-danger-primary">{errors.identifier}</p>}
         </div>
-        {/* 需求类型：创建时是产品级可搜索下拉，选中后展示不可更换警示；编辑时只读 */}
+        {/* 需求类型 + 产品分类：同一行两列，创建时可选、编辑时只读；需求类型的提示 / 警示整行放在下方 */}
         <div>
-          <span className="mb-1.5 flex items-center gap-0.5 text-12 font-medium text-secondary">
-            {t("requirement_libraries.fields.requirement_type")}
-            {!isEditMode && <span className="text-danger-primary">*</span>}
-          </span>
-          {libraryToEdit ? (
-            <>
-              <div className="flex h-9 w-full cursor-not-allowed items-center gap-2 rounded-md border border-subtle bg-layer-1 px-3 text-13 opacity-70">
-                <span className="truncate text-primary">{libraryToEdit.requirement_type_detail?.name}</span>
-                <span className="shrink-0 rounded-full bg-layer-2 px-2 text-11 text-secondary">
-                  {t("requirement_libraries.fields.field_count_badge", { count: libraryToEdit.field_count })}
-                </span>
-              </div>
-              <p className="mt-1.5 text-11 text-tertiary">{t("requirement_libraries.fields.requirement_type_hint")}</p>
-            </>
-          ) : (
-            <>
-              <CustomSearchSelect
-                value={requirementTypeId}
-                onChange={(value: string) => {
-                  setRequirementTypeId(value);
-                  if (errors.requirementType) setErrors((current) => ({ ...current, requirementType: undefined }));
-                }}
-                options={requirementTypeOptions}
-                disabled={isRequirementTypesLoading}
-                className="w-full"
-                customButtonClassName="w-full rounded-md"
-                optionsClassName="w-80"
-                noResultsMessage={t("requirement_libraries.fields.requirement_type_empty")}
-                customButton={
-                  <div
-                    className={cn(
-                      "flex h-9 w-full items-center justify-between gap-2 rounded-md border bg-surface-1 px-3 text-left text-13",
-                      errors.requirementType ? "border-danger-primary" : "border-subtle",
-                      isRequirementTypesLoading && "cursor-not-allowed opacity-60"
-                    )}
-                  >
-                    {selectedRequirementType ? (
-                      <span className="flex min-w-0 items-center gap-2">
-                        <span className="truncate text-primary">{selectedRequirementType.name}</span>
-                        <span className="shrink-0 rounded-full bg-layer-2 px-2 text-11 text-secondary">
-                          {t("requirement_libraries.fields.field_count_badge", {
-                            count: selectedRequirementType.field_count,
-                          })}
-                        </span>
-                      </span>
-                    ) : (
-                      <span className="text-placeholder">
-                        {t("requirement_libraries.fields.requirement_type_placeholder")}
-                      </span>
-                    )}
-                    <ChevronDownIcon className="size-3.5 shrink-0 text-secondary" />
-                  </div>
-                }
-                footerOption={
-                  <div className="mx-2 mt-1.5 border-t border-subtle pt-1.5">
-                    <Link
-                      to={getSettingsRequirementTypePath(workspaceSlug)}
-                      onClick={handleClose}
-                      className="flex items-center gap-1.5 rounded-sm px-1 py-1.5 text-11 text-secondary hover:bg-layer-transparent-hover"
-                    >
-                      <Settings2 className="size-3 shrink-0" />
-                      {t("requirement_libraries.fields.requirement_type_manage")}
-                    </Link>
-                  </div>
-                }
-              />
-              {errors.requirementType ? (
-                <p className="mt-1.5 text-11 text-danger-primary">{errors.requirementType}</p>
-              ) : selectedRequirementType ? (
-                <div className="mt-2 flex items-start gap-2 rounded-md bg-warning-subtle px-3 py-2">
-                  <TriangleAlert className="mt-0.5 size-3.5 shrink-0 text-warning-primary" />
-                  <span className="text-11 text-warning-primary">
-                    {t("requirement_libraries.fields.requirement_type_warning")}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="min-w-0">
+              <span className="mb-1.5 flex items-center gap-0.5 text-12 font-medium text-secondary">
+                {t("requirement_libraries.fields.requirement_type")}
+                {!isEditMode && <span className="text-danger-primary">*</span>}
+              </span>
+              {libraryToEdit ? (
+                <div className="flex h-9 w-full cursor-not-allowed items-center gap-2 rounded-md border border-subtle bg-layer-1 px-3 text-13 opacity-70">
+                  <span className="truncate text-primary">{libraryToEdit.requirement_type_detail?.name}</span>
+                  <span className="shrink-0 rounded-full bg-layer-2 px-2 text-11 text-secondary">
+                    {t("requirement_libraries.fields.field_count_badge", { count: libraryToEdit.field_count })}
                   </span>
                 </div>
-              ) : null}
-            </>
-          )}
+              ) : (
+                <CustomSearchSelect
+                  value={requirementTypeId}
+                  onChange={(value: string) => {
+                    setRequirementTypeId(value);
+                    if (errors.requirementType) setErrors((current) => ({ ...current, requirementType: undefined }));
+                  }}
+                  options={requirementTypeOptions}
+                  disabled={isRequirementTypesLoading}
+                  className="w-full"
+                  customButtonClassName="w-full rounded-md"
+                  optionsClassName="w-80"
+                  noResultsMessage={t("requirement_libraries.fields.requirement_type_empty")}
+                  customButton={
+                    <div
+                      className={cn(
+                        "flex h-9 w-full items-center justify-between gap-2 rounded-md border bg-surface-1 px-3 text-left text-13",
+                        errors.requirementType ? "border-danger-primary" : "border-subtle",
+                        isRequirementTypesLoading && "cursor-not-allowed opacity-60"
+                      )}
+                    >
+                      {selectedRequirementType ? (
+                        <span className="flex min-w-0 items-center gap-2">
+                          <span className="truncate text-primary">{selectedRequirementType.name}</span>
+                          <span className="shrink-0 rounded-full bg-layer-2 px-2 text-11 text-secondary">
+                            {t("requirement_libraries.fields.field_count_badge", {
+                              count: selectedRequirementType.field_count,
+                            })}
+                          </span>
+                        </span>
+                      ) : (
+                        <span className="text-placeholder">
+                          {t("requirement_libraries.fields.requirement_type_placeholder")}
+                        </span>
+                      )}
+                      <ChevronDownIcon className="size-3.5 shrink-0 text-secondary" />
+                    </div>
+                  }
+                  footerOption={
+                    <div className="mx-2 mt-1.5 border-t border-subtle pt-1.5">
+                      <Link
+                        to={getSettingsRequirementTypePath(workspaceSlug)}
+                        onClick={handleClose}
+                        className="flex items-center gap-1.5 rounded-sm px-1 py-1.5 text-11 text-secondary hover:bg-layer-transparent-hover"
+                      >
+                        <Settings2 className="size-3 shrink-0" />
+                        {t("requirement_libraries.fields.requirement_type_manage")}
+                      </Link>
+                    </div>
+                  }
+                />
+              )}
+            </div>
+            <div className="min-w-0">
+              <span className="mb-1.5 flex items-center text-12 font-medium text-secondary">
+                {t("requirement_libraries.fields.product_category")}
+              </span>
+              {libraryToEdit ? (
+                <ProductCategoryReadonly category={libraryToEdit.product_category_detail} />
+              ) : (
+                <ProductCategorySelect
+                  categories={productCategories}
+                  value={productCategoryId}
+                  onChange={(value) => {
+                    setProductCategoryId(value);
+                    if (errors.productCategory) setErrors((current) => ({ ...current, productCategory: undefined }));
+                  }}
+                  disabled={isProductCategoriesLoading}
+                  hasError={Boolean(errors.productCategory)}
+                />
+              )}
+            </div>
+          </div>
+          {libraryToEdit ? (
+            <p className="mt-1.5 text-11 text-tertiary">{t("requirement_libraries.fields.requirement_type_hint")}</p>
+          ) : errors.requirementType ? (
+            <p className="mt-1.5 text-11 text-danger-primary">{errors.requirementType}</p>
+          ) : selectedRequirementType ? (
+            <div className="mt-2 flex items-start gap-2 rounded-md bg-warning-subtle px-3 py-2">
+              <TriangleAlert className="mt-0.5 size-3.5 shrink-0 text-warning-primary" />
+              <span className="text-11 text-warning-primary">
+                {t("requirement_libraries.fields.requirement_type_warning")}
+              </span>
+            </div>
+          ) : null}
+          {errors.productCategory && <p className="mt-1.5 text-11 text-danger-primary">{errors.productCategory}</p>}
         </div>
+        {/* 选了分类：预览库会自动带出的一级模块 */}
+        {!isEditMode && <ProductCategoryModulesPreview category={selectedProductCategory} />}
         {/* 描述 */}
         <label className="block">
           <span className="mb-1.5 flex items-center gap-1.5 text-12 font-medium text-secondary">

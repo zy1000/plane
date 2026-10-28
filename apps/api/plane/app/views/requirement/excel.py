@@ -25,7 +25,8 @@ from plane.app.serializers.requirement import (
     RequirementBatchSaveSerializer,
     RequirementBatchUpdateSerializer,
 )
-from plane.db.models import RequirementType
+from plane.db.models import RequirementLibrary, RequirementType
+from plane.utils.product_category import locked_root_names
 from plane.utils.requirement import (
     RequirementBatchConflict,
     field_specs_for_requirement_types,
@@ -276,12 +277,19 @@ class RequirementExcelMixin:
         from plane.app.views.requirement.row_base import annotate_pending
 
         existing_rows = list(annotate_pending(layer.queryset))
+        library = owner if isinstance(owner, RequirementLibrary) else None
         resolver = xl.RequirementImportResolver(
             scope_identifier=layer.serializer_context.get("scope_identifier"),
             existing_rows=existing_rows,
             members=xl.workspace_member_rows(owner.workspace_id),
             is_library=self.excel_is_library,
             module_index=self._excel_module_index(owner),
+            locked_root_names=locked_root_names(library),
+            locked_category_name=(
+                library.product_category.name
+                if library is not None and library.product_category_id
+                else ""
+            ),
         )
         results = xl.resolve_groups(groups, resolver)
 

@@ -1281,9 +1281,15 @@ class RequirementImportResolver:
         members,
         is_library,
         module_index=None,
+        locked_root_names=None,
+        locked_category_name="",
     ):
         self.scope_identifier = scope_identifier or ""
         self.is_library = is_library
+        # 有产品分类的标准库：第一层只能是分类的一级模块，不能由导入新建
+        # （None = 不受控，见 utils.product_category）
+        self.locked_root_names = locked_root_names
+        self.locked_category_name = locked_category_name
 
         # 作用域内的模块树（module_path_index 的产物）。id_by_text 让「名称里本身带 /」
         # 的已有模块也能按整格文本精确命中，不被切分规则误伤
@@ -1675,6 +1681,16 @@ class RequirementImportResolver:
             path, error = parse_module_path(raw)
             if error:
                 result.errors.append(f"「{MODULE_COLUMN_LABEL}」{error}")
+                return
+            if (
+                self.locked_root_names is not None
+                and path
+                and path[0] not in self.locked_root_names
+            ):
+                result.errors.append(
+                    f"「{MODULE_COLUMN_LABEL}」第一层「{path[0]}」不在产品分类"
+                    f"「{self.locked_category_name}」的一级模块中。"
+                )
                 return
             if path not in self.module_id_by_path:
                 result.warnings.append(

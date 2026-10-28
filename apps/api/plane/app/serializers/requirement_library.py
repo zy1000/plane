@@ -1,7 +1,9 @@
+from django.db import transaction
 from rest_framework import serializers
 
 from plane.app.serializers.product import IDENTIFIER_PATTERN
-from plane.db.models import RequirementLibrary, RequirementType
+from plane.db.models import ProductCategory, RequirementLibrary, RequirementType
+from plane.utils.product_category import seed_library_root_modules
 
 from .base import BaseSerializer
 
@@ -13,6 +15,14 @@ class RequirementLibrarySerializer(BaseSerializer):
         queryset=RequirementType.objects.all(),
     )
     requirement_type_detail = serializers.SerializerMethodField()
+    # 可空；只在创建时可写（第一层模块跟着它走，换分类会让库的第一层整体失效）
+    product_category_id = serializers.PrimaryKeyRelatedField(
+        source="product_category",
+        queryset=ProductCategory.objects.all(),
+        allow_null=True,
+        required=False,
+    )
+    product_category_detail = serializers.SerializerMethodField()
     name = serializers.CharField(max_length=255, required=False)
     # 与 name 一样 required=False + 在 validate() 里补必填校验，这样 PATCH 只改
     # description 时不用把标识一起传上来
@@ -28,6 +38,8 @@ class RequirementLibrarySerializer(BaseSerializer):
             "workspace_id",
             "requirement_type_id",
             "requirement_type_detail",
+            "product_category_id",
+            "product_category_detail",
             "name",
             # 库内条目编号的前缀（SEC-12），也是导入后目标行溯源显示的前缀。
             # 可改 —— 前缀是读时解析的，改完已导入需求的来源编号自动跟随。
@@ -46,6 +58,7 @@ class RequirementLibrarySerializer(BaseSerializer):
             "id",
             "workspace_id",
             "requirement_type_detail",
+            "product_category_detail",
             "field_count",
             "item_count",
             "created_at",
@@ -60,6 +73,11 @@ class RequirementLibrarySerializer(BaseSerializer):
             "name": obj.requirement_type.name,
             "logo_props": obj.requirement_type.logo_props or {},
         }
+
+    def get_product_category_detail(self, obj):
+        if not obj.product_category_id:
+            return None
+        return {"id": str(obj.product_category_id), "name": obj.product_category.name}
 
     def get_field_count(self, obj):
         annotated_count = getattr(obj, "field_count", None)
@@ -102,6 +120,23 @@ class RequirementLibrarySerializer(BaseSerializer):
                         "requirement_type_id": "This field cannot be changed after creation."
                     }
                 )
+
+        # 产品分类同理：库的第一层就是分类的一级模块，创建后不能换
+        if self.instance and "product_category_id" in self.initial_data:
+            submitted = attrs.pop("product_category", None)
+            if getattr(submitted, "id", None) != self.instance.product_category_id:
+                raise serializers.ValidationError(
+                    {
+                        "product_category_id": "This field cannot be changed after creation."
+                    }
+                )
+        product_category = attrs.get("product_category")
+        if product_category is not None and product_category.workspace_id != workspace.id:
+            raise serializers.ValidationError(
+                {
+                    "product_category_id": "Product category does not belong to this workspace."
+                }
+            )
 
         requirement_type = attrs.get(
             "requirement_type", getattr(self.instance, "requirement_type", None)
@@ -149,7 +184,10 @@ class RequirementLibrarySerializer(BaseSerializer):
     def create(self, validated_data):
         library = RequirementLibrary(**validated_data)
         library.full_clean(exclude=["created_by", "updated_by"])
-        library.save()
+        with transaction.atomic():
+            library.save()
+            # 选了产品分类：把分类的一级模块建成库的根模块（受控、实时跟随）
+            seed_library_root_modules(library, actor=library.created_by)
         return library
 
     def update(self, instance, validated_data):

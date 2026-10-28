@@ -207,20 +207,30 @@ export const ModuleTree = ({
         buttonClassName="size-5 rounded-md text-tertiary hover:bg-layer-transparent-active aria-expanded:bg-layer-transparent-active aria-expanded:text-primary"
         optionsClassName="min-w-[160px]"
       >
-        {items.map((item) => (
-          <CustomMenu.MenuItem
-            key={item.key}
-            disabled={item.disabled}
-            onClick={item.onClick}
-            className={cn(
-              "flex items-center gap-2 px-2 py-1.5 text-13",
-              item.danger ? "text-danger-primary" : "text-primary"
-            )}
-          >
-            {item.icon && <span className="flex size-3.5 shrink-0 items-center justify-center">{item.icon}</span>}
-            <span className="truncate">{item.label}</span>
-          </CustomMenu.MenuItem>
-        ))}
+        {items.map((item) =>
+          item.note ? (
+            <div
+              key={item.key}
+              className="mx-1 mt-1 flex w-56 items-start gap-2 border-t border-subtle px-1 pb-1 pt-2 text-12 leading-[18px] text-tertiary"
+            >
+              {item.icon && <span className="mt-0.5 flex size-3.5 shrink-0 items-center justify-center">{item.icon}</span>}
+              <span className="min-w-0 whitespace-normal">{item.label}</span>
+            </div>
+          ) : (
+            <CustomMenu.MenuItem
+              key={item.key}
+              disabled={item.disabled}
+              onClick={item.onClick}
+              className={cn(
+                "flex items-center gap-2 px-2 py-1.5 text-13",
+                item.danger ? "text-danger-primary" : "text-primary"
+              )}
+            >
+              {item.icon && <span className="flex size-3.5 shrink-0 items-center justify-center">{item.icon}</span>}
+              <span className="truncate">{item.label}</span>
+            </CustomMenu.MenuItem>
+          )
+        )}
       </CustomMenu>
     </span>
   );

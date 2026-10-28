@@ -289,6 +289,16 @@ class RequirementLibrary(BaseModel):
         related_name="libraries",
         verbose_name="所选需求类型",
     )
+    # 可空：为空的库第一层模块自由维护（存量库全部为空）；选了分类后第一层 = 分类的
+    # 一级模块且实时跟随，见 utils.product_category。创建后不可改。
+    product_category = models.ForeignKey(
+        "db.ProductCategory",
+        on_delete=models.RESTRICT,
+        related_name="libraries",
+        null=True,
+        blank=True,
+        verbose_name="产品分类",
+    )
     name = models.CharField(max_length=255, verbose_name="标准库名称")
     identifier = models.CharField(
         max_length=12, db_index=True, verbose_name="标准库标识（条目编号前缀）"
@@ -338,6 +348,13 @@ class RequirementLibrary(BaseModel):
         ):
             raise ValidationError(
                 {"requirement_type": "只能选择当前工作区内的需求类型。"}
+            )
+        if (
+            self.product_category_id
+            and self.workspace_id != self.product_category.workspace_id
+        ):
+            raise ValidationError(
+                {"product_category": "只能选择当前工作区内的产品分类。"}
             )
 
     def save(self, *args, **kwargs):
@@ -390,6 +407,17 @@ class RequirementModule(BaseModel):
     )
     name = models.CharField(max_length=30, verbose_name="模块名称")
     sort_order = models.FloatField(default=DEFAULT_SORT_ORDER, verbose_name="排序")
+    # 非空 = 来自产品分类的一级模块（受控：库里不能改名 / 移动 / 删除，名称与排序跟随
+    # 分类）。只会出现在有分类的库的根模块上。SET_NULL 只为分类模块硬删时兜住
+    # 已软删库里残留的行，活库里的对应模块由 utils.product_category 先行删除。
+    category_module = models.ForeignKey(
+        "db.ProductCategoryModule",
+        on_delete=models.SET_NULL,
+        related_name="library_modules",
+        null=True,
+        blank=True,
+        verbose_name="来源产品分类模块",
+    )
 
     class Meta:
         db_table = "requirement_modules"
@@ -438,6 +466,15 @@ class RequirementModule(BaseModel):
                 ),
                 name="req_module_unique_product_child_name",
             ),
+            # 一个库里每个分类模块只对应一个根模块
+            models.UniqueConstraint(
+                fields=["library", "category_module"],
+                condition=Q(
+                    category_module__isnull=False,
+                    deleted_at__isnull=True,
+                ),
+                name="req_module_unique_library_category_module",
+            ),
         ]
 
     def __str__(self):
@@ -445,6 +482,10 @@ class RequirementModule(BaseModel):
 
     def clean(self):
         super().clean()
+        if self.category_module_id and (self.parent_id or not self.library_id):
+            raise ValidationError(
+                {"category_module": "只有标准库的根模块可以来自产品分类。"}
+            )
         # 跨行规则，DB 表达不了：父模块必须同属一个库/产品
         if self.parent_id:
             if self.parent_id == self.id:

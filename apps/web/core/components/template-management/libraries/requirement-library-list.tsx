@@ -13,6 +13,7 @@ import { ContentWrapper } from "@/components/core/content-wrapper";
 import { PageHead } from "@/components/core/page-title";
 import { MoreMenu } from "@/components/project-issue-types/root";
 import { useTemplatePermissions } from "../permissions";
+import { ProductCategoryTag } from "../product-categories/product-category-tag";
 import { useRequirementLibrariesContext } from "./context";
 
 /** 按需求类型给卡片图标上色：同一类型同一色，类型多了循环用 */
@@ -176,13 +177,16 @@ export const RequirementLibraryList = observer(function RequirementLibraryList()
               </span>
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-14 font-semibold leading-[22px] text-primary">{library.name}</span>
-                <span
-                  className={cn(
-                    "mt-1.5 inline-flex h-[22px] max-w-full items-center truncate rounded-md px-2 text-12 font-medium",
-                    toneByType.get(library.requirement_type_id) ?? TYPE_TONES[0]
-                  )}
-                >
-                  {library.requirement_type_detail?.name}
+                <span className="mt-1.5 flex flex-wrap gap-1.5">
+                  <span
+                    className={cn(
+                      "inline-flex h-[22px] max-w-full items-center truncate rounded-md px-2 text-12 font-medium",
+                      toneByType.get(library.requirement_type_id) ?? TYPE_TONES[0]
+                    )}
+                  >
+                    {library.requirement_type_detail?.name}
+                  </span>
+                  {library.product_category_detail && <ProductCategoryTag name={library.product_category_detail.name} />}
                 </span>
               </span>
             </div>

@@ -144,6 +144,8 @@ def build_module_tree_payload(*, scope_filter, total_queryset):
             "parent": str(module.parent_id) if module.parent_id else None,
             "sort_order": module.sort_order,
             "count": subtree_count(module),
+            # 来自产品分类的一级模块：库里不能改名 / 移动 / 删除（utils.product_category）
+            "locked": bool(module.category_module_id),
             "children": [
                 node_payload(child) for child in children_map.get(module.id, [])
             ],

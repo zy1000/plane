@@ -29,12 +29,32 @@ from plane.app.views.requirement.mixins import (
     can_write_requirements,
     get_scoped_product,
 )
-from plane.db.models import Product, ProductProject, Requirement, RequirementModule
+from plane.db.models import (
+    Product,
+    ProductProject,
+    Requirement,
+    RequirementLibrary,
+    RequirementModule,
+)
+from plane.utils.product_category import ROOT_LOCKED_CODE, root_lock_violation
 from plane.utils.requirement_module import build_module_tree_payload
 from plane.utils.requirement_project import linked_requirement_ids
 
 
 DUPLICATE_NAME_MESSAGE = "同级模块名称已存在"
+
+
+def _root_locked_response(owner, **kwargs):
+    """有产品分类的库：第一层受控，碰到就 400（规则在 utils.product_category）。"""
+    if not isinstance(owner, RequirementLibrary):
+        return None
+    message = root_lock_violation(owner, **kwargs)
+    if message is None:
+        return None
+    return Response(
+        {"error": message, "code": ROOT_LOCKED_CODE},
+        status=status.HTTP_400_BAD_REQUEST,
+    )
 
 
 class _RequirementModuleScopeMixin:
@@ -118,6 +138,9 @@ class RequirementModuleAPIView(_RequirementModuleScopeMixin, BaseAPIView):
         owner, scope_filter, error = self.resolve_scope(require_write=True)
         if error is not None:
             return error
+        locked = _root_locked_response(owner, data=request.data)
+        if locked is not None:
+            return locked
         serializer = RequirementModuleWriteSerializer(
             data=request.data, context={"scope_filter": scope_filter}
         )
@@ -148,7 +171,7 @@ class RequirementModuleDetailAPIView(_RequirementModuleScopeMixin, BaseAPIView):
         return RequirementModule.objects.filter(id=module_id, **scope_filter).first()
 
     def patch(self, request, slug, module_id, **kwargs):
-        _, scope_filter, error = self.resolve_scope(require_write=True)
+        owner, scope_filter, error = self.resolve_scope(require_write=True)
         if error is not None:
             return error
         module = self._module_or_none(scope_filter, module_id)
@@ -156,6 +179,9 @@ class RequirementModuleDetailAPIView(_RequirementModuleScopeMixin, BaseAPIView):
             return Response(
                 {"error": self.NOT_FOUND_MODULE}, status=status.HTTP_404_NOT_FOUND
             )
+        locked = _root_locked_response(owner, module=module, data=request.data)
+        if locked is not None:
+            return locked
         serializer = RequirementModuleWriteSerializer(
             instance=module,
             data=request.data,
@@ -175,7 +201,7 @@ class RequirementModuleDetailAPIView(_RequirementModuleScopeMixin, BaseAPIView):
         )
 
     def delete(self, request, slug, module_id, **kwargs):
-        _, scope_filter, error = self.resolve_scope(require_write=True)
+        owner, scope_filter, error = self.resolve_scope(require_write=True)
         if error is not None:
             return error
         module = self._module_or_none(scope_filter, module_id)
@@ -183,6 +209,9 @@ class RequirementModuleDetailAPIView(_RequirementModuleScopeMixin, BaseAPIView):
             return Response(
                 {"error": self.NOT_FOUND_MODULE}, status=status.HTTP_404_NOT_FOUND
             )
+        locked = _root_locked_response(owner, module=module, deleting=True)
+        if locked is not None:
+            return locked
         # 硬删：collector 级联硬删子树（parent CASCADE），挂靠的需求走
         # Requirement.module 的 SET_NULL 回到「全部」，不会被带走。
         module.delete(soft=False)

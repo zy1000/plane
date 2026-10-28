@@ -105,6 +105,7 @@
 - **「内容」只有标题 / 描述 / 父项 / 自定义字段 / 附件**（2026-10-20）：`NON_CONTENT_BUILTIN_COLUMNS` = 状态 + 排期属性（优先级 / 负责人 / 开始 / 结束日期），模块也不是内容（独立旁路）。排期属性仍走内容写路径编辑（写集合是 `ROW_WRITABLE_BUILTIN_COLUMNS`，只去掉 status），但改它不让已通过的行变「已改动」、不进变更单 diff、回滚 / 驳回撤销不倒推；评审中 / 已关闭照旧不能改。前端对应 `requirement-builtin-fields.tsx` 的 `isContent`。
 - **回滚 `rollback_requirement_to_version()` 不是撤销审批**：版本链一条不动，`approved_version` 也不变，它只是一次写在活行上的**普通编辑**（`version += 1`）。只恢复内容列（`parent_id` 不回滚，避免 FK 悬挂）。恢复的 `data` 必须按**当前**字段结构裁剪（`prune_requirement_data_to_fields`）。
 - **标准库条目是旁路**：`RequirementLibrary` 内的条目永不走审批（approval_state 永远 `draft`，status 恒 `not_started`），由 CheckConstraint `req_library_item_never_approved` 硬保证。
+- **产品分类管住标准库第一层（2026-10-28，迁移 `0428`）**：`ProductCategory`（工作区级，电表 / 水表…，与数据字典「产品类别」无关）下维护一级模块 `ProductCategoryModule`。`RequirementLibrary.product_category` 可空、创建后不可改；选了分类的库，根模块带 `category_module` 且**实时跟随**分类（增 / 改名 / 排序同步，删分类模块时任一库该模块下有子模块或条目则 409 `PRODUCT_CATEGORY_MODULE_IN_USE`）。库里对受控第一层的新增 / 改名 / 移动 / 删除、把子模块提成第一层一律 400 `REQUIREMENT_MODULE_ROOT_LOCKED`；Excel 导入路径第一段不在分类里的行报错。规则全在 `utils/product_category.py`；分类为空的库（含全部存量库）行为不变。权限沿用 `workspace.requirement_library.*`。
 - 基线只收录 `approved_version` 非空的需求；评审中/已改动的按**上一个已通过版本**收录并标 `stale`；从未通过的 `skipped`。`collect_baseline_entries()` 不写库，**创建与 dry-run 预览共用同一份判定**。
 - `compare_baselines()` 产出的 diff item 形状**与 RequirementChangeItem 一致**，前端 diff 组件可直接复用。
 - **模型层 product / project 双作用域都建了约束，但 URL 层目前只暴露 product 作用域**的变更单 / 基线 / 配置入口。project 是模型预留，不要以为有对应 API。

@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { ClipboardCheck, FlaskConical, Library, Workflow } from "lucide-react";
+import { ClipboardCheck, FlaskConical, Library, Tags, Workflow } from "lucide-react";
 import {
   WORKSPACE_CASE_TEMPLATE_READ_PERMISSION_KEYS,
   WORKSPACE_DEV_MODE_READ_PERMISSION_KEYS,
@@ -7,7 +7,7 @@ import {
   WORKSPACE_REVIEW_TEMPLATE_READ_PERMISSION_KEYS,
 } from "@plane/constants";
 
-export type TTemplateManagementTabKey = "libraries" | "test-cases" | "reviews" | "dev-modes";
+export type TTemplateManagementTabKey = "libraries" | "product-categories" | "test-cases" | "reviews" | "dev-modes";
 
 export type TTemplateManagementNavigationItem = {
   key: TTemplateManagementTabKey;
@@ -22,6 +22,13 @@ export const TEMPLATE_MANAGEMENT_NAVIGATION_ITEMS: TTemplateManagementNavigation
     key: "libraries",
     icon: Library,
     i18nKey: "workspace_templates.navigation.libraries",
+    permissionKeys: WORKSPACE_REQUIREMENT_LIBRARY_READ_PERMISSION_KEYS,
+  },
+  {
+    // 紧挨「标准需求库」：库的第一层模块由所选分类统一维护，读写口径与库相同
+    key: "product-categories",
+    icon: Tags,
+    i18nKey: "workspace_templates.navigation.product_categories",
     permissionKeys: WORKSPACE_REQUIREMENT_LIBRARY_READ_PERMISSION_KEYS,
   },
   {

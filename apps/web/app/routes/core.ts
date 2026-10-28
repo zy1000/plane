@@ -168,6 +168,10 @@ export const coreRoutes: RouteConfigEntry[] = [
               "./(all)/[workspaceSlug]/(projects)/templates/libraries/[libraryId]/requirements/[requirementId]/page.tsx"
             ),
           ]),
+          route(
+            ":workspaceSlug/templates/product-categories",
+            "./(all)/[workspaceSlug]/(projects)/templates/product-categories/page.tsx"
+          ),
           route(":workspaceSlug/templates/reviews", "./(all)/[workspaceSlug]/(projects)/templates/reviews/page.tsx"),
           route(
             ":workspaceSlug/templates/dev-modes",

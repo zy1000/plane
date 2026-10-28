@@ -54,6 +54,7 @@ export * from "./payment";
 export * from "./pragmatic";
 export * from "./project";
 export * from "./product";
+export * from "./product-category";
 export * from "./publish";
 export * from "./reaction";
 export * from "./intake";

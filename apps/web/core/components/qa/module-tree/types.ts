@@ -27,6 +27,8 @@ export type TModuleTreeMenuItem = {
   icon?: ReactNode;
   danger?: boolean;
   disabled?: boolean;
+  /** 纯说明行：不可点、灰字、可换行，上方自带分隔线（onClick 不会被调用） */
+  note?: boolean;
   onClick: () => void;
 };
 

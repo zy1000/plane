@@ -22,6 +22,7 @@ from .department import urlpatterns as department_urls
 from .requirement import urlpatterns as requirement_urls
 from .stage_review import urlpatterns as stage_review_urls
 from .stage_type import urlpatterns as stage_type_urls
+from .product_category import urlpatterns as product_category_urls
 from .dev_mode import urlpatterns as dev_mode_urls
 from .search import urlpatterns as search_urls
 from .state import urlpatterns as state_urls
@@ -63,6 +64,7 @@ urlpatterns = [
     *requirement_urls,
     *stage_review_urls,
     *stage_type_urls,
+    *product_category_urls,
     *dev_mode_urls,
     *search_urls,
     *state_urls,

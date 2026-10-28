@@ -205,6 +205,7 @@ from .stage_review import (
     StageReviewTemplate,
 )
 from .stage_type import StageType
+from .product_category import ProductCategory, ProductCategoryModule
 from .dev_mode import DevMode, DevModeStage, DevModeStageTemplate
 from .project_stage import ProjectStage, ProjectStageStatus
 from .risk import (

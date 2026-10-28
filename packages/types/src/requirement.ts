@@ -352,6 +352,9 @@ export type TRequirementLibrary = {
   /** 需求类型的字段数——库内条目共用这套字段 */
   field_count: number;
   item_count: number;
+  /** 产品分类：选了之后库的第一层模块跟着分类的一级模块走；仅创建时可写 */
+  product_category_id: string | null;
+  product_category_detail: { id: string; name: string } | null;
   is_active: boolean;
   sort_order: number;
   created_at: string;
@@ -365,6 +368,8 @@ export type TCreateRequirementLibraryPayload = {
   identifier: string;
   requirement_type_id: string;
   description?: string;
+  /** 可为 null（不选分类）；创建后不可更换 */
+  product_category_id?: string | null;
 };
 
 /** requirement_type_id 创建后不可变——换类型会让库内已填数据全部失效 */
@@ -396,6 +401,8 @@ export type TRequirementModule = {
   sort_order: number;
   /** 子树累加计数（本模块与全部后代下的需求数），与列表 module_id 过滤口径一致 */
   count: number;
+  /** 仅库作用域：true = 来自产品分类的一级模块，库里不能新增同级 / 改名 / 删除 / 挪动 */
+  locked?: boolean;
   children: TRequirementModule[];
 };
 

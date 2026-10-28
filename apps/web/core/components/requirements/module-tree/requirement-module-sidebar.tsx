@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FolderPlus, Pencil, Trash2 } from "lucide-react";
+import { FolderLock, FolderPlus, Lock, Pencil, Trash2 } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TRequirementModule } from "@plane/types";
@@ -29,13 +29,23 @@ const getErrorMessage = (error: unknown, fallback: string) => {
   return fallback;
 };
 
-const toTreeNodes = (list: TRequirementModule[]): TModuleTreeNode[] =>
+/** markLocked：库绑了产品分类时，来自分类的一级模块换锁形文件夹图标 */
+const toTreeNodes = (list: TRequirementModule[], markLocked: boolean): TModuleTreeNode[] =>
   list.map((item) => ({
     key: item.id,
     label: item.name,
     count: item.count,
-    children: toTreeNodes(item.children ?? []),
+    icon: markLocked && item.locked ? <FolderLock className="size-3.5" strokeWidth={1.75} /> : undefined,
+    children: toTreeNodes(item.children ?? [], markLocked),
   }));
+
+const collectLockedKeys = (list: TRequirementModule[], keys = new Set<string>()) => {
+  for (const item of list) {
+    if (item.locked) keys.add(item.id);
+    if (item.children?.length) collectLockedKeys(item.children, keys);
+  }
+  return keys;
+};
 
 type TProps = {
   store: TRequirementModulesStore;
@@ -43,6 +53,11 @@ type TProps = {
   onSelect: (moduleId: string | null) => void;
   /** 无写权限的成员仍可按模块过滤，只是没有增删改入口 */
   readonly?: boolean;
+  /**
+   * 标准库绑了产品分类时传分类名：第一层模块由分类统一维护，树头不再能建一级模块，
+   * locked 节点只能建子模块（产品页不传，行为不变）。
+   */
+  lockedRootCategoryName?: string;
 };
 
 /**
@@ -50,14 +65,19 @@ type TProps = {
  * 外壳与树体用测试管理共用的 ModuleTreePanel（可拖宽、可收起、可搜索），行样式同项目研发需求页。
  */
 export const RequirementModuleSidebar = (props: TProps) => {
-  const { store, selectedModuleId, onSelect, readonly = false } = props;
+  const { store, selectedModuleId, onSelect, readonly = false, lockedRootCategoryName } = props;
+  const isRootLocked = Boolean(lockedRootCategoryName);
   const { t } = useTranslation();
   const [expandedKeys, setExpandedKeys] = useState<string[]>([]);
   const [editing, setEditing] = useState<TModuleTreeEditing>(null);
   const [deleteTarget, setDeleteTarget] = useState<TModuleTreeNode | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const treeNodes = useMemo(() => toTreeNodes(store.modules), [store.modules]);
+  const treeNodes = useMemo(() => toTreeNodes(store.modules, isRootLocked), [store.modules, isRootLocked]);
+  const lockedKeys = useMemo(
+    () => (isRootLocked ? collectLockedKeys(store.modules) : new Set<string>()),
+    [store.modules, isRootLocked]
+  );
   const isUnassignedSelected = selectedModuleId === UNASSIGNED_MODULE_KEY;
   // 末尾的「未归类」（一个模块都没有时不出，见 appendUnassignedNode）
   const displayNodes = useMemo(
@@ -132,30 +152,44 @@ export const RequirementModuleSidebar = (props: TProps) => {
     }
   };
 
-  const getMenuItems = (node: TModuleTreeNode): TModuleTreeMenuItem[] =>
-    readonly
-      ? []
-      : [
-          {
-            key: "add",
-            label: t("requirement_modules.add_child"),
-            icon: <FolderPlus className="size-3.5" strokeWidth={1.75} />,
-            onClick: () => startCreate(node.key),
-          },
-          {
-            key: "rename",
-            label: t("requirement_modules.rename"),
-            icon: <Pencil className="size-3.5" strokeWidth={1.75} />,
-            onClick: () => setEditing({ kind: "rename", key: node.key, initialValue: node.label }),
-          },
-          {
-            key: "delete",
-            label: t("requirement_modules.delete"),
-            icon: <Trash2 className="size-3.5" strokeWidth={1.75} />,
-            danger: true,
-            onClick: () => setDeleteTarget(node),
-          },
-        ];
+  const getMenuItems = (node: TModuleTreeNode): TModuleTreeMenuItem[] => {
+    if (readonly) return [];
+    const addChild: TModuleTreeMenuItem = {
+      key: "add",
+      label: t("requirement_modules.add_child"),
+      icon: <FolderPlus className="size-3.5" strokeWidth={1.75} />,
+      onClick: () => startCreate(node.key),
+    };
+    // 来自产品分类的一级模块：只能往下建，改名 / 删除要去分类里做
+    if (lockedKeys.has(node.key)) {
+      return [
+        addChild,
+        {
+          key: "locked-note",
+          label: t("requirement_modules.locked_by_category", { name: lockedRootCategoryName ?? "" }),
+          icon: <Lock className="size-3" strokeWidth={1.75} />,
+          note: true,
+          onClick: () => undefined,
+        },
+      ];
+    }
+    return [
+      addChild,
+      {
+        key: "rename",
+        label: t("requirement_modules.rename"),
+        icon: <Pencil className="size-3.5" strokeWidth={1.75} />,
+        onClick: () => setEditing({ kind: "rename", key: node.key, initialValue: node.label }),
+      },
+      {
+        key: "delete",
+        label: t("requirement_modules.delete"),
+        icon: <Trash2 className="size-3.5" strokeWidth={1.75} />,
+        danger: true,
+        onClick: () => setDeleteTarget(node),
+      },
+    ];
+  };
 
   const allLabel = t("requirement_modules.all");
 
@@ -173,7 +207,7 @@ export const RequirementModuleSidebar = (props: TProps) => {
         onEditCommit={(value) => void handleEditCommit(value)}
         onEditCancel={() => setEditing(null)}
         getMenuItems={getMenuItems}
-        onAddRoot={readonly ? undefined : () => startCreate(MODULE_TREE_ROOT_KEY)}
+        onAddRoot={readonly || isRootLocked ? undefined : () => startCreate(MODULE_TREE_ROOT_KEY)}
         railLabel={(selectedModuleId && nodeByKey.get(selectedModuleId)?.label) || allLabel}
         loading={store.isLoading}
         emptyText={t("requirement_modules.empty")}
