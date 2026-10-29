@@ -56,6 +56,7 @@ import type {
   TRequirementTrailResponse,
   TRequirementVersionsResponse,
   TSetRequirementModulePayload,
+  TMoveRequirementModulePayload,
   TUpdateRequirementLibraryPayload,
   TUpdateRequirementModulePayload,
 } from "@plane/types";
@@ -530,6 +531,19 @@ export class RequirementService extends APIService {
     payload: TUpdateRequirementModulePayload
   ): Promise<TRequirementModule> {
     return this.patch(`${this.modulesRoot(workspaceSlug, scope)}/${moduleId}/`, payload)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 拖拽移动模块（换父级 + 同级排序），同级序号由后端整组重排 */
+  async moveRequirementModule(
+    workspaceSlug: string,
+    scope: TRequirementModuleScope,
+    payload: TMoveRequirementModulePayload
+  ): Promise<TRequirementModule> {
+    return this.post(`${this.modulesRoot(workspaceSlug, scope)}/move/`, payload)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;

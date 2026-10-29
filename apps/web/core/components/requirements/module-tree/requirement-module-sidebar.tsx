@@ -14,6 +14,7 @@ import {
   collectAncestorKeys,
   indexModuleTree,
   isInSubtree,
+  type TModuleTreeDropEvent,
   type TModuleTreeEditing,
   type TModuleTreeMenuItem,
   type TModuleTreeNode,
@@ -29,15 +30,19 @@ const getErrorMessage = (error: unknown, fallback: string) => {
   return fallback;
 };
 
-/** markLocked：库绑了产品分类时，来自分类的一级模块换锁形文件夹图标 */
+/** markLocked：库绑了产品分类时，来自分类的一级模块换锁形文件夹图标，且不可拖动 */
 const toTreeNodes = (list: TRequirementModule[], markLocked: boolean): TModuleTreeNode[] =>
-  list.map((item) => ({
-    key: item.id,
-    label: item.name,
-    count: item.count,
-    icon: markLocked && item.locked ? <FolderLock className="size-3.5" strokeWidth={1.75} /> : undefined,
-    children: toTreeNodes(item.children ?? [], markLocked),
-  }));
+  list.map((item) => {
+    const locked = markLocked && Boolean(item.locked);
+    return {
+      key: item.id,
+      label: item.name,
+      count: item.count,
+      icon: locked ? <FolderLock className="size-3.5" strokeWidth={1.75} /> : undefined,
+      draggable: locked ? false : undefined,
+      children: toTreeNodes(item.children ?? [], markLocked),
+    };
+  });
 
 const collectLockedKeys = (list: TRequirementModule[], keys = new Set<string>()) => {
   for (const item of list) {
@@ -58,14 +63,16 @@ type TProps = {
    * locked 节点只能建子模块（产品页不传，行为不变）。
    */
   lockedRootCategoryName?: string;
+  /** 拖动模块成功后回调：选中的模块子树可能变了，页面据此重拉右侧列表 */
+  onModuleMoved?: () => void;
 };
 
 /**
- * 库页 / 产品页左侧的可编辑模块树侧栏：建 / 重命名 / 删模块 + 点击过滤。
+ * 库页 / 产品页左侧的可编辑模块树侧栏：建 / 重命名 / 删 / 拖动（换父级、排序）模块 + 点击过滤。
  * 外壳与树体用测试管理共用的 ModuleTreePanel（可拖宽、可收起、可搜索），行样式同项目研发需求页。
  */
 export const RequirementModuleSidebar = (props: TProps) => {
-  const { store, selectedModuleId, onSelect, readonly = false, lockedRootCategoryName } = props;
+  const { store, selectedModuleId, onSelect, readonly = false, lockedRootCategoryName, onModuleMoved } = props;
   const isRootLocked = Boolean(lockedRootCategoryName);
   const { t } = useTranslation();
   const [expandedKeys, setExpandedKeys] = useState<string[]>([]);
@@ -87,7 +94,7 @@ export const RequirementModuleSidebar = (props: TProps) => {
       ),
     [treeNodes, store.unassigned, isUnassignedSelected, t]
   );
-  const { nodeByKey } = useMemo(() => indexModuleTree(displayNodes), [displayNodes]);
+  const { nodeByKey, parentByKey } = useMemo(() => indexModuleTree(displayNodes), [displayNodes]);
 
   // 选中项（通常来自 URL）藏在收起的分支里时，把它的祖先展开；只在第一次拿到树时做
   const initialExpandDone = useRef(false);
@@ -152,6 +159,37 @@ export const RequirementModuleSidebar = (props: TProps) => {
     }
   };
 
+  /**
+   * 拖拽落点 → 移动接口参数：落在模块上 = 移进去（追加到末尾），落在「全部」上 = 移到一级，
+   * 落在两行之间 = 与目标同级、插到它前 / 后。
+   */
+  const handleDrop = async ({ dragKey, targetKey, position }: TModuleTreeDropEvent) => {
+    if (readonly) return;
+    const targetParentId =
+      position === "into" ? (targetKey === MODULE_TREE_ROOT_KEY ? null : targetKey) : parentByKey.get(targetKey);
+    if (targetParentId === undefined) return;
+    // 有产品分类的库：第一层由分类维护，不能把模块提到一级，也不能在一级之间排序
+    if (isRootLocked && targetParentId === null) {
+      setToast({
+        type: TOAST_TYPE.ERROR,
+        title: t("error"),
+        message: t("requirement_modules.locked_by_category", { name: lockedRootCategoryName ?? "" }),
+      });
+      return;
+    }
+    try {
+      await store.moveModule({
+        module_id: dragKey,
+        target_parent_id: targetParentId,
+        ...(position === "into" ? {} : { anchor_id: targetKey, placement: position }),
+      });
+      if (targetParentId) setExpandedKeys((prev) => (prev.includes(targetParentId) ? prev : [...prev, targetParentId]));
+      if (selectedModuleId && selectedModuleId !== UNASSIGNED_MODULE_KEY) onModuleMoved?.();
+    } catch (error) {
+      showError(error, "requirement_modules.toast.move_failed");
+    }
+  };
+
   const getMenuItems = (node: TModuleTreeNode): TModuleTreeMenuItem[] => {
     if (readonly) return [];
     const addChild: TModuleTreeMenuItem = {
@@ -207,6 +245,8 @@ export const RequirementModuleSidebar = (props: TProps) => {
         onEditCommit={(value) => void handleEditCommit(value)}
         onEditCancel={() => setEditing(null)}
         getMenuItems={getMenuItems}
+        dragMode={readonly ? "none" : "sort"}
+        onDrop={(event) => void handleDrop(event)}
         onAddRoot={readonly || isRootLocked ? undefined : () => startCreate(MODULE_TREE_ROOT_KEY)}
         railLabel={(selectedModuleId && nodeByKey.get(selectedModuleId)?.label) || allLabel}
         loading={store.isLoading}

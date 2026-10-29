@@ -19,6 +19,7 @@ from plane.app.views.requirement import (
     RequirementLibraryViewSet,
     RequirementModuleAPIView,
     RequirementModuleDetailAPIView,
+    RequirementModuleMoveAPIView,
     RequirementProjectsViewSet,
     RequirementTestCaseViewSet,
     RequirementTypeConfigurationAPIView,
@@ -134,6 +135,12 @@ urlpatterns = [
         RequirementModuleDetailAPIView.as_view(),
         name="requirement-library-module-detail",
     ),
+    # 拖拽移动模块（换父级 + 同级排序）
+    path(
+        "workspaces/<str:slug>/requirement-libraries/<uuid:library_id>/modules/move/",
+        RequirementModuleMoveAPIView.as_view(),
+        name="requirement-library-module-move",
+    ),
     # 批量挂靠 / 移动条目到模块（module_id 显式传 null = 移回「全部」）
     path(
         "workspaces/<str:slug>/requirement-libraries/<uuid:library_id>/items/set-module/",
@@ -190,6 +197,11 @@ urlpatterns = [
         "workspaces/<str:slug>/products/<uuid:product_id>/requirement-modules/<uuid:module_id>/",
         RequirementModuleDetailAPIView.as_view(),
         name="product-requirement-module-detail",
+    ),
+    path(
+        "workspaces/<str:slug>/products/<uuid:product_id>/requirement-modules/move/",
+        RequirementModuleMoveAPIView.as_view(),
+        name="product-requirement-module-move",
     ),
     path(
         "workspaces/<str:slug>/products/<uuid:product_id>/requirements/set-module/",

@@ -8,7 +8,7 @@
 
 from collections import defaultdict
 
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from rest_framework import status
 from rest_framework.response import Response
 
@@ -18,6 +18,7 @@ from plane.app.permissions import (
     has_workspace_permission,
 )
 from plane.app.serializers.requirement_module import (
+    RequirementModuleMoveSerializer,
     RequirementModuleSerializer,
     RequirementModuleWriteSerializer,
 )
@@ -36,7 +37,11 @@ from plane.db.models import (
     RequirementLibrary,
     RequirementModule,
 )
-from plane.utils.product_category import ROOT_LOCKED_CODE, root_lock_violation
+from plane.utils.product_category import (
+    ROOT_LOCKED_CODE,
+    root_lock_message,
+    root_lock_violation,
+)
 from plane.utils.requirement_module import build_module_tree_payload
 from plane.utils.requirement_project import linked_requirement_ids
 
@@ -216,6 +221,74 @@ class RequirementModuleDetailAPIView(_RequirementModuleScopeMixin, BaseAPIView):
         # Requirement.module 的 SET_NULL 回到「全部」，不会被带走。
         module.delete(soft=False)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+#: 同级重排后的序号步长，与 RequirementModule.sort_order 默认值一致
+SORT_ORDER_STEP = 65535
+
+
+class RequirementModuleMoveAPIView(_RequirementModuleScopeMixin, BaseAPIView):
+    """拖拽移动模块：只改模块的 parent 与同级 sort_order，挂靠的需求不变。
+
+    存量同级 sort_order 基本都是默认值，前端没法取中点排序，所以由这里把目标
+    同级整组重编号（顺序口径与树接口一致：sort_order, created_at, id）。
+    """
+
+    model = RequirementModule
+
+    def post(self, request, slug, **kwargs):
+        owner, scope_filter, error = self.resolve_scope(require_write=True)
+        if error is not None:
+            return error
+        serializer = RequirementModuleMoveSerializer(
+            data=request.data, context={"scope_filter": scope_filter}
+        )
+        serializer.is_valid(raise_exception=True)
+        module = serializer.validated_data["module"]
+        target_parent = serializer.validated_data["target_parent"]
+        anchor = serializer.validated_data["anchor"]
+        placement = serializer.validated_data["placement"]
+
+        # 有产品分类的库：受控的一级模块不能挪，普通模块也不能提到第一层
+        if (
+            isinstance(owner, RequirementLibrary)
+            and owner.product_category_id
+            and (module.category_module_id or target_parent is None)
+        ):
+            return Response(
+                {"error": root_lock_message(owner), "code": ROOT_LOCKED_CODE},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        siblings = list(
+            RequirementModule.objects.filter(parent=target_parent, **scope_filter)
+            .exclude(id=module.id)
+            .order_by("sort_order", "created_at", "id")
+        )
+        if anchor is None:
+            index = len(siblings)
+        else:
+            index = next(i for i, s in enumerate(siblings) if s.id == anchor.id)
+            if placement == "after":
+                index += 1
+        siblings.insert(index, module)
+
+        module.parent = target_parent
+        for i, sibling in enumerate(siblings):
+            sibling.sort_order = (i + 1) * SORT_ORDER_STEP
+
+        try:
+            with transaction.atomic():
+                RequirementModule.objects.bulk_update(siblings, ["parent", "sort_order"])
+        except IntegrityError:
+            return Response(
+                {"error": "目标位置已存在同名模块"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        module.refresh_from_db()
+        return Response(
+            RequirementModuleSerializer(module).data, status=status.HTTP_200_OK
+        )
 
 
 class ProjectProductRequirementModuleTreeAPIView(BaseAPIView):

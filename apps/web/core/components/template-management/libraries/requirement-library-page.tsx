@@ -236,6 +236,7 @@ export const RequirementLibraryPage = observer(function RequirementLibraryPage()
               onSelect={setSelectedModuleId}
               readonly={!canManageLibraries}
               lockedRootCategoryName={library?.product_category_detail?.name}
+              onModuleMoved={() => void store.fetchRequirements().catch(() => undefined)}
             />
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
               {library && (

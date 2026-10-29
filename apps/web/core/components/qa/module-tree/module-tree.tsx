@@ -2,8 +2,8 @@
 
 import { Fragment, useCallback, useMemo, useState } from "react";
 import type { DragEvent, KeyboardEvent, ReactNode } from "react";
-import { ChevronDown, ChevronRight, Folder, ListChecks } from "lucide-react";
-import { CustomMenu } from "@plane/ui";
+import { ChevronDown, ChevronRight, Folder, GripVertical, ListChecks } from "lucide-react";
+import { CustomMenu, Tooltip } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { ModuleTreeInput } from "./module-tree-input";
 import { filterModuleTree, indexModuleTree, isInSubtree } from "./module-tree-utils";
@@ -25,6 +25,8 @@ const INDENT = 16;
 const BASE_PADDING = 6;
 /** 箭头位 14 + 间距 4，拖拽指示线从图标处起 */
 const SLOT = 18;
+/** 悬停出的拖柄宽度：贴在箭头左边，一级行借用滚动区的左内边距（同侧栏收藏夹） */
+const GRIP_WIDTH = 12;
 
 export type TModuleTreeRoot = {
   key?: string;
@@ -253,6 +255,26 @@ export const ModuleTree = ({
     );
   };
 
+  /** 可拖的行悬停时左侧出拖柄，提示能拖；拖动本身仍是整行可拖 */
+  const renderGrip = (indent: number) => (
+    // title="" 挡住行上的名称原生提示，只留拖柄自己的提示
+    <span
+      title=""
+      className="absolute top-1/2 hidden -translate-y-1/2 cursor-grab text-placeholder group-hover/row:flex"
+      style={{ left: indent - GRIP_WIDTH, width: GRIP_WIDTH }}
+    >
+      <Tooltip
+        tooltipContent={dragMode === "sort" ? "拖动可调整顺序或移入其他模块" : "拖动可移入其他模块"}
+        position="top-left"
+        disabled={dragKey !== null}
+      >
+        <span className="grid h-4 w-3 place-items-center">
+          <GripVertical className="size-3.5" />
+        </span>
+      </Tooltip>
+    </span>
+  );
+
   /** 图标位：头像 / 色点等 leading 优先，其次节点自带图标；「全部」默认清单图标，其余默认文件夹 */
   const renderIcon = (node: TModuleTreeNode | null, isSelected: boolean) => (
     <span className={cn("grid size-3.5 shrink-0 place-items-center", isSelected ? "text-primary" : "text-tertiary")}>
@@ -328,6 +350,7 @@ export const ModuleTree = ({
         )}
         style={{ paddingLeft: indent }}
       >
+        {canDrag && renderGrip(indent)}
         {renderChevron(node, expanded)}
         <div className="flex h-full min-w-0 flex-1 items-center gap-[7px]">
           {renderIcon(node, isSelected)}

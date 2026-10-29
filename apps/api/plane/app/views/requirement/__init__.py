@@ -29,6 +29,7 @@ from .module import (
     ProjectProductRequirementModuleTreeAPIView,
     RequirementModuleAPIView,
     RequirementModuleDetailAPIView,
+    RequirementModuleMoveAPIView,
 )
 from .test_case import RequirementTestCaseViewSet
 from .type import (
@@ -55,6 +56,7 @@ __all__ = [
     "RequirementLibraryViewSet",
     "RequirementModuleAPIView",
     "RequirementModuleDetailAPIView",
+    "RequirementModuleMoveAPIView",
     "RequirementProjectsViewSet",
     "RequirementTestCaseViewSet",
     "RequirementTypeConfigurationAPIView",

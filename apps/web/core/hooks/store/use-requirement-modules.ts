@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
   TCreateRequirementModulePayload,
+  TMoveRequirementModulePayload,
   TProjectRequirementModuleGroup,
   TRequirementModule,
   TRequirementModuleScope,
@@ -129,6 +130,22 @@ export const useRequirementModules = (
     [workspaceSlug, writeScope, refresh]
   );
 
+  /** 拖拽移动模块：换父级 / 同级排序，挂靠的需求不变 */
+  const moveModule = useCallback(
+    async (payload: TMoveRequirementModulePayload) => {
+      if (!workspaceSlug || !writeScope) throw new Error("Modules are read-only in this scope.");
+      setIsMutating(true);
+      try {
+        const response = await requirementService.moveRequirementModule(workspaceSlug, writeScope, payload);
+        await refresh();
+        return response;
+      } finally {
+        setIsMutating(false);
+      }
+    },
+    [workspaceSlug, writeScope, refresh]
+  );
+
   /** 删除模块连带删子模块；模块下的需求不删，回到「全部」 */
   const deleteModule = useCallback(
     async (moduleId: string) => {
@@ -179,6 +196,7 @@ export const useRequirementModules = (
     refresh,
     createModule,
     updateModule,
+    moveModule,
     deleteModule,
     moveRequirements,
   };

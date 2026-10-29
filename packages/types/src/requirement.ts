@@ -423,6 +423,14 @@ export type TCreateRequirementModulePayload = {
 
 export type TUpdateRequirementModulePayload = Partial<TCreateRequirementModulePayload>;
 
+/** 拖拽移动模块：target_parent_id 为 null = 移到一级；有 anchor_id 时插到它前 / 后，否则追加到末尾 */
+export type TMoveRequirementModulePayload = {
+  module_id: string;
+  target_parent_id: string | null;
+  anchor_id?: string;
+  placement?: "before" | "after";
+};
+
 /** module_id 必传：显式 null 才是「移回全部（取消挂靠）」 */
 export type TSetRequirementModulePayload = {
   requirement_ids: string[];

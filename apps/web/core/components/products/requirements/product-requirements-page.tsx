@@ -443,6 +443,7 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
               selectedModuleId={selectedModuleId}
               onSelect={setSelectedModuleId}
               readonly={!canManageModules}
+              onModuleMoved={() => void store.fetchRequirements().catch(() => undefined)}
             />
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
               {requirementTypes.length === 0 ? (
