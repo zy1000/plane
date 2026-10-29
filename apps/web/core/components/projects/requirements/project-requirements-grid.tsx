@@ -1,6 +1,7 @@
 /**
- * 项目需求网格：需求内容只读，唯一能写的是需求级交付状态（RequirementStatusCell 下拉，
- * 与关联/解除共用 canManage）。
+ * 项目需求网格。「全部」视图：需求内容只读，唯一能写的是需求级交付状态（RequirementStatusCell
+ * 下拉，与关联/解除共用 canManage）。选中某个需求类型时表格换成该类型的字段视图，格子直接改
+ * （见 project-requirement-type-table.tsx）；工具栏、勾选解除、空态与分页仍归这里。
  *
  * 没有复用 components/requirements/requirement-grid.tsx —— 那个网格是「一个需求类型
  * 一张表」的可编辑录入界面，整套暂存/批量保存/乐观锁机制在项目侧全无用武之地。
@@ -14,7 +15,6 @@
  */
 import { type KeyboardEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Pagination } from "antd";
 import { Loader as LoaderIcon } from "lucide-react";
 import { useOutsideClickDetector } from "@plane/hooks";
 import { useTranslation } from "@plane/i18n";
@@ -22,7 +22,13 @@ import { Button } from "@plane/propel/button";
 import { IconButton } from "@plane/propel/icon-button";
 import { CloseIcon, SearchIcon } from "@plane/propel/icons";
 import { Tooltip } from "@plane/propel/tooltip";
-import type { TProjectRequirement, TRequirementItemStatus, TRequirementTypeSchema } from "@plane/types";
+import type {
+  TProjectRequirement,
+  TRequirementBatchSavePayload,
+  TRequirementBatchSaveResponse,
+  TRequirementItemStatus,
+  TRequirementTypeSchema,
+} from "@plane/types";
 import { Loader } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { FiltersDropdown } from "@/components/issues/issue-layouts/filters";
@@ -30,6 +36,9 @@ import { RequirementApprovalCell } from "@/components/products/requirements/appr
 import { ProductChip } from "@/components/products/product-chip";
 import { RequirementStatusCell } from "@/components/requirements";
 import { BuiltinCellValue, REQUIREMENT_BUILTIN_COLUMNS } from "@/components/requirements/requirement-builtin-fields";
+import { resolveBuiltinColumns } from "@/components/requirements/requirement-builtin-layout";
+import { RequirementDisplayProperties } from "@/components/requirements/requirement-display-properties";
+import { RequirementGridPagination } from "@/components/requirements/requirement-grid-pagination";
 import {
   getCurrentPageOffset,
   getRequirementColumnWidth,
@@ -53,6 +62,8 @@ import {
 } from "@/components/requirements/requirement-grid-shared";
 import { RequirementIdentifier } from "@/components/requirements/requirement-identifier";
 import { ProjectRequirementDisplayProperties } from "./project-requirement-display-properties";
+import { ProjectRequirementTypeTable } from "./project-requirement-type-table";
+import { useProjectRequirementTypeColumns } from "./use-project-requirement-type-columns";
 import {
   COLUMN_ICONS,
   COLUMN_LABEL_KEYS,
@@ -100,7 +111,19 @@ type TProps = {
   /** 列显隐由页面持有：视图页签要把它和筛选一起记住 */
   hiddenColumns: TProjectRequirementColumnKey[];
   onToggleColumn: (key: TProjectRequirementColumnKey) => void;
+  /** 选中的需求类型：传了就换成该类型的字段视图 */
+  activeRequirementType?: TRequirementTypeSchema | null;
+  /** 类型视图里「所属产品」列只在跨产品浏览时出现 */
+  showProductColumn?: boolean;
+  /** 当前用户能改需求内容的产品；不在里面的行只读 */
+  editableProductIds?: Set<string>;
+  /** 类型视图存一行：打这一行所属产品的 bulk-save。不传则类型视图整表只读 */
+  onSaveRow?: (productId: string, payload: TRequirementBatchSavePayload) => Promise<TRequirementBatchSaveResponse>;
 };
+
+const EMPTY_PRODUCT_IDS = new Set<string>();
+/** 没给保存入口（如个人页只读复用）时类型视图整表只读，这个兜底永远不会被调到 */
+const rejectSaveRow = () => Promise.reject({ error: "Read only." });
 
 export const ProjectRequirementsGrid = (props: TProps) => {
   const {
@@ -135,9 +158,21 @@ export const ProjectRequirementsGrid = (props: TProps) => {
     onClearFilters,
     hiddenColumns,
     onToggleColumn,
+    activeRequirementType = null,
+    showProductColumn = true,
+    editableProductIds = EMPTY_PRODUCT_IDS,
+    onSaveRow,
   } = props;
   const { t } = useTranslation();
+  const typeColumns = useProjectRequirementTypeColumns(projectId, activeRequirementType?.id ?? null);
+  /** 类型视图子表单行菜单的 portal 宿主，挂在滚动容器外 */
+  const [menuPortalEl, setMenuPortalEl] = useState<HTMLDivElement | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  /** 整块骨架屏只给进页首次加载；之后切类型 / 筛选 / 翻页都留着当前内容等新数据 */
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(!isLoading);
+  useEffect(() => {
+    if (!isLoading) setHasLoadedOnce(true);
+  }, [isLoading]);
   const [searchInput, setSearchInput] = useState(search);
   const [isSearchOpen, setIsSearchOpen] = useState(() => search.trim().length > 0);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -169,6 +204,35 @@ export const ProjectRequirementsGrid = (props: TProps) => {
     (key: TProjectRequirementColumnKey) => COLUMN_ICONS[key] ?? builtinByKey[key]?.icon,
     [builtinByKey]
   );
+
+  /** 类型视图「显示」里的列：编号、标题固定；内置列、类型字段（子表字段单列一项）、项目侧列 */
+  const typeDisplayColumns = useMemo(() => {
+    if (!activeRequirementType) return [];
+    return [
+      { id: "display_id", name: t("requirements.identifier.column"), locked: true },
+      { id: "title", name: t("requirement_fields.builtin.title"), locked: true },
+      { id: "module", name: t("requirement_modules.column") },
+      ...(showProductColumn ? [{ id: "product", name: columnLabel("product") }] : []),
+      ...resolveBuiltinColumns("product", activeRequirementType.builtin_fields).map((entry) => ({
+        id: entry.key,
+        name: t(entry.column.labelKey),
+      })),
+      ...activeRequirementType.fields
+        .filter((field) => field.is_active)
+        .flatMap((field) =>
+          field.field_type === "form"
+            ? [
+                { id: field.id, name: field.name },
+                ...field.children
+                  .filter((child) => child.is_active)
+                  .map((child) => ({ id: child.id, name: `${field.name} / ${child.name}` })),
+              ]
+            : [{ id: field.id, name: field.name }]
+        ),
+      { id: "issues", name: columnLabel("issues") },
+      { id: "approval", name: columnLabel("approval") },
+    ];
+  }, [activeRequirementType, columnLabel, showProductColumn, t]);
 
   // --- 搜索 -----------------------------------------------------------
   const scheduleSearch = (value: string) => {
@@ -399,29 +463,6 @@ export const ProjectRequirementsGrid = (props: TProps) => {
     }
   };
 
-  if (isLoading && !requirements.length) {
-    return (
-      <div className="p-6">
-        <Loader>
-          <Loader.Item height="420px" />
-        </Loader>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="grid flex-1 place-items-center p-6 text-center">
-        <div>
-          <p className="text-13 text-secondary">{error}</p>
-          <Button variant="neutral-primary" size="sm" className="mt-3" onClick={onRetry}>
-            {t("retry")}
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
   const toolbar = (
     <div className="flex items-center gap-2">
       {canManage && selectedIds.length > 0 && (
@@ -467,11 +508,21 @@ export const ProjectRequirementsGrid = (props: TProps) => {
       </div>
       {toolbarAfterSearch}
       <FiltersDropdown title={t("common.display")} placement="bottom-end">
-        <div className="vertical-scrollbar relative scrollbar-sm h-full w-full divide-y divide-subtle-1 overflow-hidden overflow-y-auto px-2.5">
-          <div className="py-2">
-            <ProjectRequirementDisplayProperties hiddenColumns={hiddenColumns} onToggle={onToggleColumn} />
+        {activeRequirementType ? (
+          <div className="vertical-scrollbar relative scrollbar-sm h-full w-full overflow-hidden overflow-y-auto">
+            <RequirementDisplayProperties
+              columns={typeDisplayColumns}
+              hiddenIds={typeColumns.hiddenIds}
+              onToggle={typeColumns.toggleColumn}
+            />
           </div>
-        </div>
+        ) : (
+          <div className="vertical-scrollbar relative scrollbar-sm h-full w-full divide-y divide-subtle-1 overflow-hidden overflow-y-auto px-2.5">
+            <div className="py-2">
+              <ProjectRequirementDisplayProperties hiddenColumns={hiddenColumns} onToggle={onToggleColumn} />
+            </div>
+          </div>
+        )}
       </FiltersDropdown>
       {onCreate && (
         <Button variant="primary" size="lg" disabled={isMutating} onClick={onCreate}>
@@ -496,14 +547,40 @@ export const ProjectRequirementsGrid = (props: TProps) => {
 
   return (
     <div className="relative flex flex-1 flex-col overflow-hidden">
+      <div ref={setMenuPortalEl} className="requirement-grid-menu-portal" />
       {toolbarPortalEl ? createPortal(toolbar, toolbarPortalEl) : <div className="px-4 py-2">{toolbar}</div>}
 
       <div
         ref={setScrollContainer}
         className="horizontal-scrollbar vertical-scrollbar scrollbar-lg min-h-0 min-w-0 flex-1 overflow-auto bg-surface-1"
       >
-        {/* 没有行就不渲染表格：否则会看到一条空荡荡的表头横在那里，横滚时还会错位 */}
-        {isEmpty ? (
+        {/*
+          加载与报错只占表格区域，不能整个组件提前返回 —— 右上角的创建 / 关联按钮是从这里
+          portal 出去的，提前返回会让它们跟着消失。
+          没有行就不渲染表格：否则会看到一条空荡荡的表头横在那里，横滚时还会错位
+        */}
+        {isLoading && isEmpty ? (
+          hasLoadedOnce ? (
+            <div className="grid h-full place-items-center p-10">
+              <LoaderIcon className="size-5 animate-spin text-tertiary" />
+            </div>
+          ) : (
+            <div className="p-6">
+              <Loader>
+                <Loader.Item height="420px" />
+              </Loader>
+            </div>
+          )
+        ) : error ? (
+          <div className="grid h-full place-items-center p-6 text-center">
+            <div>
+              <p className="text-13 text-secondary">{error}</p>
+              <Button variant="neutral-primary" size="sm" className="mt-3" onClick={onRetry}>
+                {t("retry")}
+              </Button>
+            </div>
+          </div>
+        ) : isEmpty ? (
           <div className="grid h-full place-items-center p-10 text-center">
             {/*
               两种空态语义完全不同，不能共用一段文案：
@@ -544,6 +621,25 @@ export const ProjectRequirementsGrid = (props: TProps) => {
               </div>
             )}
           </div>
+        ) : activeRequirementType ? (
+          <ProjectRequirementTypeTable
+            key={activeRequirementType.id}
+            workspaceSlug={workspaceSlug}
+            containerWidth={containerWidth}
+            menuPortalEl={menuPortalEl}
+            requirementType={activeRequirementType}
+            requirements={requirements}
+            hiddenIds={typeColumns.hiddenIds}
+            showProductColumn={showProductColumn}
+            canManage={canManage}
+            selectedIds={selectedIds}
+            onToggleOne={toggleOne}
+            onToggleAll={toggleAll}
+            editableProductIds={onSaveRow ? editableProductIds : EMPTY_PRODUCT_IDS}
+            onSaveRow={onSaveRow ?? rejectSaveRow}
+            onOpenDetail={onOpenDetail}
+            onStatusChange={onStatusChange}
+          />
         ) : (
           <table className={REQUIREMENT_GRID_TABLE_CLASS} style={{ width: tableWidth }}>
             <colgroup>
@@ -802,35 +898,15 @@ export const ProjectRequirementsGrid = (props: TProps) => {
         totalCount > 0 但本页 0 行 = 停在越界的页码上。这时**必须**留着分页，
         否则唯一能回到第一页的控件也没了，用户就卡死在空页上。
       */}
-      {(!isEmpty || totalCount > 0) && (
-        <div className="flex flex-shrink-0 items-center justify-between border-t border-subtle bg-surface-1 px-4 py-3">
-          <span className="text-sm text-secondary">
-            {isLoading && <LoaderIcon className="mr-1 inline size-3.5 animate-spin" />}
-            {totalCount > 0
-              ? t("requirement_grid.data.range", {
-                  start: currentPageOffset * perPage + 1,
-                  end: Math.min(currentPageOffset * perPage + requirements.length, totalCount),
-                  total: totalCount,
-                })
-              : ""}
-          </span>
-          <Pagination
-            simple
-            size="small"
-            showSizeChanger
-            pageSizeOptions={["20", "50", "100"]}
-            current={currentPageOffset + 1}
-            pageSize={perPage}
-            total={totalCount}
-            onChange={(page, size) => {
-              if (size !== perPage) {
-                onPerPageChange(size);
-                return;
-              }
-              onCursorChange(`${perPage}:${page - 1}:0`);
-            }}
-          />
-        </div>
+      {!error && (!isEmpty || totalCount > 0) && (
+        <RequirementGridPagination
+          totalCount={totalCount}
+          perPage={perPage}
+          pageIndex={currentPageOffset}
+          isLoading={isLoading}
+          onPageChange={(pageIndex) => onCursorChange(pageIndex <= 0 ? undefined : `${perPage}:${pageIndex}:0`)}
+          onPerPageChange={onPerPageChange}
+        />
       )}
     </div>
   );

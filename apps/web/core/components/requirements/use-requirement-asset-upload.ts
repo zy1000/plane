@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { v4 as uuidv4 } from "uuid";
 import { EFileAssetType } from "@plane/types";
 import type { TRequirementAssetRef } from "@plane/types";
@@ -21,28 +21,38 @@ export const useRequirementAssetUpload = ({
   workspaceSlug: string;
   entityId: string;
 }) => {
+  const uploadFor = useRequirementAssetUploadByEntity({ workspaceSlug });
+  return useMemo(() => uploadFor(entityId), [entityId, uploadFor]);
+};
+
+/**
+ * 同一张表里的行分属不同归属时用（项目需求页一页可以横跨多个产品）：先按行拿到它的
+ * productId，再换出挂在该产品上的上传器。
+ */
+export const useRequirementAssetUploadByEntity = ({ workspaceSlug }: { workspaceSlug: string }) => {
   const { uploadEditorAsset } = useEditorAsset();
 
   return useCallback(
-    /** blockId 由调用方给时，可以拿它去 editor asset store 读上传进度（需求级附件区要显示进度） */
-    async (file: globalThis.File, imageOnly: boolean, blockId?: string): Promise<TRequirementAssetRef> => {
-      if (imageOnly && !file.type.startsWith("image/")) throw new Error("Only images are supported.");
-      const response = await uploadEditorAsset({
-        blockId: blockId ?? uuidv4(),
-        data: {
-          entity_identifier: entityId,
-          entity_type: EFileAssetType.REQUIREMENT_ATTACHMENT,
-        },
-        file,
-        workspaceSlug,
-      });
-      return {
-        asset_id: response.asset_id,
-        name: file.name,
-        type: file.type,
-        size: file.size,
-      };
-    },
-    [entityId, uploadEditorAsset, workspaceSlug]
+    (entityId: string) =>
+      /** blockId 由调用方给时，可以拿它去 editor asset store 读上传进度（需求级附件区要显示进度） */
+      async (file: globalThis.File, imageOnly: boolean, blockId?: string): Promise<TRequirementAssetRef> => {
+        if (imageOnly && !file.type.startsWith("image/")) throw new Error("Only images are supported.");
+        const response = await uploadEditorAsset({
+          blockId: blockId ?? uuidv4(),
+          data: {
+            entity_identifier: entityId,
+            entity_type: EFileAssetType.REQUIREMENT_ATTACHMENT,
+          },
+          file,
+          workspaceSlug,
+        });
+        return {
+          asset_id: response.asset_id,
+          name: file.name,
+          type: file.type,
+          size: file.size,
+        };
+      },
+    [uploadEditorAsset, workspaceSlug]
   );
 };

@@ -50,6 +50,8 @@ type TViewTabsBarProps = {
   canUpdateModeView: (view: IProjectView) => boolean;
   onUpdateModeView: () => Promise<void> | void;
   onSaveAsProjectView: (view: IProjectView) => void;
+  /** 栏最右侧的页面自有控件（如需求页的类型切换），排在「保存 / 放弃」之后 */
+  trailing?: ReactNode;
 };
 
 /** 右侧「更多 / 新建」要占的宽度，量页签时先扣掉 */
@@ -140,6 +142,7 @@ export const ViewTabsBar = (props: TViewTabsBarProps) => {
     canUpdateModeView,
     onUpdateModeView,
     onSaveAsProjectView,
+    trailing,
   } = props;
   // refs
   const containerRef = useRef<HTMLDivElement>(null);
@@ -403,6 +406,8 @@ export const ViewTabsBar = (props: TViewTabsBarProps) => {
           )}
         </div>
       )}
+
+      {trailing && <div className="flex shrink-0 items-center">{trailing}</div>}
     </div>
   );
 };

@@ -1,16 +1,17 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   TProjectRequirement,
   TProjectRequirementCreatePayload,
   TProjectRequirementsResponse,
-  TRequirementConfiguration,
+  TRequirementBatchSavePayload,
+  TRequirementBatchSaveResponse,
   TRequirementFilter,
   TRequirementItemStatus,
   TRequirementProjectSubmitChangePayload,
   TRequirementTypeSchema,
 } from "@plane/types";
 import type { TProjectRequirementListQuery } from "@/components/projects/requirements/filters";
-import { RequirementService } from "@/services/requirement.service";
+import { RequirementService, type TProjectRequirementConfiguration } from "@/services/requirement.service";
 
 const requirementService = new RequirementService();
 
@@ -34,6 +35,7 @@ const EMPTY_PAGE: TProjectRequirementsResponse = {
 
 /** 稳定引用，避免每次渲染都产生新数组把下游 memo 打穿 */
 const EMPTY_REQUIREMENT_TYPES: TRequirementTypeSchema[] = [];
+const EMPTY_PRODUCT_IDS: string[] = [];
 
 /**
  * 一个项目引用的产品需求。
@@ -53,6 +55,7 @@ export const useProjectRequirements = ({
   initialListQuery,
   initialModuleId,
   initialProductId,
+  initialRequirementTypeId,
 }: {
   workspaceSlug: string | undefined;
   projectId: string | undefined;
@@ -60,8 +63,10 @@ export const useProjectRequirements = ({
   /** 首屏就带着 ?moduleId= / ?product= 时传进来，免得挂载后再追平初值、多打一次列表 */
   initialModuleId?: string | null;
   initialProductId?: string | null;
+  /** 首屏就带着类型页签（?req_type=）时传进来，理由同上 */
+  initialRequirementTypeId?: string | null;
 }) => {
-  const [configuration, setConfiguration] = useState<TRequirementConfiguration | null>(null);
+  const [configuration, setConfiguration] = useState<TProjectRequirementConfiguration | null>(null);
   const [requirementsPage, setRequirementsPage] = useState<TProjectRequirementsResponse>(EMPTY_PAGE);
   const [isConfigurationLoading, setIsConfigurationLoading] = useState(Boolean(workspaceSlug && projectId));
   const [isRequirementsLoading, setIsRequirementsLoading] = useState(Boolean(workspaceSlug && projectId));
@@ -79,6 +84,18 @@ export const useProjectRequirements = ({
    */
   const [moduleId, setModuleIdState] = useState<string | null>(initialModuleId ?? null);
   const [productId, setProductIdState] = useState<string | null>(initialProductId ?? null);
+  /**
+   * 类型页签；null = 「全部」。选中某个类型时表格换成该类型的字段视图，列表只取这一类。
+   * 与筛选里的「需求类型」同一个查询参数，页签优先。
+   */
+  const [requirementTypeId, setRequirementTypeIdState] = useState<string | null>(initialRequirementTypeId ?? null);
+  /**
+   * 当前这页数据是按哪个类型取回来的。表格按它渲染而不是按页签：切类型时新数据回来前，
+   * 不能拿上一个类型的行去套新类型的列。
+   */
+  const [loadedRequirementTypeId, setLoadedRequirementTypeId] = useState<string | null>(
+    initialRequirementTypeId ?? null
+  );
 
   const fetchConfiguration = useCallback(async () => {
     if (!workspaceSlug || !projectId) return null;
@@ -116,7 +133,7 @@ export const useProjectRequirements = ({
           perPage,
           search,
           filters,
-          requirementTypeId: listFilters.requirementTypeId,
+          requirementTypeId: requirementTypeId ?? listFilters.requirementTypeId,
           productId: productId ?? undefined,
           status: listFilters.status,
           title: listFilters.title,
@@ -133,6 +150,7 @@ export const useProjectRequirements = ({
         });
         if (requestSequence !== requestSequenceRef.current) return response;
         setRequirementsPage(response);
+        setLoadedRequirementTypeId(requirementTypeId);
         return response;
       } catch (requestError) {
         if (requestSequence === requestSequenceRef.current) {
@@ -143,7 +161,7 @@ export const useProjectRequirements = ({
         if (requestSequence === requestSequenceRef.current) setIsRequirementsLoading(false);
       }
     },
-    [cursor, filters, listFilters, moduleId, perPage, productId, projectId, search, workspaceSlug]
+    [cursor, filters, listFilters, moduleId, perPage, productId, projectId, requirementTypeId, search, workspaceSlug]
   );
 
   useEffect(() => {
@@ -270,6 +288,32 @@ export const useProjectRequirements = ({
   }, []);
 
   /**
+   * 类型视图里改一格存一行：内容的写入权在产品上，直接打这一行所属产品的 bulk-save。
+   *
+   * 服务端回的是产品口径的行，没有项目侧字段（工作项数、所属产品名、关联排序等），
+   * 所以按字段合并回当前页而不是整行替换，也不重拉列表 —— 重拉会让骨架屏顶掉表格。
+   */
+  const saveRequirementRow = useCallback(
+    async (rowProductId: string, payload: TRequirementBatchSavePayload): Promise<TRequirementBatchSaveResponse> => {
+      if (!workspaceSlug) throw new Error("Workspace is required.");
+      const response = await requirementService.bulkSaveRequirements(workspaceSlug, rowProductId, payload);
+      const updated = response?.updated ?? [];
+      if (updated.length) {
+        const byId = new Map(updated.map((row) => [row.id, row]));
+        setRequirementsPage((current) => ({
+          ...current,
+          results: current.results.map((item) => {
+            const saved = byId.get(item.id);
+            return saved ? { ...item, ...saved } : item;
+          }),
+        }));
+      }
+      return response;
+    },
+    [workspaceSlug]
+  );
+
+  /**
    * 人工改需求级交付状态。
    *
    * 只改这一行 + 分面计数，不重拉列表 —— 状态变化不改变结果集构成（除非当前正按
@@ -331,6 +375,13 @@ export const useProjectRequirements = ({
     setCursor(undefined);
     setProductIdState(value);
   }, []);
+  const setRequirementTypeId = useCallback((value: string | null) => {
+    setCursor(undefined);
+    setRequirementTypeIdState(value);
+  }, []);
+
+  const editableProductIds = configuration?.editable_product_ids ?? EMPTY_PRODUCT_IDS;
+  const editableProductIdSet = useMemo(() => new Set(editableProductIds), [editableProductIds]);
 
   return {
     configuration,
@@ -348,6 +399,9 @@ export const useProjectRequirements = ({
     listFilters,
     moduleId,
     productId,
+    requirementTypeId,
+    loadedRequirementTypeId,
+    editableProductIds: editableProductIdSet,
     setSearch: updateSearch,
     setFilters: updateFilters,
     setCursor,
@@ -355,6 +409,7 @@ export const useProjectRequirements = ({
     setListFilters,
     setModuleId,
     setProductId,
+    setRequirementTypeId,
     fetchConfiguration,
     fetchRequirements,
     linkRequirements,
@@ -363,5 +418,6 @@ export const useProjectRequirements = ({
     submitChange,
     updateStatus,
     syncRequirements,
+    saveRequirementRow,
   };
 };

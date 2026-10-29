@@ -38,6 +38,7 @@ from plane.app.serializers.requirement_project import (
 from plane.app.views.base import BaseViewSet
 from plane.app.views.requirement.change import change_error_response
 from plane.app.views.requirement.mixins import (
+    can_write_requirements,
     get_requirement_scope,
     get_scoped_product,
     resolve_row_layer,
@@ -53,6 +54,7 @@ from plane.db.models import (
     RequirementProject,
     RequirementRelease,
 )
+from plane.utils.product import can_view_product
 from plane.utils.requirement import (
     field_specs_for_requirement_types,
     field_tree_from_specs,
@@ -370,13 +372,37 @@ class ProjectRequirementViewSet(BaseViewSet):
 
         与产品的 requirement-configuration 形状一致，但 can_edit 恒为 False ——
         需求内容的写入权在产品上，项目侧只有关联与状态。
+
+        editable_product_ids：本项目需求所属的产品里，当前用户能改需求内容的那些。
+        项目页类型视图按行判断格子能不能改，写入直接走各产品的 bulk-save。
         """
         requirement_type_ids, specs, by_requirement_type = self._requirement_type_specs(
             project_id
         )
+        product_ids = (
+            RequirementProject.objects.filter(
+                project_id=project_id,
+                requirement__deleted_at__isnull=True,
+                requirement__product__isnull=False,
+            )
+            .order_by()
+            .values_list("requirement__product_id", flat=True)
+            .distinct()
+        )
+        editable_product_ids = [
+            str(product.id)
+            for product in Product.objects.filter(
+                id__in=list(product_ids), workspace__slug=slug
+            )
+            .select_related("workspace")
+            .prefetch_related("reviewers")
+            if can_view_product(request.user, product)
+            and can_write_requirements(request.user, product)
+        ]
         return Response(
             {
                 "can_edit": False,
+                "editable_product_ids": editable_product_ids,
                 "pending_change_request_count": 0,
                 "requirement_types": requirement_types_field_payload_from_specs(
                     requirement_type_ids, by_requirement_type

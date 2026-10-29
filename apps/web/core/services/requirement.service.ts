@@ -97,6 +97,11 @@ async function unwrapBlobError(error: any) {
 /** 需求接口的作用域。product = 归属（可写），project = 引用（只读） */
 export type TRequirementScope = { kind: "product" | "project"; id: string };
 
+/** 项目需求配置：在产品配置的形状上多一份「当前用户能改哪些产品的需求内容」 */
+export type TProjectRequirementConfiguration = TRequirementConfiguration & {
+  editable_product_ids?: string[];
+};
+
 /** 需求列表的查询参数：项目需求页与 profile 需求 tab 共用同一套 */
 export type TRequirementListParams = {
   cursor?: string;
@@ -1133,11 +1138,14 @@ export class RequirementService extends APIService {
 
   /* --- 项目 ↔ 需求 ------------------------------------------------------ */
 
-  /** 项目网格渲染自定义列所需的需求类型与字段。形状与产品的 configuration 一致，但 can_edit 恒为 false */
+  /**
+   * 项目网格渲染自定义列所需的需求类型与字段。形状与产品的 configuration 一致，但 can_edit 恒为 false；
+   * 内容能不能改按行所属产品看 editable_product_ids，写入走各产品的 bulk-save。
+   */
   async getProjectRequirementConfiguration(
     workspaceSlug: string,
     projectId: string
-  ): Promise<TRequirementConfiguration> {
+  ): Promise<TProjectRequirementConfiguration> {
     return this.get(`${this.scopeRoot(workspaceSlug, { kind: "project", id: projectId })}/requirement-configuration/`)
       .then((response) => response?.data)
       .catch((error) => {

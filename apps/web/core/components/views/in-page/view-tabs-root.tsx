@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import type { ReactNode } from "react";
 import { observer } from "mobx-react";
 import type { IProjectView, TViewScope } from "@plane/types";
 import { AlertModalCore } from "@plane/ui";
@@ -15,6 +16,8 @@ type TViewTabsRootProps = TViewTabsParams & {
   allLabel: string;
   /** 「存为新视图」弹窗里的摘要行 */
   getSummary?: (snapshot: TViewSnapshot) => TViewSummaryRow[];
+  /** 页签栏最右侧的页面自有控件 */
+  trailing?: ReactNode;
 };
 
 type TSaveModalState = { mode: "create"; initialName?: string } | { mode: "edit"; view: IProjectView } | null;
@@ -38,7 +41,7 @@ const SUMMARY_KIND_OF_PART: Record<TViewSnapshotKey, TViewSummaryRow["kind"]> = 
  * 页面只负责提供当前状态（current）和如何应用一个视图（apply）。
  */
 export const ViewTabsRoot = observer(function ViewTabsRoot(props: TViewTabsRootProps) {
-  const { allLabel, getSummary, ...params } = props;
+  const { allLabel, getSummary, trailing, ...params } = props;
   // store hooks
   const { getUserDetails } = useMember();
   const tabs = useViewTabs(params);
@@ -118,6 +121,7 @@ export const ViewTabsRoot = observer(function ViewTabsRoot(props: TViewTabsRootP
         canUpdateModeView={tabs.canUpdateModeView}
         onUpdateModeView={tabs.saveActiveView}
         onSaveAsProjectView={openSaveAsProjectView}
+        trailing={trailing}
       />
 
       <SaveViewModal

@@ -1,9 +1,10 @@
 /**
  * 项目需求页（/:ws/projects/:pid/requirements）。
  *
- * 展示的是**产品需求被本项目引用的那一份**：网格内容只读，项目能改的是关联关系
- * 与需求级交付状态。详情抽屉打到产品端点上 —— 当前用户对该产品有 can_edit 时
- * 可以在抽屉里改标题、字段和子表单，否则只读。
+ * 展示的是**产品需求被本项目引用的那一份**：「全部」视图内容只读，项目能改的是关联关系
+ * 与需求级交付状态。页签栏右侧切到某个需求类型（?req_type=）后，表格换成该类型的字段视图，
+ * 对所属产品有编辑权限的行可以直接在格子里改（写入走产品端点）。详情抽屉同样打到产品端点上 ——
+ * 当前用户对该产品有 can_edit 时可以在抽屉里改标题、字段和子表单，否则只读。
  *
  * 这与同一路径下曾经的「按工作项类别过滤的列表」不是一回事 ——
  * 那个页面（研发需求 /dev-requirements）已下线。
@@ -55,6 +56,7 @@ import {
 } from "./filters";
 import { LinkRequirementsModal } from "./link-modal/link-requirements-modal";
 import { ProjectRequirementCreateModal } from "./project-requirement-create-modal";
+import { ProjectRequirementTypeTabs } from "./project-requirement-type-tabs";
 import { PROJECT_REQUIREMENTS_HEADER_ACTIONS_ID } from "./project-requirement-filters";
 import {
   PRODUCT_PARAM,
@@ -70,6 +72,9 @@ import { useProjectRequirementColumns } from "./use-project-requirement-columns"
 type TRequirementViewDisplayProperties = { hidden_columns?: TProjectRequirementColumnKey[] };
 
 const requirementService = new RequirementService();
+
+/** 类型页签的 URL 参数。view / type 已分别被页内视图与筛选占用 */
+const REQUIREMENT_TYPE_PARAM = "req_type";
 
 export const ProjectRequirementsPage = observer(function ProjectRequirementsPage() {
   const { t } = useTranslation();
@@ -101,12 +106,16 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
   // 首屏列表会多打一次。按已关联产品校验 URL 值的那一步在下面，初值只认 URL 原值（同 selectedProductId）
   const urlModuleId = searchParams.get("moduleId");
   const [initialProductId] = useState(() => getProductFromParam(searchParams.get(PRODUCT_PARAM), null) ?? null);
+  const urlRequirementTypeId = searchParams.get(REQUIREMENT_TYPE_PARAM);
+  const [selectedRequirementTypeId, setSelectedRequirementTypeId] = useState<string | null>(urlRequirementTypeId);
+  const syncedRequirementTypeRef = useRef(urlRequirementTypeId);
   const store = useProjectRequirements({
     workspaceSlug: slug,
     projectId: project,
     initialListQuery,
     initialModuleId: urlModuleId,
     initialProductId,
+    initialRequirementTypeId: urlRequirementTypeId,
   });
   const {
     links: productLinks,
@@ -167,10 +176,44 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
     }
   }, [moduleStore.groups, moduleStore.isLoading, selectedModuleId, selectedProductId]);
 
-  const { setModuleId, setProductId } = store;
+  // ── 类型页签：?req_type= 双向同步，同 ?product= 的写法 ─────────────────────
+  useEffect(() => {
+    if (urlRequirementTypeId === syncedRequirementTypeRef.current) return;
+    syncedRequirementTypeRef.current = urlRequirementTypeId;
+    setSelectedRequirementTypeId(urlRequirementTypeId);
+  }, [urlRequirementTypeId]);
+
+  useEffect(() => {
+    if (urlRequirementTypeId === selectedRequirementTypeId) return;
+    syncedRequirementTypeRef.current = selectedRequirementTypeId;
+    const next = new URLSearchParams(searchParams);
+    if (selectedRequirementTypeId) next.set(REQUIREMENT_TYPE_PARAM, selectedRequirementTypeId);
+    else next.delete(REQUIREMENT_TYPE_PARAM);
+    setSearchParams(next, { replace: true });
+  }, [selectedRequirementTypeId, urlRequirementTypeId, searchParams, setSearchParams]);
+
+  // 解除关联后某个类型可能在本项目里一条都不剩了，配置里没了它就退回「全部」
+  const activeRequirementType = selectedRequirementTypeId
+    ? (store.requirementTypes.find((type) => type.id === selectedRequirementTypeId) ?? null)
+    : null;
+  // 页签点下去立即高亮；表格跟着「已取回的数据」走，新类型的数据到了再整表换
+  const displayedRequirementType = store.loadedRequirementTypeId
+    ? (store.requirementTypes.find((type) => type.id === store.loadedRequirementTypeId) ?? null)
+    : null;
+  useEffect(() => {
+    if (!selectedRequirementTypeId || !store.configuration) return;
+    if (!store.requirementTypes.some((type) => type.id === selectedRequirementTypeId)) {
+      setSelectedRequirementTypeId(null);
+    }
+  }, [selectedRequirementTypeId, store.configuration, store.requirementTypes]);
+
+  const { setModuleId, setProductId, setRequirementTypeId } = store;
   useEffect(() => {
     setProductId(selectedProductId);
   }, [selectedProductId, setProductId]);
+  useEffect(() => {
+    setRequirementTypeId(selectedRequirementTypeId);
+  }, [selectedRequirementTypeId, setRequirementTypeId]);
   useEffect(() => {
     setModuleId(selectedModuleId);
   }, [selectedModuleId, setModuleId]);
@@ -450,6 +493,13 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
           compareKeys={["rich_filters", "display_properties"]}
           applyOnMount={!hasInitialUrlFilters}
           getSummary={getViewSummary}
+          trailing={
+            <ProjectRequirementTypeTabs
+              requirementTypes={store.requirementTypes}
+              activeTypeId={activeRequirementType?.id ?? null}
+              onChange={setSelectedRequirementTypeId}
+            />
+          }
         />
         <FiltersRow filter={filter} />
 
@@ -508,6 +558,11 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
               toolbarAfterSearch={<FiltersToggle filter={filter} />}
               hiddenColumns={hiddenColumns}
               onToggleColumn={toggleColumn}
+              activeRequirementType={displayedRequirementType}
+              // 左栏选了具体产品（或其下模块）时整页只有一个产品，「所属产品」列是冗余的
+              showProductColumn={!selectedProductId}
+              editableProductIds={store.editableProductIds}
+              onSaveRow={store.saveRequirementRow}
             />
           </div>
         </div>
