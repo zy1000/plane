@@ -237,7 +237,7 @@ export const ManageViewsModal = (props: TManageViewsModalProps) => {
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-4.5 pt-5 pb-2">
-          <SectionTitle title="页签栏" count={barViews.length + 1} hint="按这个顺序从左往右排" />
+          <SectionTitle title="页签栏" count={barViews.length + 1} hint="" />
           <div className="flex h-11.5 items-center gap-2.5 rounded-lg pr-2 pl-1.5 text-14 text-secondary">
             <span className="grid w-4.5 shrink-0 place-items-center text-tertiary">
               <Lock className="size-3.5" />

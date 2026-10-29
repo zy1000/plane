@@ -34,7 +34,8 @@ type TViewActionsMenuProps = {
   onSaveAsProjectView?: (view: IProjectView) => void;
 };
 
-export const VIEW_MENU_OPTIONS_CLASS = "w-64 rounded-lg border-subtle px-1.5 py-1.5 shadow-overlay-200";
+// CustomMenu 的 maxHeight 最高只到 max-h-60（240px），视图菜单有八九项，底部的「删除视图」会被裁掉，这里放宽
+export const VIEW_MENU_OPTIONS_CLASS = "max-h-[70vh] w-64 rounded-lg border-subtle px-1.5 py-1.5 shadow-overlay-200";
 export const VIEW_MENU_ITEM_CLASS = "flex items-center gap-2.5 rounded-md px-2.5 py-2 text-13 text-primary";
 const iconClass = "size-4 shrink-0 text-tertiary";
 
