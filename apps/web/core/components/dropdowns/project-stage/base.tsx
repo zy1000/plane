@@ -86,9 +86,7 @@ export const ProjectStageDropdownBase = observer(function ProjectStageDropdownBa
     }
   }, [isOpen, isMobile]);
 
-  const selectedStage = value ? getStageById(value) : null;
-  const selectedName = value ? (selectedStage?.name ?? valueName ?? null) : null;
-  const selectedCode = selectedStage && !selectedStage.parent_id ? selectedStage.code : null;
+  const selectedName = value ? (getStageById(value)?.name ?? valueName ?? null) : null;
 
   const comboButton = (
     <>
@@ -135,7 +133,6 @@ export const ProjectStageDropdownBase = observer(function ProjectStageDropdownBa
               hideText={BUTTON_VARIANTS_WITHOUT_TEXT.includes(buttonVariant)}
               placeholder={placeholder}
               label={selectedName}
-              code={selectedCode}
             />
           </DropdownButton>
         </button>

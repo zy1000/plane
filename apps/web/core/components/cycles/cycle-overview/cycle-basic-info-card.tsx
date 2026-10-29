@@ -71,7 +71,6 @@ export const CycleBasicInfoCard = ({ workspaceSlug, projectId, cycleId, cycleDet
   // 所属阶段：有编辑权限且未归档就能改（不要求是负责人），与列表行一致
   const canUpdateStage = canEdit && !cycleDetails?.archived_at;
   const cycleStage = cycleDetails?.stage_id ? getStageById(cycleDetails.stage_id) : null;
-  const cycleStageCode = cycleStage && !cycleStage.parent_id ? cycleStage.code : null;
   const { isUpdatingStatus, handleStatusChange, testingDatesModalProps } = useCycleStatusChange({
     workspaceSlug,
     projectId,
@@ -287,10 +286,7 @@ export const CycleBasicInfoCard = ({ workspaceSlug, projectId, cycleId, cycleDet
               />
             </div>
           ) : cycleStage ? (
-            <span className="inline-flex min-w-0 flex-1 items-center gap-1 text-secondary">
-              {cycleStageCode && <span className="shrink-0 text-11 text-placeholder">{cycleStageCode}</span>}
-              <span className="truncate">{cycleStage.name}</span>
-            </span>
+            <span className="min-w-0 flex-1 truncate text-secondary">{cycleStage.name}</span>
           ) : (
             <span className="flex-1 text-secondary">{t("stage_field.no_stage")}</span>
           )}

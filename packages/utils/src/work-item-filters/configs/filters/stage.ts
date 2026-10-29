@@ -13,9 +13,9 @@ export type TCreateStageFilterParams = TCreateFilterConfigParams &
     stages: TStageFilterOption[];
   };
 
-/** 根阶段「编码 名称」，子阶段按深度缩进只显示名称，与下拉的展示规则一致。 */
+/** 只显示名称（编号可能很长），子阶段按深度缩进，与下拉的展示规则一致。 */
 export const getStageFilterOptionLabel = ({ stage, depth }: TStageFilterOption) =>
-  depth > 0 ? `${"　".repeat(depth - 1)}└ ${stage.name}` : `${stage.code} ${stage.name}`;
+  depth > 0 ? `${"　".repeat(depth - 1)}└ ${stage.name}` : stage.name;
 
 /** 工作项「阶段」筛选：候选是项目阶段（父子都可选），照 product.ts。 */
 export const getStageMultiSelectConfig = (params: TCreateStageFilterParams) =>

@@ -28,7 +28,7 @@ interface Props {
   value?: string | null;
 }
 
-/** 选项按树先序排、不按已选置顶（树一乱就看不出父子）；搜索时去掉缩进。 */
+/** 选项按树先序排、不按已选置顶（树一乱就看不出父子）；只显示名称（编号可能很长会叠到名称上），搜索仍能按编号命中；搜索时去掉缩进。 */
 export const ProjectStageOptions = observer(function ProjectStageOptions(props: Props) {
   const { isOpen, options, onDropdownOpen, placement, referenceElement, value } = props;
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -64,11 +64,7 @@ export const ProjectStageOptions = observer(function ProjectStageOptions(props: 
     depth,
     content: (
       <div className="flex min-w-0 items-center gap-1.5">
-        {depth > 0 ? (
-          <span className="flex-shrink-0 text-placeholder">└</span>
-        ) : (
-          <span className="w-9 flex-shrink-0 text-10 text-placeholder">{stage.code}</span>
-        )}
+        {depth > 0 && <span className="flex-shrink-0 text-placeholder">└</span>}
         <Tooltip tooltipContent={stage.name} isMobile={isMobile}>
           <span className="flex-grow truncate">{stage.name}</span>
         </Tooltip>

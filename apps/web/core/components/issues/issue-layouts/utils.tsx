@@ -292,14 +292,14 @@ const getProductModuleColumns = (): IGroupByColumn[] | undefined => {
 };
 
 // 阶段分组：候选来自 projectStage store（project-wrapper 预热），树先序、父子都成列；
-// 根阶段显示「编码 名称」，子阶段只显示名称。非 hook 环境拿不到 t，「无阶段」直接写死。
+// 只显示名称（编号可能很长）。非 hook 环境拿不到 t，「无阶段」直接写死。
 const getStageColumns = (): IGroupByColumn[] | undefined => {
   const { currentProjectDetails } = store.projectRoot.project;
   if (!currentProjectDetails?.id) return;
   const options = store.projectStage.getProjectStageOptions(currentProjectDetails.id);
   const stages: IGroupByColumn[] = options.map(({ stage, depth }) => ({
     id: stage.id,
-    name: depth > 0 ? stage.name : `${stage.code} ${stage.name}`,
+    name: stage.name,
     icon: <Layers className="h-3.5 w-3.5" />,
     payload: { stage_id: stage.id },
   }));

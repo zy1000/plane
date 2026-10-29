@@ -22,7 +22,7 @@ type Props = {
 /** 「无阶段」在筛选里的值 */
 const NO_STAGE_VALUE = "None";
 
-/** 迭代筛选：所属阶段。候选是项目阶段树先序（根阶段带编码、子阶段缩进），末尾一项「无阶段」。 */
+/** 迭代筛选：所属阶段。候选是项目阶段树先序（只显示名称，子阶段缩进），末尾一项「无阶段」。 */
 export const FilterStage = observer(function FilterStage(props: Props) {
   const { appliedFilters, handleUpdate, searchQuery } = props;
   // router
@@ -47,7 +47,7 @@ export const FilterStage = observer(function FilterStage(props: Props) {
   const stageOptions = options
     .map(({ stage, depth }) => ({
       value: stage.id,
-      title: depth === 0 ? `${stage.code} ${stage.name}` : stage.name,
+      title: stage.name,
       depth,
     }))
     .filter((option) => !query || option.title.toLowerCase().includes(query));
