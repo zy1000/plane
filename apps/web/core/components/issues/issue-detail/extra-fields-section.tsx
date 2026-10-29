@@ -300,16 +300,21 @@ export const IssueExtraFieldsSection = observer(function IssueExtraFieldsSection
           </div>
         )}
 
+        {/* 段落文本与其他字段同样标签在左，但占满整行，长文本在值列内换行 */}
         {paragraphFields.map((field, index) => (
           <div
             key={field.id}
             className={cn(
-              "flex flex-col gap-1.5 py-2.5 pl-[11px]",
+              "grid min-w-0 grid-cols-[7.25rem_minmax(0,1fr)] items-start gap-x-3 pl-[11px]",
+              isEditing ? "py-1.5" : "py-2",
               index < paragraphFields.length - 1 && "border-b border-subtle"
             )}
           >
-            <FieldLabel field={field} required={isEditing && field.is_required} />
-            <div>{renderValue(field)}</div>
+            {/* 编辑态文本框有边框和上内边距，标签下移对齐首行 */}
+            <div className={cn(isEditing && "pt-[7px]")}>
+              <FieldLabel field={field} required={isEditing && field.is_required} />
+            </div>
+            {renderValue(field)}
           </div>
         ))}
 
