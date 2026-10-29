@@ -8,7 +8,14 @@ from rest_framework import serializers
 
 from plane.app.serializers.stage_type import StageTypeLiteSerializer
 from plane.app.serializers.user import UserLiteSerializer
-from plane.db.models import ProjectMember, ProjectStage, ProjectStageStatus, StageType, User
+from plane.db.models import (
+    ProjectMember,
+    ProjectStage,
+    ProjectStageStatus,
+    StageReviewStatus,
+    StageType,
+    User,
+)
 from plane.utils.project_stage import MAX_DURATION_DAYS
 
 from .base import BaseSerializer
@@ -73,6 +80,9 @@ class ProjectStageSerializer(BaseSerializer):
     is_delayed = serializers.BooleanField(read_only=True)
     children_count = serializers.SerializerMethodField()
     review_count = serializers.SerializerMethodField()
+    # 删除确认框要写明连带删掉多少：已开始的评审会拦住删除，格子数跟着评审一起报
+    started_review_count = serializers.SerializerMethodField()
+    tailoring_item_count = serializers.SerializerMethodField()
 
     class Meta:
         model = ProjectStage
@@ -101,6 +111,8 @@ class ProjectStageSerializer(BaseSerializer):
             "source_stage_id",
             "children_count",
             "review_count",
+            "started_review_count",
+            "tailoring_item_count",
             "created_at",
             "updated_at",
         ]
@@ -115,6 +127,8 @@ class ProjectStageSerializer(BaseSerializer):
             "source_stage_id",
             "children_count",
             "review_count",
+            "started_review_count",
+            "tailoring_item_count",
             "created_at",
             "updated_at",
         ]
@@ -144,6 +158,18 @@ class ProjectStageSerializer(BaseSerializer):
         if annotated is not None:
             return annotated
         return obj.stage_reviews.count()
+
+    def get_started_review_count(self, obj):
+        annotated = getattr(obj, "started_review_count", None)
+        if annotated is not None:
+            return annotated
+        return obj.stage_reviews.exclude(status=StageReviewStatus.NOT_STARTED).count()
+
+    def get_tailoring_item_count(self, obj):
+        annotated = getattr(obj, "tailoring_item_count", None)
+        if annotated is not None:
+            return annotated
+        return obj.tailoring_items.count()
 
     def get_children_count(self, obj):
         annotated = getattr(obj, "children_count", None)

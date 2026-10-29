@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { format } from "date-fns";
 import { observer } from "mobx-react";
-import { Layers, Plus, SearchX } from "lucide-react";
+import { Layers, SearchX } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
@@ -11,6 +11,7 @@ import { EProjectStageStatus, PROJECT_STAGE_MAX_WORKLOAD_RATIO } from "@plane/ty
 import { AlertModalCore, Loader } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { PageSearchInput } from "@/components/pages/list/search-input";
+import { useProject } from "@/hooks/store/use-project";
 import { getProjectStageError, useProjectStages } from "@/hooks/store/use-project-stages";
 import { useStageTypes } from "@/hooks/store/use-stage-types";
 import { ProjectStageBulkBar } from "./bulk/project-stage-bulk-bar";
@@ -21,6 +22,7 @@ import { PROJECT_STAGES_HEADER_ACTIONS_ID } from "./header-slots";
 import { useProjectStagePermissions } from "./permissions";
 import type { TProjectStageFormMode } from "./project-stage-form-modal";
 import { ProjectStageFormModal } from "./project-stage-form-modal";
+import { ProjectStageSyncModal } from "./project-stage-sync-modal";
 import { buildProjectStageRows } from "./project-stage-rows";
 import { PROJECT_STAGE_STATUS_STYLE } from "./project-stage-status-cell";
 import { ProjectStageTable } from "./project-stage-table";
@@ -30,7 +32,43 @@ const I18N = "project_stage";
 type TPendingDelete = { stage: TProjectStage } | { bulk: string[] } | null;
 
 /**
- * 项目阶段页：页头挂点里放搜索 / 新建；下面一行状态计数；树形阶段表；
+ * 删除会连带删掉多少：未评审的评审、裁剪表格子按能删的阶段合计；有评审已开始的阶段后端会拒绝，单独计数。
+ */
+const getDeleteImpact = (stages: TProjectStage[], ids: string[]) => {
+  const byId = new Map(stages.map((stage) => [stage.id, stage]));
+  let reviews = 0;
+  let items = 0;
+  let blocked = 0;
+  for (const id of ids) {
+    const stage = byId.get(id);
+    if (!stage) continue;
+    if (stage.started_review_count > 0) {
+      blocked += 1;
+      continue;
+    }
+    reviews += stage.review_count;
+    items += stage.tailoring_item_count;
+  }
+  return { reviews, items, blocked };
+};
+
+/** 按深度从深到浅排：子阶段先删，父子一起勾选时父才删得掉 */
+const deepestFirst = (stages: TProjectStage[], ids: string[]) => {
+  const byId = new Map(stages.map((stage) => [stage.id, stage]));
+  const depthOf = (id: string) => {
+    let depth = 0;
+    let parentId = byId.get(id)?.parent_id;
+    while (parentId) {
+      depth += 1;
+      parentId = byId.get(parentId)?.parent_id;
+    }
+    return depth;
+  };
+  return [...ids].sort((a, b) => depthOf(b) - depthOf(a));
+};
+
+/**
+ * 项目阶段页：页头挂点里放搜索 / 从研发模式带出 / 新建；下面一行状态计数；树形阶段表；
  * 底栏占比合计；勾选后浮动批量条（修改属性 / 删除）。
  *
  * 增删改都走 hook 重拉整棵树（父占比、层级、下移都由后端算）；批量改属性回的是改到的行，就地替换。
@@ -44,6 +82,7 @@ export const ProjectStageList = observer(function ProjectStageList({
 }) {
   const { t } = useTranslation();
   const { canManage } = useProjectStagePermissions(workspaceSlug, projectId);
+  const { currentProjectDetails } = useProject();
   const { stageTypes } = useStageTypes(workspaceSlug);
   const {
     stages,
@@ -53,6 +92,7 @@ export const ProjectStageList = observer(function ProjectStageList({
     createStage,
     updateStage,
     deleteStage,
+    syncFromDevMode,
     applyStages,
     workloadTotal,
     workloadRemaining,
@@ -63,6 +103,7 @@ export const ProjectStageList = observer(function ProjectStageList({
   const [form, setForm] = useState<TProjectStageFormMode | null>(null);
   const [pendingDelete, setPendingDelete] = useState<TPendingDelete>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isSyncOpen, setIsSyncOpen] = useState(false);
   const [actionsHost, setActionsHost] = useState<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -136,11 +177,11 @@ export const ProjectStageList = observer(function ProjectStageList({
 
   const handleDelete = async () => {
     if (!pendingDelete) return;
-    const ids = "bulk" in pendingDelete ? pendingDelete.bulk : [pendingDelete.stage.id];
+    const ids = "bulk" in pendingDelete ? deepestFirst(stages, pendingDelete.bulk) : [pendingDelete.stage.id];
     setIsDeleting(true);
     let failed = 0;
     try {
-      // 逐条删：有子阶段的会 409，其余照删。父先于子勾选时父会失败，再删一次即可
+      // 逐条删、子先父后：还有没选中的子阶段、或有评审已开始的会 409，其余照删
       for (const id of ids) {
         try {
           await deleteStage(id);
@@ -164,16 +205,54 @@ export const ProjectStageList = observer(function ProjectStageList({
     }
   };
 
+  const handleSync = async (modeStageIds: string[]) => {
+    const result = await syncFromDevMode(modeStageIds);
+    if (!result) return;
+    setToast({
+      type: TOAST_TYPE.SUCCESS,
+      title: t(`${I18N}.sync.toast_success`, { count: result.created.length }),
+      message:
+        result.ratio_dropped.length > 0
+          ? t(`${I18N}.sync.toast_ratio_dropped`, { names: result.ratio_dropped.join("、") })
+          : undefined,
+    });
+  };
+
+  const devMode = currentProjectDetails?.dev_mode_detail;
+  const devModeId = currentProjectDetails?.dev_mode ?? devMode?.id;
+
+  const deleteImpact = pendingDelete
+    ? getDeleteImpact(stages, "bulk" in pendingDelete ? pendingDelete.bulk : [pendingDelete.stage.id])
+    : null;
+  const deleteContent = (() => {
+    if (!deleteImpact) return "";
+    const parts: string[] = [];
+    if (deleteImpact.reviews > 0 || deleteImpact.items > 0) {
+      parts.push(
+        t(`${I18N}.delete_modal.cascade`, { reviews: deleteImpact.reviews, items: deleteImpact.items })
+      );
+    }
+    if (deleteImpact.blocked > 0) {
+      parts.push(t(`${I18N}.delete_modal.blocked`, { count: deleteImpact.blocked }));
+    }
+    parts.push(t(`${I18N}.delete_modal.description`));
+    return parts.join("");
+  })();
+
   const ratioPercent = Math.min(100, Math.max(0, (workloadTotal / PROJECT_STAGE_MAX_WORKLOAD_RATIO) * 100));
 
   const headerActions = (
     <>
       <PageSearchInput searchQuery={search} updateSearchQuery={setSearch} placeholder={t(`${I18N}.header.search`)} />
       {canManage && (
-        <Button variant="primary" size="lg" onClick={() => setForm({ mode: "create" })}>
-          <Plus className="size-3.5" />
-          {t(`${I18N}.header.create`)}
-        </Button>
+        <>
+          <Button variant="secondary" size="lg" onClick={() => setIsSyncOpen(true)} disabled={!devModeId}>
+            {t(`${I18N}.header.sync`)}
+          </Button>
+          <Button variant="primary" size="lg" onClick={() => setForm({ mode: "create" })}>
+            {t(`${I18N}.header.create`)}
+          </Button>
+        </>
       )}
     </>
   );
@@ -231,6 +310,9 @@ export const ProjectStageList = observer(function ProjectStageList({
               <p className="max-w-xs text-13 text-tertiary">{t(`${I18N}.empty.description`)}</p>
               {canManage && (
                 <div className="mt-1 flex items-center gap-2">
+                  <Button variant="secondary" size="lg" onClick={() => setIsSyncOpen(true)} disabled={!devModeId}>
+                    {t(`${I18N}.header.sync`)}
+                  </Button>
                   <Button variant="primary" size="lg" onClick={() => setForm({ mode: "create" })}>
                     {t(`${I18N}.header.create`)}
                   </Button>
@@ -329,6 +411,18 @@ export const ProjectStageList = observer(function ProjectStageList({
         }}
       />
 
+      <ProjectStageSyncModal
+        isOpen={isSyncOpen}
+        workspaceSlug={workspaceSlug}
+        devModeId={devModeId}
+        devModeName={devMode?.name ?? ""}
+        stages={stages}
+        workloadTotal={workloadTotal}
+        isSubmitting={isMutating}
+        onClose={() => setIsSyncOpen(false)}
+        onSubmit={handleSync}
+      />
+
       <AlertModalCore
         isOpen={Boolean(pendingDelete)}
         variant="danger"
@@ -340,7 +434,7 @@ export const ProjectStageList = observer(function ProjectStageList({
             ? t(`${I18N}.delete_modal.bulk_title`, { count: pendingDelete.bulk.length })
             : t(`${I18N}.delete_modal.title`, { name: pendingDelete && "stage" in pendingDelete ? pendingDelete.stage.name : "" })
         }
-        content={t(`${I18N}.delete_modal.description`)}
+        content={deleteContent}
         primaryButtonText={{ loading: t(`${I18N}.delete_modal.deleting`), default: t(`${I18N}.delete_modal.confirm`) }}
         secondaryButtonText={t("cancel")}
       />

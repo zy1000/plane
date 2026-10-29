@@ -59,6 +59,10 @@ export type TProjectStage = {
   children_count: number;
   /** 挂在这个阶段上的活跃评审数（PMS-101 第二期），阶段页行尾小标 */
   review_count: number;
+  /** 已开始（评审中 / 审核中 / 已评审）的评审数；大于 0 时不能删除 */
+  started_review_count: number;
+  /** 挂在这个阶段上的裁剪表格子数，删除时连带删掉 */
+  tailoring_item_count: number;
   created_at: string;
   updated_at: string;
 };
@@ -106,4 +110,10 @@ export type TBulkUpdateProjectStageResponse = {
   updated: number;
   failed: { id: string; name: string; code: string; error: string }[];
   stages: TProjectStage[];
+};
+
+export type TSyncProjectStagesResponse = {
+  created: TProjectStage[];
+  /** 因占比会超 100 而被置空占比的阶段名 */
+  ratio_dropped: string[];
 };

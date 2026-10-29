@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { ChevronRight, ClipboardCheck, Flag, GitBranchPlus, Pencil, Trash2 } from "lucide-react";
+import { ChevronRight, ClipboardCheck, Flag } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import type { TProjectStage, TUpdateProjectStagePayload } from "@plane/types";
 import { Checkbox } from "@plane/ui";
@@ -117,12 +117,28 @@ export type TProjectStageRowActions = {
   onUpdate: (stage: TProjectStage, payload: TUpdateProjectStagePayload) => void;
 };
 
-const ActionButton = ({ title, onClick, children }: { title: string; onClick: () => void; children: ReactNode }) => (
+/** 「操作」列的文字按钮（同产品分类页）；置灰时 title 说明原因 */
+const ActionButton = ({
+  title,
+  onClick,
+  disabled = false,
+  danger = false,
+  children,
+}: {
+  title?: string;
+  onClick: () => void;
+  disabled?: boolean;
+  danger?: boolean;
+  children: ReactNode;
+}) => (
   <button
     type="button"
     title={title}
-    aria-label={title}
-    className="grid size-7 place-items-center rounded-md text-tertiary transition-colors hover:bg-layer-transparent-hover hover:text-primary"
+    disabled={disabled}
+    className={cn(
+      "shrink-0 text-13 whitespace-nowrap hover:underline disabled:cursor-not-allowed disabled:text-placeholder disabled:no-underline",
+      danger ? "text-danger-primary" : "text-accent-primary"
+    )}
     onClick={(event) => {
       event.stopPropagation();
       onClick();
@@ -135,7 +151,8 @@ const ActionButton = ({ title, onClick, children }: { title: string; onClick: ()
 /**
  * 树形阶段表：名称列带展开箭头 + 里程碑旗标 + 已延期标签，子阶段按深度缩进并画一段树线；
  * 有维护权限时负责人 / 占比 / 计划起止 / 周期 / 状态点格子就地改（同工作项表格），父阶段的占比
- * 是子之和、只读；实际日期跟着状态走、只读；名称与类型走编辑弹窗。行尾悬停出编辑 / 新建子阶段 / 删除。
+ * 是子之和、只读；实际日期跟着状态走、只读；名称与类型走编辑弹窗。行尾「操作」列常显编辑 / 新建子阶段 / 删除
+ * 三个文字按钮；有子阶段或有评审已开始的阶段删除按钮置灰，悬停说明原因。
  */
 export const ProjectStageTable = ({
   projectId,
@@ -168,7 +185,7 @@ export const ProjectStageTable = ({
   const gridTemplateColumns = [
     "minmax(260px, 1fr)",
     ...columns.map((column) => COLUMN_WIDTH[column]),
-    actions ? "96px" : "0px",
+    actions ? "184px" : "0px",
   ].join(" ");
   const unassigned = t(`${I18N}.table.unassigned`);
   const hasSelection = Boolean(selection && selection.selectedSet.size > 0);
@@ -273,7 +290,13 @@ export const ProjectStageTable = ({
             <span className="truncate">{t(`${I18N}.table.${column}`)}</span>
           </span>
         ))}
-        {actions ? <span className={CELL_CLASS} /> : <span />}
+        {actions ? (
+          <span className={CELL_CLASS}>
+            <span className="truncate">{t(`${I18N}.table.actions`)}</span>
+          </span>
+        ) : (
+          <span />
+        )}
       </div>
 
       {rows.map(({ stage, depth, hasChildren, isExpanded }) => {
@@ -363,18 +386,23 @@ export const ProjectStageTable = ({
               </span>
             ))}
             {actions ? (
-              <span className="flex h-full items-center justify-end border-l border-subtle px-2">
-                <span className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover/row:opacity-100 focus-within:opacity-100">
-                  <ActionButton title={t(`${I18N}.table.edit`)} onClick={() => actions.onEdit(stage)}>
-                    <Pencil className="size-3.5" />
-                  </ActionButton>
-                  <ActionButton title={t(`${I18N}.table.add_child`)} onClick={() => actions.onAddChild(stage)}>
-                    <GitBranchPlus className="size-3.5" />
-                  </ActionButton>
-                  <ActionButton title={t(`${I18N}.table.delete`)} onClick={() => actions.onDelete(stage)}>
-                    <Trash2 className="size-3.5" />
-                  </ActionButton>
-                </span>
+              <span className={cn(CELL_CLASS, "gap-3")}>
+                <ActionButton onClick={() => actions.onEdit(stage)}>{t(`${I18N}.table.edit`)}</ActionButton>
+                <ActionButton onClick={() => actions.onAddChild(stage)}>{t(`${I18N}.table.add_child`)}</ActionButton>
+                <ActionButton
+                  danger
+                  title={
+                    hasChildren
+                      ? t(`${I18N}.table.delete_blocked_children`)
+                      : stage.started_review_count > 0
+                        ? t(`${I18N}.table.delete_blocked_started`, { count: stage.started_review_count })
+                        : undefined
+                  }
+                  disabled={hasChildren || stage.started_review_count > 0}
+                  onClick={() => actions.onDelete(stage)}
+                >
+                  {t(`${I18N}.table.delete`)}
+                </ActionButton>
               </span>
             ) : (
               <span />

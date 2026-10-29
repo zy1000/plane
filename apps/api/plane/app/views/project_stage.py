@@ -5,7 +5,8 @@
 """
 
 from django.db import transaction
-from django.db.models import Count, Q
+from django.db.models import Count, IntegerField, OuterRef, Q, Subquery, Value
+from django.db.models.functions import Coalesce
 from rest_framework import status
 from rest_framework.response import Response
 
@@ -15,13 +16,20 @@ from plane.app.serializers.project_stage import (
     ProjectStageSerializer,
 )
 from plane.app.views.base import BaseViewSet
-from plane.db.models import Project, ProjectStage
+from plane.db.models import (
+    Project,
+    ProjectStage,
+    ReviewTailoringItem,
+    StageReview,
+    StageReviewStatus,
+)
 from plane.utils.project_stage import (
     ProjectStageError,
     bulk_update_stages,
     create_stage,
     delete_stage,
     load_tree,
+    sync_from_dev_mode,
     update_stage,
 )
 
@@ -32,7 +40,26 @@ PROJECT_STAGE_READ_KEYS = (
 PROJECT_STAGE_MANAGE_KEY = PermissionKey.PROJECT_STAGE_MANAGE
 
 #: 「当前状态不允许」而不是「请求写错了」
-CONFLICT_CODES = {"PROJECT_STAGE_HAS_CHILDREN", "PROJECT_STAGE_IN_USE"}
+CONFLICT_CODES = {
+    "PROJECT_STAGE_HAS_CHILDREN",
+    "PROJECT_STAGE_IN_USE",
+    "PROJECT_STAGE_REVIEW_STARTED",
+}
+
+
+def _count_subquery(queryset):
+    """按阶段计数的子查询。不用 Count join：一个阶段上百条评审 × 几百个格子会把行数乘爆。"""
+    return Coalesce(
+        Subquery(
+            queryset.filter(stage_id=OuterRef("pk"))
+            .order_by()
+            .values("stage_id")
+            .annotate(total=Count("id"))
+            .values("total"),
+            output_field=IntegerField(),
+        ),
+        Value(0),
+    )
 
 
 def project_stage_error_response(exc):
@@ -78,6 +105,11 @@ class ProjectStageViewSet(BaseViewSet):
                 review_count=Count(
                     "stage_reviews", filter=Q(stage_reviews__deleted_at__isnull=True), distinct=True
                 ),
+                # 删除确认框用：已开始的评审会拦住删除，格子跟着阶段一起删
+                started_review_count=_count_subquery(
+                    StageReview.objects.exclude(status=StageReviewStatus.NOT_STARTED)
+                ),
+                tailoring_item_count=_count_subquery(ReviewTailoringItem.objects.all()),
             )
             .distinct()
         )
@@ -205,6 +237,29 @@ class ProjectStageViewSet(BaseViewSet):
                 "updated": len(updated_ids),
                 "failed": failed,
                 "stages": ProjectStageSerializer(rows, many=True, context=self._context()).data,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    @allow_fine_permission(PROJECT_STAGE_MANAGE_KEY)
+    def sync_from_dev_mode(self, request, slug, project_id):
+        """把勾选的研发模式阶段再带一份进项目（``stage_ids`` 是模式阶段 id），已带出过的也照样新建。"""
+        project = self._project()
+        if project is None:
+            return Response({"error": "Project not found."}, status=status.HTTP_404_NOT_FOUND)
+        stage_ids = request.data.get("stage_ids")
+        if not isinstance(stage_ids, list) or not stage_ids:
+            return Response(
+                {"error": "stage_ids must be a non-empty list."}, status=status.HTTP_400_BAD_REQUEST
+            )
+        with transaction.atomic():
+            result = sync_from_dev_mode(project, actor=request.user, only_ids=stage_ids)
+        created_ids = [stage.id for stage in result["created"]]
+        rows = self.get_queryset().filter(id__in=created_ids) if created_ids else []
+        return Response(
+            {
+                "created": ProjectStageSerializer(rows, many=True, context=self._context()).data,
+                "ratio_dropped": result["ratio_dropped"],
             },
             status=status.HTTP_200_OK,
         )

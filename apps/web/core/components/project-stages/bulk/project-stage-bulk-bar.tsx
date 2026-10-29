@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import { SlidersHorizontal, Trash2 } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { cn } from "@plane/utils";
@@ -41,13 +40,11 @@ export const ProjectStageBulkBar = ({
           onClick={onToggleEditPanel}
           aria-expanded={isEditPanelOpen}
         >
-          <SlidersHorizontal className="size-3.5" />
           {t(`${I18N}.edit_properties`)}
         </Button>
         {isEditPanelOpen && <div className="absolute bottom-full left-1/2 mb-4 -translate-x-1/2">{editPanel}</div>}
       </div>
       <Button variant="ghost" size="lg" className="text-danger-primary" onClick={onDelete}>
-        <Trash2 className="size-3.5" />
         {t(`${I18N}.delete`)}
       </Button>
     </BulkOperationsBar>

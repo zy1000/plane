@@ -27,6 +27,10 @@ from plane.db.models import (
     DevModeStageTemplate,
     ProjectStage,
     ProjectStageStatus,
+    ReviewTailoring,
+    ReviewTailoringItem,
+    StageReview,
+    StageReviewStatus,
     StageReviewTemplate,
 )
 from plane.db.models.dev_mode import MAX_WORKLOAD_RATIO_TOTAL, SORT_ORDER_STEP
@@ -251,6 +255,39 @@ def copy_stages_from_dev_mode(project, *, actor=None):
     ]
     with transaction.atomic():
         return ProjectStage.objects.bulk_create(rows)
+
+
+def sync_from_dev_mode(project, *, actor=None, only_ids):
+    """把勾选的模式阶段再带一份进项目，排在末尾。
+
+    **已经带出过的也照样新建**（同名、同 ``source_stage``）—— 项目里删掉后想要回来，或者同一个
+    阶段要走两轮，都走这里。补入的占比若让叶子合计超 100 就置空（``ratio_dropped``），让用户
+    手动分。``only_ids`` 里不属于项目研发模式的 id 静默忽略。
+    """
+    wanted = {str(item) for item in only_ids}
+    existing = list(ProjectStage.objects.filter(project_id=project.id))
+    total = StageTree(existing).leaf_total()
+    last_sort = max((stage.sort_order for stage in existing), default=0)
+
+    rows, ratio_dropped = [], []
+    for mode_stage in _mode_stages(project):
+        if str(mode_stage.id) not in wanted:
+            continue
+        ratio = mode_stage.workload_ratio
+        if ratio is not None:
+            if total + ratio > MAX_WORKLOAD_RATIO_TOTAL:
+                ratio_dropped.append(mode_stage.name)
+                ratio = None
+            else:
+                total += ratio
+        last_sort += SORT_ORDER_STEP
+        rows.append(
+            _build_from_mode_stage(
+                project, mode_stage, actor=actor, sort_order=last_sort, workload_ratio=ratio
+            )
+        )
+    created = ProjectStage.objects.bulk_create(rows) if rows else []
+    return {"created": created, "ratio_dropped": ratio_dropped}
 
 
 # --- 校验 -------------------------------------------------------------------
@@ -555,19 +592,64 @@ def bulk_update_stages(stages, *, actor, changes):
 
 
 def delete_stage(stage):
-    """有活跃子阶段、或被活跃评审 / 格子引用的不能删（409）。硬删；软删残留撞 RESTRICT 同样收成 409。"""
+    """删阶段，连带删掉挂在它上面的评审和裁剪格子。调用方负责事务与锁行。
+
+    拦住（409）的三种：有子阶段；有 O 裁剪表绑着它；它上面有评审已经开始（评审中 / 审核中 /
+    已评审）。其余一律连带删：
+
+    - 评审与格子都**硬删**，含软删残留 —— 阶段本身是硬删，外键是 RESTRICT，软删行也会挡住。
+      Django 的硬删级联是同步的：活动、评论、附件、成品 / 组件表跟着删，格子上的
+      ``stage_review`` 置空。
+    - 要删的评审在别的阶段上还有子评审的，先断开父子留下来（同 ``_delete_stage_reviews``）。
+    - 删掉的格子从所在裁剪表的生效快照里去掉，否则修订时会被算成「被移除的格子」。
+    """
     if ProjectStage.objects.filter(parent_id=stage.id).exists():
         raise ProjectStageError(
             "请先删除它下面的子阶段。", code="PROJECT_STAGE_HAS_CHILDREN"
         )
-    if stage_in_use(stage):
+    if stage.review_tailorings.exists():
         raise ProjectStageError(
-            "这个阶段挂着评审或裁剪表里的格子，先在裁剪表把它们移到别的阶段，或删掉评审后再删。",
+            "有 O 阶段裁剪表绑定在这个阶段上，先删掉那张裁剪表再删。",
             code="PROJECT_STAGE_IN_USE",
         )
+    started = stage.stage_reviews.exclude(status=StageReviewStatus.NOT_STARTED).count()
+    if started:
+        raise ProjectStageError(
+            f"这个阶段有 {started} 条评审已经开始或已评审，不能删除。",
+            code="PROJECT_STAGE_REVIEW_STARTED",
+            detail={"started_count": started},
+        )
+
+    review_ids = list(StageReview.all_objects.filter(stage_id=stage.id).values_list("id", flat=True))
+    if review_ids:
+        StageReview.all_objects.filter(parent_id__in=review_ids).exclude(
+            id__in=review_ids
+        ).update(parent=None)
+        StageReview.all_objects.filter(id__in=review_ids).delete()
+
+    items = list(
+        ReviewTailoringItem.all_objects.filter(stage_id=stage.id).values_list("id", "tailoring_id")
+    )
+    if items:
+        removed_by_tailoring = defaultdict(set)
+        for item_id, tailoring_id in items:
+            removed_by_tailoring[tailoring_id].add(str(item_id))
+        ReviewTailoringItem.all_objects.filter(id__in=[item_id for item_id, _ in items]).delete()
+        for tailoring in ReviewTailoring.all_objects.filter(
+            id__in=list(removed_by_tailoring)
+        ).exclude(effective_snapshot__isnull=True):
+            removed = removed_by_tailoring[tailoring.id]
+            snapshot = tailoring.effective_snapshot or {}
+            if not removed.intersection(snapshot):
+                continue
+            tailoring.effective_snapshot = {
+                key: value for key, value in snapshot.items() if key not in removed
+            }
+            tailoring.save(update_fields=["effective_snapshot", "updated_at"])
+
     try:
         stage.delete()
     except RestrictedError:
         raise ProjectStageError(
-            "阶段仍被已删除的评审或裁剪格子引用，无法删除。", code="PROJECT_STAGE_IN_USE"
+            "阶段仍被已删除的裁剪表引用，无法删除。", code="PROJECT_STAGE_IN_USE"
         )

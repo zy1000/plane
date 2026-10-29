@@ -14,7 +14,8 @@ import { getProjectStageError } from "@/hooks/store/use-project-stages";
 import { parseDurationDays, withDurationDays, withEndDate, withStartDate } from "./project-stage-schedule";
 
 const I18N = "project_stage.form";
-const styles = FORM_VARIANT_STYLES["grouped-modal"];
+// 共用变体只给非必填挂「可选」，这里再给必填项（阶段类型 / 名称 / 计划开始）标红星
+const styles = { ...FORM_VARIANT_STYLES["grouped-modal"], requiredMarker: true };
 
 export type TProjectStageFormMode =
   | { mode: "create" }
@@ -116,7 +117,9 @@ export const ProjectStageFormModal = ({
     } else {
       const parent = form.mode === "create-child" ? form.parent : null;
       const defaultType = parent ? parent.stage_type_id : (stageTypes[0]?.id ?? "");
-      setValue({ ...EMPTY, stageTypeId: defaultType, parentId: parent?.id ?? null });
+      // 名称必填，先填上类型名（之后换类型会跟着变，手改过就不跟）
+      const defaultName = stageTypes.find((item) => item.id === defaultType)?.name ?? "";
+      setValue({ ...EMPTY, stageTypeId: defaultType, name: defaultName, parentId: parent?.id ?? null });
     }
     setError(null);
   }, [isOpen, form, stageTypes]);
@@ -225,9 +228,15 @@ export const ProjectStageFormModal = ({
             <Layers className="size-7" strokeWidth={1.75} aria-hidden="true" />
           </div>
           <div className="min-w-0">
-            <p className="mb-1 text-12 font-medium text-tertiary">{title}</p>
+            <p className="mb-2 text-12 font-medium text-tertiary">{title}</p>
             <div className="flex items-start gap-3">
-              <div className="w-56 shrink-0">
+              <FormFieldShell
+                label={t(`${I18N}.stage_type`)}
+                required
+                editable={!typeLocked}
+                styles={styles}
+                className="w-56 shrink-0"
+              >
                 <CustomSelect
                   value={value.stageTypeId}
                   onChange={(next: string) => {
@@ -258,17 +267,19 @@ export const ProjectStageFormModal = ({
                     </CustomSelect.Option>
                   ))}
                 </CustomSelect>
-              </div>
-              <input
-                ref={nameRef}
-                type="text"
-                autoComplete="off"
-                value={value.name}
-                maxLength={255}
-                placeholder={selectedType?.name ?? t(`${I18N}.name_placeholder`)}
-                onChange={(event) => setValue((current) => ({ ...current, name: event.target.value }))}
-                className="block min-w-0 flex-1 border-0 border-b-2 border-transparent bg-transparent px-0 py-1 text-[22px] leading-tight font-semibold tracking-tight text-primary outline-none placeholder:font-medium placeholder:text-placeholder focus:border-accent-strong"
-              />
+              </FormFieldShell>
+              <FormFieldShell label={t(`${I18N}.name`)} required editable styles={styles} className="flex-1">
+                <input
+                  ref={nameRef}
+                  type="text"
+                  autoComplete="off"
+                  value={value.name}
+                  maxLength={255}
+                  placeholder={selectedType?.name ?? t(`${I18N}.name_placeholder`)}
+                  onChange={(event) => setValue((current) => ({ ...current, name: event.target.value }))}
+                  className="block w-full min-w-0 border-0 border-b-2 border-transparent bg-transparent px-0 py-1 text-[22px] leading-tight font-semibold tracking-tight text-primary outline-none placeholder:font-medium placeholder:text-placeholder focus:border-accent-strong"
+                />
+              </FormFieldShell>
             </div>
             <p className={styles.hint}>{typeLocked ? t(`${I18N}.type_locked_hint`) : t(`${I18N}.name_hint`)}</p>
           </div>
@@ -330,8 +341,8 @@ export const ProjectStageFormModal = ({
           </FormFieldGroup>
 
           <FormFieldGroup title={t(`${I18N}.group_schedule`)}>
-            <div className="flex items-center gap-3">
-              <FormFieldShell label={t(`${I18N}.start_date`)} labelHidden required editable styles={styles} className="flex-1">
+            <div className="flex items-end gap-3">
+              <FormFieldShell label={t(`${I18N}.start_date`)} required editable styles={styles} className="flex-1">
                 <div className={styles.control}>
                   <DateDropdown
                     value={value.startDate}
@@ -355,8 +366,8 @@ export const ProjectStageFormModal = ({
                   />
                 </div>
               </FormFieldShell>
-              <span className="text-13 text-placeholder">→</span>
-              <FormFieldShell label={t(`${I18N}.end_date`)} labelHidden required={false} editable styles={styles} className="flex-1">
+              <span className="flex h-[38px] items-center text-13 text-placeholder">→</span>
+              <FormFieldShell label={t(`${I18N}.end_date`)} required={false} editable styles={styles} className="flex-1">
                 <div className={styles.control}>
                   <DateDropdown
                     value={value.endDate}
@@ -381,7 +392,6 @@ export const ProjectStageFormModal = ({
               </FormFieldShell>
               <FormFieldShell
                 label={t(`${I18N}.duration_days`)}
-                labelHidden
                 required={false}
                 editable
                 styles={styles}
