@@ -191,7 +191,7 @@ def issue_group_values(
     if field == "state_id":
         queryset = State.objects.filter(is_triage=False, workspace__slug=slug).values_list("id", flat=True)
         if project_id:
-            return list(queryset.filter(project_id=project_id))
+            return list(queryset.filter(scheme__projects=project_id))
         else:
             return list(queryset)
     if field == "labels__id":
