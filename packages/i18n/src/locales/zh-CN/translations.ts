@@ -6855,6 +6855,16 @@ export default {
     transfer_work_items: "转移 {count} 工作项",
     date_range: "日期",
     add_date: "添加日期",
+    filters: {
+      status: "状态",
+      stage: "所属阶段",
+      operator_is: "是",
+      operator_between: "介于",
+      operator_before: "早于",
+      operator_after: "晚于",
+      clear_all: "清除全部",
+      summary: "{filtered} / {total} 个迭代",
+    },
     active_cycle: {
       label: "活动迭代",
       progress: "进度",

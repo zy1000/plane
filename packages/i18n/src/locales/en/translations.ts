@@ -6732,6 +6732,16 @@ export default {
     transfer_work_items: "Transfer {count} work items",
     date_range: "Date range",
     add_date: "Add date",
+    filters: {
+      status: "Status",
+      stage: "Stage",
+      operator_is: "is",
+      operator_between: "between",
+      operator_before: "before",
+      operator_after: "after",
+      clear_all: "Clear all",
+      summary: "{filtered} / {total} cycles",
+    },
     active_cycle: {
       label: "Active cycle",
       progress: "Progress",

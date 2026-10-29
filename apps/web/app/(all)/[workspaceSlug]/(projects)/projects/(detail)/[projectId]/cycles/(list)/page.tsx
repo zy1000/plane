@@ -12,26 +12,22 @@ import { useTheme } from "next-themes";
 import { EUserPermissionsLevel, CYCLE_TRACKER_ELEMENTS, PROJECT_SPRINTS_VIEW_PERMISSION_KEY, PROJECT_SPRINTS_CREATE_PERMISSION_KEY } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { EmptyStateDetailed } from "@plane/propel/empty-state";
-import type { TCycleFilters } from "@plane/types";
 import { EUserProjectRoles } from "@plane/types";
-// components
-import { Header, EHeaderVariant } from "@plane/ui";
-import { calculateTotalFilters } from "@plane/utils";
 // assets
 import darkEmptyState from "@/app/assets/empty-state/disabled-feature/cycles-dark.webp?url";
 import lightEmptyState from "@/app/assets/empty-state/disabled-feature/cycles-light.webp?url";
 // components
 import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
 import { PageHead } from "@/components/core/page-title";
-import { CycleAppliedFiltersList } from "@/components/cycles/applied-filters";
 import { CyclesView } from "@/components/cycles/cycles-view";
+import { useCycleListFiltering } from "@/components/cycles/filters/use-cycle-list-filter";
 import { CycleCreateUpdateModal } from "@/components/cycles/modal";
 import { DetailedEmptyState } from "@/components/empty-state/detailed-empty-state-root";
+import { FiltersRow } from "@/components/rich-filters/filters-row";
 import { buildProjectSettingsPath, getPathWithSearch } from "@/components/settings/project/navigation";
 import { CycleModuleListLayoutLoader } from "@/components/ui/loader/cycle-module-list-loader";
 // hooks
 import { useCycle } from "@/hooks/store/use-cycle";
-import { useCycleFilter } from "@/hooks/store/use-cycle-filter";
 import { useProject } from "@/hooks/store/use-project";
 import { useUserPermissions } from "@/hooks/store/user";
 import { useAppRouter } from "@/hooks/use-app-router";
@@ -41,7 +37,7 @@ function ProjectCyclesPage({ params }: Route.ComponentProps) {
   // states
   const [createModal, setCreateModal] = useState(false);
   // store hooks
-  const { currentProjectCycleIds, loader } = useCycle();
+  const { currentProjectCycleIds, getFilteredCycleIds, loader } = useCycle();
   const { getProjectById, currentProjectDetails } = useProject();
   // router
   const router = useAppRouter();
@@ -52,26 +48,18 @@ function ProjectCyclesPage({ params }: Route.ComponentProps) {
   const { resolvedTheme } = useTheme();
   // plane hooks
   const { t } = useTranslation();
-  // cycle filters hook
-  const { clearAllFilters, currentProjectFilters, updateFilters } = useCycleFilter();
+  // 富筛选：建实例 + 注册属性配置（页头的漏斗按钮与这里拿的是同一份实例）
+  const filter = useCycleListFiltering(workspaceSlug, projectId);
   const { allowPermissions, allowProjectPermissionKeys, workspaceUserInfo } = useUserPermissions();
   // derived values
   const resolvedEmptyState = resolvedTheme === "light" ? lightEmptyState : darkEmptyState;
   const totalCycles = currentProjectCycleIds?.length ?? 0;
+  const filteredCycles = getFilteredCycleIds(projectId, false)?.length ?? 0;
   const project = getProjectById(projectId);
   const pageTitle = project?.name ? `${project?.name} - ${t("common.cycles", { count: 2 })}` : undefined;
   const hasAdminLevelPermission = allowPermissions([EUserProjectRoles.ADMIN], EUserPermissionsLevel.PROJECT);
   const canCreateSprint = allowProjectPermissionKeys([PROJECT_SPRINTS_CREATE_PERMISSION_KEY], workspaceSlug, projectId);
   const currentPath = getPathWithSearch(pathname, searchParams);
-
-  const handleRemoveFilter = (key: keyof TCycleFilters, value: string | null) => {
-    let newValues = currentProjectFilters?.[key] ?? [];
-
-    if (!value) newValues = [];
-    else newValues = newValues.filter((val) => val !== value);
-
-    updateFilters(projectId, { [key]: newValues });
-  };
 
   const canViewSprints = allowProjectPermissionKeys(
     [PROJECT_SPRINTS_VIEW_PERMISSION_KEY],
@@ -140,16 +128,10 @@ function ProjectCyclesPage({ params }: Route.ComponentProps) {
           </div>
         ) : (
           <>
-            {calculateTotalFilters(currentProjectFilters ?? {}) !== 0 && (
-              <Header variant={EHeaderVariant.TERNARY}>
-                <CycleAppliedFiltersList
-                  appliedFilters={currentProjectFilters ?? {}}
-                  handleClearAllFilters={() => clearAllFilters(projectId)}
-                  handleRemoveFilter={handleRemoveFilter}
-                />
-              </Header>
-            )}
-
+            <FiltersRow
+              filter={filter}
+              summary={t("project_cycles.filters.summary", { filtered: filteredCycles, total: totalCycles })}
+            />
             <CyclesView workspaceSlug={workspaceSlug} projectId={projectId} />
           </>
         )}

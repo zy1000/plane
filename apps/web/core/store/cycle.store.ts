@@ -19,6 +19,8 @@ import type {
 } from "@plane/types";
 import type { DistributionUpdates } from "@plane/utils";
 import { orderCycles, shouldFilterCycle, updateDistribution } from "@plane/utils";
+// components
+import { cycleMatchesConditions } from "@/components/cycles/filters/match-cycle";
 // helpers
 // services
 import { CycleService } from "@/services/cycle.service";
@@ -330,7 +332,8 @@ export class CycleStore implements ICycleStore {
    * @returns {string[] | null}
    */
   getFilteredCycleIds = computedFn((projectId: string, sortByManual: boolean) => {
-    const filters = this.rootStore.cycleFilter.getFiltersByProjectId(projectId);
+    // 列表页的筛选走富筛选实例（筛选行条件全部 AND），本地匹配
+    const conditions = this.rootStore.cycleFilter.getRichFilter(projectId)?.allConditionsForDisplay ?? [];
     const displayFilters = this.rootStore.cycleFilter.getDisplayFiltersByProjectId(projectId);
     const searchQuery = this.rootStore.cycleFilter.searchQuery;
     if (!this.fetchedMap[projectId]) return null;
@@ -339,7 +342,7 @@ export class CycleStore implements ICycleStore {
         c.project_id === projectId &&
         !c.archived_at &&
         c.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
-        shouldFilterCycle(c, filters ?? {})
+        cycleMatchesConditions(c, conditions)
     );
     cycles = orderCycles(cycles, sortByManual, displayFilters?.order_by);
     const cycleIds = cycles.map((c) => c.id);
@@ -353,7 +356,7 @@ export class CycleStore implements ICycleStore {
    * @returns {string[] | null}
    */
   getFilteredCompletedCycleIds = computedFn((projectId: string) => {
-    const filters = this.rootStore.cycleFilter.getFiltersByProjectId(projectId);
+    const conditions = this.rootStore.cycleFilter.getRichFilter(projectId)?.allConditionsForDisplay ?? [];
     const searchQuery = this.rootStore.cycleFilter.searchQuery;
     if (!this.fetchedMap[projectId]) return null;
     let cycles = Object.values(this.cycleMap ?? {}).filter(
@@ -362,7 +365,7 @@ export class CycleStore implements ICycleStore {
         !c.archived_at &&
         c.status === "completed" &&
         c.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
-        shouldFilterCycle(c, filters ?? {})
+        cycleMatchesConditions(c, conditions)
     );
     cycles = sortBy(cycles, [(c) => !c.start_date]);
     const cycleIds = cycles.map((c) => c.id);

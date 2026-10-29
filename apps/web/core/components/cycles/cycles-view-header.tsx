@@ -6,20 +6,22 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { observer } from "mobx-react";
-import { ListFilter, SlidersHorizontal } from "lucide-react";
+import { SlidersHorizontal } from "lucide-react";
 // plane imports
 import { useOutsideClickDetector } from "@plane/hooks";
 import { IconButton } from "@plane/propel/icon-button";
 import { useTranslation } from "@plane/i18n";
 import { SearchIcon, CloseIcon } from "@plane/propel/icons";
-import type { TCycleDisplayProperties, TCycleFilters, TCycleOrderByOptions } from "@plane/types";
-import { cn, calculateTotalFilters } from "@plane/utils";
+import type { TCycleDisplayProperties, TCycleOrderByOptions } from "@plane/types";
+import { cn } from "@plane/utils";
 // components
 import { FiltersDropdown } from "@/components/issues/issue-layouts/filters";
+import { FiltersToggle } from "@/components/rich-filters/filters-toggle";
 // hooks
 import { useCycleFilter } from "@/hooks/store/use-cycle-filter";
 // local imports
-import { CycleDisplayFiltersSelection, CycleFiltersSelection } from "./dropdowns";
+import { CycleDisplayFiltersSelection } from "./dropdowns";
+import { useCycleListFilter } from "./filters/use-cycle-list-filter";
 
 type Props = {
   projectId: string;
@@ -36,35 +38,16 @@ export const CyclesViewHeader = observer(function CyclesViewHeader(props: Props)
   // refs
   const inputRef = useRef<HTMLInputElement>(null);
   // hooks
-  const { currentProjectDisplayFilters, currentProjectFilters, searchQuery, updateDisplayFilters, updateFilters, updateSearchQuery } =
-    useCycleFilter();
+  const { currentProjectDisplayFilters, searchQuery, updateDisplayFilters, updateSearchQuery } = useCycleFilter();
   const { t } = useTranslation();
+  // 筛选实例在 store 里按项目一份；页头只拿实例，属性配置由列表页根注册
+  const filter = useCycleListFilter(projectId);
   // states
   const [isSearchOpen, setIsSearchOpen] = useState(searchQuery !== "" ? true : false);
   // outside click detector hook
   useOutsideClickDetector(inputRef, () => {
     if (isSearchOpen && searchQuery.trim() === "") setIsSearchOpen(false);
   });
-
-  const handleFilters = useCallback(
-    (key: keyof TCycleFilters, value: string | string[]) => {
-      if (!projectId) return;
-      const newValues = currentProjectFilters?.[key] ?? [];
-
-      if (Array.isArray(value))
-        value.forEach((val) => {
-          if (!newValues.includes(val)) newValues.push(val);
-          else newValues.splice(newValues.indexOf(val), 1);
-        });
-      else {
-        if (currentProjectFilters?.[key]?.includes(value)) newValues.splice(newValues.indexOf(value), 1);
-        else newValues.push(value);
-      }
-
-      updateFilters(projectId, { [key]: newValues });
-    },
-    [currentProjectFilters, projectId, updateFilters]
-  );
 
   const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Escape") {
@@ -75,8 +58,6 @@ export const CyclesViewHeader = observer(function CyclesViewHeader(props: Props)
       }
     }
   };
-
-  const isFiltersApplied = calculateTotalFilters(currentProjectFilters ?? {}) !== 0;
 
   const handleDisplayFiltersUpdate = useCallback(
     (displayFilters: Partial<TCycleListDisplayFilters>) => {
@@ -135,14 +116,7 @@ export const CyclesViewHeader = observer(function CyclesViewHeader(props: Props)
         </div>
       )}
 
-      <FiltersDropdown
-        icon={<ListFilter className="h-3 w-3" />}
-        title={t("common.filters")}
-        placement="bottom-end"
-        isFiltersApplied={isFiltersApplied}
-      >
-        <CycleFiltersSelection filters={currentProjectFilters ?? {}} handleFiltersUpdate={handleFilters} />
-      </FiltersDropdown>
+      <FiltersToggle filter={filter} enableQuickAddFilter={false} />
       <FiltersDropdown
         title={t("common.display")}
         placement="bottom-end"

@@ -7,15 +7,28 @@
 import { set } from "lodash-es";
 import { action, computed, observable, makeObservable, runInAction, reaction } from "mobx";
 import { computedFn } from "mobx-utils";
+// plane imports
+import { FilterInstance } from "@plane/shared-state";
+import type { IFilterInstance } from "@plane/shared-state";
 // types
 import type { TCycleDisplayFilters, TCycleFilters, TCycleFiltersByState } from "@plane/types";
+// components
+import { cycleFiltersAdapter } from "@/components/cycles/filters/adapter";
+import type { TCycleFilterExpression, TCycleFilterProperty } from "@/components/cycles/filters/types";
+// hooks
+import { getValueFromLocalStorage, setValueIntoLocalStorage } from "@/hooks/use-local-storage";
 // store
 import type { CoreRootStore } from "./root.store";
+
+export type TCycleRichFilter = IFilterInstance<TCycleFilterProperty, TCycleFilterExpression>;
+
+const getRichFilterStorageKey = (projectId: string) => `cycles-filter:v1:${projectId}`;
 
 export interface ICycleFilterStore {
   // observables
   displayFilters: Record<string, TCycleDisplayFilters>;
   filters: Record<string, TCycleFiltersByState>;
+  richFilters: Map<string, TCycleRichFilter>;
   searchQuery: string;
   archivedCyclesSearchQuery: string;
   // computed
@@ -26,7 +39,9 @@ export interface ICycleFilterStore {
   getDisplayFiltersByProjectId: (projectId: string) => TCycleDisplayFilters | undefined;
   getFiltersByProjectId: (projectId: string) => TCycleFilters | undefined;
   getArchivedFiltersByProjectId: (projectId: string) => TCycleFilters | undefined;
+  getRichFilter: (projectId: string) => TCycleRichFilter | undefined;
   // actions
+  getOrCreateRichFilter: (projectId: string) => TCycleRichFilter;
   updateDisplayFilters: (projectId: string, displayFilters: TCycleDisplayFilters) => void;
   updateFilters: (projectId: string, filters: TCycleFilters, state?: keyof TCycleFiltersByState) => void;
   updateSearchQuery: (query: string) => void;
@@ -38,6 +53,8 @@ export class CycleFilterStore implements ICycleFilterStore {
   // observables
   displayFilters: Record<string, TCycleDisplayFilters> = {};
   filters: Record<string, TCycleFiltersByState> = {};
+  /** 迭代列表页（非归档）的富筛选实例，按项目一份；归档页仍走 `filters[projectId].archived` */
+  richFilters: Map<string, TCycleRichFilter> = new Map();
   searchQuery: string = "";
   archivedCyclesSearchQuery: string = "";
   // root store
@@ -48,6 +65,7 @@ export class CycleFilterStore implements ICycleFilterStore {
       // observables
       displayFilters: observable,
       filters: observable,
+      richFilters: observable,
       searchQuery: observable.ref,
       archivedCyclesSearchQuery: observable.ref,
       // computed
@@ -55,6 +73,7 @@ export class CycleFilterStore implements ICycleFilterStore {
       currentProjectFilters: computed,
       currentProjectArchivedFilters: computed,
       // actions
+      getOrCreateRichFilter: action,
       updateDisplayFilters: action,
       updateFilters: action,
       updateSearchQuery: action,
@@ -118,6 +137,29 @@ export class CycleFilterStore implements ICycleFilterStore {
    * @param {string} projectId
    */
   getArchivedFiltersByProjectId = computedFn((projectId: string) => this.filters[projectId].archived);
+
+  /**
+   * @description 项目的富筛选实例；没建过时返回 undefined（列表页挂载时才会建）
+   */
+  getRichFilter = computedFn((projectId: string) => this.richFilters.get(projectId));
+
+  /**
+   * @description 建（或取）项目的富筛选实例。条件记在本地，下次进来还是上次的筛选
+   */
+  getOrCreateRichFilter = (projectId: string) => {
+    const existing = this.richFilters.get(projectId);
+    if (existing) return existing;
+    const storageKey = getRichFilterStorageKey(projectId);
+    const filter = new FilterInstance<TCycleFilterProperty, TCycleFilterExpression>({
+      adapter: cycleFiltersAdapter,
+      initialExpression: getValueFromLocalStorage(storageKey, {}) as TCycleFilterExpression,
+      onExpressionChange: (expression) => setValueIntoLocalStorage(storageKey, expression),
+    });
+    runInAction(() => {
+      this.richFilters.set(projectId, filter);
+    });
+    return filter;
+  };
 
   /**
    * @description initialize display filters and filters of a project
