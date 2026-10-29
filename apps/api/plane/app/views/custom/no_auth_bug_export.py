@@ -53,14 +53,16 @@ class PublicBugReportExportAPIView(BaseAPIView):
 
     OPEN_STATE_NAME = "Open"
     TRACE_ACTIVITY_FIELDS = ("state", "assignees")
-    TECH_REASON_FIELD_NAME = "技术原因及解决方案"
+    TECH_REASON_FIELD_NAME = "技术原因"
+    SOLUTION_FIELD_NAME = "解决方案"
     BUG_LEVEL_FIELD_NAME = "缺陷级别"
     BUG_REASON_FIELD_NAME = "缺陷原因"
     export_columns = [
         "序号",
         "ID",
         "标题",
-        "技术原因及解决方案",
+        "技术原因",
+        "解决方案",
         "项目",
         "创建时间",
         "当前负责人",
@@ -72,7 +74,8 @@ class PublicBugReportExportAPIView(BaseAPIView):
     ]
     export_widths = {
         "标题": 40,
-        "技术原因及解决方案": 80,
+        "技术原因": 60,
+        "解决方案": 60,
         "项目": 30,
         "创建时间": 20,
         "当前负责人": 20,
@@ -141,6 +144,13 @@ class PublicBugReportExportAPIView(BaseAPIView):
 
     def _get_tech_reason(self, issue):
         for item in getattr(issue, "tech_reason_values", []):
+            value = self._stringify_extra_field_value(item.value)
+            if value:
+                return value
+        return ""
+
+    def _get_solution(self, issue):
+        for item in getattr(issue, "solution_values", []):
             value = self._stringify_extra_field_value(item.value)
             if value:
                 return value
@@ -341,6 +351,16 @@ class PublicBugReportExportAPIView(BaseAPIView):
                     "type_extra_field_values",
                     queryset=TypeExtraFieldValue.objects.filter(
                         deleted_at__isnull=True,
+                        extra_field__name=self.SOLUTION_FIELD_NAME,
+                    )
+                    .select_related("extra_field")
+                    .order_by("-created_at"),
+                    to_attr="solution_values",
+                ),
+                Prefetch(
+                    "type_extra_field_values",
+                    queryset=TypeExtraFieldValue.objects.filter(
+                        deleted_at__isnull=True,
                         extra_field__name=self.BUG_LEVEL_FIELD_NAME,
                     )
                     .select_related("extra_field")
@@ -391,7 +411,8 @@ class PublicBugReportExportAPIView(BaseAPIView):
                     "序号": index,
                     "ID": issue_url,
                     "标题": issue.name or "",
-                    "技术原因及解决方案": self._get_tech_reason(issue),
+                    "技术原因": self._get_tech_reason(issue),
+                    "解决方案": self._get_solution(issue),
                     "项目": issue.project.name if issue.project_id else "",
                     "创建时间": self._to_utc8_string(issue.created_at),
                     "当前负责人": ",".join(assignees),

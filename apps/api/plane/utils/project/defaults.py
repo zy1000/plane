@@ -23,13 +23,13 @@ from plane.utils.project.member import add_user_to_project
 
 QA_ROLE_SET = ['软件测试工程师', '软件测试负责人']
 RD_ROLE_SET = ['软件研发工程师', '软件研发负责人']
-BUG_REQUIRED_FIELD = ["修复版本", "技术原因及解决方案"]
+BUG_REQUIRED_FIELD = ["修复版本", "技术原因", "解决方案"]
 TRANSITION_RULES = [
     dict(from_state='Backlog', to_state='Open', initiator=None, assignee=dict(role_name=RD_ROLE_SET)),
     dict(from_state='Open', to_state='Fixed', initiator=dict(role_name=RD_ROLE_SET),
-         assignee=dict(role_name=QA_ROLE_SET), required_field=['修复版本', '技术原因及解决方案', '缺陷原因']),
+         assignee=dict(role_name=QA_ROLE_SET), required_field=['修复版本', '技术原因', '解决方案', '缺陷原因']),
     dict(from_state='Open', to_state='Pending-Reject', initiator=dict(role_name=RD_ROLE_SET),
-         assignee=dict(role_name=QA_ROLE_SET), required_field=['技术原因及解决方案']),
+         assignee=dict(role_name=QA_ROLE_SET), required_field=['技术原因', '解决方案']),
     dict(from_state='Fixed', to_state='Reopen', initiator=dict(role_name=QA_ROLE_SET),
          assignee=dict(role_name=RD_ROLE_SET)),
     dict(from_state='Fixed', to_state='Closed', initiator=dict(role_name=QA_ROLE_SET),
@@ -38,13 +38,13 @@ TRANSITION_RULES = [
          initiator=dict(role_name=QA_ROLE_SET),
          assignee=dict(dynamic_target=['created_by']),
          approver=dict(role_name=['软件测试负责人'], member_name=['欧秋洁', '何洽', '钟长会']),
-         required_field=['技术原因及解决方案'], approval_type=ApprovalType.N_OF_M, required_count=2
+         required_field=['技术原因', '解决方案'], approval_type=ApprovalType.N_OF_M, required_count=2
          ),
     dict(from_state='Pending-Reject', to_state='Suspend',
          initiator=dict(role_name=QA_ROLE_SET),
          assignee=dict(dynamic_target=['created_by']),
          approver=dict(role_name=['软件测试负责人'], member_name=['欧秋洁', '何洽', '钟长会']),
-         required_field=['技术原因及解决方案'], approval_type=ApprovalType.N_OF_M, required_count=2
+         required_field=['技术原因', '解决方案'], approval_type=ApprovalType.N_OF_M, required_count=2
          ),
     dict(from_state='Pending-Reject', to_state='Reopen', initiator=dict(role_name=QA_ROLE_SET),
          assignee=dict(role_name=RD_ROLE_SET)),
@@ -55,7 +55,7 @@ TRANSITION_RULES = [
     dict(from_state='Reopen', to_state='Fixed', initiator=dict(role_name=RD_ROLE_SET),
          assignee=dict(role_name=QA_ROLE_SET), required_field=BUG_REQUIRED_FIELD),
     dict(from_state='Reopen', to_state='Pending-Reject', initiator=dict(role_name=RD_ROLE_SET),
-         assignee=dict(role_name=QA_ROLE_SET), required_field=['技术原因及解决方案']),
+         assignee=dict(role_name=QA_ROLE_SET), required_field=['技术原因', '解决方案']),
 ]
 
 
@@ -362,10 +362,17 @@ def create_default_bug_extra_field(issue_types: list[IssueType]):
         issue_type=defect_issue_type, name="修复版本"
     )
 
+    # 技术原因
+    TypeExtraField.objects.create(
+        issue_type=defect_issue_type,
+        name="技术原因",
+        options={"text_mode": "paragraph"},
+    )
+
     # 解决方案
     TypeExtraField.objects.create(
         issue_type=defect_issue_type,
-        name="技术原因及解决方案",
+        name="解决方案",
         options={"text_mode": "paragraph"},
     )
 
