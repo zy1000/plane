@@ -16,6 +16,7 @@ const FIELD_LABELS: Record<string, string> = {
   name: "标题",
   product_id: "产品",
   product_module_id: "产品模块",
+  stage_id: "阶段",
 };
 
 const OPERATOR_LABELS: Record<string, string> = {
@@ -84,7 +85,7 @@ export const describeViewConditions = (view: TSchemeView, resolvers: TConditionN
     const values = String(rawValue ?? "")
       .split(",")
       .filter(Boolean);
-    const isIdList = field === "product_id" || field === "product_module_id";
+    const isIdList = field === "product_id" || field === "product_module_id" || field === "stage_id";
     const names = isIdList ? [] : values.map((value) => resolveValue(field, value, resolvers));
     const listed = names.slice(0, MAX_LISTED_VALUES).join("、");
     const value = isIdList

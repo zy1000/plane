@@ -94,6 +94,9 @@ export const shouldFilterCycle = (cycle: ICycle, filter: TCycleFilters): boolean
     const filterKey = key as keyof TCycleFilters;
     if (filterKey === "status" && filter.status && filter.status.length > 0)
       fallsInFilters = fallsInFilters && filter.status.includes(cycle.status ?? "");
+    // 所属阶段：值是阶段 id 列表，"None" 表示无阶段
+    if (filterKey === "stage" && filter.stage && filter.stage.length > 0)
+      fallsInFilters = fallsInFilters && filter.stage.includes(cycle.stage_id ?? "None");
     if (filterKey === "start_date" && filter.start_date && filter.start_date.length > 0) {
       const startDate = getDate(cycle.start_date);
       filter.start_date.forEach((dateFilter) => {

@@ -357,6 +357,10 @@ def filter_product_module_id(params, issue_filter, method, prefix=""):
     return _filter_plain_fk("product_module_id", params, issue_filter, method, prefix)
 
 
+def filter_stage_id(params, issue_filter, method, prefix=""):
+    return _filter_plain_fk("stage_id", params, issue_filter, method, prefix)
+
+
 def filter_type_name(params, issue_filter, method, prefix=""):
     type_names = [item for item in params.get("type__name").split(",")]
     issue_filter['type__name__in'] = type_names
@@ -531,6 +535,8 @@ def issue_filters(query_params, method, prefix=""):
         # 产品 / 产品模块（Issue 单选外键）
         "product_id": filter_product_id,
         "product_module_id": filter_product_module_id,
+        # 项目阶段（Issue 单选外键）
+        "stage_id": filter_stage_id,
         # 按 IssueTypeCategory.name 过滤（如：缺陷）
         "type_category": filter_type_category,
         "project": filter_project,

@@ -19,6 +19,7 @@ import { getDate, renderFormattedPayloadDate, getTabIndex } from "@plane/utils";
 import { CycleRichTextEditor } from "@/components/cycles/cycle-rich-text-editor";
 import { DateDropdown } from "@/components/dropdowns/date";
 import { DateRangeDropdown } from "@/components/dropdowns/date-range";
+import { ProjectStageDropdown } from "@/components/dropdowns/project-stage/dropdown";
 
 type Props = {
   handleFormSubmit: (values: Partial<ICycle>) => Promise<void>;
@@ -38,6 +39,7 @@ const defaultValues: Partial<ICycle> = {
   start_date: null,
   end_date: null,
   test_handoff_date: null,
+  stage_id: null,
 };
 
 /* 编辑器正文字号取自 --font-size-regular（由 .editor-container.large-font 以更高优先级设为 1rem），
@@ -76,6 +78,7 @@ export function CycleForm(props: Props) {
       start_date: data?.start_date || null,
       end_date: data?.end_date || null,
       test_handoff_date: data?.test_handoff_date || null,
+      stage_id: data?.stage_id ?? null,
     },
   });
 
@@ -242,6 +245,23 @@ export function CycleForm(props: Props) {
               />
               <span className="text-11 text-danger-primary">{errors?.test_handoff_date?.message}</span>
             </div>
+            <Controller
+              control={control}
+              name="stage_id"
+              render={({ field: { value, onChange } }) => (
+                <div className="h-7">
+                  <ProjectStageDropdown
+                    projectId={selectedProjectId}
+                    value={value ?? null}
+                    onChange={onChange}
+                    placeholder={t("stage_field.cycle_label")}
+                    tooltipHeading={t("stage_field.cycle_label")}
+                    buttonVariant="border-with-text"
+                    tabIndex={getIndex("stage_id")}
+                  />
+                </div>
+              )}
+            />
           </div>
         </div>
       </div>

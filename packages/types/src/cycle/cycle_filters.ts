@@ -30,7 +30,8 @@ export type TCycleDisplayPropertyKey =
   | "end_date"
   | "test_handoff_date"
   | "created_by"
-  | "members";
+  | "members"
+  | "stage";
 
 export type TCycleDisplayProperties = Partial<Record<TCycleDisplayPropertyKey, boolean>>;
 
@@ -46,6 +47,8 @@ export type TCycleFilters = {
   end_date?: string[] | null;
   start_date?: string[] | null;
   status?: string[] | null;
+  /** 所属阶段 id 列表，"None" 表示无阶段 */
+  stage?: string[] | null;
 };
 
 export type TCycleFiltersByState = {

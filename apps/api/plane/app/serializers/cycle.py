@@ -16,9 +16,11 @@ from plane.db.models import (
     CycleIssue,
     CycleOverdueRecord,
     CycleUserProperties,
+    ProjectStage,
     User,
 )
 from plane.utils.cycle.rules import check_cycle_state
+from plane.utils.issue_stage import validate_stage_in_project
 from plane.utils.timezone_converter import convert_to_utc
 
 
@@ -28,10 +30,20 @@ class CycleWriteSerializer(BaseSerializer):
         queryset=User.objects.all(),
         required=False,
     )
+    stage_id = serializers.PrimaryKeyRelatedField(
+        source="stage", queryset=ProjectStage.objects.all(), required=False, allow_null=True
+    )
 
     def validate(self, data):
         status = data.get("status")
         user = self.context.get("user")
+
+        # 项目阶段：只要求属于同一项目，规则在 utils/issue_stage.py
+        if "stage" in data:
+            validate_stage_in_project(
+                data.get("stage"),
+                (self.instance and self.instance.project_id) or self.context.get("project_id"),
+            )
         has_end_date_in_payload = "end_date" in data
         has_test_handoff_date_in_payload = "test_handoff_date" in data
 
@@ -163,6 +175,7 @@ class CycleSerializer(BaseSerializer):
             "progress_snapshot",
             "logo_props",
             "release_id",
+            "stage_id",
             # meta fields
             "is_favorite",
             "total_issues",

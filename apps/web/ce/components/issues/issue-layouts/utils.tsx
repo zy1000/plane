@@ -5,7 +5,7 @@
  */
 
 import type { FC } from "react";
-import { Boxes, CalendarDays, LayersIcon, Package, Paperclip, Rocket } from "lucide-react";
+import { Boxes, CalendarDays, Layers, LayersIcon, Package, Paperclip, Rocket } from "lucide-react";
 // types
 import { ISSUE_GROUP_BY_OPTIONS } from "@plane/constants";
 import type { ISvgIcons } from "@plane/propel/icons";
@@ -41,6 +41,7 @@ import {
   SpreadsheetReleaseColumn,
   SpreadsheetProductColumn,
   SpreadsheetProductModuleColumn,
+  SpreadsheetStageColumn,
   SpreadsheetLinkColumn,
   SpreadsheetPriorityColumn,
   SpreadsheetStartDateColumn,
@@ -98,6 +99,7 @@ export const SpreadSheetPropertyIconMap: Record<string, FC<ISvgIcons>> = {
   Rocket: Rocket,
   Package: Package,
   Boxes: Boxes,
+  Layers: Layers,
 };
 
 export const SPREADSHEET_COLUMNS: { [key in keyof IIssueDisplayProperties]: TSpreadsheetColumn } = {
@@ -111,6 +113,7 @@ export const SPREADSHEET_COLUMNS: { [key in keyof IIssueDisplayProperties]: TSpr
   release: SpreadsheetReleaseColumn,
   product: SpreadsheetProductColumn,
   product_module: SpreadsheetProductModuleColumn,
+  stage: SpreadsheetStageColumn,
   link: SpreadsheetLinkColumn,
   priority: SpreadsheetPriorityColumn,
   start_date: SpreadsheetStartDateColumn,

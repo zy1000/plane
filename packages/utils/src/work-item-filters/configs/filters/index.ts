@@ -14,6 +14,7 @@ export * from "./project";
 export * from "./release";
 export * from "./product";
 export * from "./product-module";
+export * from "./stage";
 export * from "./state";
 export * from "./user";
 export * from "./issue-type";

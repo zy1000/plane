@@ -10,11 +10,13 @@ import { Avatar, CircularProgressIndicator, CustomSelect } from "@plane/ui";
 import { getDate, getFileURL, renderFormattedDate, renderFormattedPayloadDate } from "@plane/utils";
 import { DateRangeDropdown } from "@/components/dropdowns/date-range";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
+import { ProjectStageDropdown } from "@/components/dropdowns/project-stage/dropdown";
 import { TestingDatesConfirmModal } from "@/components/common/testing-dates-confirm-modal";
 import { formatCycleUpdateError } from "@/components/cycles/use-cycle-error-message";
 import { useCycleStatusChange } from "@/components/cycles/use-cycle-status-change";
 import { useCycle } from "@/hooks/store/use-cycle";
 import { useMember } from "@/hooks/store/use-member";
+import { useProjectStage } from "@/hooks/store/use-project-stage";
 import { useUser } from "@/hooks/store/user";
 import { useCycleBasicInfo } from "./use-cycle-basic-info";
 
@@ -39,9 +41,11 @@ export const CycleBasicInfoCard = ({ workspaceSlug, projectId, cycleId, cycleDet
   const { t } = useTranslation();
   const { updateCycleDetails } = useCycle();
   const { getUserDetails } = useMember();
+  const { getStageById } = useProjectStage();
   const { data: currentUser } = useUser();
   const [isUpdatingDateRange, setIsUpdatingDateRange] = useState(false);
   const [isUpdatingOwner, setIsUpdatingOwner] = useState(false);
+  const [isUpdatingStage, setIsUpdatingStage] = useState(false);
   const { completionRate, delayRate, typeDistribution, isTypeLoading } = useCycleBasicInfo({
     workspaceSlug,
     projectId,
@@ -63,6 +67,11 @@ export const CycleBasicInfoCard = ({ workspaceSlug, projectId, cycleId, cycleDet
   const canChangeStatus = canEdit && !cycleDetails?.archived_at && statusOptions.length > 0;
   const canUpdateDateRange = canEdit && !cycleDetails?.archived_at && !isCompleted;
   const canUpdateOwner = canEdit && !cycleDetails?.archived_at && isCurrentOwner;
+  // 所属阶段：权限守卫与负责人一致
+  // 所属阶段：有编辑权限且未归档就能改（不要求是负责人），与列表行一致
+  const canUpdateStage = canEdit && !cycleDetails?.archived_at;
+  const cycleStage = cycleDetails?.stage_id ? getStageById(cycleDetails.stage_id) : null;
+  const cycleStageCode = cycleStage && !cycleStage.parent_id ? cycleStage.code : null;
   const { isUpdatingStatus, handleStatusChange, testingDatesModalProps } = useCycleStatusChange({
     workspaceSlug,
     projectId,
@@ -236,6 +245,54 @@ export const CycleBasicInfoCard = ({ workspaceSlug, projectId, cycleId, cycleDet
             </span>
           ) : (
             <span className="flex-1 text-secondary">-</span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="w-20 shrink-0 font-semibold text-primary">{t("stage_field.cycle_label")}：</span>
+          {canUpdateStage ? (
+            <div className="h-6 min-w-0 max-w-[220px] flex-1 text-left">
+              <ProjectStageDropdown
+                projectId={projectId}
+                value={cycleDetails?.stage_id ?? null}
+                onChange={(nextStageId) => {
+                  if (isUpdatingStage || nextStageId === (cycleDetails.stage_id ?? null) || !canUpdateStage) return;
+                  void (async () => {
+                    setIsUpdatingStage(true);
+                    try {
+                      await updateCycleDetails(workspaceSlug, projectId, cycleId, { stage_id: nextStageId });
+                      setToast({
+                        type: TOAST_TYPE.SUCCESS,
+                        title: t("project_cycles.action.update.success.title"),
+                        message: t("project_cycles.action.update.success.description"),
+                      });
+                    } catch (err) {
+                      const { title, message } = formatCycleUpdateError(err);
+                      setToast({
+                        type: TOAST_TYPE.ERROR,
+                        title,
+                        message,
+                      });
+                    } finally {
+                      setIsUpdatingStage(false);
+                    }
+                  })();
+                }}
+                buttonVariant="transparent-with-text"
+                className="h-full w-full"
+                buttonContainerClassName="w-full text-left"
+                buttonClassName="!px-0 !py-0 text-sm hover:bg-transparent"
+                placeholder={t("stage_field.no_stage")}
+                tooltipHeading={t("stage_field.cycle_label")}
+                disabled={!canUpdateStage || isUpdatingStage}
+              />
+            </div>
+          ) : cycleStage ? (
+            <span className="inline-flex min-w-0 flex-1 items-center gap-1 text-secondary">
+              {cycleStageCode && <span className="shrink-0 text-11 text-placeholder">{cycleStageCode}</span>}
+              <span className="truncate">{cycleStage.name}</span>
+            </span>
+          ) : (
+            <span className="flex-1 text-secondary">{t("stage_field.no_stage")}</span>
           )}
         </div>
         <div className="flex items-center gap-2">

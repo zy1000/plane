@@ -30,6 +30,7 @@ from plane.db.models import (
     Module,
     Product,
     Project,
+    ProjectStage,
     Release,
     RequirementModule,
     State,
@@ -386,6 +387,51 @@ def track_product_module(
             comment="updated the product module to",
             old_identifier=current_module_id,
             new_identifier=requested_module_id,
+            epoch=epoch,
+        )
+    )
+
+
+# Track changes in project stage of the issue
+def track_stage(
+    requested_data,
+    current_instance,
+    issue_id,
+    project_id,
+    workspace_id,
+    actor_id,
+    issue_activities,
+    epoch,
+):
+    current_stage_id = current_instance.get("stage_id")
+    requested_stage_id = requested_data.get("stage_id")
+
+    if current_stage_id is not None and not is_valid_uuid(current_stage_id):
+        current_stage_id = None
+    if requested_stage_id is not None and not is_valid_uuid(requested_stage_id):
+        requested_stage_id = None
+
+    if str(current_stage_id) == str(requested_stage_id):
+        return
+
+    def _stage_name(stage_id):
+        if not stage_id:
+            return ""
+        return ProjectStage.objects.filter(id=stage_id).values_list("name", flat=True).first() or ""
+
+    issue_activities.append(
+        IssueActivity(
+            issue_id=issue_id,
+            actor_id=actor_id,
+            verb="removed" if requested_stage_id is None else "updated",
+            old_value=_stage_name(current_stage_id),
+            new_value=_stage_name(requested_stage_id),
+            field="stage",
+            project_id=project_id,
+            workspace_id=workspace_id,
+            comment="updated the stage to",
+            old_identifier=current_stage_id,
+            new_identifier=requested_stage_id,
             epoch=epoch,
         )
     )
@@ -928,6 +974,7 @@ def update_issue_activity(
         "closed_to": track_closed_to,
         "product_id": track_product,
         "product_module_id": track_product_module,
+        "stage_id": track_stage,
         # External endpoint keys
         "parent": track_parent,
         "state": track_state,

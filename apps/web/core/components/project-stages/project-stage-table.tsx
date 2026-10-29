@@ -1,9 +1,13 @@
 import type { ReactNode } from "react";
+import { useMemo } from "react";
+import { useParams } from "next/navigation";
 import { ChevronRight, ClipboardCheck, Flag } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import type { TProjectStage, TUpdateProjectStagePayload } from "@plane/types";
 import { Checkbox } from "@plane/ui";
 import { cn } from "@plane/utils";
+import { useCycleFilter } from "@/hooks/store/use-cycle-filter";
+import { useAppRouter } from "@/hooks/use-app-router";
 import type { TProjectStageFlashedCells } from "./bulk/use-project-stage-bulk-edit";
 import {
   Empty,
@@ -14,7 +18,7 @@ import {
 } from "./project-stage-cells";
 import { ProjectStageDelayedTag } from "./project-stage-delayed-tag";
 import type { TProjectStageRow } from "./project-stage-rows";
-import { delayedDays } from "./project-stage-rows";
+import { collectProjectStageSubtreeIds, delayedDays, sumProjectStageSubtree } from "./project-stage-rows";
 import { ProjectStageStatusCell } from "./project-stage-status-cell";
 
 const I18N = "project_stage";
@@ -28,7 +32,9 @@ export type TProjectStageColumn =
   | "duration_days"
   | "actual_start"
   | "actual_end"
-  | "status";
+  | "status"
+  | "cycle_count"
+  | "issue_count";
 
 export const PROJECT_STAGE_COLUMNS: TProjectStageColumn[] = [
   "code",
@@ -40,6 +46,8 @@ export const PROJECT_STAGE_COLUMNS: TProjectStageColumn[] = [
   "actual_start",
   "actual_end",
   "status",
+  "cycle_count",
+  "issue_count",
 ];
 
 /** 宽度含格子左右各 12px 内边距（格子之间画竖线，不再用 gap 隔开） */
@@ -53,7 +61,27 @@ const COLUMN_WIDTH: Record<TProjectStageColumn, string> = {
   actual_start: "96px",
   actual_end: "96px",
   status: "124px",
+  cycle_count: "88px",
+  issue_count: "88px",
 };
+
+/** 「迭代 / 工作项」计数格：0 显示 —，大于 0 显示成链接，点了跳到对应列表 */
+const CountCell = ({ count, title, onClick }: { count: number; title: string; onClick: () => void }) =>
+  count > 0 ? (
+    <button
+      type="button"
+      title={title}
+      className="text-13 tabular-nums text-accent-primary hover:underline"
+      onClick={(event) => {
+        event.stopPropagation();
+        onClick();
+      }}
+    >
+      {count}
+    </button>
+  ) : (
+    <Empty />
+  );
 
 /** 同阶段评审 / 工作项表格：每格左边一道竖线，与行底线一起画出格子 */
 const CELL_CLASS = "flex h-full min-w-0 items-center border-l border-subtle px-3";
@@ -156,6 +184,7 @@ const ActionButton = ({
  */
 export const ProjectStageTable = ({
   projectId,
+  stages,
   rows,
   today,
   workloadRemaining,
@@ -167,6 +196,8 @@ export const ProjectStageTable = ({
   flashedCells,
 }: {
   projectId: string;
+  /** 全量阶段（含折叠起来没出行的），迭代 / 工作项列要按子树合计 */
+  stages: TProjectStage[];
   rows: TProjectStageRow[];
   /** `YYYY-MM-DD` */
   today: string;
@@ -181,7 +212,21 @@ export const ProjectStageTable = ({
   flashedCells?: TProjectStageFlashedCells | null;
 }) => {
   const { t } = useTranslation();
+  const { workspaceSlug } = useParams();
+  const router = useAppRouter();
+  const { updateFilters: updateCycleFilters } = useCycleFilter();
   const columns = PROJECT_STAGE_COLUMNS;
+  const cycleTotals = useMemo(() => sumProjectStageSubtree(stages, (stage) => stage.cycle_count ?? 0), [stages]);
+  const issueTotals = useMemo(() => sumProjectStageSubtree(stages, (stage) => stage.issue_count ?? 0), [stages]);
+  // 迭代列表按该阶段筛选后再跳；工作项列表暂无程序化设筛选的入口，直接跳
+  const openCycles = (stage: TProjectStage) => {
+    // 计数含子阶段，筛选也要带上整棵子树，否则父阶段点开是空列表
+    updateCycleFilters(projectId, { stage: collectProjectStageSubtreeIds(stages, stage.id) });
+    router.push(`/${workspaceSlug}/projects/${projectId}/cycles/`);
+  };
+  const openIssues = () => {
+    router.push(`/${workspaceSlug}/projects/${projectId}/issues/`);
+  };
   const gridTemplateColumns = [
     "minmax(260px, 1fr)",
     ...columns.map((column) => COLUMN_WIDTH[column]),
@@ -263,6 +308,22 @@ export const ProjectStageTable = ({
           <ProjectStageStatusCell
             status={stage.status}
             onChange={update && ((status) => update({ status }))}
+          />
+        );
+      case "cycle_count":
+        return (
+          <CountCell
+            count={cycleTotals.get(stage.id) ?? 0}
+            title={t(`${I18N}.table.cycle_count`)}
+            onClick={() => openCycles(stage)}
+          />
+        );
+      case "issue_count":
+        return (
+          <CountCell
+            count={issueTotals.get(stage.id) ?? 0}
+            title={t(`${I18N}.table.issue_count`)}
+            onClick={openIssues}
           />
         );
     }

@@ -11,12 +11,15 @@ from rest_framework import status
 from rest_framework.response import Response
 
 from plane.app.permissions import PermissionKey, allow_fine_permission
+from plane.app.permissions.base import ROLE, allow_permission
 from plane.app.serializers.project_stage import (
     ProjectStageBulkUpdateSerializer,
     ProjectStageSerializer,
 )
 from plane.app.views.base import BaseViewSet
 from plane.db.models import (
+    Cycle,
+    Issue,
     Project,
     ProjectStage,
     ReviewTailoringItem,
@@ -33,10 +36,9 @@ from plane.utils.project_stage import (
     update_stage,
 )
 
-PROJECT_STAGE_READ_KEYS = (
-    PermissionKey.PROJECT_STAGE_VIEW,
-    PermissionKey.PROJECT_STAGE_MANAGE,
-)
+# 列表 / 详情对项目成员开放（不要求 project.stage.view）：迭代 / 工作项的阶段下拉、筛选、分组都要读阶段名，
+# 阶段名不敏感；阶段页本身仍按 project.stage.view 显示入口。
+PROJECT_STAGE_READ_ROLES = [ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST]
 PROJECT_STAGE_MANAGE_KEY = PermissionKey.PROJECT_STAGE_MANAGE
 
 #: 「当前状态不允许」而不是「请求写错了」
@@ -110,6 +112,9 @@ class ProjectStageViewSet(BaseViewSet):
                     StageReview.objects.exclude(status=StageReviewStatus.NOT_STARTED)
                 ),
                 tailoring_item_count=_count_subquery(ReviewTailoringItem.objects.all()),
+                # 直接挂在该阶段上的迭代 / 工作项数，不含子阶段（前端按子树求和）
+                cycle_count=_count_subquery(Cycle.objects.filter(deleted_at__isnull=True)),
+                issue_count=_count_subquery(Issue.objects.filter(deleted_at__isnull=True)),
             )
             .distinct()
         )
@@ -141,7 +146,7 @@ class ProjectStageViewSet(BaseViewSet):
             return Response({"error": "Stage not found."}, status=status.HTTP_404_NOT_FOUND)
         return Response(ProjectStageSerializer(stage, context=self._context()).data, status=http_status)
 
-    @allow_fine_permission(*PROJECT_STAGE_READ_KEYS)
+    @allow_permission(PROJECT_STAGE_READ_ROLES)
     def list(self, request, slug, project_id):
         stages = self.get_queryset()
         return Response(
@@ -149,7 +154,7 @@ class ProjectStageViewSet(BaseViewSet):
             status=status.HTTP_200_OK,
         )
 
-    @allow_fine_permission(*PROJECT_STAGE_READ_KEYS)
+    @allow_permission(PROJECT_STAGE_READ_ROLES)
     def retrieve(self, request, slug, project_id, pk):
         return self._detail_response(pk)
 

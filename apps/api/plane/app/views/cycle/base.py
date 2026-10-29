@@ -258,6 +258,7 @@ class CycleViewSet(BaseViewSet):
         "progress_snapshot",
         "logo_props",
         "release_id",
+        "stage_id",
         "is_favorite",
         "total_issues",
         "completed_issues",
@@ -416,6 +417,7 @@ class CycleViewSet(BaseViewSet):
                         "external_id",
                         "progress_snapshot",
                         "logo_props",
+                        "stage_id",
                         "version",
                         # meta fields
                         "is_favorite",
@@ -547,6 +549,7 @@ class CycleViewSet(BaseViewSet):
                 "progress_snapshot",
                 "logo_props",
                 "release_id",
+                "stage_id",
                 "version",
                 # meta fields
                 "is_favorite",
@@ -673,6 +676,7 @@ class CycleViewSet(BaseViewSet):
             "progress_snapshot",
             "sub_issues",
             "logo_props",
+            "stage_id",
             "version",
             # meta fields
             "is_favorite",

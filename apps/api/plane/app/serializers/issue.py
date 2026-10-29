@@ -45,6 +45,7 @@ from plane.db.models import (
     ProjectMember,
     EstimatePoint, IssueType,
     Product,
+    ProjectStage,
 )
 from plane.db.seed_data.issue_scheme import (
     BUG as SYSTEM_BUG,
@@ -55,6 +56,7 @@ from plane.db.seed_data.issue_scheme import (
     TASK as SYSTEM_TASK,
 )
 from plane.utils.issue_scheme import is_type_visible_to_project, project_scheme_id
+from plane.utils.issue_stage import validate_stage_in_project
 from plane.utils.issue_product import (
     apply_resolved_product_fields,
     product_module_queryset,
@@ -153,6 +155,9 @@ class IssueCreateSerializer(BaseSerializer):
         queryset=product_module_queryset(),
         required=False,
         allow_null=True,
+    )
+    stage_id = serializers.PrimaryKeyRelatedField(
+        source="stage", queryset=ProjectStage.objects.all(), required=False, allow_null=True
     )
     label_ids = serializers.ListField(
         child=serializers.PrimaryKeyRelatedField(queryset=Label.objects.all()),
@@ -335,6 +340,13 @@ class IssueCreateSerializer(BaseSerializer):
                 resolved,
                 current_product_id=current_product_id,
                 current_module_id=current_module_id,
+            )
+
+        # 项目阶段：只要求属于同一项目，规则在 utils/issue_stage.py
+        if "stage" in attrs:
+            validate_stage_in_project(
+                attrs.get("stage"),
+                self.context.get("project_id") or (self.instance.project_id if self.instance else None),
             )
 
         return attrs
@@ -968,6 +980,7 @@ class IssueSerializer(DynamicBaseSerializer):
             "type_name",
             "product_id",
             "product_module_id",
+            "stage_id",
         ]
         read_only_fields = fields
 
@@ -1030,6 +1043,7 @@ class IssueListDetailSerializer(serializers.Serializer):
             "type_name": instance.type.name if instance.type else None,
             "product_id": instance.product_id,
             "product_module_id": instance.product_module_id,
+            "stage_id": instance.stage_id,
             "module_ids": self.get_module_ids(instance),
             "release_ids": self.get_release_ids(instance),
             "label_ids": self.get_label_ids(instance),
@@ -1289,6 +1303,9 @@ class IssueBatchUpdateSerializer(BaseSerializer):
         required=False,
         allow_null=True,
     )
+    stage_id = serializers.PrimaryKeyRelatedField(
+        source="stage", queryset=ProjectStage.objects.all(), required=False, allow_null=True
+    )
 
     class Meta:
         model = Issue
@@ -1305,9 +1322,13 @@ class IssueBatchUpdateSerializer(BaseSerializer):
             "release_ids",
             "product_id",
             "product_module_id",
+            "stage_id",
         ]
 
     def validate(self, attrs):
+        if "stage" in attrs and self.instance is not None:
+            validate_stage_in_project(attrs.get("stage"), self.instance.project_id)
+
         if ("product" in attrs or "product_module" in attrs) and self.instance is not None:
             resolved = resolve_issue_product_fields(
                 project_id=self.instance.project_id,

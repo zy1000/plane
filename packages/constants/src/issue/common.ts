@@ -35,6 +35,7 @@ export enum EIssueGroupByToServerOptions {
   "release" = "issue_release__release_id",
   "product" = "product_id",
   "product_module" = "product_module_id",
+  "stage" = "stage_id",
   "target_date" = "target_date",
   "project" = "project_id",
   "created_by" = "created_by",
@@ -53,6 +54,7 @@ export enum EIssueGroupBYServerToProperty {
   "issue_release__release_id" = "release_ids",
   "product_id" = "product_id",
   "product_module_id" = "product_module_id",
+  "stage_id" = "stage_id",
   "target_date" = "target_date",
   "project_id" = "project_id",
   "created_by" = "created_by",
@@ -107,6 +109,7 @@ export const DRAG_ALLOWED_GROUPS: TIssueGroupByOptions[] = [
   "release",
   "product",
   "product_module",
+  "stage",
 ];
 
 export type TCreateModalStoreTypes =
@@ -135,6 +138,7 @@ export const ISSUE_GROUP_BY_OPTIONS: {
   { key: "release", titleTranslationKey: "issue.display.properties.release" },
   { key: "product", titleTranslationKey: "issue.display.properties.product" },
   { key: "product_module", titleTranslationKey: "issue.display.properties.product_module" },
+  { key: "stage", titleTranslationKey: "issue.display.properties.stage" },
   { key: "labels", titleTranslationKey: "common.labels" },
   { key: "assignees", titleTranslationKey: "common.assignees" },
   { key: "created_by", titleTranslationKey: "common.created_by" },
@@ -171,6 +175,7 @@ export const ISSUE_DISPLAY_PROPERTIES_KEYS: (keyof IIssueDisplayProperties)[] = 
   "release",
   "product",
   "product_module",
+  "stage",
   "issue_type",
 ];
 
@@ -236,6 +241,7 @@ export const ISSUE_DISPLAY_PROPERTIES: {
   { key: "release", titleTranslationKey: "issue.display.properties.release" },
   { key: "product", titleTranslationKey: "issue.display.properties.product" },
   { key: "product_module", titleTranslationKey: "issue.display.properties.product_module" },
+  { key: "stage", titleTranslationKey: "issue.display.properties.stage" },
 ];
 
 export const SPREADSHEET_PROPERTY_LIST: (keyof IIssueDisplayProperties)[] = [
@@ -248,6 +254,7 @@ export const SPREADSHEET_PROPERTY_LIST: (keyof IIssueDisplayProperties)[] = [
   "release",
   "product",
   "product_module",
+  "stage",
   "start_date",
   "due_date",
   "estimate",
@@ -348,6 +355,14 @@ export const SPREADSHEET_PROPERTY_DETAILS: {
     descendingOrderTitle: "Z",
     icon: "Boxes",
   },
+  stage: {
+    i18n_title: "issue.display.properties.stage",
+    ascendingOrderKey: "stage__name",
+    ascendingOrderTitle: "A",
+    descendingOrderKey: "-stage__name",
+    descendingOrderTitle: "Z",
+    icon: "Layers",
+  },
   priority: {
     i18n_title: "common.priority",
     ascendingOrderKey: "priority",
@@ -420,4 +435,5 @@ export const FILTER_TO_ISSUE_MAP: Partial<Record<keyof IIssueFilterOptions, keyo
   state_group: "state__group",
   product: "product_id",
   product_module: "product_module_id",
+  stage: "stage_id",
 } as const;

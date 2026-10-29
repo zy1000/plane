@@ -26,6 +26,7 @@ const DISPLAY_PROPERTY_LABELS: Record<string, string> = {
   release: "发布",
   product: "产品",
   product_module: "产品模块",
+  stage: "阶段",
 };
 
 const GROUP_BY_LABELS: Record<string, string> = {
@@ -40,6 +41,7 @@ const GROUP_BY_LABELS: Record<string, string> = {
   release: "发布",
   product: "产品",
   product_module: "产品模块",
+  stage: "阶段",
   issue_type: "类型",
   target_date: "截止日期",
   project: "项目",

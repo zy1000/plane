@@ -130,6 +130,7 @@ export const ISSUE_GROUP_BY_KEY: Record<TIssueDisplayFilterOptions, keyof TIssue
   release: "release_ids",
   product: "product_id",
   product_module: "product_module_id",
+  stage: "stage_id",
   team_project: "project_id",
 };
 
@@ -140,6 +141,7 @@ export const ISSUE_FILTER_DEFAULT_DATA: Record<TIssueDisplayFilterOptions, keyof
   release: "release_ids",
   product: "product_id",
   product_module: "product_module_id",
+  stage: "stage_id",
   state: "state_id",
   "state_detail.group": "state__group", // state_detail.group is only being used for state_group display,
   priority: "priority",
@@ -175,6 +177,8 @@ const ISSUE_ORDERBY_KEY: Record<TIssueOrderByOptions, keyof TIssue> = {
   "-product__name": "product_id",
   product_module__name: "product_module_id",
   "-product_module__name": "product_module_id",
+  stage__name: "stage_id",
+  "-stage__name": "stage_id",
   target_date: "target_date",
   "-target_date": "target_date",
   estimate_point__key: "estimate_point",
@@ -1873,6 +1877,12 @@ export abstract class BaseIssuesStore implements IBaseIssuesStore {
     return isDataIdsArray ? (order ? orderBy(dataValues, undefined, [order]) : dataValues) : dataValues;
   }
 
+  /** 阶段名排序用：优先 store 里的名字，列表随行带的 stage_name 兜底 */
+  getIssueStageName = (issue: TIssue): string =>
+    (issue?.stage_id ? this.rootIssueStore.rootStore.projectStage.getStageById(issue.stage_id)?.name : null) ||
+    issue?.stage_name ||
+    "";
+
   issuesSortWithOrderBy = (issueIds: string[], key: TIssueOrderByOptions | undefined): string[] => {
     const issues = this.rootIssueStore.issues.getIssuesByIds(issueIds, this.isArchived ? "archived" : "un-archived");
     const array = orderBy(issues, (issue) => convertToISODateString(issue["created_at"]), ["desc"]);
@@ -1892,6 +1902,19 @@ export abstract class BaseIssuesStore implements IBaseIssuesStore {
             array,
             (issue) => this.populateIssueDataForSorting("state_id", issue?.["state_id"], issue?.["project_id"]),
             ["desc"]
+          )
+        );
+      // 阶段：按阶段名排，空的沉底（前端本地排序没有这个 case 时会退回按创建时间，盖掉后端的顺序）
+      case "stage__name":
+        return getIssueIds(
+          orderBy(array, [getSortOrderToFilterEmptyValues.bind(null, "stage_id"), (issue) => this.getIssueStageName(issue)])
+        );
+      case "-stage__name":
+        return getIssueIds(
+          orderBy(
+            array,
+            [getSortOrderToFilterEmptyValues.bind(null, "stage_id"), (issue) => this.getIssueStageName(issue)],
+            ["asc", "desc"]
           )
         );
       // dates

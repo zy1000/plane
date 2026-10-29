@@ -33,11 +33,14 @@ type TPendingDelete = { stage: TProjectStage } | { bulk: string[] } | null;
 
 /**
  * 删除会连带删掉多少：未评审的评审、裁剪表格子按能删的阶段合计；有评审已开始的阶段后端会拒绝，单独计数。
+ * 迭代 / 工作项不删、只清空阶段；父阶段有子时本来就删不掉，所以只取直接挂在该阶段上的数。
  */
 const getDeleteImpact = (stages: TProjectStage[], ids: string[]) => {
   const byId = new Map(stages.map((stage) => [stage.id, stage]));
   let reviews = 0;
   let items = 0;
+  let cycles = 0;
+  let issues = 0;
   let blocked = 0;
   for (const id of ids) {
     const stage = byId.get(id);
@@ -48,8 +51,10 @@ const getDeleteImpact = (stages: TProjectStage[], ids: string[]) => {
     }
     reviews += stage.review_count;
     items += stage.tailoring_item_count;
+    cycles += stage.cycle_count ?? 0;
+    issues += stage.issue_count ?? 0;
   }
-  return { reviews, items, blocked };
+  return { reviews, items, cycles, issues, blocked };
 };
 
 /** 按深度从深到浅排：子阶段先删，父子一起勾选时父才删得掉 */
@@ -232,6 +237,9 @@ export const ProjectStageList = observer(function ProjectStageList({
         t(`${I18N}.delete_modal.cascade`, { reviews: deleteImpact.reviews, items: deleteImpact.items })
       );
     }
+    if (deleteImpact.cycles > 0 || deleteImpact.issues > 0) {
+      parts.push(t(`${I18N}.delete_modal.unlink`, { cycles: deleteImpact.cycles, issues: deleteImpact.issues }));
+    }
     if (deleteImpact.blocked > 0) {
       parts.push(t(`${I18N}.delete_modal.blocked`, { count: deleteImpact.blocked }));
     }
@@ -330,6 +338,7 @@ export const ProjectStageList = observer(function ProjectStageList({
         ) : (
           <ProjectStageTable
             projectId={projectId}
+            stages={stages}
             rows={rows}
             today={today}
             workloadRemaining={workloadRemaining}

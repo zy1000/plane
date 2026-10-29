@@ -16,6 +16,7 @@ import { replaceUnderscoreIfSnakeCase } from "@plane/utils";
 import { useUserPermissions } from "@/hooks/store/user";
 // local imports
 import { AppliedDateFilters } from "./date";
+import { AppliedStageFilters } from "./stage";
 import { AppliedStatusFilters } from "./status";
 
 type Props = {
@@ -57,6 +58,13 @@ export const CycleAppliedFiltersList = observer(function CycleAppliedFiltersList
                 <AppliedStatusFilters
                   editable={isEditingAllowed}
                   handleRemove={(val) => handleRemoveFilter("status", val)}
+                  values={value}
+                />
+              )}
+              {filterKey === "stage" && (
+                <AppliedStageFilters
+                  editable={isEditingAllowed}
+                  handleRemove={(val) => handleRemoveFilter("stage", val)}
                   values={value}
                 />
               )}

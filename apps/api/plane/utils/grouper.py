@@ -25,6 +25,7 @@ from plane.db.models import (
     ReleaseIssue,
     Product,
     ProductProject,
+    ProjectStage,
     RequirementModule,
 )
 from typing import Optional, Dict, Tuple, Any, Union, List
@@ -167,6 +168,8 @@ def issue_on_results(
         "product_name",
         "product_module_id",
         "product_module_name",
+        "stage_id",
+        "stage_name",
     ]
 
     if group_by in FIELD_MAPPER:
@@ -184,6 +187,7 @@ def issue_on_results(
             # 产品 / 产品模块名随行带出：列表回显不必先拉产品池
             product_name=F("product__name"),
             product_module_name=F("product_module__name"),
+            stage_name=F("stage__name"),
         ).values(*required_fields)
     )
 
@@ -250,6 +254,15 @@ def issue_group_values(
                 product_id__in=_grouping_product_ids(slug, project_id)
             ).values_list("id", flat=True)
         ) + ["None"]
+
+    # 项目阶段：项目内按该项目的阶段（树序），工作区级按全部项目阶段；带「无」组
+    if field == "stage_id":
+        queryset = ProjectStage.objects.filter(workspace__slug=slug).order_by(
+            "sort_order", "created_at", "id"
+        )
+        if project_id:
+            queryset = queryset.filter(project_id=project_id)
+        return list(queryset.values_list("id", flat=True)) + ["None"]
 
     if field == "priority":
         return ["low", "medium", "high", "urgent", "none"]

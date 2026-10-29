@@ -193,6 +193,17 @@ class Issue(ProjectBaseModel):
         blank=True,
         verbose_name="所属产品模块",
     )
+    # 所属项目阶段（父 / 子阶段都可挂），与迭代上的阶段互不派生、互不限制；
+    # 只要求属于同一项目（utils/issue_stage.py::validate_stage_in_project）。
+    # ProjectStage 是硬删，所以用 SET_NULL 让库级联把工作项上的阶段置空。
+    stage = models.ForeignKey(
+        "db.ProjectStage",
+        on_delete=models.SET_NULL,
+        related_name="issues",
+        null=True,
+        blank=True,
+        verbose_name="所属阶段",
+    )
 
     issue_objects = IssueManager()
 

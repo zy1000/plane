@@ -523,6 +523,7 @@ export class IssueService extends APIService {
         release_ids?: string[];
         product_id?: string | null;
         product_module_id?: string | null;
+        stage_id?: string | null;
         approval_reason?: string;
       };
     }

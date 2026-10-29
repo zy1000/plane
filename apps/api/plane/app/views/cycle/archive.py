@@ -357,6 +357,7 @@ class CycleArchiveUnarchiveEndpoint(BaseAPIView):
                     "progress_snapshot",
                     "sub_issues",
                     "logo_props",
+                    "stage_id",
                     # meta fields
                     "completed_estimate_points",
                     "total_estimate_points",

@@ -6,7 +6,7 @@
 
 import type { CSSProperties, FC } from "react";
 import { extractInstruction } from "@atlaskit/pragmatic-drag-and-drop-hitbox/tree-item";
-import { Boxes, Package, Rocket } from "lucide-react";
+import { Boxes, Layers, Package, Rocket } from "lucide-react";
 import { clone, isNil, pull, uniq, concat } from "lodash-es";
 import scrollIntoView from "smooth-scroll-into-view-if-needed";
 // plane types
@@ -121,6 +121,7 @@ export const getGroupByColumns = ({
     release: getReleaseColumns,
     product: getProductColumns,
     product_module: getProductModuleColumns,
+    stage: getStageColumns,
     state: getStateColumns,
     "state_detail.group": getStateGroupColumns,
     priority: getPriorityColumns,
@@ -288,6 +289,27 @@ const getProductModuleColumns = (): IGroupByColumn[] | undefined => {
     payload: { product_module_id: null },
   });
   return modules;
+};
+
+// 阶段分组：候选来自 projectStage store（project-wrapper 预热），树先序、父子都成列；
+// 根阶段显示「编码 名称」，子阶段只显示名称。非 hook 环境拿不到 t，「无阶段」直接写死。
+const getStageColumns = (): IGroupByColumn[] | undefined => {
+  const { currentProjectDetails } = store.projectRoot.project;
+  if (!currentProjectDetails?.id) return;
+  const options = store.projectStage.getProjectStageOptions(currentProjectDetails.id);
+  const stages: IGroupByColumn[] = options.map(({ stage, depth }) => ({
+    id: stage.id,
+    name: depth > 0 ? stage.name : `${stage.code} ${stage.name}`,
+    icon: <Layers className="h-3.5 w-3.5" />,
+    payload: { stage_id: stage.id },
+  }));
+  stages.push({
+    id: "None",
+    name: "无阶段",
+    icon: <Layers className="h-3.5 w-3.5" />,
+    payload: { stage_id: null },
+  });
+  return stages;
 };
 
 const getStateColumns = ({ projectId, issueTypeIds }: TGetColumns): IGroupByColumn[] | undefined => {

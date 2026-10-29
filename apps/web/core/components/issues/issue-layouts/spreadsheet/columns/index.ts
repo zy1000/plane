@@ -21,3 +21,4 @@ export * from "./cycle-column";
 export * from "./release-column";
 export * from "./product-column";
 export * from "./product-module-column";
+export * from "./stage-column";

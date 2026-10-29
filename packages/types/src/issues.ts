@@ -123,6 +123,7 @@ export type GroupByColumnTypes =
   | "release"
   | "product"
   | "product_module"
+  | "stage"
   | "state"
   | "state_detail.group"
   | "priority"

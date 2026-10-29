@@ -41,6 +41,7 @@ import { PriorityDropdown } from "@/components/dropdowns/priority";
 import { ReleaseDropdown } from "@/components/dropdowns/release/dropdown";
 import { ProductDropdown } from "@/components/dropdowns/product/dropdown";
 import { ProductModuleDropdown } from "@/components/dropdowns/product-module/dropdown";
+import { ProjectStageDropdown } from "@/components/dropdowns/project-stage/dropdown";
 import { StateDropdown } from "@/components/dropdowns/state/dropdown";
 // hooks
 import { useProjectEstimates } from "@/hooks/store/estimates";
@@ -305,6 +306,19 @@ export const IssueProperties = observer(function IssueProperties(props: IIssuePr
       if (!updateIssue || !issue || (issue.product_module_id ?? null) === moduleId) return;
       try {
         await updateIssue(issue.project_id, issue.id, { product_module_id: moduleId });
+      } catch (error) {
+        showIssueUpdateErrorToast(error);
+      }
+    },
+    [issue, updateIssue, showIssueUpdateErrorToast]
+  );
+
+  // 阶段同样是单值字段，直接走 PATCH
+  const handleStage = useCallback(
+    async (stageId: string | null) => {
+      if (!updateIssue || !issue || (issue.stage_id ?? null) === stageId) return;
+      try {
+        await updateIssue(issue.project_id, issue.id, { stage_id: stageId });
       } catch (error) {
         showIssueUpdateErrorToast(error);
       }
@@ -588,6 +602,24 @@ export const IssueProperties = observer(function IssueProperties(props: IIssuePr
             disabled={isReadOnly}
             renderByDefault={isMobile}
             placeholder={t("product_module_field.label")}
+            buttonVariant="border-with-text"
+            showTooltip
+          />
+        </div>
+      </WithDisplayPropertiesHOC>
+
+      {/* stage */}
+      <WithDisplayPropertiesHOC displayProperties={displayProperties} displayPropertyKey="stage">
+        <div className="h-5" onFocus={handleEventPropagation} onClick={handleEventPropagation}>
+          <ProjectStageDropdown
+            buttonContainerClassName="truncate max-w-40"
+            projectId={issue?.project_id ?? undefined}
+            value={issue?.stage_id ?? null}
+            valueName={issue?.stage_name ?? null}
+            onChange={handleStage}
+            disabled={isReadOnly}
+            renderByDefault={isMobile}
+            placeholder={t("stage_field.label")}
             buttonVariant="border-with-text"
             showTooltip
           />

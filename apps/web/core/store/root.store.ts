@@ -67,6 +67,8 @@ import type { IReleaseFilterStore } from "./release_filter.store";
 import { ReleaseFilterStore } from "./release_filter.store";
 import type { IProjectProductStore } from "./project-product.store";
 import { ProjectProductStore } from "./project-product.store";
+import type { IProjectStageStore } from "./project-stage.store";
+import { ProjectStageStore } from "./project-stage.store";
 import type { IMultipleSelectStore } from "./multiple_select.store";
 import { MultipleSelectStore } from "./multiple_select.store";
 import type { IWorkspaceNotificationStore } from "./notifications/workspace-notifications.store";
@@ -106,6 +108,7 @@ export class CoreRootStore {
   releaseComment: IReleaseCommentStore;
   releaseActivity: IReleaseActivityStore;
   projectProduct: IProjectProductStore;
+  projectStage: IProjectStageStore;
   projectView: IProjectViewStore;
   globalView: IGlobalViewStore;
   issue: IIssueRootStore;
@@ -151,6 +154,7 @@ export class CoreRootStore {
     this.releaseComment = new ReleaseCommentStore(this);
     this.releaseActivity = new ReleaseActivityStore(this);
     this.projectProduct = new ProjectProductStore(this);
+    this.projectStage = new ProjectStageStore(this);
     this.projectView = new ProjectViewStore(this);
     this.globalView = new GlobalViewStore(this);
     this.issue = new IssueRootStore(this as unknown as RootStore);
@@ -194,6 +198,7 @@ export class CoreRootStore {
     this.releaseComment = new ReleaseCommentStore(this);
     this.releaseActivity = new ReleaseActivityStore(this);
     this.projectProduct = new ProjectProductStore(this);
+    this.projectStage = new ProjectStageStore(this);
     this.projectView = new ProjectViewStore(this);
     this.globalView = new GlobalViewStore(this);
     this.issue = new IssueRootStore(this as unknown as RootStore);

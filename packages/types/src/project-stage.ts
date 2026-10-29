@@ -63,6 +63,9 @@ export type TProjectStage = {
   started_review_count: number;
   /** 挂在这个阶段上的裁剪表格子数，删除时连带删掉 */
   tailoring_item_count: number;
+  /** 直接挂在这个阶段上的活跃迭代 / 工作项数（不含子阶段，前端按子树求和）；删除时置空 */
+  cycle_count: number;
+  issue_count: number;
   created_at: string;
   updated_at: string;
 };

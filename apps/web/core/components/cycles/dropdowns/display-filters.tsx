@@ -48,6 +48,7 @@ const DISPLAY_PROPERTY_OPTIONS: { key: TCycleDisplayPropertyKey; labelKey: strin
   { key: "start_date", labelKey: "cycle.display.properties.start_date" },
   { key: "end_date", labelKey: "cycle.display.properties.end_date" },
   { key: "test_handoff_date", labelKey: "test_handoff_date" },
+  { key: "stage", labelKey: "stage_field.label" },
   { key: "created_by", labelKey: "lead" },
   { key: "members", labelKey: "cycle.display.properties.members" },
 ];

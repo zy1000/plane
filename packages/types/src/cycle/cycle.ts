@@ -135,6 +135,8 @@ export interface ICycle extends TProgressSnapshot {
   archived_at: string | null;
   assignee_ids?: string[];
   release_id?: string | null;
+  /** 所属项目阶段（ProjectStage），与工作项上的阶段互不派生 */
+  stage_id?: string | null;
   view_props: {
     filters: IIssueFilterOptions;
   };

@@ -36,6 +36,7 @@ export const EXPORT_FIELD_ITEMS: TExportFieldItem[] = [
   { key: "modules", label: "模块", group: "关联" },
   { key: "product", label: "产品", group: "关联" },
   { key: "product_module", label: "产品模块", group: "关联" },
+  { key: "stage", label: "阶段", group: "关联" },
   { key: "parent_key", label: "父工作项标识", group: "关联" },
   { key: "parent_name", label: "父工作项标题", group: "关联" },
   { key: "project", label: "项目", group: "关联" },

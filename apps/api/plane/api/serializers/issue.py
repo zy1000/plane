@@ -27,6 +27,7 @@ from plane.db.models import (
     EstimatePoint,
 )
 from plane.utils.issue_scheme import is_type_visible_to_project, project_default_issue_type
+from plane.utils.issue_stage import validate_stage_in_project
 from plane.utils.content_validator import (
     validate_html_content,
     validate_binary_data,
@@ -81,6 +82,10 @@ class IssueSerializer(BaseSerializer):
             and data.get("start_date", None) > data.get("target_date", None)
         ):
             raise serializers.ValidationError("Start date cannot exceed target date")
+
+        # 阶段必须属于本项目：与 app 端序列化器同一条规则，公开 API 走 ModelSerializer 的 exclude 会把外键自动放开
+        project_id = self.context.get("project_id") or (self.instance.project_id if self.instance else None)
+        validate_stage_in_project(data.get("stage"), project_id, field="stage")
 
         try:
             if data.get("description_html", None) is not None:

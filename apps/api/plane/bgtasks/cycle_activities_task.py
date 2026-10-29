@@ -13,6 +13,7 @@ from plane.db.models import (
     Project,
     Cycle,
     CycleActivity,
+    ProjectStage,
     User,
 )
 from plane.utils.exception_logger import log_exception
@@ -30,6 +31,7 @@ _CYCLE_FIELD_LABELS = {
     "suggested_test_scope": "建议测试范围",
     "owned_by": "负责人",
     "owned_by_id": "负责人",
+    "stage": "所属阶段",
     "attachment": "附件",
     "cycle_issue": "关联工作项",
     "comment": "评论",
@@ -214,6 +216,46 @@ def _track_owner(
     )
 
 
+def _stage_name(stage_id: Optional[str]) -> str:
+    if not stage_id or not is_valid_uuid(str(stage_id)):
+        return ""
+    return ProjectStage.objects.filter(pk=stage_id).values_list("name", flat=True).first() or ""
+
+
+def _track_stage(
+    *,
+    requested,
+    current,
+    cycle_id,
+    project_id,
+    workspace_id,
+    actor_id,
+    activities,
+    epoch,
+):
+    if "stage_id" not in requested:
+        return
+    new_stage = requested.get("stage_id")
+    old_stage = current.get("stage_id")
+    if str(new_stage or "") == str(old_stage or ""):
+        return
+    _append(
+        activities,
+        cycle_id=cycle_id,
+        project_id=project_id,
+        workspace_id=workspace_id,
+        actor_id=actor_id,
+        verb="updated",
+        field="stage",
+        old_value=_stage_name(old_stage),
+        new_value=_stage_name(new_stage),
+        old_identifier=old_stage if is_valid_uuid(str(old_stage or "")) else None,
+        new_identifier=new_stage if is_valid_uuid(str(new_stage or "")) else None,
+        comment="更新了所属阶段",
+        epoch=epoch,
+    )
+
+
 def _track_date(
     field: str,
     *,
@@ -302,6 +344,7 @@ def update_cycle_activity(
     _track_date("end_date", requested=requested, current=current, **common)
     _track_simple_text("suggested_test_scope", requested=requested, current=current, strip_html=True, **common)
     _track_owner(requested=requested, current=current, **common)
+    _track_stage(requested=requested, current=current, **common)
 
 
 def delete_cycle_activity(

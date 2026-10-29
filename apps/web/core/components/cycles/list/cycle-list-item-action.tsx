@@ -29,6 +29,7 @@ import { getDate, getFileURL, generateQueryParams, renderFormattedPayloadDate } 
 import { DateDropdown } from "@/components/dropdowns/date";
 import { DateRangeDropdown } from "@/components/dropdowns/date-range";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
+import { ProjectStageDropdown } from "@/components/dropdowns/project-stage/dropdown";
 import { TestingDatesConfirmModal } from "@/components/common/testing-dates-confirm-modal";
 // hooks
 import { useCycle } from "@/hooks/store/use-cycle";
@@ -68,6 +69,7 @@ export const CycleListItemAction = observer(function CycleListItemAction(props: 
   const [transferIssuesModal, setTransferIssuesModal] = useState(false);
   const [isUpdatingDateRange, setIsUpdatingDateRange] = useState(false);
   const [isUpdatingOwner, setIsUpdatingOwner] = useState(false);
+  const [isUpdatingStage, setIsUpdatingStage] = useState(false);
   // hooks
   const { isMobile } = usePlatformOS();
   const { t } = useTranslation();
@@ -106,6 +108,7 @@ export const CycleListItemAction = observer(function CycleListItemAction(props: 
   const showEndDateProperty = displayProperties.end_date !== false;
   const showDateRange = showStartDateProperty || showEndDateProperty;
   const showTestHandoffDateProperty = displayProperties.test_handoff_date !== false;
+  const showStageProperty = displayProperties.stage !== false;
   const showOwnerProperty = displayProperties.created_by !== false;
   const showMembersProperty = displayProperties.members !== false;
   const showStatusInGroupedView =
@@ -135,6 +138,8 @@ export const CycleListItemAction = observer(function CycleListItemAction(props: 
   const canChangeStatus = isEditingAllowed && !cycleDetails.archived_at && statusOptions.length > 0;
   const canUpdateDateRange = isEditingAllowed && !cycleDetails.archived_at && !isCompleted;
   const canUpdateOwner = isEditingAllowed && !cycleDetails.archived_at && isCurrentOwner;
+  // 所属阶段：有编辑权限且未归档就能改，已完成的迭代也允许补填
+  const canUpdateStage = isEditingAllowed && !cycleDetails.archived_at;
   const { isUpdatingStatus, handleStatusChange, testingDatesModalProps } = useCycleStatusChange({
     workspaceSlug,
     projectId,
@@ -292,6 +297,48 @@ export const CycleListItemAction = observer(function CycleListItemAction(props: 
     })();
   };
 
+  const handleStageChange = (nextStageId: string | null) => {
+    if (isUpdatingStage || nextStageId === (cycleDetails.stage_id ?? null) || !canUpdateStage) return;
+    void (async () => {
+      setIsUpdatingStage(true);
+      try {
+        await updateCycleDetails(workspaceSlug, projectId, cycleId, { stage_id: nextStageId });
+        setToast({
+          type: TOAST_TYPE.SUCCESS,
+          title: t("project_cycles.action.update.success.title"),
+          message: t("project_cycles.action.update.success.description"),
+        });
+      } catch (err) {
+        const { title, message } = formatCycleUpdateError(err);
+        setToast({
+          type: TOAST_TYPE.ERROR,
+          title,
+          message,
+        });
+      } finally {
+        setIsUpdatingStage(false);
+      }
+    })();
+  };
+
+  const stageDropdown = (
+    <div className="h-6">
+      <ProjectStageDropdown
+        projectId={projectId}
+        value={cycleDetails.stage_id ?? null}
+        onChange={handleStageChange}
+        buttonVariant="transparent-with-text"
+        className="h-full"
+        buttonContainerClassName="h-6 flex items-center gap-1.5 rounded-sm text-11 text-tertiary [&>div]:hover:bg-transparent"
+        buttonClassName="p-0"
+        placeholder={t("stage_field.cycle_label")}
+        tooltipHeading={t("stage_field.cycle_label")}
+        showTooltip
+        disabled={!canUpdateStage || isUpdatingStage}
+      />
+    </div>
+  );
+
   // handlers
   const openCycleOverview = (e: MouseEvent<HTMLButtonElement | HTMLAnchorElement>) => {
     e.preventDefault();
@@ -380,6 +427,7 @@ export const CycleListItemAction = observer(function CycleListItemAction(props: 
       {isActive ? (
         <>
           <div className="flex gap-2">
+            {showStageProperty && stageDropdown}
             {showDateRange && (
               <DateRangeDropdown
                 buttonVariant={"transparent-with-text"}
@@ -451,8 +499,9 @@ export const CycleListItemAction = observer(function CycleListItemAction(props: 
           </div>
         </>
       ) : (
-        (showDateRange || showTestHandoffDateProperty) && (
+        (showStageProperty || showDateRange || showTestHandoffDateProperty) && (
           <>
+            {showStageProperty && stageDropdown}
             {showDateRange && (
               <DateRangeDropdown
                 buttonVariant={"transparent-with-text"}

@@ -36,6 +36,7 @@ import { useModule } from "@/hooks/store/use-module";
 import { useProject } from "@/hooks/store/use-project";
 import { useRelease } from "@/hooks/store/use-release";
 import { useProjectProduct } from "@/hooks/store/use-project-product";
+import { useProjectStage } from "@/hooks/store/use-project-stage";
 import { useProjectState } from "@/hooks/store/use-project-state";
 import { useProjectView } from "@/hooks/store/use-project-view";
 import { useUser, useUserPermissions } from "@/hooks/store/user";
@@ -60,6 +61,7 @@ export const ProjectAuthWrapper = observer(function ProjectAuthWrapper(props: IP
   const { fetchModulesSlim, fetchModules } = useModule();
   const { fetchReleases } = useRelease();
   const { fetchProjectProductModules } = useProjectProduct();
+  const { fetchStages: fetchProjectStages } = useProjectStage();
   const { initGantt } = useTimeLineChart(GANTT_TIMELINE_TYPE.MODULE);
   const { fetchViews } = useProjectView();
   const {
@@ -148,6 +150,14 @@ export const ProjectAuthWrapper = observer(function ProjectAuthWrapper(props: IP
     workspaceSlug && projectId ? `PROJECT_PRODUCT_POOL_${workspaceSlug}_${projectId}` : null,
     async () => {
       await fetchProjectProductModules(workspaceSlug, projectId);
+    },
+    { revalidateIfStale: false, revalidateOnFocus: false }
+  );
+  // 迭代 / 工作项「阶段」的候选池：分组列 / 筛选项在非 hook 环境读 store，这里预热
+  useSWR(
+    workspaceSlug && projectId ? `PROJECT_STAGE_POOL_${workspaceSlug}_${projectId}` : null,
+    async () => {
+      await fetchProjectStages(workspaceSlug, projectId);
     },
     { revalidateIfStale: false, revalidateOnFocus: false }
   );

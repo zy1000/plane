@@ -221,6 +221,7 @@
 - 批量改属性 `stages/bulk-update/`（负责人 / 计划日期，逐条保存点部分成功，父先子后）。计划开始不可清空；不含周期字段，周期随开始 / 结束按上面的规则连带变化。
 - 权限 `project.stage.view / manage`（`0396` 把原 `milestone.view` → view、`milestone.create|edit` → manage 折算到角色上）。**`PermissionKey` 枚举与迁移必须同提交删旧 key**：`permission_bootstrap.ensure_static_permissions` 是 additive 的，post_migrate 会按枚举把删掉的行补回来。
 - **第二期（2026-09-24）已换挂**：`StageReview.stage`、`ReviewTailoringItem.stage / origin_stage` 指向本表（迁移 `0398`–`0400`，按 `source_stage` → 同类型同名 → 自动补建三级映射，快照里的 id 一并改写，不支持反向）。被活跃评审 / 格子引用的阶段不能删（409 `PROJECT_STAGE_IN_USE`）、不能改类型（400 `PROJECT_STAGE_TYPE_IN_USE`），`utils/project_stage.py::stage_in_use` 只算活跃行。**阶段顺序对外一律是树先序 rank**（`tree_order`）：`sort_order` 是项目全局单调，跨层不可比，评审线的 `sort_order / stage_sort_order` 字段吐的都是 rank，另带 `parent_id / depth`。
+- **迭代 / 工作项挂阶段**（2026-10-29，迁移 `0432`）：`Issue.stage`、`Cycle.stage` 都是 SET_NULL 单选外键，规则只有一条「阶段必须属于同一项目」（`utils/issue_stage.py::validate_stage_in_project`，工作项与迭代序列化器共用，错误码 `STAGE_NOT_IN_PROJECT`）；两边互不派生。工作项这条线照 `product` 接法全套（随行 `stage_name`、分组 `stage_id`、筛选 `stage_id` / 富筛选 `stage`、活动 field `stage`、批量、Excel 导出）；迭代只在序列化 / 四处 values / 迭代活动日志加了字段，列表按阶段筛选是前端本地过滤。前端阶段候选统一读 `core/store/project-stage.store.ts`（`project-wrapper` 预热，阶段页增删改后同步），下拉在 `components/dropdowns/project-stage/`。
 - 前端：`packages/types/src/project-stage.ts`、`core/services/project-stage.service.ts`、`core/hooks/store/use-project-stages.ts`（局部 state）、`core/components/project-stages/`、路由 `projects/(detail)/[projectId]/stages/`；tab key `stages`（旧 `milestones` 键在 `tab-navigation-utils.ts` 里仍映射到同一 URL）。
 
 ## stage_review（阶段评审 / 评审裁剪）
@@ -377,7 +378,8 @@ Project (原生)
   │        规则集中在 utils/issue_product.py；产品须在 ProductProject 池内、模块须属于该产品、换产品清模块；
   │        首次挂需求时自动带出需求的产品 / 模块；候选池端点 projects/<pid>/products/<product_id>/requirement-modules/）
   ├── Release ──ReleaseIssue── Issue
-  ├── ProjectStage ──FK── StageType / DevModeStage(source_stage)   （项目阶段，自引用 parent；本期不挂工作项）
+  ├── ProjectStage ──FK── StageType / DevModeStage(source_stage)   （项目阶段，自引用 parent）
+  │        └─FK(SET_NULL)◄── Issue.stage / Cycle.stage            （2026-10-29：两边各自单选挂阶段，互不派生）
   ├── TimeSheet ──FK── Issue | TestCase           （二选一，由 category 决定）
   ├── TestPlan ──FK── Cycle
   │      ├──M2M── Module (原生)
@@ -391,7 +393,7 @@ Project (原生)
 **已知的断链（不要以为有关联而去找）：**
 - 需求 ↔ Cycle / Release / Issue 已由 `RequirementCycle` / `RequirementRelease` / `RequirementIssue` 关联表打通，但它们只圈定范围、供计数，不派生需求状态（见 requirement 节轴 A）。`RequirementBaseline` 的 docstring 说它「用于发版留痕」，但与 Release 表仍无外键关系，只能人工对应。
 - **product 和 project 之间没有直接外键**，关系走 `ProductProject` 关联表（见上）。
-- project_stage 不关联工作项 / 需求；评审 / 裁剪格子挂在它上面（第二期）。
+- project_stage 不关联需求；评审 / 裁剪格子挂在它上面（第二期）。**工作项与迭代各有一个 `stage` 单选外键**（2026-10-29，迁移 `0432`），两边互不派生、互不限制（工作项可以和它所在迭代填不同的阶段），父子阶段都可挂，删阶段时 SET_NULL；阶段列表的 `cycle_count / issue_count` 只算直接挂的，前端按子树求和。
 - 数据字典被 Product（6 个 FK）与 Project（3 个 FK）引用，与 requirement / issue 无关联；**评审这条线（模板 / 格子 / 实例）不再引用 `product_stage` 字典**，阶段走 StageType / DevModeStage。
 - changelog 与所有模块零关联。
 

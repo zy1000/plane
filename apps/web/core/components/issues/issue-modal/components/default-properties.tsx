@@ -32,6 +32,7 @@ import { ModuleDropdown } from "@/components/dropdowns/module/dropdown";
 import { ReleaseDropdown } from "@/components/dropdowns/release/dropdown";
 import { ProductDropdown } from "@/components/dropdowns/product/dropdown";
 import { ProductModuleDropdown } from "@/components/dropdowns/product-module/dropdown";
+import { ProjectStageDropdown } from "@/components/dropdowns/project-stage/dropdown";
 import { PriorityDropdown } from "@/components/dropdowns/priority";
 import { StateDropdown } from "@/components/dropdowns/state/dropdown";
 import { ParentIssuesListModal } from "@/components/issues/parent-issues-list-modal";
@@ -370,6 +371,27 @@ export const IssueDefaultProperties = observer(function IssueDefaultProperties(p
                 placeholder={t("product_module_field.label")}
                 buttonVariant="border-with-text"
                 tabIndex={getIndex("product_module_id")}
+              />
+            </div>
+          )}
+        />
+      )}
+      {projectId && workspaceSlug && (
+        <Controller
+          control={control}
+          name="stage_id"
+          render={({ field: { value, onChange } }) => (
+            <div className="h-7">
+              <ProjectStageDropdown
+                projectId={projectId}
+                value={value ?? null}
+                onChange={(stageId) => {
+                  onChange(stageId);
+                  handleFormChange();
+                }}
+                placeholder={t("stage_field.label")}
+                buttonVariant="border-with-text"
+                tabIndex={getIndex("stage_id")}
               />
             </div>
           )}

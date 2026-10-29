@@ -94,6 +94,9 @@ export type TBaseIssue = {
   product_name?: string | null;
   product_module_id: string | null;
   product_module_name?: string | null;
+  /** 项目阶段（ProjectStage）；与迭代上的阶段互不派生 */
+  stage_id: string | null;
+  stage_name?: string | null;
 
   created_at: string;
   updated_at: string;

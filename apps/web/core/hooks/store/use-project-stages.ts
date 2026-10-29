@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { TCreateProjectStagePayload, TProjectStage, TUpdateProjectStagePayload } from "@plane/types";
 import { PROJECT_STAGE_MAX_WORKLOAD_RATIO } from "@plane/types";
+import { useProjectStage } from "@/hooks/store/use-project-stage";
 import { ProjectStageService } from "@/services/project-stage.service";
 
 const service = new ProjectStageService();
@@ -34,6 +35,7 @@ export const getProjectStageError = (error: unknown): { message: string; code?: 
  * 删叶子会改父的汇总值，就地替换要把这些规则在前端再算一遍，不值。列表一次十几到几十条，重拉很便宜。
  */
 export const useProjectStages = (workspaceSlug: string | undefined, projectId: string | undefined) => {
+  const { setProjectStages, clearDeletedStage } = useProjectStage();
   const [stages, setStages] = useState<TProjectStage[]>([]);
   const [isLoading, setIsLoading] = useState(Boolean(workspaceSlug && projectId));
   const [isMutating, setIsMutating] = useState(false);
@@ -43,13 +45,15 @@ export const useProjectStages = (workspaceSlug: string | undefined, projectId: s
     if (!workspaceSlug || !projectId) return;
     setError(null);
     try {
-      setStages(await service.list(workspaceSlug, projectId));
+      const list = await service.list(workspaceSlug, projectId);
+      setStages(list);
+      setProjectStages(projectId, list);
     } catch (requestError) {
       setError(getProjectStageError(requestError).message);
     } finally {
       setIsLoading(false);
     }
-  }, [workspaceSlug, projectId]);
+  }, [workspaceSlug, projectId, setProjectStages]);
 
   useEffect(() => {
     setIsLoading(Boolean(workspaceSlug && projectId));
@@ -83,8 +87,12 @@ export const useProjectStages = (workspaceSlug: string | undefined, projectId: s
   );
 
   const deleteStage = useCallback(
-    (stageId: string) => mutate(() => service.remove(workspaceSlug!, projectId!, stageId)),
-    [mutate, workspaceSlug, projectId]
+    (stageId: string) =>
+      mutate(async () => {
+        await service.remove(workspaceSlug!, projectId!, stageId);
+        clearDeletedStage(projectId!, stageId);
+      }),
+    [mutate, workspaceSlug, projectId, clearDeletedStage]
   );
 
   const syncFromDevMode = useCallback(
@@ -96,8 +104,12 @@ export const useProjectStages = (workspaceSlug: string | undefined, projectId: s
   const applyStages = useCallback((next: TProjectStage[]) => {
     if (next.length === 0) return;
     const byId = new Map(next.map((stage) => [stage.id, stage]));
-    setStages((current) => current.map((stage) => byId.get(stage.id) ?? stage));
-  }, []);
+    setStages((current) => {
+      const merged = current.map((stage) => byId.get(stage.id) ?? stage);
+      if (projectId) setProjectStages(projectId, merged);
+      return merged;
+    });
+  }, [projectId, setProjectStages]);
 
   /**
    * 叶子占比合计与剩余。按「分」累加再除回来，避免 0.1 + 0.2 的浮点尾巴让合法输入被判超限。

@@ -22,6 +22,7 @@ const LABELED_FIELDS = new Set([
   "attachment",
   "product",
   "product_module",
+  "stage",
   "type",
 ]);
 

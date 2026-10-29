@@ -83,6 +83,9 @@ class ProjectStageSerializer(BaseSerializer):
     # 删除确认框要写明连带删掉多少：已开始的评审会拦住删除，格子数跟着评审一起报
     started_review_count = serializers.SerializerMethodField()
     tailoring_item_count = serializers.SerializerMethodField()
+    # 直接挂在该阶段上的迭代 / 工作项数（不含子阶段）
+    cycle_count = serializers.SerializerMethodField()
+    issue_count = serializers.SerializerMethodField()
 
     class Meta:
         model = ProjectStage
@@ -113,6 +116,8 @@ class ProjectStageSerializer(BaseSerializer):
             "review_count",
             "started_review_count",
             "tailoring_item_count",
+            "cycle_count",
+            "issue_count",
             "created_at",
             "updated_at",
         ]
@@ -129,6 +134,8 @@ class ProjectStageSerializer(BaseSerializer):
             "review_count",
             "started_review_count",
             "tailoring_item_count",
+            "cycle_count",
+            "issue_count",
             "created_at",
             "updated_at",
         ]
@@ -170,6 +177,18 @@ class ProjectStageSerializer(BaseSerializer):
         if annotated is not None:
             return annotated
         return obj.tailoring_items.count()
+
+    def get_cycle_count(self, obj):
+        annotated = getattr(obj, "cycle_count", None)
+        if annotated is not None:
+            return annotated
+        return obj.cycles.count()
+
+    def get_issue_count(self, obj):
+        annotated = getattr(obj, "issue_count", None)
+        if annotated is not None:
+            return annotated
+        return obj.issues.count()
 
     def get_children_count(self, obj):
         annotated = getattr(obj, "children_count", None)

@@ -5,7 +5,7 @@
  */
 
 import { observer } from "mobx-react";
-import { Boxes, CalendarClock, CalendarPlus, Package, Rocket, UserRound } from "lucide-react";
+import { Boxes, CalendarClock, CalendarPlus, Layers, Package, Rocket, UserRound } from "lucide-react";
 // i18n
 import { useTranslation } from "@plane/i18n";
 // ui icons
@@ -28,6 +28,7 @@ import { IssueModuleSelect } from "../issue-detail/module-select";
 import { IssueReleaseSelect } from "../issue-detail/release-select";
 import { IssueProductSelect } from "../issue-detail/product-select";
 import { IssueProductModuleSelect } from "../issue-detail/product-module-select";
+import { IssueStageSelect } from "../issue-detail/stage-select";
 import { PeekOverviewBasicProperties, PeekOverviewDateProperties } from "./basic-properties";
 import { PropertyGroupSection, StructureFieldLabel, StructureFieldValue } from "./property-field";
 
@@ -223,6 +224,18 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
             <StructureFieldLabel icon={Boxes} label={t("product_module_field.label")} />
             <StructureFieldValue>
               <IssueProductModuleSelect
+                className="h-7.5 w-full grow"
+                workspaceSlug={workspaceSlug}
+                projectId={projectId}
+                issueId={issueId}
+                issueOperations={issueOperations}
+                disabled={disabled}
+              />
+            </StructureFieldValue>
+
+            <StructureFieldLabel icon={Layers} label={t("stage_field.label")} />
+            <StructureFieldValue>
+              <IssueStageSelect
                 className="h-7.5 w-full grow"
                 workspaceSlug={workspaceSlug}
                 projectId={projectId}

@@ -13,6 +13,7 @@ import type { TCycleFilters, TCycleGroups } from "@plane/types";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 // local imports
 import { FilterEndDate } from "./end-date";
+import { FilterStage } from "./stage";
 import { FilterStartDate } from "./start-date";
 import { FilterStatus } from "./status";
 
@@ -60,6 +61,15 @@ export const CycleFiltersSelection = observer(function CycleFiltersSelection(pro
             />
           </div>
         )}
+
+        {/* stage */}
+        <div className="py-2">
+          <FilterStage
+            appliedFilters={filters.stage ?? null}
+            handleUpdate={(val) => handleFiltersUpdate("stage", val)}
+            searchQuery={filtersSearchQuery}
+          />
+        </div>
 
         {/* start date */}
         <div className="py-2">

@@ -275,6 +275,7 @@ class IssueListEndpoint(BaseAPIView):
                 "release_ids",
                 "product_id",
                 "product_module_id",
+                "stage_id",
                 "label_ids",
                 "assignee_ids",
                 "sub_issues_count",
@@ -593,6 +594,7 @@ class IssueViewSet(BaseViewSet):
                     "release_ids",
                     "product_id",
                     "product_module_id",
+                    "stage_id",
                     "label_ids",
                     "assignee_ids",
                     "sub_issues_count",
@@ -1151,6 +1153,7 @@ EXPORT_ALL_FIELDS = [
     "modules",
     "product",
     "product_module",
+    "stage",
     "parent_key",
     "parent_name",
     "project",
@@ -1184,6 +1187,7 @@ EXPORT_FIELD_LABELS = {
     "modules": "模块",
     "product": "产品",
     "product_module": "产品模块",
+    "stage": "阶段",
     "parent_key": "父工作项标识",
     "parent_name": "父工作项标题",
     "project": "项目",
@@ -1307,6 +1311,7 @@ def _build_issue_export_row(issue, fields, tz=None):
         "product_module": lambda: (
             module_path_label(issue.product_module_id) if issue.product_module_id else None
         ),
+        "stage": lambda: issue.stage.name if issue.stage else "",
         "parent_key": lambda: parent_key,
         "parent_name": lambda: parent.name if parent else None,
         "project": lambda: project.name if project else None,
@@ -1422,6 +1427,7 @@ class BulkExportIssuesEndpoint(BaseAPIView):
                 "updated_by",
                 "product",
                 "product_module",
+                "stage",
             )
             .prefetch_related(
                 Prefetch(
@@ -1643,6 +1649,7 @@ class IssuePaginatedViewSet(BaseViewSet):
             "release_ids",
             "product_id",
             "product_module_id",
+            "stage_id",
             "label_ids",
             "assignee_ids",
             "link_count",

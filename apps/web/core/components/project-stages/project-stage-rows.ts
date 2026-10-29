@@ -59,6 +59,49 @@ export const orderProjectStages = (stages: TProjectStage[]) =>
     depth,
   }));
 
+/**
+ * 子树合计（自身 + 所有后代）：阶段页「迭代 / 工作项」列用。后端回的 cycle_count / issue_count
+ * 只是直接挂在该阶段上的数，父阶段要把子阶段的一起算进去。
+ */
+/** 某阶段自身 + 所有后代的 id（阶段页计数链接跳迭代列表时按子树筛） */
+export const collectProjectStageSubtreeIds = (stages: TProjectStage[], rootId: string): string[] => {
+  const childrenOf = new Map<string, string[]>();
+  for (const stage of stages) {
+    if (!stage.parent_id) continue;
+    childrenOf.set(stage.parent_id, [...(childrenOf.get(stage.parent_id) ?? []), stage.id]);
+  }
+  const ids: string[] = [];
+  const walk = (id: string) => {
+    ids.push(id);
+    (childrenOf.get(id) ?? []).forEach(walk);
+  };
+  walk(rootId);
+  return ids;
+};
+
+export const sumProjectStageSubtree = (
+  stages: TProjectStage[],
+  pick: (stage: TProjectStage) => number
+): Map<string, number> => {
+  const childrenOf = new Map<string, TProjectStage[]>();
+  for (const stage of stages) {
+    if (!stage.parent_id) continue;
+    const bucket = childrenOf.get(stage.parent_id) ?? [];
+    bucket.push(stage);
+    childrenOf.set(stage.parent_id, bucket);
+  }
+  const totals = new Map<string, number>();
+  const total = (stage: TProjectStage): number => {
+    const cached = totals.get(stage.id);
+    if (cached !== undefined) return cached;
+    const value = pick(stage) + (childrenOf.get(stage.id) ?? []).reduce((sum, child) => sum + total(child), 0);
+    totals.set(stage.id, value);
+    return value;
+  };
+  for (const stage of stages) total(stage);
+  return totals;
+};
+
 /** 计算「已延期 N 天」：计划结束到今天的自然日差 */
 export const delayedDays = (endDate: string, today: string) => {
   const end = new Date(`${endDate}T00:00:00`);

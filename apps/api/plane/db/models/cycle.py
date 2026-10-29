@@ -100,6 +100,15 @@ class Cycle(ProjectBaseModel):
 
     module = models.ForeignKey("Module", on_delete=models.DO_NOTHING, related_name="cycles", null=True, blank=True)
     release = models.ForeignKey("Release", on_delete=models.DO_NOTHING, related_name="release_cycles", null=True, blank=True)
+    # 所属项目阶段（父 / 子阶段都可挂），与迭代内工作项的阶段互不派生；ProjectStage 硬删，SET_NULL 置空
+    stage = models.ForeignKey(
+        "db.ProjectStage",
+        on_delete=models.SET_NULL,
+        related_name="cycles",
+        null=True,
+        blank=True,
+        verbose_name="所属阶段",
+    )
     files = models.ManyToManyField("db.File", blank=True, related_name="cycles")
 
     class Meta:

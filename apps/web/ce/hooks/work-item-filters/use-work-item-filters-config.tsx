@@ -5,7 +5,7 @@
  */
 
 import { useCallback, useMemo } from "react";
-import { AtSign, Boxes, Briefcase, Package, Rocket } from "lucide-react";
+import { AtSign, Boxes, Briefcase, Layers, Package, Rocket } from "lucide-react";
 // plane imports
 import { Logo } from "@plane/propel/emoji-icon-picker";
 import {
@@ -36,6 +36,7 @@ import type {
   IRelease,
   TFlatProductModule,
   TProductOption,
+  TProjectStage,
   TWorkItemFilterProperty,
 } from "@plane/types";
 import { Avatar } from "@plane/ui";
@@ -55,6 +56,7 @@ import {
   getReleaseFilterConfig,
   getProductFilterConfig,
   getProductModuleFilterConfig,
+  getStageFilterConfig,
   getStartDateFilterConfig,
   getStateFilterConfig,
   getStateGroupFilterConfig,
@@ -75,6 +77,7 @@ import { useProjectIssueTypes } from "@/hooks/store/use-project-issue-types";
 import { useProjectTypeExtraFields } from "@/hooks/store/use-project-type-extra-fields";
 import { useRelease } from "@/hooks/store/use-release";
 import { useProjectProduct } from "@/hooks/store/use-project-product";
+import { useProjectStage } from "@/hooks/store/use-project-stage";
 import { useTypedPageIssueTypeIds } from "@/hooks/use-issue-layout-store";
 // plane web imports
 import { useFiltersOperatorConfigs } from "@/plane-web/hooks/rich-filters/use-filters-operator-configs";
@@ -129,6 +132,7 @@ export const useWorkItemFiltersConfig = (props: TUseWorkItemFiltersConfigProps):
   const { getReleaseById } = useRelease();
   const { getProjectProductIds, getProductById, getProjectProductModuleIds, getProductModuleById } =
     useProjectProduct();
+  const { getProjectStageIds, getProjectStageOptions } = useProjectStage();
   const { getUserDetails } = useMember();
   const { issueTypes: workItemTypes } = useProjectIssueTypes(workspaceSlug, projectId);
   // 缺陷等按类别固定口径的页面会提供本页类型 ID，类型筛选只列这些；工作项页没提供则列全部
@@ -208,6 +212,10 @@ export const useWorkItemFiltersConfig = (props: TUseWorkItemFiltersConfigProps):
         : undefined,
     [productIds, productModuleIds, getProductModuleById]
   );
+  // 阶段候选来自 projectStage store（project-wrapper 预热；未拉到前视为未就绪），树先序带深度
+  const stageIds = projectId ? getProjectStageIds(projectId) : null;
+  const stages: { stage: TProjectStage; depth: number }[] | undefined =
+    stageIds && projectId ? getProjectStageOptions(projectId) : undefined;
   // projectExtraFields === null means still loading (no cached data); [] means loaded and empty
   const areAllConfigsInitialized = useMemo(
     () => isLoaderReady(projectLoader) && projectExtraFields !== null,
@@ -333,6 +341,18 @@ export const useWorkItemFiltersConfig = (props: TUseWorkItemFiltersConfigProps):
         ...operatorConfigs,
       }),
     [isFilterEnabled, productModules, operatorConfigs]
+  );
+
+  // stage filter config（候选 = 项目阶段，父子都可选）
+  const stageFilterConfig = useMemo(
+    () =>
+      getStageFilterConfig<TWorkItemFilterProperty>("stage_id")({
+        isEnabled: isFilterEnabled("stage_id") && stages !== undefined,
+        filterIcon: Layers,
+        stages: stages ?? [],
+        ...operatorConfigs,
+      }),
+    [isFilterEnabled, stages, operatorConfigs]
   );
 
   // assignee filter config
@@ -555,6 +575,7 @@ export const useWorkItemFiltersConfig = (props: TUseWorkItemFiltersConfigProps):
       releaseFilterConfig,
       productFilterConfig,
       productModuleFilterConfig,
+      stageFilterConfig,
       issueTypeFilterConfig,
       startDateFilterConfig,
       targetDateFilterConfig,
@@ -575,6 +596,7 @@ export const useWorkItemFiltersConfig = (props: TUseWorkItemFiltersConfigProps):
       release_id: releaseFilterConfig,
       product_id: productFilterConfig,
       product_module_id: productModuleFilterConfig,
+      stage_id: stageFilterConfig,
       assignee_id: assigneeFilterConfig,
       mention_id: mentionFilterConfig,
       created_by_id: createdByFilterConfig,

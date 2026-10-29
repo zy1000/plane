@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Trash2 } from "lucide-react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
+import { useTranslation } from "@plane/i18n";
 import type { TIssue } from "@plane/types";
 import { cn } from "@plane/utils";
 import { format } from "date-fns";
@@ -18,6 +19,7 @@ import { DateDropdown } from "@/components/dropdowns/date";
 import { ReleaseDropdown } from "@/components/dropdowns/release/dropdown";
 import { ProductDropdown } from "@/components/dropdowns/product/dropdown";
 import { ProductModuleDropdown } from "@/components/dropdowns/product-module/dropdown";
+import { ProjectStageDropdown } from "@/components/dropdowns/project-stage/dropdown";
 import { IssuePropertyLabels } from "@/components/issues/issue-layouts/properties/labels";
 // hooks
 import { useMultipleSelectStore } from "@/hooks/store/use-multiple-select-store";
@@ -54,6 +56,7 @@ type TBatchUpdateProperties = {
   release_ids?: string[];
   product_id?: string | null;
   product_module_id?: string | null;
+  stage_id?: string | null;
 };
 
 type TOptimisticIssuePatchStore = {
@@ -68,6 +71,7 @@ export const BulkOperationsActionBar = observer(function BulkOperationsActionBar
   const { selectedEntityIds, clearSelection } = useMultipleSelectStore();
   const selectedCount = selectedEntityIds.length;
   const { workspaceSlug, projectId } = useParams() as { workspaceSlug?: string; projectId?: string };
+  const { t } = useTranslation();
   
   // store hooks
   const storeType = useIssueStoreType();
@@ -96,6 +100,9 @@ export const BulkOperationsActionBar = observer(function BulkOperationsActionBar
   const [selectedReleaseIds, setSelectedReleaseIds] = useState<string[]>([]);
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [selectedProductModuleId, setSelectedProductModuleId] = useState<string | null>(null);
+  const [selectedStageId, setSelectedStageId] = useState<string | null>(null);
+  // 阶段选过「无阶段」也算改动（要把已有阶段清掉），用这个标记和「没动」区分开
+  const [stageTouched, setStageTouched] = useState(false);
   const [selectedCycleId, setSelectedCycleId] = useState<string | null>(null);
   const [selectedStartDate, setSelectedStartDate] = useState<Date | null>(null);
   const [selectedDueDate, setSelectedDueDate] = useState<Date | null>(null);
@@ -141,7 +148,8 @@ export const BulkOperationsActionBar = observer(function BulkOperationsActionBar
     !!selectedCycleId ||
     selectedModuleIds.length > 0 ||
     selectedReleaseIds.length > 0 ||
-    !!selectedProductId;
+    !!selectedProductId ||
+    stageTouched;
 
   const canApplyUpdate =
     workspaceSlug &&
@@ -168,6 +176,7 @@ export const BulkOperationsActionBar = observer(function BulkOperationsActionBar
       properties.product_id = selectedProductId;
       properties.product_module_id = selectedProductModuleId;
     }
+    if (stageTouched) properties.stage_id = selectedStageId;
 
     const updatePayloads: { issueIds: string[]; properties: TBatchUpdateProperties }[] = [];
 
@@ -309,7 +318,8 @@ export const BulkOperationsActionBar = observer(function BulkOperationsActionBar
       setSelectedReleaseIds([]);
       setSelectedProductId(null);
       setSelectedProductModuleId(null);
-      
+      setSelectedStageId(null);
+      setStageTouched(false);
     } finally {
       setIsUpdating(false);
     }
@@ -503,6 +513,20 @@ export const BulkOperationsActionBar = observer(function BulkOperationsActionBar
             buttonVariant="transparent-with-text"
             buttonContainerClassName={actionPillContainerClassName}
             buttonClassName={cn(actionPillClassName, !selectedProductId && "opacity-50 cursor-not-allowed")}
+            showTooltip
+          />
+          <ProjectStageDropdown
+            projectId={projectId ? projectId.toString() : undefined}
+            value={selectedStageId}
+            onChange={(stageId) => {
+              setSelectedStageId(stageId);
+              setStageTouched(true);
+            }}
+            disabled={false}
+            placeholder={stageTouched ? t("stage_field.no_stage") : t("stage_field.select_stage")}
+            buttonVariant="transparent-with-text"
+            buttonContainerClassName={actionPillContainerClassName}
+            buttonClassName={actionPillClassName}
             showTooltip
           />
 
