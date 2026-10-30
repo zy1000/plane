@@ -2388,7 +2388,7 @@ export default {
   },
   // 模板中心「产品分类」：工作区级分类与它的一级模块
   product_categories: {
-    title: "产品分类",
+    title: "产品模板库",
     description: "标准需求库选用分类后，库的第一层模块由这里统一维护。",
     create: "创建分类",
     all_categories: "全部分类",
@@ -3745,7 +3745,7 @@ export default {
       test_cases: "测试用例库",
       reviews: "评审模板库",
       dev_modes: "研发模式",
-      product_categories: "产品分类",
+      product_categories: "产品模板库",
     },
     dev_modes: {
       title: "研发模式",

@@ -216,12 +216,12 @@ export const IssueFieldLibraryPage = observer(function IssueFieldLibraryPage({
 
   return (
     <>
-      <PageHead title={`通用字段 - ${t("workspace_templates.title")}`} />
+      <PageHead title={`通用字段库 - ${t("workspace_templates.title")}`} />
       <ContentWrapper className="bg-surface-1">
         <div className="flex min-h-full flex-col gap-5 px-8 pt-6 pb-8">
           <header className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2.5">
-              <h1 className="text-20 leading-7 font-semibold text-primary">通用字段</h1>
+              <h1 className="text-20 leading-7 font-semibold text-primary">通用字段库</h1>
               {hasLoaded && <span className="text-14 tabular-nums text-tertiary">{fields.length}</span>}
             </div>
             <div className="flex flex-wrap items-center gap-2.5">

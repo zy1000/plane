@@ -9,7 +9,7 @@ import {
 
 export type TTemplateManagementTabKey =
   | "libraries"
-  | "product-categories"
+  | "product"
   | "test-cases"
   | "reviews"
   | "issue-types"
@@ -35,7 +35,7 @@ export const TEMPLATE_MANAGEMENT_NAVIGATION_ITEMS: TTemplateManagementNavigation
   },
   {
     // 紧挨「标准需求库」：库的第一层模块由所选分类统一维护，读写口径与库相同
-    key: "product-categories",
+    key: "product",
     icon: Tags,
     i18nKey: "workspace_templates.navigation.product_categories",
     permissionKeys: WORKSPACE_REQUIREMENT_LIBRARY_READ_PERMISSION_KEYS,
@@ -62,7 +62,7 @@ export const TEMPLATE_MANAGEMENT_NAVIGATION_ITEMS: TTemplateManagementNavigation
   {
     key: "issue-fields",
     icon: Rows2,
-    label: "通用字段",
+    label: "通用字段库",
     permissionKeys: WORKSPACE_DEV_MODE_READ_PERMISSION_KEYS,
   },
   {

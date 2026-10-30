@@ -161,7 +161,7 @@ export const RequirementLibraryPage = observer(function RequirementLibraryPage()
                       )}
                       {library?.product_category_detail && (
                         <Link
-                          to={`/${workspaceSlug}/templates/product-categories?category=${library.product_category_detail.id}`}
+                          to={`/${workspaceSlug}/templates/product?category=${library.product_category_detail.id}`}
                           className="flex min-w-0 max-w-40 shrink-0"
                         >
                           <ProductCategoryTag

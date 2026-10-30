@@ -169,8 +169,8 @@ export const coreRoutes: RouteConfigEntry[] = [
             ),
           ]),
           route(
-            ":workspaceSlug/templates/product-categories",
-            "./(all)/[workspaceSlug]/(projects)/templates/product-categories/page.tsx"
+            ":workspaceSlug/templates/product",
+            "./(all)/[workspaceSlug]/(projects)/templates/product/page.tsx"
           ),
           route(":workspaceSlug/templates/reviews", "./(all)/[workspaceSlug]/(projects)/templates/reviews/page.tsx"),
           // 工作项类型库：所有研发模式共用的类型 / 状态 / 工作流 / 字段，流转配置是它的子页
