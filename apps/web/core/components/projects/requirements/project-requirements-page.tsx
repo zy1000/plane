@@ -9,7 +9,7 @@
  * 这与同一路径下曾经的「按工作项类别过滤的列表」不是一回事 ——
  * 那个页面（研发需求 /dev-requirements）已下线。
  */
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { observer } from "mobx-react";
 import { useParams, useSearchParams } from "react-router";
 import {
@@ -57,7 +57,6 @@ import {
 import { LinkRequirementsModal } from "./link-modal/link-requirements-modal";
 import { ProjectRequirementCreateModal } from "./project-requirement-create-modal";
 import { ProjectRequirementTypeTabs } from "./project-requirement-type-tabs";
-import { PROJECT_REQUIREMENTS_HEADER_ACTIONS_ID } from "./project-requirement-filters";
 import {
   PRODUCT_PARAM,
   getProductFromParam,
@@ -97,10 +96,6 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
   // 带着筛选参数进来（深链 / 前进后退）就以 URL 为准，不用记住的视图盖掉它
   const [hasInitialUrlFilters] = useState(() => Object.values(initialListQuery).some(Boolean));
   const { hiddenColumns, setHiddenColumns, toggleColumn } = useProjectRequirementColumns(project);
-
-  useLayoutEffect(() => {
-    setDataToolbarHost(document.getElementById(PROJECT_REQUIREMENTS_HEADER_ACTIONS_ID) as HTMLDivElement | null);
-  }, []);
 
   // ?product= / ?moduleId= 的初值要同时喂给 store：页面与 store 各自从 null 起步再追平，
   // 首屏列表会多打一次。按已关联产品校验 URL 值的那一步在下面，初值只认 URL 原值（同 selectedProductId）
@@ -494,11 +489,15 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
           applyOnMount={!hasInitialUrlFilters}
           getSummary={getViewSummary}
           trailing={
-            <ProjectRequirementTypeTabs
-              requirementTypes={store.requirementTypes}
-              activeTypeId={activeRequirementType?.id ?? null}
-              onChange={setSelectedRequirementTypeId}
-            />
+            <div className="flex items-center gap-3">
+              <ProjectRequirementTypeTabs
+                requirementTypes={store.requirementTypes}
+                activeTypeId={activeRequirementType?.id ?? null}
+                onChange={setSelectedRequirementTypeId}
+              />
+              {/* 网格工具栏的挂点：搜索 / 筛选 / 显示 / 创建 / 关联由网格 portal 进来 */}
+              <div ref={setDataToolbarHost} className="flex items-center gap-2" />
+            </div>
           }
         />
         <FiltersRow filter={filter} />

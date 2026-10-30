@@ -18,6 +18,8 @@ import { ViewTabsRoot, getFilterPropertyLabels, getWorkItemViewSummary } from "@
 import type { TViewSnapshot } from "@/components/views/in-page";
 import { ProjectLevelWorkItemFiltersHOC } from "@/components/work-item-filters/filters-hoc/project-level";
 import { WorkItemFiltersRow } from "@/components/work-item-filters/filters-row";
+// plane web imports
+import { IssuesHeaderActions } from "@/plane-web/components/issues/header";
 // hooks
 import { useIssues } from "@/hooks/store/use-issues";
 import { useWorkItemFilters } from "@/hooks/store/work-item-filters/use-work-item-filters";
@@ -148,6 +150,7 @@ export const ProjectLayoutRoot = observer(function ProjectLayoutRoot() {
               getSummary={(snapshot) =>
                 getWorkItemViewSummary(snapshot, getFilterPropertyLabels(projectWorkItemsFilter))
               }
+              trailing={<IssuesHeaderActions />}
             />
             {projectWorkItemsFilter && (
               <WorkItemFiltersRow

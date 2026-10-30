@@ -4,6 +4,9 @@ import { useMember } from "@/hooks/store/use-member";
 
 const EMPTY_IDS: string[] = [];
 
+/** default_view_id 的哨兵值：把「全部」设成默认页签；null / 没有则是没设过默认，进页沿用上次停留的页签 */
+export const DEFAULT_VIEW_ALL = "all";
+
 /**
  * 每人每页面的视图页签偏好（默认页签 / 收进「更多」的页签 / 顺序），
  * 存在项目用户属性 preferences.views[scope]，随账号走。

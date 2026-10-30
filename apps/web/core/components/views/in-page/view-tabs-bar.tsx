@@ -9,6 +9,7 @@ import { isModeView } from "./mode-view";
 import { ModeViewUpdateButton } from "./mode-view-update-button";
 import { MoreViewsPopover } from "./more-views-popover";
 import type { TViewSummaryRow } from "./types";
+import { DEFAULT_VIEW_ALL } from "./use-view-tab-preferences";
 import {
   VIEW_MENU_ITEM_CLASS,
   VIEW_MENU_OPTIONS_CLASS,
@@ -151,6 +152,7 @@ export const ViewTabsBar = (props: TViewTabsBarProps) => {
   const [visibleCount, setVisibleCount] = useState(views.length);
   // derived values
   const isAllActive = activeViewId === null;
+  const isAllDefault = defaultViewId === DEFAULT_VIEW_ALL;
   const activeBarIndex = views.findIndex((view) => view.id === activeViewId);
   /** 当前视图收在「更多」里（不在页签栏的名单上），量宽行要多量它一份 */
   const activeOutsideBar = activeView && activeBarIndex === -1 ? activeView : null;
@@ -267,11 +269,11 @@ export const ViewTabsBar = (props: TViewTabsBarProps) => {
           <ViewMenuSeparator />
           <CustomMenu.MenuItem
             className={VIEW_MENU_ITEM_CLASS}
-            onClick={() => defaultViewId !== null && onSetDefault(null)}
+            onClick={() => onSetDefault(isAllDefault ? null : DEFAULT_VIEW_ALL)}
           >
-            <Star className={cn("size-4 shrink-0", defaultViewId === null ? "fill-current text-warning-primary" : "text-tertiary")} />
-            <span className="flex-1">{defaultViewId === null ? "我的默认视图" : "设为我的默认视图"}</span>
-            {defaultViewId === null && <Check className="size-4 shrink-0 text-accent-primary" />}
+            <Star className={cn("size-4 shrink-0", isAllDefault ? "fill-current text-warning-primary" : "text-tertiary")} />
+            <span className="flex-1">{isAllDefault ? "我的默认视图" : "设为我的默认视图"}</span>
+            {isAllDefault && <Check className="size-4 shrink-0 text-accent-primary" />}
           </CustomMenu.MenuItem>
           <CustomMenu.MenuItem className={VIEW_MENU_ITEM_CLASS} onClick={onManage}>
             <SlidersHorizontal className="size-4 shrink-0 text-tertiary" />

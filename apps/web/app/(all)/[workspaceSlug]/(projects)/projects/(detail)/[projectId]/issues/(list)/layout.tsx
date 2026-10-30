@@ -6,15 +6,17 @@
 
 // components
 import { Outlet } from "react-router";
-import { AppHeader } from "@/components/core/app-header";
 import { ContentWrapper } from "@/components/core/content-wrapper";
-import { ProjectIssuesHeader } from "./header";
 import { ProjectIssuesMobileHeader } from "./mobile-header";
 
+/**
+ * 页头那一行已并进视图页签栏（ProjectLayoutRoot 把工具栏放在 ViewTabsRoot 的 trailing 里），
+ * 这里只剩移动端的工具条。
+ */
 export default function ProjectIssuesLayout() {
   return (
     <>
-      <AppHeader header={<ProjectIssuesHeader />} mobileHeader={<ProjectIssuesMobileHeader />} />
+      <ProjectIssuesMobileHeader />
       <ContentWrapper>
         <Outlet />
       </ContentWrapper>

@@ -9,7 +9,7 @@ import { useProjectView } from "@/hooks/store/use-project-view";
 import { useUser, useUserPermissions } from "@/hooks/store/user";
 import { isModeView, useModeViewContext } from "./mode-view";
 import type { TSaveViewInput, TViewSnapshot, TViewSnapshotKey, TViewTabsParams } from "./types";
-import { useViewTabPreferences } from "./use-view-tab-preferences";
+import { DEFAULT_VIEW_ALL, useViewTabPreferences } from "./use-view-tab-preferences";
 
 const ACTIVE_ALL = "all";
 const DEFAULT_COMPARE_KEYS: TViewSnapshotKey[] = ["rich_filters", "display_filters", "display_properties"];
@@ -95,7 +95,7 @@ export const useViewTabs = (params: TViewTabsParams) => {
   const views = getScopedProjectViews(projectId, scope);
   const isReady = !!views && preferences.isLoaded;
 
-  // 进页：优先停在上次所在的页签，其次是自己设的默认页签，最后是「全部」
+  // 进页：URL 指定的视图 > 自己设的默认视图（设了就每次都开它）> 上次停留的页签 > 「全部」
   useEffect(() => {
     const key = `${projectId}__${scope}`;
     if (!views || !preferences.isLoaded || initializedKeyRef.current === key) return;
@@ -103,29 +103,40 @@ export const useViewTabs = (params: TViewTabsParams) => {
 
     const stored = readStoredActive(projectId, scope);
     const requested = readRequestedViewId();
+    const defaultId = preferences.defaultViewId;
     let next: string | null = null;
-    let shouldApply = false;
+    /** 进页要应用的：视图 id、ACTIVE_ALL（清掉筛选回到「全部」）或 null（什么都不动） */
+    let pendingApply: string | null = null;
     if (requested && views.some((view) => view.id === requested)) {
       next = requested;
-      shouldApply = true;
+      pendingApply = requested;
       writeStoredActive(projectId, scope, requested);
+    } else if (defaultId === DEFAULT_VIEW_ALL) {
+      next = null;
+      // 上次停在别的视图：它的筛选还留在页面上，清掉才真是「全部」；本来就在「全部」则保留手动筛的条件
+      pendingApply = stored && stored !== ACTIVE_ALL ? ACTIVE_ALL : null;
+    } else if (defaultId && views.some((view) => view.id === defaultId)) {
+      next = defaultId;
+      pendingApply = defaultId;
     } else if (stored === ACTIVE_ALL) {
       next = null;
     } else if (stored && views.some((view) => view.id === stored)) {
       next = stored;
-      shouldApply = applyOnMount;
-    } else if (preferences.defaultViewId && views.some((view) => view.id === preferences.defaultViewId)) {
-      next = preferences.defaultViewId;
-      shouldApply = true;
+      pendingApply = applyOnMount ? stored : null;
     }
     setActiveViewId(next);
-    pendingApplyRef.current = shouldApply ? next : null;
+    pendingApplyRef.current = pendingApply;
   }, [views, preferences.isLoaded, preferences.defaultViewId, projectId, scope, applyOnMount]);
 
   useEffect(() => {
     if (!ready || !views || !pendingApplyRef.current) return;
-    const view = views.find((item) => item.id === pendingApplyRef.current);
+    const pending = pendingApplyRef.current;
     pendingApplyRef.current = null;
+    if (pending === ACTIVE_ALL) {
+      applyRef.current(null);
+      return;
+    }
+    const view = views.find((item) => item.id === pending);
     if (view) applyRef.current(snapshotOfView(view));
   }, [ready, views, activeViewId]);
 

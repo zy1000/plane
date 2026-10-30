@@ -40,6 +40,7 @@ import { PROJECT_DEFECT_FILTER_TOGGLE_EVENT } from "./defect-filter-events";
 import { DEFECT_PRESET_PARAM, DEFECT_PRESET_STATE_NAMES, getDefectPreset } from "./defect-presets";
 import type { TDefectPreset } from "./defect-presets";
 import { DefectQuickFilterRail } from "./defect-quick-filter-rail";
+import { ProjectDefectsToolbar } from "./project-defects-toolbar";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -473,6 +474,7 @@ export const DefectListRoot = observer(function DefectListRoot() {
                 getSummary={(snapshot) =>
                   getWorkItemViewSummary(snapshot, getFilterPropertyLabels(typedPageFilter))
                 }
+                trailing={<ProjectDefectsToolbar />}
               />
               <div className="relative flex min-h-0 w-full flex-1 overflow-hidden">
                 <DefectQuickFilterRail

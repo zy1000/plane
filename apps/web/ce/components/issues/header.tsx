@@ -6,34 +6,21 @@
 
 import { observer } from "mobx-react";
 import { useParams, usePathname } from "next/navigation";
-// icons
-import { Circle, ClipboardCheck, GitBranch } from "lucide-react";
 // plane imports
-import {
-  EUserPermissions,
-  EUserPermissionsLevel,
-  SPACE_BASE_PATH,
-  SPACE_BASE_URL,
-  WORK_ITEM_TRACKER_ELEMENTS,
-} from "@plane/constants";
+import { EUserPermissions, EUserPermissionsLevel, WORK_ITEM_TRACKER_ELEMENTS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
-import { NewTabIcon, WorkItemsIcon } from "@plane/propel/icons";
-import { Tooltip } from "@plane/propel/tooltip";
 import { EIssuesStoreType } from "@plane/types";
-import { Breadcrumbs, Header } from "@plane/ui";
 // components
-import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
-import { CountChip } from "@/components/common/count-chip";
-// constants
+import { WorkItemsModal } from "@/components/analytics/work-items/modal";
 import { HeaderFilters } from "@/components/issues/filters";
+import { HeaderMoreMenu } from "@/components/issues/header-more-menu";
 import { WorkflowApprovalModal } from "@/components/issues/workflow-approval-modal";
 import { WorkflowFlowchartModal } from "@/components/issues/workflow-flowchart-modal";
 import { IssueExportModal } from "@/components/issues/export/export-modal";
 import { stringifyAppliedFilters } from "@/components/issues/export/utils";
 import { ImportIssuesModal } from "@/components/issues/import";
 import { useEffect, useMemo, useState } from "react";
-// helpers
 // hooks
 import { useCommandPalette } from "@/hooks/store/use-command-palette";
 import { useIssues } from "@/hooks/store/use-issues";
@@ -41,17 +28,16 @@ import { useMultipleSelectStore } from "@/hooks/store/use-multiple-select-store"
 import { useLabel } from "@/hooks/store/use-label";
 import { useProject } from "@/hooks/store/use-project";
 import { useUserPermissions } from "@/hooks/store/user";
-import { useAppRouter } from "@/hooks/use-app-router";
-import { usePlatformOS } from "@/hooks/use-platform-os";
 import { useWorkflowApprovals } from "@/hooks/store/use-workflow-approvals";
 import { useProjectWorkflowFlowchart } from "@/hooks/store/use-project-workflow-flowchart";
-// plane web imports
-import { CommonProjectBreadcrumbs } from "@/plane-web/components/breadcrumbs/common";
 import { getProjectIssueScopeFromPathname } from "@/store/issue/project";
 
-export const IssuesHeader = observer(function IssuesHeader() {
+/**
+ * 工作项页的工具栏：搜索 / 布局 / 筛选 / 显示 · 审批 · 添加工作项 · ⋯。
+ * 渲染在视图页签栏右侧（ViewTabsRoot 的 trailing），页头不再单独占一行。
+ */
+export const IssuesHeaderActions = observer(function IssuesHeaderActions() {
   // router
-  const router = useAppRouter();
   const { workspaceSlug, projectId } = useParams();
   const pathname = usePathname();
   const scope = getProjectIssueScopeFromPathname(pathname);
@@ -73,12 +59,12 @@ export const IssuesHeader = observer(function IssuesHeader() {
     );
   };
 
-  const { currentProjectDetails, loader } = useProject();
+  const { currentProjectDetails } = useProject();
 
   const { toggleCreateIssueModal } = useCommandPalette();
   const { allowPermissions } = useUserPermissions();
-  const { isMobile } = usePlatformOS();
 
+  const [isAnalyticsModalOpen, setIsAnalyticsModalOpen] = useState(false);
   const [isApprovalModalOpen, setIsApprovalModalOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -117,157 +103,95 @@ export const IssuesHeader = observer(function IssuesHeader() {
     return stringifyAppliedFilters(applied as Record<string, unknown> | undefined);
   }, [issuesFilter, projectId, issuesFilter?.appliedFilters]);
 
-  const SPACE_APP_URL = (SPACE_BASE_URL.trim() === "" ? window.location.origin : SPACE_BASE_URL) + SPACE_BASE_PATH;
-  const publishedURL = `${SPACE_APP_URL}/issues/${currentProjectDetails?.anchor}`;
-
-  const issuesCount = issues.getGroupIssueCount(undefined, undefined, false);
   const canUserCreateIssue = allowPermissions(
     [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
     EUserPermissionsLevel.PROJECT
   );
 
   return (
-    <Header>
-      <Header.LeftItem>
-        <div className="flex items-center gap-2.5">
-          <Breadcrumbs onBack={() => router.back()} isLoading={loader === "init-loader"} className="flex-grow-0">
-            <CommonProjectBreadcrumbs workspaceSlug={workspaceSlug?.toString()} projectId={projectId?.toString()} />
-            <Breadcrumbs.Item
-              component={
-                <BreadcrumbLink
-                  label="Work Items"
-                  href={`/${workspaceSlug}/projects/${projectId}/issues/`}
-                  icon={<WorkItemsIcon className="h-4 w-4 text-tertiary" />}
-                  isLast
-                />
-              }
-              isLast
-            />
-          </Breadcrumbs>
-          {issuesCount && issuesCount > 0 ? (
-            <Tooltip
-              isMobile={isMobile}
-              tooltipContent={`There are ${issuesCount} ${issuesCount > 1 ? "work items" : "work item"} in this project`}
-              position="bottom"
-            >
-              <CountChip count={issuesCount} />
-            </Tooltip>
-          ) : null}
-        </div>
-        {currentProjectDetails?.anchor ? (
-          <a
-            href={publishedURL}
-            className="group flex items-center gap-1.5 rounded-sm bg-accent-primary/10 px-2.5 py-1 text-11 font-medium text-accent-primary"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Circle className="h-1.5 w-1.5 fill-accent-primary" strokeWidth={2} />
-            {t("workspace_projects.network.public.title")}
-            <NewTabIcon className="hidden h-3 w-3 group-hover:block" strokeWidth={2} />
-          </a>
-        ) : (
-          <></>
-        )}
-      </Header.LeftItem>
-      <Header.RightItem>
-        <div className="hidden items-center gap-2 md:flex">
-          <HeaderFilters
-            projectId={projectId}
-            currentProjectDetails={currentProjectDetails}
-            workspaceSlug={workspaceSlug}
-            canUserCreateIssue={canUserCreateIssue}
-          />
-        </div>
-        {hasActiveWorkflow && (
-          <div className="relative hidden md:block">
-            <Button
-              variant="secondary"
-              size="lg"
-              onClick={() => setIsFlowchartModalOpen(true)}
-              className="flex items-center gap-1"
-            >
-              <GitBranch className="h-3.5 w-3.5 rotate-90" />
-              工作流
-            </Button>
-          </div>
-        )}
-        {canUserCreateIssue && (
-          <>
-            <Button
-              variant="primary"
-              size="lg"
-              onClick={() => {
-                toggleCreateIssueModal(true, EIssuesStoreType.PROJECT);
-              }}
-              data-ph-element={WORK_ITEM_TRACKER_ELEMENTS.HEADER_ADD_BUTTON.WORK_ITEMS}
-            >
-              <div className="block sm:hidden">{t("issue.label", { count: 1 })}</div>
-              <div className="hidden sm:block">{t("issue.add.label")}</div>
-            </Button>
-            <Button size="lg" onClick={() => setIsImportModalOpen(true)} variant="secondary">
-              导入
-            </Button>
-            <Button size="lg" variant="secondary" onClick={() => setIsExportModalOpen(true)}>
-              导出
-            </Button>
-            <div className="relative hidden md:block">
-              <Button
-                variant="secondary"
-                size="lg"
-                onClick={() => setIsApprovalModalOpen(true)}
-                className="flex items-center gap-1"
-              >
-                <ClipboardCheck className="h-3.5 w-3.5" />
-                {pendingCount > 0 ? (
-                  <span style={{ color: "#f87171" }}>
-                    待审批·{pendingCount > 99 ? "99+" : pendingCount}
-                  </span>
-                ) : (
-                  "审批"
-                )}
-              </Button>
-            </div>
-          </>
-        )}
-        {isApprovalModalOpen && workspaceSlug && projectId && (
-          <WorkflowApprovalModal
-            isOpen={isApprovalModalOpen}
-            onClose={() => {
-              setIsApprovalModalOpen(false);
-              fetchPendingCount();
+    <>
+      <div className="hidden items-center gap-2 md:flex">
+        <HeaderFilters projectId={projectId} currentProjectDetails={currentProjectDetails} workspaceSlug={workspaceSlug} />
+      </div>
+      {canUserCreateIssue && (
+        <>
+          {/* 审批常显：有待办时按钮本身就是红字计数，收进菜单就看不见了 */}
+          <Button variant="secondary" size="lg" className="hidden md:flex" onClick={() => setIsApprovalModalOpen(true)}>
+            {pendingCount > 0 ? (
+              <span style={{ color: "#f87171" }}>待审批·{pendingCount > 99 ? "99+" : pendingCount}</span>
+            ) : (
+              "审批"
+            )}
+          </Button>
+          <Button
+            variant="primary"
+            size="lg"
+            onClick={() => {
+              toggleCreateIssueModal(true, EIssuesStoreType.PROJECT);
             }}
-            workspaceSlug={workspaceSlug.toString()}
-            projectId={projectId.toString()}
-          />
-        )}
-        {isFlowchartModalOpen && (
-          <WorkflowFlowchartModal
-            isOpen={isFlowchartModalOpen}
-            onClose={() => setIsFlowchartModalOpen(false)}
-            flowcharts={flowcharts}
-            isLoading={isFlowchartLoading}
-          />
-        )}
-        {workspaceSlug && projectId && (
-          <IssueExportModal
-            open={isExportModalOpen}
-            onClose={() => setIsExportModalOpen(false)}
-            workspaceSlug={workspaceSlug.toString()}
-            projectId={projectId.toString()}
-            selectedIds={selectedEntityIds}
-            filteredQueryString={filteredQueryString}
-          />
-        )}
-        {workspaceSlug && projectId && (
-          <ImportIssuesModal
-            isOpen={isImportModalOpen}
-            onClose={() => setIsImportModalOpen(false)}
-            workspaceSlug={workspaceSlug.toString()}
-            projectId={projectId.toString()}
-            onSuccess={refreshAfterImport}
-          />
-        )}
-      </Header.RightItem>
-    </Header>
+            data-ph-element={WORK_ITEM_TRACKER_ELEMENTS.HEADER_ADD_BUTTON.WORK_ITEMS}
+          >
+            <div className="block sm:hidden">{t("issue.label", { count: 1 })}</div>
+            <div className="hidden sm:block">{t("issue.add.label")}</div>
+          </Button>
+        </>
+      )}
+      <HeaderMoreMenu
+        items={[
+          {
+            key: "analytics",
+            label: t("common.analytics"),
+            onClick: () => setIsAnalyticsModalOpen(true),
+            shouldRender: canUserCreateIssue,
+          },
+          { key: "workflow", label: "工作流", onClick: () => setIsFlowchartModalOpen(true), shouldRender: hasActiveWorkflow },
+          { key: "import", label: "导入", onClick: () => setIsImportModalOpen(true), shouldRender: canUserCreateIssue },
+          { key: "export", label: "导出", onClick: () => setIsExportModalOpen(true), shouldRender: canUserCreateIssue },
+        ]}
+      />
+      <WorkItemsModal
+        isOpen={isAnalyticsModalOpen}
+        onClose={() => setIsAnalyticsModalOpen(false)}
+        projectDetails={currentProjectDetails ?? undefined}
+      />
+      {isApprovalModalOpen && workspaceSlug && projectId && (
+        <WorkflowApprovalModal
+          isOpen={isApprovalModalOpen}
+          onClose={() => {
+            setIsApprovalModalOpen(false);
+            fetchPendingCount();
+          }}
+          workspaceSlug={workspaceSlug.toString()}
+          projectId={projectId.toString()}
+        />
+      )}
+      {isFlowchartModalOpen && (
+        <WorkflowFlowchartModal
+          isOpen={isFlowchartModalOpen}
+          onClose={() => setIsFlowchartModalOpen(false)}
+          flowcharts={flowcharts}
+          isLoading={isFlowchartLoading}
+        />
+      )}
+      {workspaceSlug && projectId && (
+        <IssueExportModal
+          open={isExportModalOpen}
+          onClose={() => setIsExportModalOpen(false)}
+          workspaceSlug={workspaceSlug.toString()}
+          projectId={projectId.toString()}
+          selectedIds={selectedEntityIds}
+          filteredQueryString={filteredQueryString}
+        />
+      )}
+      {workspaceSlug && projectId && (
+        <ImportIssuesModal
+          isOpen={isImportModalOpen}
+          onClose={() => setIsImportModalOpen(false)}
+          workspaceSlug={workspaceSlug.toString()}
+          projectId={projectId.toString()}
+          onSuccess={refreshAfterImport}
+        />
+      )}
+    </>
   );
 });

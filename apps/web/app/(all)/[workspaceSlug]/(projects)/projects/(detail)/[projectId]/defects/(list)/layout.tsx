@@ -5,17 +5,13 @@
  */
 
 import { Outlet } from "react-router";
-import { AppHeader } from "@/components/core/app-header";
 import { ContentWrapper } from "@/components/core/content-wrapper";
-import { ProjectDefectsHeader } from "@/components/issues/defects/project-defects-header";
 
+/** 页头那一行已并进视图页签栏（DefectListRoot 把工具栏放在 ViewTabsRoot 的 trailing 里） */
 export default function ProjectDefectsLayout() {
   return (
-    <>
-      <AppHeader header={<ProjectDefectsHeader />} />
-      <ContentWrapper>
-        <Outlet />
-      </ContentWrapper>
-    </>
+    <ContentWrapper>
+      <Outlet />
+    </ContentWrapper>
   );
 }

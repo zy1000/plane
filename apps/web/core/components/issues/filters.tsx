@@ -4,14 +4,12 @@
  * See the LICENSE file for details.
  */
 
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
 import { observer } from "mobx-react";
 import { usePathname } from "next/navigation";
-import { ChartNoAxesColumn, SlidersHorizontal } from "lucide-react";
 // plane imports
 import { EIssueFilterType, ISSUE_DISPLAY_FILTERS_BY_PAGE, ISSUE_STORE_TO_FILTERS_MAP } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
-import { Button } from "@plane/propel/button";
 import type { IIssueDisplayFilterOptions, IIssueDisplayProperties } from "@plane/types";
 import { EIssueLayoutTypes, EIssuesStoreType } from "@plane/types";
 // hooks
@@ -21,22 +19,14 @@ import type { TProject } from "@/plane-web/types";
 import { getProjectScopeFilterConfig } from "@/components/issues/typed-page-filter-config";
 import { getProjectIssueScopeFromPathname, type TProjectIssueScope } from "@/store/issue/project";
 // local imports
-import { WorkItemsModal } from "../analytics/work-items/modal";
-import { DefectAnalysisModal } from "./defects/defect-analysis-modal";
 import { WorkItemFiltersToggle } from "../work-item-filters/filters-toggle";
 import { WorkItemSearch } from "./work-item-search";
-import {
-  DisplayFiltersSelection,
-  FiltersDropdown,
-  LayoutSelection,
-  MobileLayoutSelection,
-} from "./issue-layouts/filters";
+import { DisplayFiltersSelection, FiltersDropdown, LayoutSelection } from "./issue-layouts/filters";
 
 type Props = {
   currentProjectDetails: TProject | undefined;
   projectId: string;
   workspaceSlug: string;
-  canUserCreateIssue: boolean | undefined;
   storeType?: EIssuesStoreType.PROJECT | EIssuesStoreType.EPIC;
   scope?: TProjectIssueScope;
   onFilterToggle?: () => void;
@@ -49,20 +39,21 @@ const LAYOUTS = [
   EIssueLayoutTypes.GANTT,
 ];
 
+/**
+ * 工作项 / 缺陷页工具栏里的搜索、布局切换、筛选、显示四件套。
+ * 分析入口已挪到工具栏的「⋯」菜单里，由调用方自己渲染弹窗。
+ */
 export const HeaderFilters = observer(function HeaderFilters(props: Props) {
   const {
     currentProjectDetails,
     projectId,
     workspaceSlug,
-    canUserCreateIssue,
     storeType = EIssuesStoreType.PROJECT,
     scope: scopeProp,
     onFilterToggle,
   } = props;
   // i18n
   const { t } = useTranslation();
-  // states
-  const [analyticsModal, setAnalyticsModal] = useState(false);
   // router — detect typed pages (requirements / defects)
   const pathname = usePathname();
   const scope = scopeProp ?? getProjectIssueScopeFromPathname(pathname);
@@ -108,37 +99,12 @@ export const HeaderFilters = observer(function HeaderFilters(props: Props) {
 
   return (
     <>
-      {scope === "defects" ? (
-        <DefectAnalysisModal
-          isOpen={analyticsModal}
-          onClose={() => setAnalyticsModal(false)}
-          workspaceSlug={workspaceSlug}
-          projectId={projectId}
-          projectDetails={currentProjectDetails ?? undefined}
-        />
-      ) : (
-        <WorkItemsModal
-          isOpen={analyticsModal}
-          onClose={() => setAnalyticsModal(false)}
-          projectDetails={currentProjectDetails ?? undefined}
-          isEpic={storeType === EIssuesStoreType.EPIC}
-        />
-      )}
       {storeType === EIssuesStoreType.PROJECT && <WorkItemSearch entityType={storeType} entityId={filterEntityId} />}
-      <div className="hidden @4xl:flex">
-        <LayoutSelection
-          layouts={LAYOUTS}
-          onChange={(layout) => handleLayoutChange(layout)}
-          selectedLayout={activeLayout}
-        />
-      </div>
-      <div className="flex @4xl:hidden">
-        <MobileLayoutSelection
-          layouts={LAYOUTS}
-          onChange={(layout) => handleLayoutChange(layout)}
-          activeLayout={activeLayout}
-        />
-      </div>
+      <LayoutSelection
+        layouts={LAYOUTS}
+        onChange={(layout) => handleLayoutChange(layout)}
+        selectedLayout={activeLayout}
+      />
       <WorkItemFiltersToggle
         entityType={storeType}
         entityId={filterEntityId}
@@ -146,11 +112,8 @@ export const HeaderFilters = observer(function HeaderFilters(props: Props) {
         filterRowHiddenOnMount={scope === "defects"}
         onToggleFilter={onFilterToggle}
       />
-      <FiltersDropdown
-        miniIcon={<SlidersHorizontal className="size-3.5" />}
-        title={t("common.display")}
-        placement="bottom-end"
-      >
+      {/* 不传 miniIcon：工具栏不在 @container 里，@4xl 分支永远不命中，直接显示「显示」两个字 */}
+      <FiltersDropdown title={t("common.display")} placement="bottom-end">
         <DisplayFiltersSelection
           layoutDisplayFiltersOptions={layoutDisplayFiltersOptions}
           displayFilters={scopedIssueFilters?.displayFilters ?? {}}
@@ -162,16 +125,6 @@ export const HeaderFilters = observer(function HeaderFilters(props: Props) {
           isEpic={storeType === EIssuesStoreType.EPIC}
         />
       </FiltersDropdown>
-      {canUserCreateIssue ? (
-        <Button className="hidden px-2 md:block" onClick={() => setAnalyticsModal(true)} variant="secondary" size="lg">
-          <div className="hidden @4xl:flex">{t("common.analytics")}</div>
-          <div className="flex @4xl:hidden">
-            <ChartNoAxesColumn className="size-3.5" />
-          </div>
-        </Button>
-      ) : (
-        <></>
-      )}
     </>
   );
 });
