@@ -6,10 +6,11 @@
  * 每行带上本项目从该产品引了多少需求、交付到哪 —— 与产品侧「关联项目」表对称。
  *
  * 关联/解除都走 useProjectProducts；解除时若该产品下还有需求关联在本项目，后端 409。
+ * 「创建产品」复用工作区的产品弹窗：建成后自动关联到本项目，关联失败只提示、不回滚产品。
  */
 import { useState } from "react";
 import { observer } from "mobx-react";
-import { FolderKanban, Package } from "lucide-react";
+import { FolderKanban, Link2, Package } from "lucide-react";
 import { useParams } from "react-router";
 import {
   PROJECT_PRODUCT_LINK_MANAGE_PERMISSION_KEY,
@@ -19,7 +20,8 @@ import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Tooltip } from "@plane/propel/tooltip";
-import type { TProductProject } from "@plane/types";
+import { EUserWorkspaceRoles } from "@plane/types";
+import type { TProduct, TProductProject } from "@plane/types";
 import { AlertModalCore, Breadcrumbs, CustomMenu, Header, Loader } from "@plane/ui";
 import { renderFormattedDate } from "@plane/utils";
 import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
@@ -27,11 +29,13 @@ import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { AppHeader } from "@/components/core/app-header";
 import { ContentWrapper } from "@/components/core/content-wrapper";
 import { PageHead } from "@/components/core/page-title";
+import { ProductModalCore } from "@/components/products/modal";
 import { ProductChip } from "@/components/products/product-chip";
 import {
   getCompletionRate,
   ProductProjectStatusBar,
 } from "@/components/products/projects/product-project-status-bar";
+import { ProjectContextChip } from "@/components/projects/project-context-chip";
 import { useProducts } from "@/hooks/store/use-products";
 import { useProject } from "@/hooks/store/use-project";
 import { useProjectProducts } from "@/hooks/store/use-project-products";
@@ -48,7 +52,8 @@ export const ProjectProductsPage = observer(function ProjectProductsPage() {
   const project = projectId?.toString() ?? "";
 
   const { getProjectById, loader } = useProject();
-  const { allowProjectPermissionKeys, workspaceUserInfo } = useUserPermissions();
+  const { allowProjectPermissionKeys, workspaceUserInfo, workspaceInfoBySlug, hasAllWorkspacePermissions } =
+    useUserPermissions();
 
   // 与后端 ProjectProductViewSet 同一组 key：list 放行 view / manage 任一，create 只认 manage
   const canView = allowProjectPermissionKeys(
@@ -57,6 +62,14 @@ export const ProjectProductsPage = observer(function ProjectProductsPage() {
     project
   );
   const canManage = allowProjectPermissionKeys([PROJECT_PRODUCT_LINK_MANAGE_PERMISSION_KEY], slug, project);
+  // 建产品是工作区级动作，与产品列表页同一条判定（后端 can_create_product：成员及以上）；
+  // 建完要挂到本项目，所以还得有关联权限
+  const workspaceInfo = workspaceInfoBySlug(slug);
+  const canCreateProduct =
+    canManage &&
+    (workspaceInfo?.role === EUserWorkspaceRoles.ADMIN ||
+      workspaceInfo?.role === EUserWorkspaceRoles.MEMBER ||
+      hasAllWorkspacePermissions(slug));
 
   const {
     links,
@@ -66,10 +79,12 @@ export const ProjectProductsPage = observer(function ProjectProductsPage() {
     fetchProducts: refreshLinks,
     updateProducts,
   } = useProjectProducts({ workspaceSlug: slug || undefined, projectId: project || undefined });
-  // 关联弹窗的候选项 = 当前用户可见的工作区产品。没有管理权限就不拉这份列表
-  const { products, isLoading: isProductsLoading } = useProducts(canManage ? slug : undefined);
+  // 关联弹窗的候选项 = 当前用户可见的工作区产品。没有管理权限就不拉这份列表。
+  // 创建产品也走这个 hook：新产品会进同一份列表，关联弹窗里立刻可见
+  const { products, isLoading: isProductsLoading, createProduct } = useProducts(canManage ? slug : undefined);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
   /** 行级解除关联的二次确认对象。确认框里展示产品名，避免解错行 */
   const [pendingUnlink, setPendingUnlink] = useState<TProductProject | null>(null);
 
@@ -109,6 +124,22 @@ export const ProjectProductsPage = observer(function ProjectProductsPage() {
     setToast({ type: TOAST_TYPE.SUCCESS, title: t("project_products.toast_updated") });
   };
 
+  /**
+   * 新建的产品挂到本项目。产品此时已经落库，关联失败不能回滚、也不该让弹窗报「创建失败」，
+   * 所以这里自己兜错并提示用户去「关联产品」里手动补；成功提示由产品弹窗统一给
+   */
+  const handleProductCreated = async (createdProduct: TProduct) => {
+    try {
+      await updateProducts({ products: [createdProduct.id] });
+    } catch {
+      setToast({
+        type: TOAST_TYPE.WARNING,
+        title: t("project_products.create_link_failed_title"),
+        message: t("project_products.create_link_failed"),
+      });
+    }
+  };
+
   /** 产品名落到需求页并按该产品筛选：从项目看过来，关心的是「本项目从它引了哪些需求」 */
   const requirementsHref = (productId: string) => `/${slug}/projects/${project}/requirements?product=${productId}`;
 
@@ -143,7 +174,16 @@ export const ProjectProductsPage = observer(function ProjectProductsPage() {
             </Header.LeftItem>
             {canManage && (
               <Header.RightItem>
-                <Button variant="primary" size="lg" onClick={() => setIsModalOpen(true)}>
+                {canCreateProduct && (
+                  <Button variant="primary" size="lg" onClick={() => setIsCreateOpen(true)}>
+                    {t("workspace_products.create_product")}
+                  </Button>
+                )}
+                <Button
+                  variant={canCreateProduct ? "secondary" : "primary"}
+                  size="lg"
+                  onClick={() => setIsModalOpen(true)}
+                >
                   {t("project_products.link")}
                 </Button>
               </Header.RightItem>
@@ -186,9 +226,20 @@ export const ProjectProductsPage = observer(function ProjectProductsPage() {
                 <h1 className="text-16 font-semibold text-primary">{t("project_products.empty.title")}</h1>
                 <p className="mt-2 text-13 leading-5 text-secondary">{t("project_products.empty.description")}</p>
                 {canManage && (
-                  <Button variant="primary" size="lg" className="mt-4" onClick={() => setIsModalOpen(true)}>
-                    {t("project_products.link")}
-                  </Button>
+                  <div className="mt-4 flex justify-center gap-2.5">
+                    {canCreateProduct && (
+                      <Button variant="primary" size="lg" onClick={() => setIsCreateOpen(true)}>
+                        {t("workspace_products.create_product")}
+                      </Button>
+                    )}
+                    <Button
+                      variant={canCreateProduct ? "secondary" : "primary"}
+                      size="lg"
+                      onClick={() => setIsModalOpen(true)}
+                    >
+                      {t("project_products.link")}
+                    </Button>
+                  </div>
                 )}
               </div>
             </div>
@@ -283,6 +334,23 @@ export const ProjectProductsPage = observer(function ProjectProductsPage() {
           isSubmitting={isMutating}
           handleClose={() => setIsModalOpen(false)}
           onSubmit={handleModalSubmit}
+        />
+      )}
+
+      {canCreateProduct && (
+        <ProductModalCore
+          workspaceSlug={slug}
+          modal={{ isOpen: isCreateOpen, mode: "create", product: null }}
+          createProduct={createProduct}
+          closeProductModal={() => setIsCreateOpen(false)}
+          onCreated={handleProductCreated}
+          headerContext={projectDetail?.name ? <ProjectContextChip name={projectDetail.name} /> : null}
+          footerNote={
+            <p className="flex items-center gap-1.5 truncate text-12 text-tertiary">
+              <Link2 className="size-3.5 shrink-0" />
+              <span className="truncate">{t("project_products.create_modal.footer_note")}</span>
+            </p>
+          }
         />
       )}
     </>

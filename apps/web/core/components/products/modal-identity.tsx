@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import type { MutableRefObject } from "react";
+import type { MutableRefObject, ReactNode } from "react";
 import { useTranslation } from "@plane/i18n";
 import { Tooltip } from "@plane/propel/tooltip";
 import type { TLogoProps, TProductNetwork } from "@plane/types";
@@ -17,6 +17,8 @@ import { ProductNetworkSegmented } from "./network-segmented";
 type Props = {
   /** 左上角的小标题：创建产品 / 编辑产品 / 产品详情 */
   title: string;
+  /** 小标题旁的上下文标记（如从项目页打开时的项目名） */
+  headerContext?: ReactNode;
   editable: boolean;
   name: string;
   onNameChange: (value: string) => void;
@@ -41,6 +43,7 @@ type Props = {
 export function ProductModalIdentity(props: Props) {
   const {
     title,
+    headerContext,
     editable,
     name,
     onNameChange,
@@ -60,7 +63,10 @@ export function ProductModalIdentity(props: Props) {
 
   return (
     <div>
-      <p className="mb-4.5 text-13 font-medium text-tertiary">{title}</p>
+      <div className="mb-4.5 flex min-w-0 items-center gap-2.5">
+        <p className="shrink-0 text-13 font-medium text-tertiary">{title}</p>
+        {headerContext}
+      </div>
       <div className="grid grid-cols-[64px_minmax(0,1fr)] items-start gap-x-4.5">
         <ProductLogoHeader
           logoProps={logoProps}

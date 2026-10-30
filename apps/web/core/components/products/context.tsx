@@ -6,7 +6,7 @@ import { useProductListFilterInstance } from "./filters/use-product-list-filter"
 
 export type TProductModalMode = "view" | "create" | "edit";
 
-type TProductModalState = {
+export type TProductModalState = {
   isOpen: boolean;
   mode: TProductModalMode;
   product: TProduct | null;

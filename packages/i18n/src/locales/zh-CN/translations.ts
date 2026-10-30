@@ -4320,6 +4320,11 @@ export default {
       removed: "解除",
     },
     has_linked_requirements: "该产品下还有需求关联在本项目中，请先解除这些需求的关联。",
+    create_modal: {
+      footer_note: "创建后会自动关联到本项目",
+    },
+    create_link_failed_title: "产品已创建，但未关联到本项目",
+    create_link_failed: "请通过「关联产品」手动关联。",
   },
   project_overview: {
     title: "项目概览",

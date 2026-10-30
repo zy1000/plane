@@ -4,6 +4,7 @@
  * See the LICENSE file for details.
  */
 
+import type { ReactNode } from "react";
 import { Pencil } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
@@ -17,6 +18,8 @@ type Props = {
   hasErrors: boolean;
   isSaving: boolean;
   primaryLabel: string;
+  /** 必填进度之后的一行说明 */
+  note?: ReactNode;
   onCancel: () => void;
   onSave: () => void;
   /** 查看态且有权限时才传：右下角换成「编辑」 */
@@ -24,12 +27,14 @@ type Props = {
 };
 
 export function ProductModalFooter(props: Props) {
-  const { mode, requiredFilled, requiredTotal, hasErrors, isSaving, primaryLabel, onCancel, onSave, onEdit } = props;
+  const { mode, requiredFilled, requiredTotal, hasErrors, isSaving, primaryLabel, note, onCancel, onSave, onEdit } =
+    props;
   const { t } = useTranslation();
 
   return (
     <div className="flex shrink-0 items-center gap-4 border-t border-subtle px-7 py-3.5 md:pl-9">
       {mode !== "view" ? <RequiredStatus filled={requiredFilled} total={requiredTotal} hasErrors={hasErrors} /> : null}
+      {note ? <div className="min-w-0">{note}</div> : null}
       <div className="ml-auto flex shrink-0 gap-2.5">
         <Button variant="secondary" size="lg" onClick={onCancel} disabled={isSaving}>
           {mode === "view" ? t("close") : t("cancel")}

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { observer } from "mobx-react";
 import { AlertTriangle } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
@@ -7,7 +8,13 @@ import { useTranslation } from "@plane/i18n";
 import { CloseIcon } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { EUserWorkspaceRoles } from "@plane/types";
-import type { TLogoProps, TProduct, TProductNetwork } from "@plane/types";
+import type {
+  TCreateProductPayload,
+  TLogoProps,
+  TProduct,
+  TProductNetwork,
+  TUpdateProductPayload,
+} from "@plane/types";
 import { EModalPosition, EModalWidth, Loader, ModalCore } from "@plane/ui";
 import { isValidIdentifier } from "@/components/common/identifier-input";
 import { RichTextEditor } from "@/components/editor/rich-text";
@@ -19,6 +26,7 @@ import { useWorkspace } from "@/hooks/store/use-workspace";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 import { WorkspaceService } from "@/services/workspace.service";
 import { useProductsContext } from "./context";
+import type { TProductModalMode, TProductModalState } from "./context";
 import {
   PRODUCT_FORM_DICTIONARY_KEYS,
   PRODUCT_REQUIRED_EXTENDED_FIELDS,
@@ -37,10 +45,45 @@ const EMPTY_DESCRIPTION = "<p></p>";
 /** 名称、开发编号、产品负责人不在扩展字段里，单独算进必填数 */
 const IDENTITY_REQUIRED_COUNT = 3;
 
-export const ProductModal = observer(function ProductModal() {
+export type TProductModalCoreProps = {
+  workspaceSlug: string;
+  modal: TProductModalState;
+  isDetailLoading?: boolean;
+  createProduct: (payload: TCreateProductPayload) => Promise<TProduct>;
+  /** 编辑态才用到；只开创建态的调用方可以不传 */
+  updateProduct?: (productId: string, payload: TUpdateProductPayload) => Promise<TProduct>;
+  closeProductModal: () => void;
+  /** 查看态右下角「编辑」要切模式；不传就不出这个按钮 */
+  openProductModal?: (mode: TProductModalMode, product: TProduct) => void;
+  /**
+   * 产品建成之后、绑描述附件之前调用（补附件的重试路径不会再调）。
+   * 回调要自己兜错：产品已经落库，这里抛出去会被当成创建失败提示，但不会重复建。
+   */
+  onCreated?: (product: TProduct) => Promise<void> | void;
+  /** 标题旁的上下文标记（如从项目页打开时显示项目名） */
+  headerContext?: ReactNode;
+  /** 页脚左侧的一行说明 */
+  footerNote?: ReactNode;
+};
+
+/**
+ * 弹窗本体，不依赖 ProductsProvider：产品列表页经 ProductModal 接上下文，
+ * 项目「产品」页只开创建态，直接传 props。
+ */
+export const ProductModalCore = observer(function ProductModalCore(props: TProductModalCoreProps) {
+  const {
+    workspaceSlug,
+    modal,
+    isDetailLoading = false,
+    createProduct,
+    updateProduct,
+    closeProductModal,
+    openProductModal,
+    onCreated,
+    headerContext,
+    footerNote,
+  } = props;
   const { t } = useTranslation();
-  const { workspaceSlug, modal, isDetailLoading, createProduct, updateProduct, closeProductModal, openProductModal } =
-    useProductsContext();
   const { getWorkspaceBySlug } = useWorkspace();
   const { data: currentUser } = useUser();
   const { workspaceInfoBySlug, hasAllWorkspacePermissions } = useUserPermissions();
@@ -188,8 +231,9 @@ export const ProductModal = observer(function ProductModal() {
           savedProduct = await createProduct(payload);
           setPersistedProductId(savedProduct.id);
           persistedProduct.current = savedProduct;
+          await onCreated?.(savedProduct);
         }
-      } else if (product) {
+      } else if (product && updateProduct) {
         savedProduct = await updateProduct(product.id, payload);
       } else {
         return;
@@ -340,6 +384,7 @@ export const ProductModal = observer(function ProductModal() {
                       ? "workspace_products.edit_product"
                       : "workspace_products.view_product"
                 )}
+                headerContext={headerContext}
                 editable={editable}
                 name={name}
                 onNameChange={(value) => {
@@ -421,9 +466,14 @@ export const ProductModal = observer(function ProductModal() {
                 ? t("workspace_products.create_product")
                 : t("save_changes")
           }
+          note={footerNote}
           onCancel={() => void handleClose()}
           onSave={() => void handleSave()}
-          onEdit={mode === "view" && product && canManageProduct ? () => openProductModal("edit", product) : undefined}
+          onEdit={
+            mode === "view" && product && canManageProduct && openProductModal
+              ? () => openProductModal("edit", product)
+              : undefined
+          }
         />
 
         <button
@@ -436,5 +486,22 @@ export const ProductModal = observer(function ProductModal() {
         </button>
       </div>
     </ModalCore>
+  );
+});
+
+/** 产品列表页 / 设置页用的弹窗：状态与增改都来自 ProductsProvider */
+export const ProductModal = observer(function ProductModal() {
+  const { workspaceSlug, modal, isDetailLoading, createProduct, updateProduct, closeProductModal, openProductModal } =
+    useProductsContext();
+  return (
+    <ProductModalCore
+      workspaceSlug={workspaceSlug}
+      modal={modal}
+      isDetailLoading={isDetailLoading}
+      createProduct={createProduct}
+      updateProduct={updateProduct}
+      closeProductModal={closeProductModal}
+      openProductModal={openProductModal}
+    />
   );
 });

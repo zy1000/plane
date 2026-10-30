@@ -5,9 +5,10 @@
  * 三件事在一个事务里。附件、模块、父需求都挂在所选产品上，换产品时弹窗会清掉模块和父需求。
  */
 import { useState } from "react";
-import { Briefcase, Link2, Package } from "lucide-react";
+import { Link2, Package } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import type { TProduct, TProjectRequirementCreatePayload } from "@plane/types";
+import { ProjectContextChip } from "@/components/projects/project-context-chip";
 import { RequirementCreateModal } from "@/components/requirements/requirement-create-modal";
 import { useRequirementAssetUpload } from "@/components/requirements/use-requirement-asset-upload";
 import { ProjectRequirementProductSelect } from "./project-requirement-product-select";
@@ -52,16 +53,7 @@ export const ProjectRequirementCreateModal = (props: TProps) => {
       entityKind="product"
       allowTypeSelection
       title={t("project_requirements.create")}
-      headerContext={
-        projectName ? (
-          <span className="inline-flex h-6 min-w-0 items-center gap-1.5 rounded-md border border-subtle bg-layer-1 px-2 text-12 font-medium text-secondary">
-            <Briefcase className="size-3.5 shrink-0 text-tertiary" />
-            <span className="truncate" title={projectName}>
-              {projectName}
-            </span>
-          </span>
-        ) : null
-      }
+      headerContext={projectName ? <ProjectContextChip name={projectName} /> : null}
       scopeField={{
         label: t("project_requirements.create_modal.product_label"),
         icon: Package,

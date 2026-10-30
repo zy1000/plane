@@ -4136,6 +4136,11 @@ export default {
     },
     has_linked_requirements:
       "Requirements from this product are still linked to the project. Unlink them first.",
+    create_modal: {
+      footer_note: "Linked to this project automatically after creation",
+    },
+    create_link_failed_title: "Product created, but not linked to this project",
+    create_link_failed: "Link it manually via “Link products”.",
   },
   project_overview: {
     title: "Project overview",
