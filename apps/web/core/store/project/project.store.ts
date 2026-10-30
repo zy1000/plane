@@ -10,13 +10,16 @@ import { computedFn } from "mobx-utils";
 // plane imports
 import type { TFetchStatus, TLoader, TProjectAnalyticsCount, TProjectAnalyticsCountParams } from "@plane/types";
 // helpers
-import { orderProjects, shouldFilterProject } from "@plane/utils";
+import { orderProjects, renderFormattedPayloadDate, shouldFilterProject } from "@plane/utils";
 // components
 import { projectMatchesConditions } from "@/components/project/filters/match-project";
+import { countProjectQuickScopes, projectMatchesQuickScope } from "@/components/project/quick-filters/match-quick-scope";
+import type { TProjectQuickScopeContext, TProjectQuickScopeCounts } from "@/components/project/quick-filters/match-quick-scope";
 // services
 import type { TProject, TPartialProject } from "@/plane-web/types/projects";
 import { IssueLabelService, IssueService } from "@/services/issue";
-import { ProjectService, ProjectStateService, ProjectArchiveService } from "@/services/project";
+import { ProjectService, ProjectStateService, ProjectArchiveService, ProjectCloseService } from "@/services/project";
+import type { TProjectClosePayload } from "@/services/project";
 // store
 import type { CoreRootStore } from "../root.store";
 
@@ -32,6 +35,8 @@ export interface IProjectStore {
   // computed
   isInitializingProjects: boolean;
   filteredProjectIds: string[] | undefined;
+  /** 快捷页签各档的数量（页签之外的条件已筛过），列表页的页签条用 */
+  quickScopeCounts: TProjectQuickScopeCounts | undefined;
   workspaceProjectIds: string[] | undefined;
   archivedProjectIds: string[] | undefined;
   totalProjectIds: string[] | undefined;
@@ -79,6 +84,9 @@ export interface IProjectStore {
   // archive actions
   archiveProject: (workspaceSlug: string, projectId: string) => Promise<void>;
   restoreProject: (workspaceSlug: string, projectId: string) => Promise<void>;
+  // close / reopen actions
+  closeProject: (workspaceSlug: string, projectId: string, data: TProjectClosePayload) => Promise<void>;
+  reopenProject: (workspaceSlug: string, projectId: string) => Promise<void>;
 }
 
 export class ProjectStore implements IProjectStore {
@@ -96,6 +104,7 @@ export class ProjectStore implements IProjectStore {
   // service
   projectService;
   projectArchiveService;
+  projectCloseService;
   issueLabelService;
   issueService;
   stateService;
@@ -112,7 +121,9 @@ export class ProjectStore implements IProjectStore {
       lastCollapsibleAction: observable.ref,
       // computed
       isInitializingProjects: computed,
+      quickScopeCandidates: computed,
       filteredProjectIds: computed,
+      quickScopeCounts: computed,
       workspaceProjectIds: computed,
       archivedProjectIds: computed,
       totalProjectIds: computed,
@@ -138,6 +149,8 @@ export class ProjectStore implements IProjectStore {
       // CRUD actions
       createProject: action,
       updateProject: action,
+      closeProject: action,
+      reopenProject: action,
       // collapsible actions
       setOpenCollapsibleSection: action,
       setLastCollapsibleAction: action,
@@ -148,6 +161,7 @@ export class ProjectStore implements IProjectStore {
     // services
     this.projectService = new ProjectService();
     this.projectArchiveService = new ProjectArchiveService();
+    this.projectCloseService = new ProjectCloseService();
     this.issueService = new IssueService();
     this.issueLabelService = new IssueLabelService();
     this.stateService = new ProjectStateService();
@@ -161,9 +175,10 @@ export class ProjectStore implements IProjectStore {
   }
 
   /**
-   * @description returns filtered projects based on filters and search query
+   * @description 快捷页签之前的候选集：工作区 ∧ 搜索 ∧ 我参与的 ∧ 富筛选条件。
+   * 归档与否在这一层不区分（页签「已归档」要用到归档的项目），归档页例外 —— 它只看归档的。
    */
-  get filteredProjectIds() {
+  get quickScopeCandidates(): TProject[] | undefined {
     const workspaceDetails = this.rootStore.workspaceRoot.currentWorkspace;
     const workspaceSlug = this.rootStore.router.workspaceSlug;
     const { currentWorkspaceDisplayFilters: displayFilters, searchQuery, getRichFilter } =
@@ -172,16 +187,45 @@ export class ProjectStore implements IProjectStore {
     // 属性条件来自富筛选实例（列表页挂载时才建）；没建过就只做搜索 + 范围过滤
     const conditions = workspaceSlug ? (getRichFilter(workspaceSlug)?.allConditionsForDisplay ?? []) : [];
     const currentUserId = this.rootStore.user.data?.id;
-    let workspaceProjects = Object.values(this.projectMap).filter(
+    const query = searchQuery.toLowerCase();
+    const scopeFilters = displayFilters.archived_projects ? displayFilters : { ...displayFilters, show_archived_projects: true };
+    return Object.values(this.projectMap).filter(
       (p) =>
         p.workspace === workspaceDetails.id &&
-        (p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          p.identifier.toLowerCase().includes(searchQuery.toLowerCase())) &&
-        shouldFilterProject(p, displayFilters) &&
+        (p.name.toLowerCase().includes(query) || p.identifier.toLowerCase().includes(query)) &&
+        shouldFilterProject(p, scopeFilters) &&
         projectMatchesConditions(p, conditions, currentUserId)
     );
+  }
+
+  private getQuickScopeContext(): TProjectQuickScopeContext {
+    const workspaceSlug = this.rootStore.router.workspaceSlug;
+    const closedIds = workspaceSlug ? (this.rootStore.projectRoot.projectFilter.closedStatusIds[workspaceSlug] ?? []) : [];
+    return { closedStatusIds: new Set(closedIds), today: renderFormattedPayloadDate(new Date()) ?? "" };
+  }
+
+  /**
+   * @description returns filtered projects based on filters and search query
+   */
+  get filteredProjectIds() {
+    const candidates = this.quickScopeCandidates;
+    const displayFilters = this.rootStore.projectRoot.projectFilter.currentWorkspaceDisplayFilters;
+    if (!candidates || !displayFilters) return;
+    let workspaceProjects = candidates;
+    // 归档页没有页签条；列表页按选中的页签再筛一层
+    if (!displayFilters.archived_projects) {
+      const ctx = this.getQuickScopeContext();
+      const scope = displayFilters.quick_scope ?? "all";
+      workspaceProjects = workspaceProjects.filter((p) => projectMatchesQuickScope(p, scope, ctx));
+    }
     workspaceProjects = orderProjects(workspaceProjects, displayFilters.order_by);
     return workspaceProjects.map((p) => p.id);
+  }
+
+  get quickScopeCounts() {
+    const candidates = this.quickScopeCandidates;
+    if (!candidates) return;
+    return countProjectQuickScopes(candidates, this.getQuickScopeContext());
   }
 
   /**
@@ -687,5 +731,25 @@ export class ProjectStore implements IProjectStore {
         console.log("Failed to restore project from project store");
         throw error;
       });
+  };
+
+  /**
+   * 列表行操作「关闭项目」：状态改成终态 + 实际完成日期 + 备注。响应只回这几个字段，合并进 projectMap
+   */
+  closeProject = async (workspaceSlug: string, projectId: string, data: TProjectClosePayload) => {
+    const response = await this.projectCloseService.closeProject(workspaceSlug, projectId, data);
+    runInAction(() => {
+      update(this.projectMap, [projectId], (p) => ({ ...p, ...response }));
+    });
+  };
+
+  /**
+   * 列表行操作「重新开启」：状态改回活跃中，实际完成日期与备注清空
+   */
+  reopenProject = async (workspaceSlug: string, projectId: string) => {
+    const response = await this.projectCloseService.reopenProject(workspaceSlug, projectId);
+    runInAction(() => {
+      update(this.projectMap, [projectId], (p) => ({ ...p, ...response }));
+    });
   };
 }

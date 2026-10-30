@@ -92,6 +92,10 @@ export interface IPartialProject {
   start_date?: string | null;
   /** YYYY-MM-DD */
   end_date?: string | null;
+  // ---- 0433 列表「关闭项目」记录的字段；重新开启时清空。end_date 是计划日期，别混用 ----
+  /** 实际完成日期 YYYY-MM-DD */
+  actual_end_date?: string | null;
+  close_note?: string;
   // ---- 0387 研发模式：创建时必选，创建后不可改 ----
   /** 研发模式 id */
   dev_mode?: string | null;

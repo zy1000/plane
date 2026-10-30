@@ -230,6 +230,9 @@ class Project(BaseModel):
     )
     start_date = models.DateField(null=True, blank=True, verbose_name="开始日期")
     end_date = models.DateField(null=True, blank=True, verbose_name="完成日期")
+    # 列表「关闭项目」时记录（0433）；end_date 是计划完成日期，逾期判断看它，别混用。重新开启时清空。
+    actual_end_date = models.DateField(null=True, blank=True, verbose_name="实际完成日期")
+    close_note = models.TextField(blank=True, default="", verbose_name="关闭备注")
 
     objects = SoftProjectManager()
 

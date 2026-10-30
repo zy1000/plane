@@ -19,6 +19,7 @@ import { useWorkspace } from "@/hooks/store/use-workspace";
 // local imports
 import { ProjectCardList } from "./card-list";
 import { useProjectListFiltering } from "./filters/use-project-list-filtering";
+import { ProjectQuickFilters } from "./quick-filters/project-quick-filters";
 import { ProjectTableList } from "./table-list";
 
 export const ProjectRoot = observer(function ProjectRoot() {
@@ -64,6 +65,7 @@ export const ProjectRoot = observer(function ProjectRoot() {
     <>
       <PageHead title={pageTitle} />
       <div className="flex h-full w-full flex-col">
+        {!isArchived && workspaceSlugString && <ProjectQuickFilters workspaceSlug={workspaceSlugString} lookups={lookups} />}
         {filter && (
           <FiltersRow
             filter={filter}

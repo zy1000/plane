@@ -9,6 +9,7 @@ from .project.base import (
     ProjectFavoritesViewSet,
     DeployBoardViewSet,
     ProjectArchiveUnarchiveEndpoint,
+    ProjectCloseReopenEndpoint,
 )
 
 from .project.invite import (

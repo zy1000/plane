@@ -1,5 +1,5 @@
 import { observer } from "mobx-react";
-import { useParams, usePathname } from "next/navigation";
+import { useParams } from "next/navigation";
 import { FiltersToggle } from "@/components/rich-filters/filters-toggle";
 import { useProjectFilter } from "@/hooks/store/use-project-filter";
 import { ProjectDisplayDropdown } from "./display/display-dropdown";
@@ -11,12 +11,10 @@ import { useProjectListFilter } from "./filters/use-project-list-filter";
  */
 export const ProjectListHeaderActions = observer(function ProjectListHeaderActions() {
   const { workspaceSlug } = useParams();
-  const pathname = usePathname();
   const workspaceSlugString = workspaceSlug?.toString();
   const { currentWorkspaceDisplayFilters, currentWorkspaceDisplayProperties, updateDisplayFilters, updateDisplayProperties } =
     useProjectFilter();
   const filter = useProjectListFilter(workspaceSlugString);
-  const isArchived = pathname.includes("/archives");
 
   return (
     <>
@@ -24,7 +22,6 @@ export const ProjectListHeaderActions = observer(function ProjectListHeaderActio
       <ProjectDisplayDropdown
         displayFilters={currentWorkspaceDisplayFilters ?? {}}
         displayProperties={currentWorkspaceDisplayProperties}
-        hideScopeToggles={isArchived}
         onDisplayFiltersChange={(patch) => workspaceSlugString && updateDisplayFilters(workspaceSlugString, patch)}
         onDisplayPropertiesChange={(patch) => workspaceSlugString && updateDisplayProperties(workspaceSlugString, patch)}
       />

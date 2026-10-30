@@ -15,7 +15,8 @@ const I18N = "workspace_projects";
 
 /** 固定列：项目名称吃剩余宽度（下限见 NAME_COLUMN_MIN_WIDTH），操作列定宽 */
 export const NAME_COLUMN_MIN_WIDTH = 280;
-export const ACTIONS_COLUMN_WIDTH = 150;
+/** 6 个图标按钮（复制链接 / 收藏 / 发布 / 关闭或重开 / 归档或恢复 / 设置） */
+export const ACTIONS_COLUMN_WIDTH = 180;
 
 export const PROJECT_COLUMN_WIDTH: Record<TProjectDisplayPropertyKey, number> = {
   code: 168,
@@ -28,6 +29,7 @@ export const PROJECT_COLUMN_WIDTH: Record<TProjectDisplayPropertyKey, number> = 
   product_manager: 140,
   start_date: 112,
   end_date: 132,
+  actual_end_date: 112,
   duration: 80,
   created_at: 112,
   members_count: 80,
@@ -95,12 +97,17 @@ const DateCell = ({ value }: { value: string | Date | null | undefined }) => {
   return <span className="whitespace-nowrap tabular-nums text-xs text-secondary">{formatted}</span>;
 };
 
+/** 状态是已完成 / 已取消（按字典值标签判断）→ 已关闭，行操作显示「重新开启」 */
+export const isProjectClosed = (project: TProject, ctx: TProjectTableContext) => {
+  const status = ctx.lookups.resolveItem("status", project.status, project.status_detail);
+  return PROJECT_CLOSED_STATUS_LABELS.includes(status?.item.label ?? "");
+};
+
 /** 完成日期早于今天、项目未归档、状态也不是已完成 / 已取消 → 逾期 */
 export const isProjectOverdue = (project: TProject, ctx: TProjectTableContext) => {
   if (!project.end_date || project.archived_at) return false;
   if (project.end_date.slice(0, 10) >= ctx.today) return false;
-  const status = ctx.lookups.resolveItem("status", project.status, project.status_detail);
-  return !PROJECT_CLOSED_STATUS_LABELS.includes(status?.item.label ?? "");
+  return !isProjectClosed(project, ctx);
 };
 
 const EndDateCell = ({ project, ctx }: { project: TProject; ctx: TProjectTableContext }) => {
@@ -164,6 +171,8 @@ export const renderProjectCell = (
       return <DateCell value={project.start_date} />;
     case "end_date":
       return <EndDateCell project={project} ctx={ctx} />;
+    case "actual_end_date":
+      return <DateCell value={project.actual_end_date} />;
     case "duration":
       return <DurationCell project={project} ctx={ctx} />;
     case "created_at":

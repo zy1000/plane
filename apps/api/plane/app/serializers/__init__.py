@@ -40,6 +40,7 @@ from .workspace import (
 from .project import (
     ProjectSerializer,
     ProjectListSerializer,
+    ProjectCloseSerializer,
     ProjectDetailSerializer,
     ProjectMemberSerializer,
     ProjectMemberInviteSerializer,

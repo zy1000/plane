@@ -11,6 +11,7 @@ import {
   EUserPermissionsLevel,
   PROJECT_PUBLISH_CREATE_PERMISSION_KEY,
   PROJECT_PUBLISH_VIEW_PERMISSION_KEY,
+  PROJECT_SETTINGS_EDIT_PERMISSION_KEY,
   PROJECT_TRACKER_ELEMENTS,
   WORKSPACE_PROJECT_CREATE_PERMISSION_KEY,
 } from "@plane/constants";
@@ -32,6 +33,7 @@ import { useProjectFilter } from "@/hooks/store/use-project-filter";
 import { useUserPermissions } from "@/hooks/store/user";
 import { PublishProjectModal } from "@/components/project/publish-project/modal";
 import { ArchiveRestoreProjectModal } from "@/components/project/archive-restore-modal";
+import { CloseProjectModal, ReopenProjectModal } from "@/components/project/close-project-modal";
 import { buildProjectSettingsPath, getPathWithSearch } from "@/components/settings/project/navigation";
 import { parseOrderBy, toOrderBy } from "./display/display-dropdown";
 import { projectConditionsNeedDetails } from "./filters/match-project";
@@ -43,6 +45,7 @@ import {
   NAME_COLUMN_MIN_WIDTH,
   PROJECT_COLUMN_WIDTH,
   getVisibleProjectColumns,
+  isProjectClosed,
   renderProjectCell,
 } from "./table/columns";
 import { ProjectRowActions } from "./table/row-actions";
@@ -108,6 +111,8 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
   const [publishProjectId, setPublishProjectId] = useState<string | null>(null);
   const [archiveProjectId, setArchiveProjectId] = useState<string | null>(null);
   const [restoreProjectId, setRestoreProjectId] = useState<string | null>(null);
+  const [closeProjectId, setCloseProjectId] = useState<string | null>(null);
+  const [reopenProjectId, setReopenProjectId] = useState<string | null>(null);
 
   const { key: sortKey, direction: sortDirection } = parseOrderBy(currentWorkspaceDisplayFilters?.order_by);
 
@@ -196,6 +201,8 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
   const handleOpenPublishModal = useMemo(() => openModal(setPublishProjectId), [openModal]);
   const handleOpenArchiveModal = useMemo(() => openModal(setArchiveProjectId), [openModal]);
   const handleOpenRestoreModal = useMemo(() => openModal(setRestoreProjectId), [openModal]);
+  const handleOpenCloseModal = useMemo(() => openModal(setCloseProjectId), [openModal]);
+  const handleOpenReopenModal = useMemo(() => openModal(setReopenProjectId), [openModal]);
 
   const handleSort = useCallback(
     (key: TSortKey) => {
@@ -294,6 +301,23 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
           archive={false}
         />
       )}
+      {closeProjectId && workspaceSlugString && (
+        <CloseProjectModal
+          isOpen={!!closeProjectId}
+          projectId={closeProjectId}
+          workspaceSlug={workspaceSlugString}
+          lookups={lookups}
+          onClose={() => setCloseProjectId(null)}
+        />
+      )}
+      {reopenProjectId && workspaceSlugString && (
+        <ReopenProjectModal
+          isOpen={!!reopenProjectId}
+          projectId={reopenProjectId}
+          workspaceSlug={workspaceSlugString}
+          onClose={() => setReopenProjectId(null)}
+        />
+      )}
       <ContentWrapper variant={ERowVariant.HUGGING} className="overflow-hidden">
         <div className="m-0 flex h-full w-full flex-col overflow-hidden rounded border border-subtle bg-surface-1">
           <div className="min-h-0 flex-1 overflow-auto vertical-scrollbar horizontal-scrollbar scrollbar-lg">
@@ -339,6 +363,12 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
                     (project.permission_keys ?? []).some(
                       (k) => k === PROJECT_PUBLISH_VIEW_PERMISSION_KEY || k === PROJECT_PUBLISH_CREATE_PERMISSION_KEY
                     );
+                  // 关闭 / 重新开启与后端同一把 key（项目设置编辑）；列表页只有进过的项目才拉了权限 key，
+                  // 所以项目管理员也直接放行（管理员必有这把 key）
+                  const canCloseProject =
+                    canManageProject ||
+                    allowProjectPermissionKeys([PROJECT_SETTINGS_EDIT_PERMISSION_KEY], workspaceSlugString, project.id) ||
+                    (project.permission_keys ?? []).includes(PROJECT_SETTINGS_EDIT_PERMISSION_KEY);
                   const projectSettingsPath = workspaceSlugString
                     ? buildProjectSettingsPath({ workspaceSlug: workspaceSlugString, projectId: project.id, currentPath })
                     : "#";
@@ -398,12 +428,16 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
                       <td className="px-4 py-3">
                         <ProjectRowActions
                           project={project}
+                          isClosed={isProjectClosed(project, cellContext)}
                           canManageProject={canManageProject}
+                          canCloseProject={canCloseProject}
                           canPublishProject={canPublishProject}
                           settingsPath={projectSettingsPath}
                           onCopyLink={handleCopyProjectLink}
                           onToggleFavorite={handleToggleProjectFavorite}
                           onPublish={handleOpenPublishModal}
+                          onCloseProject={handleOpenCloseModal}
+                          onReopenProject={handleOpenReopenModal}
                           onArchive={handleOpenArchiveModal}
                           onRestore={handleOpenRestoreModal}
                         />

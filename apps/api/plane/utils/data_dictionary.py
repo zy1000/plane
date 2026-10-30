@@ -147,6 +147,11 @@ PROJECT_DICTIONARY_FIELD_KEYS = {
     "business_category": "project_business_category",
 }
 
+# 项目状态里的两个终态：列表「关闭项目」只能关成这两个之一；「重新开启」改回 PROJECT_REOPEN_STATUS_LABEL。
+# 与前端 @plane/constants 的 PROJECT_CLOSED_STATUS_LABELS 同一份，改了要两边一起改。
+PROJECT_CLOSED_STATUS_LABELS = ("已完成", "已取消")
+PROJECT_REOPEN_STATUS_LABEL = "活跃中"
+
 # Project.code 不是 FK：存的是 project_code 字典里某个值的 label，所以不进上面的映射（引用检查按 label 另查）。
 PROJECT_CODE_DICTIONARY_KEY = "project_code"
 

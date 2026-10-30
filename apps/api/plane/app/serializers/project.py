@@ -823,3 +823,11 @@ class ImportProjectRoleSerializer(serializers.Serializer):
     """从工作区项目角色模板导入；固定为独立副本（与模板解绑，不设置 source_template）。"""
 
     workspace_role_id = serializers.UUIDField(required=True)
+
+
+class ProjectCloseSerializer(serializers.Serializer):
+    """列表「关闭项目」的入参：关成哪个终态、实际完成日期、备注。状态值是否属于本工作区 / 是否终态在 view 里查。"""
+
+    status = serializers.UUIDField()
+    actual_end_date = serializers.DateField()
+    close_note = serializers.CharField(required=False, allow_blank=True, default="", trim_whitespace=True)

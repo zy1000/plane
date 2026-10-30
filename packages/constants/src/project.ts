@@ -120,6 +120,7 @@ export const PROJECT_DISPLAY_PROPERTIES: {
   { key: "product_manager", i18n_label: "workspace_projects.fields.product_manager" },
   { key: "start_date", i18n_label: "workspace_projects.fields.start_date", orderByKey: "start_date" },
   { key: "end_date", i18n_label: "workspace_projects.fields.end_date", orderByKey: "end_date" },
+  { key: "actual_end_date", i18n_label: "workspace_projects.close.actual_end_date_short" },
   { key: "duration", i18n_label: "workspace_projects.fields.duration" },
   { key: "created_at", i18n_label: "workspace_projects.fields.created_at", orderByKey: "created_at" },
   { key: "members_count", i18n_label: "workspace_projects.fields.members_count", orderByKey: "members_length" },
@@ -136,6 +137,7 @@ export const DEFAULT_PROJECT_DISPLAY_PROPERTIES: TProjectDisplayProperties = {
   product_manager: false,
   start_date: true,
   end_date: true,
+  actual_end_date: false,
   duration: false,
   created_at: false,
   members_count: false,
@@ -386,3 +388,5 @@ export const PROJECT_ARCHIVES_VIEW_PERMISSION_KEYS = [
 /** 项目公开发布权限常量，与后端 PermissionKey.PROJECT_PUBLISH_* 一致 */
 export const PROJECT_PUBLISH_VIEW_PERMISSION_KEY = "project.publish.view" as const;
 export const PROJECT_PUBLISH_CREATE_PERMISSION_KEY = "project.publish.create" as const;
+/** 关闭 / 重新开启项目与后端 ProjectCloseReopenEndpoint 同一把 key（改状态属于项目设置） */
+export const PROJECT_SETTINGS_EDIT_PERMISSION_KEY = "project.settings.edit" as const;

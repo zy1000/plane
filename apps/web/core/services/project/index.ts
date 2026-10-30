@@ -11,6 +11,7 @@ export * from "./project-group.service";
 export * from "./project-state.service";
 export * from "./project-publish.service";
 export * from "./project-archive.service";
+export * from "./project-close.service";
 export * from "./project-issue-type.service";
 export * from "./project-announcement.service";
 export * from "./project-statistic.service";

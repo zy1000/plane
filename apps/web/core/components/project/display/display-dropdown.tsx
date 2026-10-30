@@ -31,19 +31,16 @@ export const parseOrderBy = (orderBy: TProjectOrderByOptions | undefined) => {
 type Props = {
   displayFilters: TProjectDisplayFilters;
   displayProperties: TProjectDisplayProperties;
-  /** 归档页没有「我的项目 / 显示已归档」这两档 */
-  hideScopeToggles?: boolean;
   onDisplayFiltersChange: (patch: TProjectDisplayFilters) => void;
   onDisplayPropertiesChange: (patch: Partial<TProjectDisplayProperties>) => void;
 };
 
 /**
- * 项目列表页头的「显示」，照工作项的面板：显示属性 / 排序方式 / 范围开关。
- * 原来页头单独的排序下拉与筛选面板里的「我的项目 / 显示已归档」都并到这里。
+ * 项目列表页头的「显示」，照工作项的面板：显示属性 / 排序方式。
+ * 「我参与的 / 已归档」的范围开关挪到了页头下方的快捷筛选条（quick-filters/）。
  */
 export const ProjectDisplayDropdown = observer(function ProjectDisplayDropdown(props: Props) {
-  const { displayFilters, displayProperties, hideScopeToggles, onDisplayFiltersChange, onDisplayPropertiesChange } =
-    props;
+  const { displayFilters, displayProperties, onDisplayFiltersChange, onDisplayPropertiesChange } = props;
   const { t } = useTranslation();
   const [isPropertiesOpen, setIsPropertiesOpen] = useState(true);
   const [isOrderOpen, setIsOrderOpen] = useState(true);
@@ -103,21 +100,6 @@ export const ProjectDisplayDropdown = observer(function ProjectDisplayDropdown(p
               />
             ))}
         </div>
-
-        {!hideScopeToggles && (
-          <div className="py-2">
-            <FilterOption
-              isChecked={!!displayFilters.my_projects}
-              title={t(`${I18N}.scope.my_projects`)}
-              onClick={() => onDisplayFiltersChange({ my_projects: !displayFilters.my_projects })}
-            />
-            <FilterOption
-              isChecked={!!displayFilters.show_archived_projects}
-              title={t(`${I18N}.scope.show_archived_projects`)}
-              onClick={() => onDisplayFiltersChange({ show_archived_projects: !displayFilters.show_archived_projects })}
-            />
-          </div>
-        )}
       </div>
     </FiltersDropdown>
   );

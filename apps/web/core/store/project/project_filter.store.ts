@@ -35,13 +35,15 @@ const getFilterStorageKey = (workspaceSlug: string) => `projects-filter:v1:${wor
 /** 落本地的那部分显示设置；`archived_projects` 由路由决定，不存 */
 type TStoredDisplayFilters = Pick<
   TProjectDisplayFilters,
-  "order_by" | "display_properties" | "my_projects" | "show_archived_projects"
+  "order_by" | "display_properties" | "my_projects" | "show_archived_projects" | "quick_scope"
 >;
 
 export interface IProjectFilterStore {
   // observables
   displayFilters: Record<string, TProjectDisplayFilters>;
   richFilters: Map<string, TProjectRichFilter>;
+  /** 工作区 → 项目状态字典里终态（已完成 / 已取消）的值 id；快捷页签「未完成 / 已逾期」靠它判断 */
+  closedStatusIds: Record<string, string[]>;
   searchQuery: string;
   viewMode: TProjectViewMode;
   // computed
@@ -54,6 +56,7 @@ export interface IProjectFilterStore {
   getOrCreateRichFilter: (workspaceSlug: string) => TProjectRichFilter;
   updateDisplayFilters: (workspaceSlug: string, displayFilters: TProjectDisplayFilters) => void;
   updateDisplayProperties: (workspaceSlug: string, properties: Partial<TProjectDisplayProperties>) => void;
+  setClosedStatusIds: (workspaceSlug: string, statusIds: string[]) => void;
   updateSearchQuery: (query: string) => void;
   updateViewMode: (mode: TProjectViewMode) => void;
 }
@@ -62,6 +65,7 @@ export class ProjectFilterStore implements IProjectFilterStore {
   // observables
   displayFilters: Record<string, TProjectDisplayFilters> = {};
   richFilters: Map<string, TProjectRichFilter> = new Map();
+  closedStatusIds: Record<string, string[]> = {};
   searchQuery: string = "";
   viewMode: TProjectViewMode = "list";
   // root store
@@ -72,6 +76,7 @@ export class ProjectFilterStore implements IProjectFilterStore {
       // observables
       displayFilters: observable,
       richFilters: observable,
+      closedStatusIds: observable,
       searchQuery: observable.ref,
       viewMode: observable.ref,
       // computed
@@ -81,6 +86,7 @@ export class ProjectFilterStore implements IProjectFilterStore {
       getOrCreateRichFilter: action,
       updateDisplayFilters: action,
       updateDisplayProperties: action,
+      setClosedStatusIds: action,
       updateSearchQuery: action,
       updateViewMode: action,
     });
@@ -150,6 +156,7 @@ export class ProjectFilterStore implements IProjectFilterStore {
         ...stored,
         ...displayFilters,
         order_by: displayFilters?.order_by || stored.order_by || "-created_at",
+        quick_scope: displayFilters?.quick_scope ?? stored.quick_scope ?? "all",
       };
     });
   };
@@ -195,6 +202,15 @@ export class ProjectFilterStore implements IProjectFilterStore {
   };
 
   /**
+   * @description 列表页从字典推出终态值 id 后登记进来；内容没变就不动，免得触发整表重算
+   */
+  setClosedStatusIds = (workspaceSlug: string, statusIds: string[]) => {
+    const current = this.closedStatusIds[workspaceSlug];
+    if (current && current.length === statusIds.length && current.every((id, index) => id === statusIds[index])) return;
+    set(this.closedStatusIds, [workspaceSlug], statusIds);
+  };
+
+  /**
    * @description update search query
    * @param {string} query
    */
@@ -210,6 +226,7 @@ export class ProjectFilterStore implements IProjectFilterStore {
       display_properties: current.display_properties,
       my_projects: current.my_projects,
       show_archived_projects: current.show_archived_projects,
+      quick_scope: current.quick_scope,
     };
     setValueIntoLocalStorage(getDisplayStorageKey(workspaceSlug), stored);
   };

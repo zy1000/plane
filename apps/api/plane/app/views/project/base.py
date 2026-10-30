@@ -42,12 +42,15 @@ from plane.app.serializers import (
     DeployBoardSerializer,
     ProjectListSerializer,
     ProjectSerializer,
+    ProjectCloseSerializer,
     IssueActivitySerializer,
 )
+from plane.app.serializers.data_dictionary import DataDictionaryItemLiteSerializer
 from plane.app.views.base import BaseAPIView, BaseViewSet
 from plane.bgtasks.recent_visited_task import recent_visited_task
 from plane.bgtasks.webhook_task import model_activity, webhook_activity
 from plane.db.models import (
+    DataDictionaryItem,
     DevModeIssueType,
     UserFavorite,
     DeployBoard,
@@ -84,6 +87,11 @@ from plane.db.models.issue_type import (
     ISSUE_TYPE_PERMISSION_ACTIONS,
     build_issue_type_permission_key,
 )
+from plane.utils.data_dictionary import (
+    PROJECT_CLOSED_STATUS_LABELS,
+    PROJECT_DICTIONARY_FIELD_KEYS,
+    PROJECT_REOPEN_STATUS_LABEL,
+)
 from plane.utils.host import base_host
 from plane.utils.issue_scheme import mode_linked_type_ids
 from plane.utils.paginator import CustomPaginator
@@ -100,6 +108,8 @@ PROJECT_LIST_PERMISSION_KEYS = frozenset(
     {
         PermissionKey.PROJECT_PUBLISH_VIEW.value,
         PermissionKey.PROJECT_PUBLISH_CREATE.value,
+        # 列表行操作「关闭 / 重新开启」与 ProjectCloseReopenEndpoint 同一把 key
+        PermissionKey.PROJECT_SETTINGS_EDIT.value,
     }
 )
 
@@ -565,6 +575,7 @@ class ProjectViewSet(BaseViewSet):
             "product_manager",
             "start_date",
             "end_date",
+            "actual_end_date",
             # 风险新建弹窗靠它判断是不是简道云同步来的项目（编号由简道云生成）
             "external_source",
             "created_at",
@@ -827,6 +838,83 @@ class ProjectArchiveUnarchiveEndpoint(BaseAPIView):
         project.archived_at = None
         project.save()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class ProjectCloseReopenEndpoint(BaseAPIView):
+    """
+    列表行操作「关闭 / 重新开启」项目。关闭 = 状态改成「已完成 / 已取消」之一 + 记实际完成日期 + 备注；
+    重新开启 = 状态改回「活跃中」、清空实际完成日期与备注。都不碰 archived_at —— 归档是另一回事。
+    响应只回这几个被改的字段（含 status_detail），前端合并进 projectMap 就够了。
+    """
+
+    def _status_items(self, slug):
+        return DataDictionaryItem.objects.filter(
+            workspace__slug=slug,
+            dictionary__key=PROJECT_DICTIONARY_FIELD_KEYS["status"],
+        ).select_related("dictionary")
+
+    @staticmethod
+    def _payload(project):
+        return {
+            "id": str(project.id),
+            "status": str(project.status_id) if project.status_id else None,
+            "status_detail": DataDictionaryItemLiteSerializer(project.status).data if project.status_id else None,
+            "actual_end_date": project.actual_end_date,
+            "close_note": project.close_note,
+        }
+
+    def _apply(self, request, slug, project, status_item, actual_end_date, close_note):
+        current_instance = json.dumps(ProjectSerializer(project).data, cls=DjangoJSONEncoder)
+        project.status = status_item
+        project.actual_end_date = actual_end_date
+        project.close_note = close_note
+        project.save()
+        # 与 partial_update 同一路：webhook 用的 model_activity，不落活动表
+        model_activity.delay(
+            model_name="project",
+            model_id=str(project.id),
+            requested_data={
+                "status": str(status_item.id) if status_item else None,
+                "actual_end_date": str(actual_end_date) if actual_end_date else None,
+                "close_note": close_note,
+            },
+            current_instance=current_instance,
+            actor_id=request.user.id,
+            slug=slug,
+            origin=base_host(request=request, is_app=True),
+        )
+        return Response(self._payload(project), status=status.HTTP_200_OK)
+
+    @allow_fine_permission(PermissionKey.PROJECT_SETTINGS_EDIT)
+    def post(self, request, slug, project_id):
+        project = Project.objects.select_related("status__dictionary").get(pk=project_id, workspace__slug=slug)
+        if project.archived_at:
+            return Response({"error": "Archived projects cannot be closed"}, status=status.HTTP_400_BAD_REQUEST)
+        serializer = ProjectCloseSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        data = serializer.validated_data
+        status_item = (
+            self._status_items(slug).filter(pk=data["status"], label__in=PROJECT_CLOSED_STATUS_LABELS).first()
+        )
+        if status_item is None:
+            return Response(
+                {"error": "status must be one of the closed project statuses", "error_code": "PROJECT_DICTIONARY_ITEM_INVALID"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return self._apply(request, slug, project, status_item, data["actual_end_date"], data["close_note"])
+
+    @allow_fine_permission(PermissionKey.PROJECT_SETTINGS_EDIT)
+    def delete(self, request, slug, project_id):
+        project = Project.objects.select_related("status__dictionary").get(pk=project_id, workspace__slug=slug)
+        if project.archived_at:
+            return Response({"error": "Archived projects cannot be reopened"}, status=status.HTTP_400_BAD_REQUEST)
+        items = self._status_items(slug)
+        reopen_item = items.filter(label=PROJECT_REOPEN_STATUS_LABEL).first()
+        if reopen_item is None:
+            # 字典里「活跃中」被改名 / 删掉时退回第一个非终态的值
+            reopen_item = items.exclude(label__in=PROJECT_CLOSED_STATUS_LABELS).order_by("sort_order").first()
+        return self._apply(request, slug, project, reopen_item, None, "")
 
 
 class ProjectIdentifierEndpoint(BaseAPIView):
