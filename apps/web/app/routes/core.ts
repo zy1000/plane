@@ -463,6 +463,14 @@ export const coreRoutes: RouteConfigEntry[] = [
             ),
           ]),
 
+          // Project plan（规划）：阶段 › 迭代 › 工作项时间轴
+          layout("./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/plan/layout.tsx", [
+            route(
+              ":workspaceSlug/projects/:projectId/plan",
+              "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/plan/page.tsx"
+            ),
+          ]),
+
           route(
             ":workspaceSlug/projects/:projectId/filestore",
             "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/filestore/page.tsx"

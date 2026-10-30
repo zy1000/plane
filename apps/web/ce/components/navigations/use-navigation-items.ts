@@ -40,7 +40,18 @@ import {
 import type { EUserProjectRoles, IPartialProject } from "@plane/types";
 import { isProjectFeatureEnabled } from "@plane/utils";
 import type { TNavigationItem } from "@/components/navigation/tab-navigation-root";
-import { ArchiveIcon, Bug, ClipboardList, Folder, Layers, Package, Rocket, Rss, ShieldAlert } from "lucide-react";
+import {
+  ArchiveIcon,
+  Bug,
+  ChartGantt,
+  ClipboardList,
+  Folder,
+  Layers,
+  Package,
+  Rocket,
+  Rss,
+  ShieldAlert,
+} from "lucide-react";
 
 type UseNavigationItemsProps = {
   workspaceSlug: string;
@@ -198,6 +209,18 @@ export const useNavigationItems = ({
         permissionKeys: [PROJECT_STAGE_VIEW_PERMISSION_KEY],
         shouldRender: true,
         sortOrder: 4,
+      },
+      {
+        // 规划：阶段 › 迭代 › 工作项一张时间轴，数据权限跟阶段走（后端 stages/plan/）
+        i18n_key: "sidebar.plan",
+        key: "plan",
+        name: "规划",
+        href: `/${workspaceSlug}/projects/${projectId}/plan`,
+        icon: ChartGantt,
+        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
+        permissionKeys: [PROJECT_STAGE_VIEW_PERMISSION_KEY],
+        shouldRender: true,
+        sortOrder: 4.5,
       },
       {
         i18n_key: "test_management",

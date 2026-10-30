@@ -48,7 +48,7 @@ import { useAppTheme } from "@/hooks/store/use-app-theme";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useProject } from "@/hooks/store/use-project";
 import { useUserPermissions } from "@/hooks/store/user";
-import { Rss, Layers, Folder, Package, Rocket } from "lucide-react";
+import { Rss, Layers, Folder, Package, Rocket, ChartGantt } from "lucide-react";
 
 export type TNavigationItem = {
   name: string;
@@ -264,6 +264,17 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
         permissionKeys: [PROJECT_STAGE_VIEW_PERMISSION_KEY],
         shouldRender: true,
         sortOrder: 8,
+      },
+      {
+        i18n_key: "sidebar.plan",
+        key: "plan",
+        name: "规划",
+        href: `/${workspaceSlug}/projects/${projectId}/plan`,
+        icon: ChartGantt,
+        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
+        permissionKeys: [PROJECT_STAGE_VIEW_PERMISSION_KEY],
+        shouldRender: true,
+        sortOrder: 8.5,
       },
       {
         i18n_key: "sidebar.filestore",

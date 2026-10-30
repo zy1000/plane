@@ -3,11 +3,41 @@ import type {
   TBulkUpdateProjectStageResponse,
   TCreateProjectStagePayload,
   TProjectStage,
+  TStateGroups,
   TSyncProjectStagesResponse,
   TUpdateProjectStagePayload,
 } from "@plane/types";
 import { API_BASE_URL } from "@plane/constants";
 import { APIService } from "@/services/api.service";
+
+/** 规划视图里的迭代：起止、测试移交日期已按项目时区折成 YYYY-MM-DD（移交日期后端要求落在起止之间） */
+export type TProjectStagePlanCycle = {
+  id: string;
+  name: string;
+  start_date: string | null;
+  end_date: string | null;
+  test_handoff_date: string | null;
+  stage_id: string | null;
+  owned_by_id: string | null;
+};
+
+/** 规划视图里的工作项：`cycle_id` 只认未归档的迭代；`assignee_ids` 按指定先后 */
+export type TProjectStagePlanIssue = {
+  id: string;
+  name: string;
+  sequence_id: number;
+  stage_id: string | null;
+  cycle_id: string | null;
+  start_date: string | null;
+  target_date: string | null;
+  state_group: TStateGroups;
+  assignee_ids: string[];
+};
+
+export type TProjectStagePlanData = {
+  cycles: TProjectStagePlanCycle[];
+  issues: TProjectStagePlanIssue[];
+};
 
 /**
  * 项目阶段：项目级资源，后端 project.stage.* 鉴权。列表整棵一次返回（扁平，前端按 parent_id 建树）。
@@ -78,6 +108,15 @@ export class ProjectStageService extends APIService {
     stageIds: string[]
   ): Promise<TSyncProjectStagesResponse> {
     return this.post(`${this.base(workspaceSlug, projectId)}/sync-from-dev-mode/`, { stage_ids: stageIds })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 规划视图（阶段 › 迭代 › 工作项）要的迭代和工作项；阶段本身走 list */
+  async getPlan(workspaceSlug: string, projectId: string): Promise<TProjectStagePlanData> {
+    return this.get(`${this.base(workspaceSlug, projectId)}/plan/`)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;

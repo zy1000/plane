@@ -35,6 +35,7 @@ from plane.utils.project_stage import (
     sync_from_dev_mode,
     update_stage,
 )
+from plane.utils.project_stage_plan import build_plan_data
 
 # 列表 / 详情对项目成员开放（不要求 project.stage.view）：迭代 / 工作项的阶段下拉、筛选、分组都要读阶段名，
 # 阶段名不敏感；阶段页本身仍按 project.stage.view 显示入口。
@@ -157,6 +158,18 @@ class ProjectStageViewSet(BaseViewSet):
     @allow_permission(PROJECT_STAGE_READ_ROLES)
     def retrieve(self, request, slug, project_id, pk):
         return self._detail_response(pk)
+
+    @allow_permission(PROJECT_STAGE_READ_ROLES)
+    def plan(self, request, slug, project_id):
+        """规划视图要的迭代 + 工作项（阶段走列表接口）。只读，权限同列表。"""
+        project = (
+            Project.objects.filter(pk=project_id, workspace__slug=slug, archived_at__isnull=True)
+            .only("id", "workspace_id", "timezone", "guest_view_all_features")
+            .first()
+        )
+        if project is None:
+            return Response({"error": "Project not found."}, status=status.HTTP_404_NOT_FOUND)
+        return Response(build_plan_data(project, request.user), status=status.HTTP_200_OK)
 
     @allow_fine_permission(PROJECT_STAGE_MANAGE_KEY)
     def create(self, request, slug, project_id):
