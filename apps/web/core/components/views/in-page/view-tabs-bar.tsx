@@ -409,7 +409,7 @@ export const ViewTabsBar = (props: TViewTabsBarProps) => {
         </div>
       )}
 
-      {trailing && <div className="flex shrink-0 items-center">{trailing}</div>}
+      {trailing && <div className="flex shrink-0 items-center gap-2">{trailing}</div>}
     </div>
   );
 };
