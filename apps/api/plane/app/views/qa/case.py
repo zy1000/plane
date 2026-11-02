@@ -41,6 +41,12 @@ from plane.bgtasks.copy_case_assets_task import copy_case_assets
 from plane.bgtasks.test_case_activities_task import test_case_activity
 from plane.utils.exception_logger import log_exception
 from plane.utils.paginator import CustomPaginator
+from plane.utils.product_category import (
+    CaseModuleRootLocked,
+    case_locked_root_names,
+    case_root_lock_message,
+    case_root_missing_message,
+)
 from plane.utils.qa import project_case_repository_ids
 from plane.utils.response import list_response
 
@@ -64,13 +70,26 @@ def sync_case_labels_by_name(source_case, new_case, target_repository_id):
     new_case.labels.set(labels)
 
 
-def get_or_create_case_module(repository_id, name, parent):
+def get_or_create_case_module(repository_id, name, parent, repository=None):
     lookup = {
         "repository_id": repository_id,
         "name": name,
         "parent": parent,
         "deleted_at__isnull": True,
     }
+    if parent is None:
+        # 绑定产品模板的模板库：第一层只能命中已有的受控模块，不能新建（导入 / 复制共用这道关）
+        if repository is None:
+            repository = (
+                TestCaseRepository.objects.select_related("product_category")
+                .filter(pk=repository_id)
+                .first()
+            )
+        if repository is not None and repository.product_category_id:
+            module = CaseModule.objects.filter(**lookup, category_module__isnull=False).first()
+            if module is None:
+                raise CaseModuleRootLocked(case_root_missing_message(repository, name))
+            return module
     try:
         module, _ = CaseModule.objects.get_or_create(**lookup)
         return module
@@ -1537,7 +1556,11 @@ class CaseAPI(BaseViewSet):
         repository_id = request.data.get('repository_id')
         if not repository_id:
             return Response({'error': 'repository_id is required'}, status=status.HTTP_400_BAD_REQUEST)
-        get_object_or_404(TestCaseRepository, id=repository_id, workspace__slug=slug, deleted_at__isnull=True)
+        repository = get_object_or_404(
+            TestCaseRepository.objects.select_related('product_category'),
+            id=repository_id, workspace__slug=slug, deleted_at__isnull=True,
+        )
+        locked_names = case_locked_root_names(repository)
 
         files: list[InMemoryUploadedFile] = request.FILES.getlist('file')
         if not files:
@@ -1574,6 +1597,11 @@ class CaseAPI(BaseViewSet):
         request_user_id = getattr(request.user, 'id', None)
         for data in case_data:
             try:
+                # 绑定产品模板的库：第一层须是产品模板的一级模块。在写用例之前判，免得「已入库却报失败」
+                if locked_names is not None and data.get('module'):
+                    first_name = str(data['module']).strip().strip("/").split("/")[0].strip()
+                    if first_name and first_name not in locked_names:
+                        raise ValueError(case_root_missing_message(repository, first_name, column='模块'))
                 code_key = data.get('code') or ''
                 defaults = dict(
                     name=data['name'],
@@ -1616,7 +1644,7 @@ class CaseAPI(BaseViewSet):
 
                         parent = None
                         for name in module_names:
-                            module = get_or_create_case_module(repository_id, name, parent)
+                            module = get_or_create_case_module(repository_id, name, parent, repository=repository)
                             parent = module
                         instance.module = parent
                 # 创建标签
@@ -1650,7 +1678,11 @@ class CaseAPI(BaseViewSet):
         repository_id = request.data.get('repository_id')
         if not repository_id:
             return Response({'error': 'repository_id is required'}, status=status.HTTP_400_BAD_REQUEST)
-        get_object_or_404(TestCaseRepository, id=repository_id, workspace__slug=slug, deleted_at__isnull=True)
+        repository = get_object_or_404(
+            TestCaseRepository.objects.select_related('product_category'),
+            id=repository_id, workspace__slug=slug, deleted_at__isnull=True,
+        )
+        locked_names = case_locked_root_names(repository)
 
         files: list[InMemoryUploadedFile] = request.FILES.getlist('file')
         if not files:
@@ -1701,6 +1733,8 @@ class CaseAPI(BaseViewSet):
                             errors.append('模块路径格式错误')
                         elif module_max_length and any(len(name) > module_max_length for name in module_names):
                             errors.append(f'模块名称长度不能超过{module_max_length}')
+                        elif locked_names is not None and module_names[0] not in locked_names:
+                            errors.append(case_root_missing_message(repository, module_names[0], column='模块'))
 
                 steps = data.get('steps')
                 if steps not in (None, ''):
@@ -1917,6 +1951,9 @@ class CaseModuleView(BaseViewSet):
             target_repository = get_object_or_404(
                 TestCaseRepository, id=target_repository_id, workspace__slug=slug
             )
+            # 绑定产品模板的库：第一层由产品模板统一维护，不能复制成新的一级模块
+            if target_repository.product_category_id:
+                raise CaseModuleRootLocked(case_root_lock_message(target_repository))
 
         # 检查目标库同级下是否已存在同名模板
         if CaseModule.objects.filter(

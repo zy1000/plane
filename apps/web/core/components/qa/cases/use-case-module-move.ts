@@ -2,6 +2,7 @@
 
 import { useCallback } from "react";
 import { useTranslation } from "@plane/i18n";
+import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { CaseModuleService } from "@/services/qa";
 import { qaCaseSetToastError } from "@/utils/qa-case-error";
 import { MODULE_TREE_ROOT_KEY, type TModuleTreeDropEvent } from "@/components/qa/module-tree";
@@ -21,6 +22,8 @@ type Params = {
   /** 完整模块树（未经搜索过滤），用于找父级 / 子孙 */
   modules: any[];
   canEdit: boolean;
+  /** 第一层由产品模板维护时传说明文案：落点为根级（拖进「全部用例」、排到一级前后、「移动到」选根）一律拦下，不发请求 */
+  lockedRootMessage?: string;
   /** 移动成功后回调，newParentId 为 null 表示移到根级 */
   onMoved: (newParentId: string | null) => void | Promise<void>;
 };
@@ -29,12 +32,16 @@ type Params = {
  * 用例模块树的库内移动：把 ModuleTree 的拖拽落点换算成后端 move 接口的参数，
  * 同时暴露 moveModule 供「移动到」弹窗使用。排序由后端按锚点重排同级序号。
  */
-export const useCaseModuleMove = ({ workspaceSlug, modules, canEdit, onMoved }: Params) => {
+export const useCaseModuleMove = ({ workspaceSlug, modules, canEdit, lockedRootMessage, onMoved }: Params) => {
   const { t } = useTranslation();
 
   const submitMove = useCallback(
     async (payload: TMovePayload) => {
       if (!workspaceSlug) return false;
+      if (lockedRootMessage && payload.target_parent_id === null) {
+        setToast({ type: TOAST_TYPE.ERROR, title: t("error"), message: lockedRootMessage });
+        return false;
+      }
       try {
         await caseModuleService.moveModule(workspaceSlug, payload);
         await onMoved(payload.target_parent_id);
@@ -44,7 +51,7 @@ export const useCaseModuleMove = ({ workspaceSlug, modules, canEdit, onMoved }: 
         return false;
       }
     },
-    [workspaceSlug, onMoved, t]
+    [workspaceSlug, lockedRootMessage, onMoved, t]
   );
 
   /** 移到目标模块下（null = 根级），追加到末尾 */

@@ -1,4 +1,4 @@
-import type { TProductCategoryModuleSkipReason } from "@plane/types";
+import type { TProductCategoryLibraryKind, TProductCategoryModuleSkipReason } from "@plane/types";
 import { PRODUCT_CATEGORY_MODULE_NAME_MAX_LENGTH } from "@plane/types";
 
 type TTranslate = (key: string, params?: Record<string, unknown>) => string;
@@ -11,6 +11,15 @@ export const getProductCategoryErrorMessage = (error: unknown, t: TTranslate) =>
   if (code === "PRODUCT_CATEGORY_MODULE_NAME_ALREADY_EXISTS") return t("product_categories.errors.module_name_exists");
   return code ?? payload?.detail ?? t("product_categories.errors.generic");
 };
+
+/** 在用库的详情页：标准需求库 / 模板用例库 */
+export const getProductCategoryLibraryPath = (
+  workspaceSlug: string,
+  library: { id: string; kind: TProductCategoryLibraryKind }
+) =>
+  library.kind === "case"
+    ? `/${workspaceSlug}/templates/test-cases/${library.id}`
+    : `/${workspaceSlug}/templates/libraries/${library.id}`;
 
 export const includesQuery = (value: string, query: string) =>
   value.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase());

@@ -21,6 +21,7 @@ import {
 } from "@/hooks/store/use-template-case-repositories";
 // local imports
 import { useTemplatePermissions } from "../permissions";
+import { ProductCategoryTag } from "../product-categories/product-category-tag";
 
 type Props = {
   workspaceSlug: string;
@@ -76,6 +77,14 @@ export const TemplateCaseRepositoryList = observer(function TemplateCaseReposito
           </Tooltip>
         </Link>
       ),
+    },
+    {
+      title: "产品模板",
+      key: "product_category",
+      dataIndex: "product_category_detail",
+      width: 180,
+      render: (_: unknown, record) =>
+        record.product_category_detail ? <ProductCategoryTag name={record.product_category_detail.name} /> : null,
     },
     {
       title: "描述",

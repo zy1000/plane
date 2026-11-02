@@ -1,5 +1,6 @@
 from enum import IntEnum
 
+from django.core.exceptions import ValidationError
 from django.core.validators import RegexValidator
 from django.db import IntegrityError
 from django.db import transaction
@@ -72,10 +73,33 @@ class TestCaseRepository(BaseModel):
     is_template = models.BooleanField(
         default=False, verbose_name="Is Template Repository"
     )
+    # 只有模板库可选；为空 = 第一层自由维护（存量全部为空，不回填）。选了之后第一层 =
+    # 产品模板的一级模块并实时跟随（CaseModule.category_module 指回来），见
+    # utils.product_category。创建后不可改。
+    product_category = models.ForeignKey(
+        "db.ProductCategory",
+        on_delete=models.RESTRICT,
+        null=True,
+        blank=True,
+        related_name="case_repositories",
+        verbose_name="产品模板",
+    )
 
     class Meta:
         db_table = "test_repository"
         ordering = ("-created_at",)
+
+    def clean(self):
+        super().clean()
+        if self.product_category_id:
+            if not self.is_template:
+                raise ValidationError(
+                    {"product_category": "只有模板用例库可以选择产品模板。"}
+                )
+            if self.workspace_id != self.product_category.workspace_id:
+                raise ValidationError(
+                    {"product_category": "只能选择当前工作区内的产品模板。"}
+                )
 
 
 class CaseLabel(BaseModel):
@@ -121,6 +145,15 @@ class CaseModule(BaseModel):
         verbose_name="TestCaseRepository",
         related_name="modules",
     )
+    # 模板库绑定产品模板时，第一层模块来自产品模板的一级模块（只有根模块会有值）。
+    category_module = models.ForeignKey(
+        "db.ProductCategoryModule",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="case_modules",
+        verbose_name="来源产品模板模块",
+    )
 
     @property
     def get_all_children(self) -> list:
@@ -153,6 +186,14 @@ class CaseModule(BaseModel):
                     deleted_at__isnull=True,
                 ),
                 name="unique_case_module_child_repo_name_parent_not_deleted",
+            ),
+            models.UniqueConstraint(
+                fields=["repository", "category_module"],
+                condition=Q(
+                    category_module__isnull=False,
+                    deleted_at__isnull=True,
+                ),
+                name="case_module_unique_repo_category_module",
             ),
         ]
         db_table = "test_modules"

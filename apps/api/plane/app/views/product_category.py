@@ -1,6 +1,9 @@
-"""产品分类：工作区级，标准库的配套资产，权限沿用 workspace.requirement_library.*。
+"""产品分类（界面叫「产品模板」）：工作区级，标准库与模板用例库共用的配套资产。
 
-分类与一级模块的每次写入都会同步到用该分类的标准库（规则在 utils.product_category）。
+权限（2026-11-02 起）：读 = 标准库或用例模板任一读权限；写 = 标准库或用例模板任一管理权限
+（allow_fine_permission 多个 key 是 OR 语义）。
+
+分类与一级模块的每次写入都会同步到用该分类的标准库与模板用例库（规则在 utils.product_category）。
 模块相关的写接口返回整个分类，前端直接替换，不用自己拼计数。
 """
 
@@ -14,6 +17,7 @@ from plane.app.serializers.product_category import (
     ProductCategoryWriteSerializer,
 )
 from plane.app.views.base import BaseAPIView
+from plane.app.views.qa.template_permissions import CASE_TEMPLATE_READ_KEYS
 from plane.app.views.requirement.library import LIBRARY_READ_KEYS
 from plane.db.models import ProductCategory, ProductCategoryModule, Workspace
 from plane.db.models.product_category import SORT_ORDER_STEP
@@ -27,11 +31,18 @@ from plane.utils.product_category import (
     delete_category,
     delete_category_module,
     libraries_using,
+    lock_category,
+    lock_category_module_roots,
     rename_category_module,
     reorder_category_modules,
 )
 
-MANAGE_KEY = PermissionKey.WORKSPACE_REQUIREMENT_LIBRARY_MANAGE
+# 必须用 * 展开传给 allow_fine_permission：直接传元组会被当成一个 key
+READ_KEYS = (*LIBRARY_READ_KEYS, *CASE_TEMPLATE_READ_KEYS)
+MANAGE_KEYS = (
+    PermissionKey.WORKSPACE_REQUIREMENT_LIBRARY_MANAGE,
+    PermissionKey.WORKSPACE_CASE_TEMPLATE_MANAGE,
+)
 
 
 def _not_found(message):
@@ -61,13 +72,13 @@ class _ProductCategoryMixin:
 
 
 class ProductCategoryEndpoint(_ProductCategoryMixin, BaseAPIView):
-    @allow_fine_permission(*LIBRARY_READ_KEYS, level="WORKSPACE")
+    @allow_fine_permission(*READ_KEYS, level="WORKSPACE")
     def get(self, request, slug):
         return Response(
             build_category_payloads(self.categories(slug)), status=status.HTTP_200_OK
         )
 
-    @allow_fine_permission(MANAGE_KEY, level="WORKSPACE")
+    @allow_fine_permission(*MANAGE_KEYS, level="WORKSPACE")
     def post(self, request, slug):
         workspace = Workspace.objects.filter(slug=slug).first()
         if workspace is None:
@@ -91,7 +102,7 @@ class ProductCategoryEndpoint(_ProductCategoryMixin, BaseAPIView):
 
 
 class ProductCategoryReorderEndpoint(_ProductCategoryMixin, BaseAPIView):
-    @allow_fine_permission(MANAGE_KEY, level="WORKSPACE")
+    @allow_fine_permission(*MANAGE_KEYS, level="WORKSPACE")
     def post(self, request, slug):
         ordered = _ordered(self.categories(slug), request.data.get("ids"))
         if ordered is None:
@@ -109,7 +120,7 @@ class ProductCategoryReorderEndpoint(_ProductCategoryMixin, BaseAPIView):
 
 
 class ProductCategoryDetailEndpoint(_ProductCategoryMixin, BaseAPIView):
-    @allow_fine_permission(MANAGE_KEY, level="WORKSPACE")
+    @allow_fine_permission(*MANAGE_KEYS, level="WORKSPACE")
     def patch(self, request, slug, category_id):
         category = self.category_or_none(slug, category_id)
         if category is None:
@@ -131,27 +142,30 @@ class ProductCategoryDetailEndpoint(_ProductCategoryMixin, BaseAPIView):
             )
         return self.category_response(category)
 
-    @allow_fine_permission(MANAGE_KEY, level="WORKSPACE")
+    @allow_fine_permission(*MANAGE_KEYS, level="WORKSPACE")
     def delete(self, request, slug, category_id):
         category = self.category_or_none(slug, category_id)
         if category is None:
             return _not_found("Product category not found.")
-        libraries = libraries_using(category)
-        if libraries:
-            return Response(
-                {
-                    "error": "该分类正被标准库使用，不能删除。",
-                    "code": CATEGORY_IN_USE_CODE,
-                    "libraries": libraries,
-                },
-                status=status.HTTP_409_CONFLICT,
-            )
-        delete_category(category)
+        # 先锁分类行再检查：与建库排队，检查通过后不会再冒出新库
+        with transaction.atomic():
+            lock_category(category.id)
+            libraries = libraries_using(category)
+            if libraries:
+                return Response(
+                    {
+                        "error": "该产品模板正被库使用，不能删除。",
+                        "code": CATEGORY_IN_USE_CODE,
+                        "libraries": libraries,
+                    },
+                    status=status.HTTP_409_CONFLICT,
+                )
+            delete_category(category)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class ProductCategoryModuleEndpoint(_ProductCategoryMixin, BaseAPIView):
-    @allow_fine_permission(MANAGE_KEY, level="WORKSPACE")
+    @allow_fine_permission(*MANAGE_KEYS, level="WORKSPACE")
     def post(self, request, slug, category_id):
         category = self.category_or_none(slug, category_id)
         if category is None:
@@ -175,7 +189,7 @@ class ProductCategoryModuleEndpoint(_ProductCategoryMixin, BaseAPIView):
 class ProductCategoryModuleBulkEndpoint(_ProductCategoryMixin, BaseAPIView):
     """批量添加一级模块（每行一个）。已有 / 重复 / 超长的跳过并原样告诉前端。"""
 
-    @allow_fine_permission(MANAGE_KEY, level="WORKSPACE")
+    @allow_fine_permission(*MANAGE_KEYS, level="WORKSPACE")
     def post(self, request, slug, category_id):
         category = self.category_or_none(slug, category_id)
         if category is None:
@@ -207,7 +221,7 @@ class ProductCategoryModuleBulkEndpoint(_ProductCategoryMixin, BaseAPIView):
 
 
 class ProductCategoryModuleReorderEndpoint(_ProductCategoryMixin, BaseAPIView):
-    @allow_fine_permission(MANAGE_KEY, level="WORKSPACE")
+    @allow_fine_permission(*MANAGE_KEYS, level="WORKSPACE")
     def post(self, request, slug, category_id):
         category = self.category_or_none(slug, category_id)
         if category is None:
@@ -233,7 +247,7 @@ class ProductCategoryModuleDetailEndpoint(_ProductCategoryMixin, BaseAPIView):
             category__workspace__slug=slug,
         ).select_related("category").first()
 
-    @allow_fine_permission(MANAGE_KEY, level="WORKSPACE")
+    @allow_fine_permission(*MANAGE_KEYS, level="WORKSPACE")
     def patch(self, request, slug, category_id, module_id):
         module = self.module_or_none(slug, category_id, module_id)
         if module is None:
@@ -255,21 +269,24 @@ class ProductCategoryModuleDetailEndpoint(_ProductCategoryMixin, BaseAPIView):
             )
         return self.category_response(module.category)
 
-    @allow_fine_permission(MANAGE_KEY, level="WORKSPACE")
+    @allow_fine_permission(*MANAGE_KEYS, level="WORKSPACE")
     def delete(self, request, slug, category_id, module_id):
         module = self.module_or_none(slug, category_id, module_id)
         if module is None:
             return _not_found("Product category module not found.")
-        blockers = category_module_blockers(module)
-        if blockers:
-            return Response(
-                {
-                    "error": "以下标准库在该模块下还有内容，先移走或删除后再试。",
-                    "code": CATEGORY_MODULE_IN_USE_CODE,
-                    "libraries": blockers,
-                },
-                status=status.HTTP_409_CONFLICT,
-            )
         category = module.category
-        delete_category_module(module)
+        # 检查与删除放在同一事务并先锁用例库模块行：删用例模块会级联硬删用例
+        with transaction.atomic():
+            lock_category_module_roots(module)
+            blockers = category_module_blockers(module)
+            if blockers:
+                return Response(
+                    {
+                        "error": "以下库在该模块下还有内容，先移走或删除后再试。",
+                        "code": CATEGORY_MODULE_IN_USE_CODE,
+                        "libraries": blockers,
+                    },
+                    status=status.HTTP_409_CONFLICT,
+                )
+            delete_category_module(module)
         return self.category_response(category)

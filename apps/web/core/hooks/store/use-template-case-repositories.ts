@@ -9,6 +9,8 @@ export type TTemplateCaseRepository = {
   description: string;
   is_template: boolean;
   project: null;
+  product_category_id: string | null;
+  product_category_detail: { id: string; name: string } | null;
   created_by?: { id: string; [key: string]: unknown } | null;
   created_at: string;
   updated_at: string;

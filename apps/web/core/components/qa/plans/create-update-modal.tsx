@@ -52,8 +52,15 @@ type TSelectOption = { value: string; query: string; content: React.ReactNode };
 const planService = new PlanService();
 const cycleService = new CycleService();
 
-const styles = FORM_VARIANT_STYLES["grouped-modal"];
+const styles = { ...FORM_VARIANT_STYLES["grouped-modal"], requiredMarker: true, optionalBadge: "" };
 const grid = getFormGridClassName("grouped-modal");
+
+/** 与字段标签等高的占位，让排期行的箭头、天数和日期框对齐 */
+const LABEL_SPACER = (
+  <span aria-hidden="true" className={cn(styles.label, "invisible")}>
+    占位
+  </span>
+);
 
 const clampThreshold = (value: number) => Math.max(0, Math.min(100, value));
 
@@ -61,14 +68,36 @@ const clampThreshold = (value: number) => Math.max(0, Math.min(100, value));
 const SelectButton = ({
   label,
   placeholder,
-  hasError,
+  onClear,
 }: {
   label?: React.ReactNode;
   placeholder: string;
-  hasError?: boolean;
+  /** 传了就在有值时显示清空按钮 */
+  onClear?: () => void;
 }) => (
-  <div className={cn(styles.select, "justify-between gap-2", hasError && "border-danger-strong")}>
+  <div className={cn(styles.select, "justify-between gap-2")}>
     <span className="min-w-0 flex-1 truncate">{label ?? <span className="text-placeholder">{placeholder}</span>}</span>
+    {label && onClear ? (
+      // 外层 CustomSearchSelect 本身是 button，这里不能再嵌 button
+      <span
+        role="button"
+        tabIndex={0}
+        aria-label="清空"
+        className="grid size-4 shrink-0 place-items-center rounded text-tertiary hover:text-primary"
+        onClick={(e) => {
+          e.stopPropagation();
+          onClear();
+        }}
+        onKeyDown={(e) => {
+          if (e.key !== "Enter" && e.key !== " ") return;
+          e.preventDefault();
+          e.stopPropagation();
+          onClear();
+        }}
+      >
+        <CloseIcon className="size-3" />
+      </span>
+    ) : null}
     <ChevronDownIcon className="size-3.5 shrink-0 text-tertiary" aria-hidden="true" />
   </div>
 );
@@ -130,7 +159,6 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
     name?: string;
     beginTime?: string;
     endTime?: string;
-    module?: string;
     threshold?: string;
   }>({});
 
@@ -245,20 +273,16 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
   const durationDays =
     beginTime && endTime && endTime >= beginTime ? differenceInCalendarDays(endTime, beginTime) + 1 : null;
 
-  // 名称、所属模块、起止日期必填；结束日期不能早于开始日期
+  // 名称、起止日期必填；结束日期不能早于开始日期
   const validate = (): boolean => {
     const nextErrors: {
       name?: string;
       beginTime?: string;
       endTime?: string;
-      module?: string;
       threshold?: string;
     } = {};
     if (!name || !name.trim()) {
       nextErrors.name = "请输入计划名称";
-    }
-    if (!moduleId) {
-      nextErrors.module = "请选择所属模块";
     }
     if (!beginTime) {
       nextErrors.beginTime = "请选择开始日期";
@@ -383,13 +407,10 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
         <div data-modal-wheel-scroll className="vertical-scrollbar scrollbar-sm min-h-0 flex-1 overflow-y-auto px-8">
           <FormFieldGroup title="归属">
             <div className={grid}>
-              <FormFieldShell label="所属模块" required editable styles={styles} error={errors.module}>
+              <FormFieldShell label="所属模块" required={false} editable styles={styles}>
                 <CustomSearchSelect
                   value={moduleId ?? undefined}
-                  onChange={(val: string | null) => {
-                    setModuleId(val ?? null);
-                    if (errors.module) setErrors((prev) => ({ ...prev, module: undefined }));
-                  }}
+                  onChange={(val: string | null) => setModuleId(val ?? null)}
                   options={moduleOptions}
                   multiple={false}
                   customButtonClassName={selectButtonClassName}
@@ -397,7 +418,7 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
                     <SelectButton
                       label={moduleOptions.find((o) => o.value === moduleId)?.content}
                       placeholder="请选择所属模块"
-                      hasError={Boolean(errors.module)}
+                      onClear={() => setModuleId(null)}
                     />
                   }
                 />
@@ -421,7 +442,7 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
           </FormFieldGroup>
 
           {/* 复核人（可多人）+ 通过规则：只有复核人能复核该计划下用例的执行结果 */}
-          <FormFieldGroup title="复核" optional>
+          <FormFieldGroup title="复核">
             <div className={grid}>
               <PlanReviewRuleFields
                 projectId={projectId ? String(projectId) : undefined}
@@ -439,7 +460,6 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
             <div className="flex items-start gap-2.5">
               <FormFieldShell
                 label="开始日期"
-                labelHidden
                 required
                 editable
                 styles={styles}
@@ -466,10 +486,14 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
                   />
                 </div>
               </FormFieldShell>
-              <ArrowRight className="mt-[11px] size-4 shrink-0 text-tertiary" aria-hidden="true" />
+              <div className="shrink-0">
+                {LABEL_SPACER}
+                <div className="flex h-[38px] items-center">
+                  <ArrowRight className="size-4 text-tertiary" aria-hidden="true" />
+                </div>
+              </div>
               <FormFieldShell
                 label="结束日期"
-                labelHidden
                 required
                 editable
                 styles={styles}
@@ -497,9 +521,12 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
                 </div>
               </FormFieldShell>
               {durationDays !== null ? (
-                <span className="flex h-[38px] shrink-0 items-center rounded-lg bg-accent-subtle px-3 text-13 font-medium text-accent-primary tabular-nums">
-                  共 {durationDays} 天
-                </span>
+                <div className="shrink-0">
+                  {LABEL_SPACER}
+                  <span className="flex h-[38px] items-center rounded-lg bg-accent-subtle px-3 text-13 font-medium text-accent-primary tabular-nums">
+                    共 {durationDays} 天
+                  </span>
+                </div>
               ) : null}
             </div>
           </FormFieldGroup>
@@ -550,7 +577,7 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
             {errors.threshold ? <p className={styles.error}>{errors.threshold}</p> : null}
           </FormFieldGroup>
 
-          <FormFieldGroup title="描述" optional>
+          <FormFieldGroup title="描述">
             <TextArea
               id="plan-description"
               name="description"

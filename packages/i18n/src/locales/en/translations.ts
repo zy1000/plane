@@ -2212,7 +2212,13 @@ export default {
     all_categories: "All categories",
     search_placeholder: "Search categories",
     in_use_libraries: "Used by libraries",
+    library_kind: {
+      requirement: "Requirement",
+      case: "Test case",
+    },
     modules_title: "Top-level modules",
+    locked_root_note: "Top-level modules are maintained by product category {name}",
+    locked_root_note_unnamed: "Top-level modules are maintained by the product category",
     module_count: "{count} modules",
     meta_modules: "{count} top-level modules",
     meta_libraries: "Used by {count} libraries",
@@ -2229,7 +2235,7 @@ export default {
     table: {
       index: "No.",
       name: "Module",
-      item_count: "Requirements",
+      item_count: "Items",
       actions: "Actions",
     },
     empty: {
@@ -2281,6 +2287,7 @@ export default {
       category_description: "These libraries use this category, so it can't be deleted.",
       child_count: "{count} submodules",
       item_count: "{count} requirements",
+      case_count: "{count} test cases",
       ok: "Got it",
     },
     errors: {

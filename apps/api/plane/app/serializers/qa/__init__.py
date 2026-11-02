@@ -2,6 +2,7 @@ from collections import defaultdict
 from decimal import Decimal
 
 
+from django.db import transaction
 from django.db.models import Count
 from django.db.models.expressions import result
 from django.utils import timezone
@@ -34,7 +35,9 @@ from plane.db.models import (
     PlanCase,
     TestCaseVersion,
     TestReport,
+    ProductCategory,
 )
+from plane.utils.product_category import seed_repository_root_modules
 from plane.utils.qa import (
     compute_plan_result,
     invalid_workspace_member_ids,
@@ -55,6 +58,8 @@ class CaseLabelListSerializer(serializers.ModelSerializer):
 
 class CaseModuleListSerializer(serializers.ModelSerializer):
     children = serializers.SerializerMethodField()
+    # 模板库绑定产品模板时的受控第一层（由产品模板统一维护）
+    locked = serializers.SerializerMethodField()
 
     class Meta:
         model = CaseModule
@@ -66,7 +71,11 @@ class CaseModuleListSerializer(serializers.ModelSerializer):
             "updated_at",
             "children",  # 递归显示所有子节点
             "repository",
+            "locked",
         ]
+
+    def get_locked(self, obj):
+        return bool(obj.category_module_id)
 
     def get_children(self, obj):
         """
@@ -409,20 +418,61 @@ class TestCaseRepositorySerializer(ModelSerializer):
     Serializer for creating a TestPlan.
     """
 
+    # 只有模板库可选、创建后不可改；选了之后建库时按产品模板的一级模块建受控根模块
+    product_category_id = serializers.PrimaryKeyRelatedField(
+        source="product_category",
+        queryset=ProductCategory.objects.all(),
+        allow_null=True,
+        required=False,
+    )
+
     class Meta:
         model = TestCaseRepository
-        fields = ["name", "description", "product", "workspace", "is_template"]
+        fields = [
+            "name",
+            "description",
+            "product",
+            "workspace",
+            "is_template",
+            "product_category_id",
+        ]
         # workspace 由 view 按 URL slug 注入，不信任客户端传值
         extra_kwargs = {"workspace": {"required": False}}
 
     def validate(self, attrs):
+        # 产品模板创建后不可改：提交原值静默忽略，改成别的报错（同标准库）
+        if self.instance is not None and "product_category_id" in self.initial_data:
+            submitted = attrs.pop("product_category", None)
+            if getattr(submitted, "id", None) != self.instance.product_category_id:
+                raise serializers.ValidationError(
+                    {"product_category_id": "产品模板创建后不能修改。"}
+                )
         is_template = attrs.get("is_template", getattr(self.instance, "is_template", False))
         product = attrs.get("product", getattr(self.instance, "product", None))
         if is_template and product is not None:
             raise serializers.ValidationError({"product": "模板库不能关联产品"})
         if not is_template and product is None:
             raise serializers.ValidationError({"product": "用例库必须属于一个产品"})
+        product_category = attrs.get("product_category")
+        if product_category is not None:
+            if not is_template:
+                raise serializers.ValidationError(
+                    {"product_category_id": "只有模板用例库可以选择产品模板。"}
+                )
+            workspace = self.context.get("workspace")
+            if workspace is not None and product_category.workspace_id != workspace.id:
+                raise serializers.ValidationError(
+                    {"product_category_id": "只能选择当前工作区内的产品模板。"}
+                )
         return attrs
+
+    def create(self, validated_data):
+        if not validated_data.get("product_category"):
+            return super().create(validated_data)
+        with transaction.atomic():
+            repository = super().create(validated_data)
+            seed_repository_root_modules(repository, actor=repository.created_by)
+        return repository
 
 
 class TestCaseRepositoryDetailSerializer(ModelSerializer):
@@ -431,11 +481,19 @@ class TestCaseRepositoryDetailSerializer(ModelSerializer):
     """
 
     created_by = UserLiteSerializer(read_only=True)
+    # 不让 depth=1 把整个产品模板对象嵌进来，与标准库同形：id + {id, name}
+    product_category_id = serializers.UUIDField(read_only=True, allow_null=True)
+    product_category_detail = serializers.SerializerMethodField()
 
     class Meta:
         model = TestCaseRepository
-        fields = "__all__"
+        exclude = ["product_category"]
         depth = 1
+
+    def get_product_category_detail(self, obj):
+        if not obj.product_category_id:
+            return None
+        return {"id": str(obj.product_category_id), "name": obj.product_category.name}
 
 
 class CaseLabelSerializer(ModelSerializer):

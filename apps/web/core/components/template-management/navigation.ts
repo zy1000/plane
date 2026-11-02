@@ -34,11 +34,11 @@ export const TEMPLATE_MANAGEMENT_NAVIGATION_ITEMS: TTemplateManagementNavigation
     permissionKeys: WORKSPACE_REQUIREMENT_LIBRARY_READ_PERMISSION_KEYS,
   },
   {
-    // 紧挨「标准需求库」：库的第一层模块由所选分类统一维护，读写口径与库相同
+    // 紧挨「标准需求库」：标准需求库、模板用例库的第一层由所选模板统一维护；读：需求库或用例模板读权限任一
     key: "product",
     icon: Tags,
     i18nKey: "workspace_templates.navigation.product_categories",
-    permissionKeys: WORKSPACE_REQUIREMENT_LIBRARY_READ_PERMISSION_KEYS,
+    permissionKeys: [...WORKSPACE_REQUIREMENT_LIBRARY_READ_PERMISSION_KEYS, ...WORKSPACE_CASE_TEMPLATE_READ_PERMISSION_KEYS],
   },
   {
     key: "test-cases",

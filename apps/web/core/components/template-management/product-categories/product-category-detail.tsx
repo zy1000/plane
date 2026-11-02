@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
-import { ArrowUpDown, Pencil, Tags } from "lucide-react";
+import { ArrowUpDown, FlaskConical, Pencil, Tags } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
@@ -17,7 +17,7 @@ import { TypeIcon } from "@/components/common/type-icon-picker";
 import type { TProductCategoriesStore } from "@/hooks/store/use-product-categories";
 import { CountPill } from "./count-pill";
 import { DeleteBlockedModal, type TDeleteBlocked } from "./delete-blocked-modal";
-import { getProductCategoryErrorMessage } from "./helpers";
+import { getProductCategoryErrorMessage, getProductCategoryLibraryPath } from "./helpers";
 import { ModuleBulkAddModal } from "./module-bulk-add-modal";
 import { NameFormModal } from "./name-form-modal";
 import { ProductCategoryModuleTable } from "./product-category-module-table";
@@ -116,12 +116,15 @@ export function ProductCategoryDetail({ workspaceSlug, category, store, canManag
           libraries: (payload.libraries ?? []).map((library) => ({
             id: library.id,
             name: library.name,
+            kind: library.kind,
             summary: [
               library.child_count > 0
                 ? t("product_categories.blocked.child_count", { count: library.child_count })
                 : null,
               library.item_count > 0
-                ? t("product_categories.blocked.item_count", { count: library.item_count })
+                ? t(library.kind === "case" ? "product_categories.blocked.case_count" : "product_categories.blocked.item_count", {
+                    count: library.item_count,
+                  })
                 : null,
             ]
               .filter(Boolean)
@@ -186,15 +189,22 @@ export function ProductCategoryDetail({ workspaceSlug, category, store, canManag
           <span className="mr-1 text-13 text-tertiary">{t("product_categories.in_use_libraries")}</span>
           {category.libraries.map((library) => (
             <Link
-              key={library.id}
-              to={`/${workspaceSlug}/templates/libraries/${library.id}`}
+              key={`${library.kind}-${library.id}`}
+              to={getProductCategoryLibraryPath(workspaceSlug, library)}
               className="inline-flex h-7 max-w-60 items-center gap-1.5 rounded-md border border-subtle-1 bg-surface-1 pr-2.5 pl-2 text-13 text-primary transition-colors hover:bg-layer-transparent-hover"
             >
-              <TypeIcon
-                iconProps={library.requirement_type_detail?.logo_props?.icon}
-                className="size-3.5 rounded-none"
-                iconClassName="size-3.5"
-              />
+              {library.kind === "case" ? (
+                <FlaskConical className="size-3.5 shrink-0 text-tertiary" strokeWidth={1.75} />
+              ) : (
+                <TypeIcon
+                  iconProps={library.requirement_type_detail?.logo_props?.icon}
+                  className="size-3.5 rounded-none"
+                  iconClassName="size-3.5"
+                />
+              )}
+              <span className="shrink-0 text-11 text-tertiary">
+                {t(`product_categories.library_kind.${library.kind}`)}
+              </span>
               <span className="truncate">{library.name}</span>
             </Link>
           ))}

@@ -1,15 +1,16 @@
 import { Link } from "react-router";
-import { AlertCircle, ChevronRight } from "lucide-react";
+import { AlertCircle, ChevronRight, FlaskConical } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
-import type { TProductCategoryLibrary } from "@plane/types";
+import type { TProductCategoryLibrary, TProductCategoryLibraryKind } from "@plane/types";
 import { EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
 import { TypeIcon } from "@/components/common/type-icon-picker";
+import { getProductCategoryLibraryPath } from "./helpers";
 
 export type TDeleteBlocked = {
   name: string;
   description: string;
-  libraries: { id: string; name: string; summary?: string }[];
+  libraries: { id: string; name: string; kind: TProductCategoryLibraryKind; summary?: string }[];
 };
 
 type Props = {
@@ -42,16 +43,23 @@ export function DeleteBlockedModal({ workspaceSlug, blocked, categoryLibraries, 
       <div className="mx-6 overflow-hidden rounded-[10px] border border-subtle">
         {blocked?.libraries.map((library) => (
           <Link
-            key={library.id}
-            to={`/${workspaceSlug}/templates/libraries/${library.id}`}
+            key={`${library.kind}-${library.id}`}
+            to={getProductCategoryLibraryPath(workspaceSlug, library)}
             onClick={onClose}
             className="flex h-[46px] items-center gap-2.5 border-b border-subtle px-3.5 transition-colors last:border-b-0 hover:bg-layer-1-hover"
           >
-            <TypeIcon
-              iconProps={logoById.get(library.id)?.icon}
-              className="size-[26px] rounded-[7px] bg-layer-1"
-              iconClassName="size-3.5"
-            />
+            {library.kind === "case" ? (
+              <span className="grid size-[26px] shrink-0 place-items-center rounded-[7px] bg-layer-1">
+                <FlaskConical className="size-3.5 text-secondary" strokeWidth={1.75} />
+              </span>
+            ) : (
+              <TypeIcon
+                iconProps={logoById.get(library.id)?.icon}
+                className="size-[26px] rounded-[7px] bg-layer-1"
+                iconClassName="size-3.5"
+              />
+            )}
+            <span className="shrink-0 text-12 text-tertiary">{t(`product_categories.library_kind.${library.kind}`)}</span>
             <span className="min-w-0 flex-1 truncate text-14 text-primary">{library.name}</span>
             {library.summary && <span className="shrink-0 text-12 text-secondary">{library.summary}</span>}
             <ChevronRight className="size-3.5 shrink-0 text-tertiary" />

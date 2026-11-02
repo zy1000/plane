@@ -18,6 +18,11 @@ from plane.app.views.qa.template_permissions import (
     allow_workspace_member_or_template,
 )
 from plane.db.models import CaseModule, TestCase
+from plane.utils.product_category import (
+    CaseModuleRootLocked,
+    case_root_lock_message,
+    case_root_lock_violation,
+)
 
 
 class CaseModuleCountAPIView(BaseAPIView):
@@ -87,6 +92,9 @@ class CaseModuleDetailAPIView(BaseAPIView):
             deleted_at__isnull=True,
             repository__workspace__slug=slug,
         )
+        locked = case_root_lock_violation(module.repository, module=module, data=request.data)
+        if locked:
+            raise CaseModuleRootLocked(locked)
         serializer = self.serializer_class(instance=module, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         try:
@@ -116,6 +124,13 @@ class CaseModuleMoveAPIView(BaseAPIView):
         target_parent = serializer.validated_data["target_parent"]
         anchor = serializer.validated_data["anchor"]
         placement = serializer.validated_data["placement"]
+
+        # 产品模板受控的第一层不能移，也不能把模块移到第一层（否则整组重编号会改写受控根的顺序）
+        repository = module.repository
+        if repository.product_category_id and (
+            module.category_module_id or target_parent is None
+        ):
+            raise CaseModuleRootLocked(case_root_lock_message(repository))
 
         siblings = list(
             CaseModule.objects.filter(

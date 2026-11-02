@@ -109,6 +109,11 @@ from plane.app.views.qa.template_permissions import (
 )
 from plane.settings.storage import S3Storage
 from plane.utils.asset_upload import presigned_post_for_asset
+from plane.utils.product_category import (
+    CaseModuleRootLocked,
+    case_root_lock_message,
+    case_root_lock_violation,
+)
 from plane.bgtasks.storage_metadata_task import get_asset_object_metadata
 from plane.bgtasks.test_case_activities_task import test_case_activity
 from django.conf import settings
@@ -224,7 +229,9 @@ class RepositoryAPIView(BaseAPIView):
     @allow_workspace_member
     def post(self, request, slug):
         workspace = get_object_or_404(Workspace, slug=slug)
-        serializer = self.serializer_class(data=request.data)
+        serializer = self.serializer_class(
+            data=request.data, context={"workspace": workspace}
+        )
         serializer.is_valid(raise_exception=True)
         # 模板库（is_template=True）走工作区级模板权限；产品库维持「工作区成员即可」
         if serializer.validated_data.get("is_template"):
@@ -270,7 +277,7 @@ class RepositoryAPIView(BaseAPIView):
 
     @allow_workspace_member
     def get(self, request, slug):
-        queryset = self.get_queryset()
+        queryset = self.get_queryset().select_related("product_category")
         # 未显式查询 is_template 时默认排除模板库，
         # 让产品侧列表、库下拉、复制弹窗等存量消费方都看不到模板库
         if "is_template" not in request.query_params:
@@ -2048,6 +2055,9 @@ class CaseModuleAPIView(BaseAPIView):
                 {"error": "Repository does not belong to this workspace"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        locked = case_root_lock_violation(repository, data=request.data)
+        if locked:
+            raise CaseModuleRootLocked(locked)
         try:
             test_plan = serializer.save()
         except IntegrityError:
@@ -2059,7 +2069,19 @@ class CaseModuleAPIView(BaseAPIView):
         PermissionKey.WORKSPACE_CASE_TEMPLATE_MANAGE
     )
     def delete(self, request, slug):
-        self.filter_queryset(self.get_queryset()).all().delete(soft=False)
+        targets = self.filter_queryset(self.get_queryset()).all()
+        # 含产品模板受控的第一层就整体拒绝，什么都不删
+        locked = (
+            targets.filter(
+                category_module__isnull=False,
+                repository__product_category__isnull=False,
+            )
+            .select_related("repository__product_category")
+            .first()
+        )
+        if locked is not None:
+            raise CaseModuleRootLocked(case_root_lock_message(locked.repository))
+        targets.delete(soft=False)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 

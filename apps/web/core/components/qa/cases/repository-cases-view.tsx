@@ -7,7 +7,7 @@ import { createPortal } from "react-dom";
 import { PageHead } from "@/components/core/page-title";
 import { Col, Dropdown, Modal, Pagination, Row, Tag } from "antd";
 import { ShareAltOutlined } from "@ant-design/icons";
-import { Copy, FolderInput, FolderPlus, Pencil, Trash2 } from "lucide-react";
+import { Copy, FolderInput, FolderLock, FolderPlus, Lock, Pencil, Trash2 } from "lucide-react";
 import {
   appendUnassignedNode,
   MODULE_TREE_ROOT_KEY,
@@ -125,10 +125,20 @@ export type TRepositoryCasesViewProps = {
   mode?: "product" | "template";
   treeHeader?: ReactNode; // 树头左侧内容（产品页放用例库切换器），由壳层传入
   toolbarPortalEl?: HTMLElement | null; // 传入后搜索/筛选/操作按钮挂到页头右侧
+  /** 模板库绑了产品模板时传模板名：第一层由产品模板统一维护（不传时行为不变） */
+  lockedRootCategoryName?: string;
 };
 
 export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
-  const { workspaceSlug, repositoryId, repositoryName, treeHeader, toolbarPortalEl, mode = "product" } = props;
+  const {
+    workspaceSlug,
+    repositoryId,
+    repositoryName,
+    treeHeader,
+    toolbarPortalEl,
+    mode = "product",
+    lockedRootCategoryName,
+  } = props;
   // 模板模式：workspace 级模板库（走 template-case 接口）；产品模式走产品作用域用例接口
   const isTemplateMode = mode === "template";
   // product 模式必传；模板模式恒为 undefined
@@ -539,29 +549,70 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
     return typeof c === "number" ? c : undefined;
   };
 
+  // 受控的只有第一层（后端 locked），只看根节点。只在模板库生效，直接认模块数据，
+  // 不等库详情返回（模板名只用于说明文案）
+  const lockedRootKeys = useMemo(
+    () =>
+      new Set<string>(isTemplateMode ? modules.filter((m: any) => m?.locked).map((m: any) => String(m.id)) : []),
+    [modules, isTemplateMode]
+  );
+  const isRootLocked = lockedRootKeys.size > 0 || Boolean(lockedRootCategoryName);
+  const lockedRootNote = !isRootLocked
+    ? ""
+    : lockedRootCategoryName
+      ? t("product_categories.locked_root_note", { name: lockedRootCategoryName })
+      : t("product_categories.locked_root_note_unnamed");
+
   const treeNodes = useMemo<TModuleTreeNode[]>(() => {
     const build = (list: any[]): TModuleTreeNode[] =>
-      (Array.isArray(list) ? list : []).map((node: any) => ({
-        key: String(node?.id),
-        label: String(node?.name ?? "-"),
-        count: getNodeCount(node),
-        children: build(node?.children || []),
-      }));
+      (Array.isArray(list) ? list : []).map((node: any) => {
+        const locked = lockedRootKeys.has(String(node?.id));
+        return {
+          key: String(node?.id),
+          label: String(node?.name ?? "-"),
+          count: getNodeCount(node),
+          icon: locked ? <FolderLock className="size-3.5" strokeWidth={1.75} /> : undefined,
+          draggable: locked ? false : undefined,
+          children: build(node?.children || []),
+        };
+      });
     return appendUnassignedNode(build(modules), unassignedTotal, {
       keepWhenEmpty: selectedModuleId === UNASSIGNED_MODULE_KEY,
     });
-  }, [modules, unassignedTotal, selectedModuleId]);
+  }, [modules, unassignedTotal, selectedModuleId, lockedRootKeys]);
 
   const getMenuItems = (node: TModuleTreeNode): TModuleTreeMenuItem[] => {
     if (!repositoryId) return [];
+    const addItem: TModuleTreeMenuItem = {
+      key: "add",
+      label: "添加子模块",
+      icon: <FolderPlus className="size-3.5" strokeWidth={1.75} />,
+      disabled: !canCreateCase,
+      onClick: () => handleAddUnderNode(node.key),
+    };
+    const copyItem: TModuleTreeMenuItem = {
+      key: "copy",
+      label: "复制",
+      icon: <Copy className="size-3.5" strokeWidth={1.75} />,
+      disabled: !canCreateCase,
+      onClick: () => setCopyingModule({ id: node.key, name: node.label }),
+    };
+    // 受控一级：只能在下面建子模块、复制，改名 / 移动 / 删除由产品模板统一维护
+    if (lockedRootKeys.has(node.key)) {
+      return [
+        addItem,
+        copyItem,
+        {
+          key: "locked-note",
+          label: lockedRootNote,
+          icon: <Lock className="size-3" strokeWidth={1.75} />,
+          note: true,
+          onClick: () => undefined,
+        },
+      ];
+    }
     return [
-      {
-        key: "add",
-        label: "添加子模块",
-        icon: <FolderPlus className="size-3.5" strokeWidth={1.75} />,
-        disabled: !canCreateCase,
-        onClick: () => handleAddUnderNode(node.key),
-      },
+      addItem,
       {
         key: "rename",
         label: "重命名",
@@ -569,13 +620,7 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
         disabled: !canEditCase,
         onClick: () => startRenameNode(node.key, node.label),
       },
-      {
-        key: "copy",
-        label: "复制",
-        icon: <Copy className="size-3.5" strokeWidth={1.75} />,
-        disabled: !canCreateCase,
-        onClick: () => setCopyingModule({ id: node.key, name: node.label }),
-      },
+      copyItem,
       {
         key: "move",
         label: "移动到…",
@@ -602,6 +647,7 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
     workspaceSlug: workspaceSlug as string | undefined,
     modules,
     canEdit: canEditCase,
+    lockedRootMessage: isRootLocked ? lockedRootNote : undefined,
     onMoved: async (newParentId) => {
       if (newParentId) {
         setExpandedKeys((prev) => (prev.includes(newParentId) ? prev : [...prev, newParentId]));
@@ -926,7 +972,11 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
               getMenuItems={getMenuItems}
               dragMode={repositoryId && canEditCase ? "sort" : "none"}
               onDrop={moduleMove.onDrop}
-              onAddRoot={repositoryId && canCreateCase ? () => handleAddUnderNode(MODULE_TREE_ROOT_KEY) : undefined}
+              onAddRoot={
+                repositoryId && canCreateCase && !isRootLocked
+                  ? () => handleAddUnderNode(MODULE_TREE_ROOT_KEY)
+                  : undefined
+              }
               railLabel={selectedModuleName || "全部用例"}
             />
             {/* 右侧表格 */}
@@ -1195,7 +1245,7 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
           workspaceSlug={workspaceSlug as string}
           repositoryId={repositoryId}
           disabledSubtreeOf={movingModule.id}
-          allowRoot
+          allowRoot={!isRootLocked}
           onConfirm={async (targetParentId) => {
             const moved = await moduleMove.moveModule(movingModule.id, targetParentId);
             if (moved) {

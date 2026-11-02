@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router";
+import { Link, useNavigate, useParams } from "react-router";
 import { FlaskConical } from "lucide-react";
 // plane imports
 import { useTranslation } from "@plane/i18n";
@@ -8,6 +8,7 @@ import { Breadcrumbs, Header } from "@plane/ui";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { AppHeader } from "@/components/core/app-header";
 import { RepositoryCasesView } from "@/components/qa/cases/repository-cases-view";
+import { ProductCategoryTag } from "@/components/template-management/product-categories/product-category-tag";
 // services
 import { RepositoryService } from "@/services/qa/repository.service";
 // testhub 全局枚举（用例类型/优先级/测试类型下拉依赖），项目侧由 testhub layout 初始化，模板侧在这里补
@@ -25,6 +26,8 @@ export default function TemplateCaseRepositoryPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [repositoryName, setRepositoryName] = useState<string>("");
+  // 绑定的产品模板：第一层模块由它统一维护
+  const [productCategory, setProductCategory] = useState<{ id: string; name: string } | null>(null);
   const [toolbarHost, setToolbarHost] = useState<HTMLDivElement | null>(null);
 
   // 初始化全局枚举
@@ -39,6 +42,7 @@ export default function TemplateCaseRepositoryPage() {
   useEffect(() => {
     if (!workspaceSlug || !repositoryId) return;
     let cancelled = false;
+    setProductCategory(null);
     repositoryService
       .getRepositories(workspaceSlug, { id: repositoryId, is_template: true })
       .then((response: any) => {
@@ -49,6 +53,7 @@ export default function TemplateCaseRepositoryPage() {
           return;
         }
         setRepositoryName(repository.name ?? "");
+        setProductCategory(repository.product_category_detail ?? null);
       })
       .catch(() => undefined);
     return () => {
@@ -79,7 +84,20 @@ export default function TemplateCaseRepositoryPage() {
                 />
                 <Breadcrumbs.Item
                   component={
-                    <span className="truncate text-13 font-medium text-primary">{repositoryName || "…"}</span>
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className="truncate text-13 font-medium text-primary">{repositoryName || "…"}</span>
+                      {productCategory && (
+                        <Link
+                          to={`/${workspaceSlug}/templates/product?category=${productCategory.id}`}
+                          className="flex min-w-0 max-w-40 shrink-0"
+                        >
+                          <ProductCategoryTag
+                            name={productCategory.name}
+                            className="h-auto rounded-full py-0.5 text-11 font-normal hover:text-primary"
+                          />
+                        </Link>
+                      )}
+                    </div>
                   }
                   isLast
                 />
@@ -98,6 +116,7 @@ export default function TemplateCaseRepositoryPage() {
           repositoryName={repositoryName}
           mode="template"
           toolbarPortalEl={toolbarHost}
+          lockedRootCategoryName={productCategory?.name}
         />
       </div>
     </>

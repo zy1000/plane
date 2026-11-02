@@ -19,7 +19,7 @@ import { ProductCategoryList } from "./product-category-list";
 /**
  * 模板中心「产品分类」：左分类列表、右分类详情（在用的库 + 一级模块表）。
  *
- * 读写口径跟标准需求库一致（requirement_library.view / manage）；无管理权限时只读。
+ * 读写口径：需求库或用例模板任一（requirement_library / case_template 的 view / manage）；无管理权限时只读。
  * 新建 / 编辑走弹窗表单，排序走显式的「调整顺序」模式（保存才提交），排序时锁住另一侧。
  * 选中分类走 `?category=`，库详情页的分类标签会带着它跳过来。
  */
@@ -29,7 +29,8 @@ export const ProductCategoriesPage = observer(function ProductCategoriesPage({
   workspaceSlug: string;
 }) {
   const { t } = useTranslation();
-  const { canManageLibraries: canManage } = useTemplatePermissions(workspaceSlug);
+  const { canManageLibraries, canManageCaseTemplates } = useTemplatePermissions(workspaceSlug);
+  const canManage = canManageLibraries || canManageCaseTemplates;
   const store = useProductCategories(workspaceSlug);
   const { categories, isLoading, error, fetchCategories } = store;
   const [searchParams, setSearchParams] = useSearchParams();

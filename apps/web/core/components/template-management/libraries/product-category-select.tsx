@@ -16,10 +16,19 @@ type TSelectProps = {
   onChange: (categoryId: string | null) => void;
   disabled?: boolean;
   hasError?: boolean;
+  /** 浮层额外类名：放进 antd 弹窗（z-index 1000）时要抬高层级 */
+  optionsClassName?: string;
 };
 
 /** 创建标准库时选产品分类（非必填）：首项「不选择」，其余带「N 个模块」，可搜索 */
-export function ProductCategorySelect({ categories, value, onChange, disabled = false, hasError = false }: TSelectProps) {
+export function ProductCategorySelect({
+  categories,
+  value,
+  onChange,
+  disabled = false,
+  hasError = false,
+  optionsClassName,
+}: TSelectProps) {
   const { t } = useTranslation();
   const selected = categories.find((category) => category.id === value) ?? null;
 
@@ -52,7 +61,7 @@ export function ProductCategorySelect({ categories, value, onChange, disabled = 
       disabled={disabled}
       className="w-full"
       customButtonClassName="w-full rounded-md"
-      optionsClassName="w-72"
+      optionsClassName={cn("w-72", optionsClassName)}
       noResultsMessage={t("product_categories.picker.empty")}
       customButton={
         <div

@@ -11,10 +11,11 @@ const TemplateProductCategoriesPage = observer(function TemplateProductCategorie
   workspaceSlug: string;
 }) {
   const { workspaceInfoBySlug } = useUserPermissions();
-  const { canViewLibraries } = useTemplatePermissions(workspaceSlug);
+  const { canViewLibraries, canViewCaseTemplates } = useTemplatePermissions(workspaceSlug);
 
-  // 产品分类与标准需求库同一套读权限（后端同样 403）
-  if (workspaceInfoBySlug(workspaceSlug) && !canViewLibraries) return <NotAuthorizedView className="h-full" />;
+  // 产品模板同时服务标准需求库与模板用例库：任一读权限即可（后端同口径）
+  if (workspaceInfoBySlug(workspaceSlug) && !canViewLibraries && !canViewCaseTemplates)
+    return <NotAuthorizedView className="h-full" />;
 
   return <ProductCategoriesPage workspaceSlug={workspaceSlug} />;
 });

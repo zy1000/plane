@@ -174,6 +174,13 @@ class Command(BaseCommand):
 
         template_repository = self._get_or_create_template_repository(workspace, project)
         self.stdout.write(f"[{label}] → 模板库「{template_repository.name}」({template_repository.id})")
+        if template_repository.product_category_id:
+            # 第一层由产品模板统一维护，不能再把用例库名建成根模块
+            self.stdout.write(
+                self.style.WARNING(f"  模板库「{template_repository.name}」已绑定产品模板，跳过")
+            )
+            totals["skipped"] += len(source_repositories)
+            return
 
         existing_root_names = set(
             CaseModule.objects.filter(
