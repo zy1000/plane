@@ -43,9 +43,9 @@ export function WorkspaceTeamMultiSelect(props: Props) {
     if (isLoading) return <span className="text-placeholder">加载中...</span>;
     const selectedNames = groups.filter((group) => selectedGroupIds.includes(group.id)).map((group) => group.name);
     if (selectedNames.length === 0) return <span className="text-placeholder">选择团队</span>;
-    if (selectedNames.length === 1) return <span>{selectedNames[0]}</span>;
+    if (selectedNames.length === 1) return <span className="truncate">{selectedNames[0]}</span>;
     return (
-      <span>
+      <span className="truncate">
         {selectedNames[0]} +{selectedNames.length - 1}
       </span>
     );
@@ -76,7 +76,7 @@ export function WorkspaceTeamMultiSelect(props: Props) {
   };
 
   return (
-    <div className="flex w-40 flex-col gap-1">
+    <div className="flex w-full flex-col gap-1">
       {disabled ? (
         <span className={selectedGroupNames.length === 0 ? "text-13 text-placeholder" : "truncate text-13"}>
           {selectedGroupNames.length > 0 ? selectedGroupNames.join("、") : "—"}
@@ -98,7 +98,7 @@ export function WorkspaceTeamMultiSelect(props: Props) {
             </div>
           )}
           buttonClassName="flex w-full items-center justify-between gap-1 rounded border-none px-0 py-1 text-13"
-          containerClassName="w-40 rounded-md p-0"
+          containerClassName="w-full rounded-md p-0"
           optionsContainerClassName="w-52"
           renderItem={({ value, selected }) => {
             const group = groups.find((item) => item.id === value);

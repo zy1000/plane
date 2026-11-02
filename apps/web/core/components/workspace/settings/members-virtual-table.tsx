@@ -12,6 +12,8 @@ import { cn } from "@plane/utils";
 type TColumn<T> = {
   key: string;
   content: string;
+  /** 列宽（px）。表格按固定列宽排版，容器更宽时按比例放大，更窄时横向滚动 */
+  width?: number;
   thRender?: () => ReactNode;
   tdRender: (rowData: T) => ReactNode;
 };
@@ -76,7 +78,12 @@ export function MembersVirtualTable<T>(props: Props<T>) {
     virtualRows.length > 0 ? virtualizer.getTotalSize() - (virtualRows[virtualRows.length - 1].end - scrollMargin) : 0;
 
   return (
-    <table className="w-full table-auto overflow-hidden whitespace-nowrap">
+    <table className="w-full table-fixed overflow-hidden whitespace-nowrap">
+      <colgroup>
+        {columns.map((column) => (
+          <col key={column.key} style={column.width ? { width: column.width } : undefined} />
+        ))}
+      </colgroup>
       <thead className={cn("divide-y divide-subtle", tHeadClassName)}>
         <tr className={cn("divide-x divide-subtle text-13 text-primary", tHeadTrClassName)}>
           {columns.map((column) => (

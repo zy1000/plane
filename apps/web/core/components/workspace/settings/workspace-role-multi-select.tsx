@@ -56,7 +56,7 @@ export function WorkspaceRoleMultiSelect(props: Props) {
   };
 
   return (
-    <div className="flex w-40 flex-col gap-1">
+    <div className="flex w-full flex-col gap-1">
       {disabled ? (
         <span className={selectedRoleNames.length === 0 ? "text-13 text-placeholder" : "truncate text-13"}>
           {selectedRoleNames.length > 0 ? selectedRoleNames.join("、") : "—"}
@@ -67,6 +67,7 @@ export function WorkspaceRoleMultiSelect(props: Props) {
           isLoading={isLoading}
           value={selectedRoleIds}
           onChange={handleChange}
+          containerClassName="w-full rounded-md p-0"
         />
       )}
     </div>

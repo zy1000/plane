@@ -70,8 +70,8 @@ export function NameColumn(props: NameProps) {
     <Disclosure>
       {() => (
         <div className="group relative">
-          <div className="flex w-72 items-center justify-between gap-x-4 gap-y-2">
-            <div className="flex flex-1 items-center gap-x-2 gap-y-2">
+          <div className="flex w-full items-center justify-between gap-x-2 gap-y-2">
+            <div className="flex min-w-0 flex-1 items-center gap-x-2 gap-y-2">
               {isSuspended ? (
                 <div className="rounded-full bg-layer-1">
                   <SuspendedUserIcon className="size-6 text-placeholder" />
@@ -96,7 +96,7 @@ export function NameColumn(props: NameProps) {
                   </span>
                 </Link>
               )}
-              <span className={isSuspended ? "text-placeholder" : ""}>
+              <span className={`truncate ${isSuspended ? "text-placeholder" : ""}`}>
                 {first_name} {last_name}
               </span>
             </div>
@@ -105,7 +105,7 @@ export function NameColumn(props: NameProps) {
               <PopoverMenu
                 data={[""]}
                 keyExtractor={(item) => item}
-                popoverClassName="justify-end"
+                popoverClassName="w-auto shrink-0 justify-end"
                 buttonClassName="outline-none	origin-center rotate-90 size-8 aspect-square flex-shrink-0 grid place-items-center opacity-0 group-hover:opacity-100 transition-opacity"
                 render={() => (
                   <div
@@ -233,8 +233,8 @@ export const NetworkZoneColumn = observer(function NetworkZoneColumn(props: Netw
           if (zone !== currentZone) setPendingZone(zone);
         }}
         label={<span className={currentZone ? "" : "text-tertiary"}>{labelOf(currentZone)}</span>}
-        buttonClassName="rounded-md border-none px-2 py-1 text-xs hover:bg-layer-1"
-        optionsClassName="w-32"
+        buttonClassName="rounded border-none px-0 py-1 text-13"
+        optionsClassName="w-32 text-13"
         disabled={!canEditMember}
       >
         {NETWORK_ZONE_OPTIONS.map((option) => (

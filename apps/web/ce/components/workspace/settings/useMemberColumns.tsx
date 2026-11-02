@@ -77,6 +77,7 @@ export const useMemberColumns = () => {
     {
       key: "Full name",
       content: t("workspace_settings.settings.members.details.full_name"),
+      width: 150,
       thClassName: "text-left",
       thRender: () => (
         <MemberHeaderColumn
@@ -100,8 +101,11 @@ export const useMemberColumns = () => {
     {
       key: "Display name",
       content: t("workspace_settings.settings.members.details.display_name"),
+      width: 130,
       tdRender: (rowData: RowData) => (
-        <div className={`w-32 ${isSuspended(rowData) ? "text-placeholder" : ""}`}>{rowData.member.display_name}</div>
+        <div className={`truncate ${isSuspended(rowData) ? "text-placeholder" : ""}`} title={rowData.member.display_name}>
+          {rowData.member.display_name}
+        </div>
       ),
       thRender: () => (
         <MemberHeaderColumn
@@ -115,8 +119,11 @@ export const useMemberColumns = () => {
     {
       key: "Email address",
       content: t("workspace_settings.settings.members.details.email_address"),
+      width: 174,
       tdRender: (rowData: RowData) => (
-        <div className={`w-48 truncate ${isSuspended(rowData) ? "text-placeholder" : ""}`}>{rowData.member.email}</div>
+        <div className={`truncate ${isSuspended(rowData) ? "text-placeholder" : ""}`} title={rowData.member.email}>
+          {rowData.member.email}
+        </div>
       ),
       thRender: () => (
         <MemberHeaderColumn
@@ -130,16 +137,18 @@ export const useMemberColumns = () => {
     {
       key: "Employee id",
       content: t("workspace_settings.settings.members.details.employee_id"),
+      width: 90,
       tdRender: (rowData: RowData) => (
-        <div className={`w-24 ${isSuspended(rowData) ? "text-placeholder" : ""}`}>{rowData.member.employee_id ?? ""}</div>
+        <div className={`truncate ${isSuspended(rowData) ? "text-placeholder" : ""}`}>{rowData.member.employee_id ?? ""}</div>
       ),
     },
 
     {
       key: "Department",
       content: t("workspace_settings.settings.members.details.department"),
+      width: 146,
       tdRender: (rowData: RowData) => (
-        <div className={`w-40 truncate ${isSuspended(rowData) ? "text-placeholder" : ""}`} title={rowData.member.department ?? ""}>
+        <div className={`truncate ${isSuspended(rowData) ? "text-placeholder" : ""}`} title={rowData.member.department ?? ""}>
           {rowData.member.department ?? ""}
         </div>
       ),
@@ -148,8 +157,9 @@ export const useMemberColumns = () => {
     {
       key: "Leader",
       content: t("workspace_settings.settings.members.details.leader"),
+      width: 68,
       tdRender: (rowData: RowData) => (
-        <div className={`w-24 truncate ${isSuspended(rowData) ? "text-placeholder" : ""}`}>
+        <div className={`truncate ${isSuspended(rowData) ? "text-placeholder" : ""}`}>
           {rowData.member.leader?.display_name ?? ""}
         </div>
       ),
@@ -158,6 +168,7 @@ export const useMemberColumns = () => {
     {
       key: "Custom roles",
       content: "Role",
+      width: 108,
       tdRender: (rowData: RowData) => (
         <CustomRolesColumn
           rowData={rowData}
@@ -172,6 +183,7 @@ export const useMemberColumns = () => {
     {
       key: "Teams",
       content: "Teams",
+      width: 100,
       tdRender: (rowData: RowData) => (
         <TeamsColumn
           rowData={rowData}
@@ -189,6 +201,7 @@ export const useMemberColumns = () => {
           {
             key: "Network zone",
             content: t("network_zone.label"),
+            width: 76,
             tdRender: (rowData: RowData) => (
               <NetworkZoneColumn rowData={rowData} workspaceSlug={workspaceSlug} canEditMember={canEditMember} />
             ),
@@ -199,8 +212,9 @@ export const useMemberColumns = () => {
     {
       key: "Joining date",
       content: t("workspace_settings.settings.members.details.joining_date"),
+      width: 124,
       tdRender: (rowData: RowData) =>
-        isSuspended(rowData) ? null : <div>{renderFormattedDate(rowData?.member?.joining_date)}</div>,
+        isSuspended(rowData) ? null : <div className="truncate">{renderFormattedDate(rowData?.member?.joining_date)}</div>,
       thRender: () => (
         <MemberHeaderColumn
           property="joining_date"
