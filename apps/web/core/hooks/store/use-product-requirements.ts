@@ -278,6 +278,12 @@ export const useProductRequirements = ({
       setIsMutating(true);
       try {
         const response = await requirementService.bulkSaveRequirements(workspaceSlug, productId, payload);
+        // 配置里的需求类型只含本产品已用到的：新建用了新类型（含空产品建第一条）要先重取配置，
+        // 否则页面还停在空状态、视图切换器也没有这个类型
+        const knownTypeIds = new Set(configuration?.requirement_types.map((item) => item.id));
+        if (response.created.some((item) => !knownTypeIds.has(item.requirement.requirement_type_id))) {
+          await fetchConfiguration();
+        }
         // 网格是「改一格存一格」，纯更新一律走本地回填；见 syncRequirements
         if (payload.creates.length || payload.deletes.length) {
           await fetchRequirements();
@@ -289,7 +295,7 @@ export const useProductRequirements = ({
         setIsMutating(false);
       }
     },
-    [fetchRequirements, productId, syncRequirements, workspaceSlug]
+    [configuration, fetchConfiguration, fetchRequirements, productId, syncRequirements, workspaceSlug]
   );
 
   const updateSearch = useCallback((value: string) => {

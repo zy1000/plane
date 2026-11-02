@@ -2,9 +2,10 @@
  * 需求级附件区。每条需求天然自带，不依赖需求类型配的附件字段；只在详情抽屉与整页出现，
  * 网格里没有它。
  *
- * 与关联区其它折叠块同一口径：有附件（或正在上传）才出现，空的不占位 —— 上传入口在
- * 关联操作条上（见 requirement-relations-area.tsx），折叠头只放「下载已选」。上传状态
- * 由外层的 useRequirementAttachmentUploads 持有，操作条按钮与这里的拖放区共用一份。
+ * 与关联区其它折叠块同一口径：有附件（或正在上传）才出现，空的不占位 —— 空的时候上传
+ * 入口在关联操作条上（见 requirement-relations-area.tsx）；出现后折叠头也放一个「上传附件」，
+ * 照工作项附件区的「+」。上传状态由外层的 useRequirementAttachmentUploads 持有，操作条按钮、
+ * 折叠头按钮与这里的拖放区共用一份。
  *
  * 附件**算内容**：列表存在行上的 attachments 列，增删都走 onPatch（乐观锁 + 评审中 / 已关闭
  * 闸门 + 版本快照），所以这里的读写权限就是 readOnly，不另开一道门。删除只是从列表里去掉，
@@ -16,7 +17,7 @@
  */
 import { useMemo, useState } from "react";
 import { observer } from "mobx-react";
-import { Download, Eye, Paperclip, Trash2, UploadCloud } from "lucide-react";
+import { Download, Eye, Paperclip, Plus, Trash2, UploadCloud } from "lucide-react";
 import { useDropzone } from "react-dropzone";
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
@@ -143,6 +144,28 @@ const AttachmentRow = ({
   );
 };
 
+/**
+ * 折叠头上的「上传附件」：有附件时人在列表这里找入口，操作条在上方离得远。
+ * 自带一个只点选的 dropzone —— 折叠后列表里的 input 不挂载，借不了它的。
+ */
+const AttachmentHeaderUploadButton = ({ uploads }: { uploads: TRequirementAttachmentUploads }) => {
+  const { t } = useTranslation();
+  const { getRootProps, getInputProps } = useDropzone({
+    onDrop: uploads.onDrop,
+    maxSize: uploads.maxFileSize,
+    multiple: true,
+    noDrag: true,
+  });
+
+  return (
+    <button type="button" {...getRootProps({ className: SECTION_ACTION_BUTTON })}>
+      <input {...getInputProps()} />
+      <Plus className="size-3.5" />
+      {t("requirement_detail.attachments.upload")}
+    </button>
+  );
+};
+
 export const RequirementAttachmentsSection = observer(function RequirementAttachmentsSection({
   workspaceSlug,
   entityId,
@@ -206,18 +229,23 @@ export const RequirementAttachmentsSection = observer(function RequirementAttach
   // 与工作项详情同一口径：没附件也没有在传的，整块不出现 —— 上传入口在操作条上
   if (!attachments.length && !uploadStatuses.length) return null;
 
-  // 折叠头的动作区在折叠态也保留；没选中任何附件时什么都不放，免得留个空容器
+  // 折叠头的动作区在折叠态也保留；只读且没选中任何附件时什么都不放，免得留个空容器
   const actions =
-    selection.selectedCount > 0 ? (
-      <button
-        type="button"
-        className={SECTION_ACTION_BUTTON}
-        disabled={isBatchDownloading}
-        onClick={() => void batchDownload(selection.selectedIds)}
-      >
-        <Download className="size-3.5" />
-        {t("requirement_detail.attachments.download_selected", { count: selection.selectedCount })}
-      </button>
+    selection.selectedCount > 0 || !readOnly ? (
+      <>
+        {selection.selectedCount > 0 && (
+          <button
+            type="button"
+            className={SECTION_ACTION_BUTTON}
+            disabled={isBatchDownloading}
+            onClick={() => void batchDownload(selection.selectedIds)}
+          >
+            <Download className="size-3.5" />
+            {t("requirement_detail.attachments.download_selected", { count: selection.selectedCount })}
+          </button>
+        )}
+        {!readOnly && <AttachmentHeaderUploadButton uploads={uploads} />}
+      </>
     ) : undefined;
 
   return (
