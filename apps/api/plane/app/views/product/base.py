@@ -9,7 +9,7 @@ from plane.app.permissions import (
 )
 from plane.app.serializers.product import ProductSerializer
 from plane.app.views.base import BaseViewSet
-from plane.db.models import Product, ProductMember, Workspace
+from plane.db.models import PlanCase, Product, ProductMember, Workspace
 from plane.utils.product import (
     can_create_product,
     can_manage_workspace_products,
@@ -187,6 +187,21 @@ class ProductViewSet(BaseViewSet):
             return Response(
                 {"error": "Product not found."},
                 status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # 产品的用例被项目计划引用时不让删：PlanCase.case 是 CASCADE，删产品会连带
+        # 悄悄删掉别的项目计划里的用例与执行记录
+        plan_case_count = PlanCase.objects.filter(
+            case__repository__product_id=product.id, plan__deleted_at__isnull=True
+        ).count()
+        if plan_case_count:
+            return Response(
+                {
+                    "error": "该产品的用例已被测试计划引用，不能删除。",
+                    "code": "PRODUCT_HAS_PLAN_CASES",
+                    "plan_case_count": plan_case_count,
+                },
+                status=status.HTTP_409_CONFLICT,
             )
 
         product.delete()

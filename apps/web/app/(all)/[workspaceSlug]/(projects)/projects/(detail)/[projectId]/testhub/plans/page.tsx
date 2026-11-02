@@ -29,7 +29,7 @@ type TestPlan = TPlanListRow;
 type TestPlanResponse = { data: TestPlan[]; count: number };
 import { CreateUpdatePlanModal } from "@/components/qa/plans/create-update-modal";
 import { PlanListTable } from "@/components/qa/plans/plan-list-table";
-import { useTestHub } from "../testhub-context";
+import { useTestHub } from "@/components/qa/shared/testhub/testhub-context";
 import { useProjectPermissions } from "@/hooks/store/use-project-permissions";
 import UnauthorizedImg from "@/app/assets/auth/unauthorized.svg?url";
 import { useTranslation } from "@plane/i18n";

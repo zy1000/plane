@@ -28,7 +28,7 @@ type Props = {
   depth: number;
   workspaceSlug: string;
   workspaceId: string;
-  projectId: string;
+  projectId?: string;
   caseId: string;
   disabled?: boolean;
   onRemove: (commentId: string) => Promise<unknown>;

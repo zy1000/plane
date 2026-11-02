@@ -43,7 +43,7 @@ const TestCaseCommentBlock = observer(function TestCaseCommentBlock(props: {
   activity: TTestCaseActivity;
   workspaceSlug: string;
   workspaceId: string;
-  projectId: string;
+  projectId?: string;
 }) {
   const { activity, workspaceSlug, workspaceId, projectId } = props;
   const { getUserDetails } = useMember();
@@ -155,7 +155,7 @@ const TestCaseActivityRow = observer(function TestCaseActivityRow(props: {
   const { getUserDetails } = useMember();
   const { data: currentUser } = useUser();
 
-  if (projectId && activity.field === "comment" && typeof activity.extra?.comment_html === "string") {
+  if (activity.field === "comment" && typeof activity.extra?.comment_html === "string") {
     return (
       <TestCaseCommentBlock
         activity={activity}

@@ -13,7 +13,7 @@ import { useResponsiveTabLayout } from "@/components/navigation/use-responsive-t
 import { useAppTheme } from "@/hooks/store/use-app-theme";
 import { useAppRouter } from "@/hooks/use-app-router";
 import { useProductsContext } from "./context";
-import { getProductTabPath, PRODUCT_NAVIGATION_ITEMS } from "./navigation";
+import { getProductTabPath, PRODUCT_NAVIGATION_ITEMS, PRODUCT_PREFIX_ACTIVE_TABS } from "./navigation";
 import { buildProductSettingsPath } from "./settings/navigation";
 
 type TProductTopNavigationProps = {
@@ -153,7 +153,10 @@ const ProductNavigationRoot = observer(function ProductNavigationRoot(props: TPr
     [products]
   );
   const isActive = useCallback(
-    (item: TProductRouteNavigationItem) => pathname === item.href || pathname === `${item.href}/`,
+    (item: TProductRouteNavigationItem) =>
+      pathname === item.href ||
+      pathname === `${item.href}/` ||
+      (PRODUCT_PREFIX_ACTIVE_TABS.includes(item.key) && pathname.startsWith(`${item.href}/`)),
     [pathname]
   );
   const { visibleItems, overflowItems, hasOverflow, itemRefs, containerRef } = useResponsiveTabLayout({

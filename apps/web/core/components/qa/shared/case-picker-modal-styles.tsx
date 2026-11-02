@@ -1,5 +1,5 @@
 import { Library, ListChecks } from "lucide-react";
-import { globalEnums } from "@/app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/util";
+import { globalEnums } from "@/components/qa/shared/testhub/util";
 import { ModuleTreeTitle } from "@/components/qa/module-tree";
 
 export const CASE_PICKER_MODAL_CLASS = "qa-case-picker-modal";

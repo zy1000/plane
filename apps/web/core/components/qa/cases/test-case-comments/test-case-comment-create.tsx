@@ -22,7 +22,8 @@ type SubmitPayload = {
 type Props = {
   workspaceSlug: string;
   workspaceId: string;
-  projectId: string;
+  /** 为空（产品下的用例）时贴图走工作区级上传，与模板用例富文本同口径 */
+  projectId?: string;
   caseId: string;
   parentId?: string | null;
   placeholder?: string;
@@ -74,7 +75,7 @@ export const TestCaseCommentCreate = observer(function TestCaseCommentCreate(pro
           parent: parentId,
         });
         const assetIds = uploadedAssetIdsRef.current;
-        if (created?.id && assetIds.length > 0) {
+        if (projectId && created?.id && assetIds.length > 0) {
           try {
             await fileService.updateBulkProjectAssetsUploadStatus(workspaceSlug, projectId, created.id, {
               asset_ids: assetIds,
@@ -146,10 +147,9 @@ export const TestCaseCommentCreate = observer(function TestCaseCommentCreate(pro
                 workspaceSlug,
                 projectId,
                 file,
-                data: {
-                  entity_identifier: caseId,
-                  entity_type: EFileAssetType.TEST_CASE_COMMENT_DESCRIPTION,
-                },
+                data: projectId
+                  ? { entity_identifier: caseId, entity_type: EFileAssetType.TEST_CASE_COMMENT_DESCRIPTION }
+                  : { entity_identifier: "", entity_type: EFileAssetType.CASE_ATTACHMENT },
               });
               uploadedAssetIdsRef.current = [...uploadedAssetIdsRef.current, response.asset_id];
               return response.asset_id;
@@ -157,8 +157,10 @@ export const TestCaseCommentCreate = observer(function TestCaseCommentCreate(pro
             duplicateFile={async (assetId) => {
               const { asset_id } = await duplicateEditorAsset({
                 assetId,
-                entityId: caseId,
-                entityType: EFileAssetType.TEST_CASE_COMMENT_DESCRIPTION,
+                entityId: projectId ? caseId : "",
+                entityType: projectId
+                  ? EFileAssetType.TEST_CASE_COMMENT_DESCRIPTION
+                  : EFileAssetType.CASE_ATTACHMENT,
                 projectId,
                 workspaceSlug,
               });

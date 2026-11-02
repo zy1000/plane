@@ -1,7 +1,7 @@
 """需求 ↔ 测试用例关联：配对规则、两个方向的候选池与批量写校验。
 
-这张关联表有两扇门 —— 需求侧（产品作用域，`views/requirement/test_case.py`）与用例侧
-（项目作用域，`views/qa/case_requirement.py`）。**配对规则只在本模块定义一次**，两端
+这张关联表有两扇门 —— 需求侧（`views/requirement/test_case.py`）与用例侧
+（`views/qa/case_requirement.py`），两边都是产品作用域。**配对规则只在本模块定义一次**，两端
 共用；任何一端自己重写一份，迟早和另一端漂移出「A 能挂 B 但 B 挂不上 A」的鬼故事。
 
 配对规则 —— 一对 (requirement, case) 可关联当且仅当：
@@ -11,8 +11,8 @@
      requirement_project.resolve_linkable_requirements 的 NOT_PRODUCT_SCOPED 同口径）；
   3. requirement.status != closed（见 RequirementItemStatus 的 docstring：closed 不进
      任何关联选择器，但已有关联保留、仍可解除）；
-  4. case.repository.project_id 为空（跨项目共享用例库，放行）**或** 落在需求已关联的
-     项目集合里（RequirementProject）。
+  4. case.repository.product_id == requirement.product_id（2026-11 起用例归产品，
+     需求只能挂本产品的用例）。
 
 **刻意不设评审门槛。** 「需求进项目」这条链路（requirement_project.
 linkable_requirements_queryset）如今同样不设评审门槛；需求进了项目之后再挂容器与
@@ -20,8 +20,6 @@ linkable_requirements_queryset）如今同样不设评审门槛；需求进了�
 views/requirement/container.py 的模块注释：测试是项目侧的节奏，不该被产品侧审批阻塞，
 前端软提示即可。用例关联同理。
 """
-
-from django.db.models import Q
 
 from plane.db.models import (
     Requirement,
@@ -34,7 +32,7 @@ from plane.utils.requirement_project import RequirementLinkError
 
 
 def linked_project_ids(requirement_id):
-    """需求已关联的项目 id。配对规则第 4 条的右半边。
+    """需求已关联的项目 id（项目侧维护关联的权限判定用）。
 
     .order_by() 清掉 RequirementProject 的默认排序（("sort_order", "-created_at")）——
     它只当子查询用，带着排序列进 IN (...) 会变成多列子查询。
@@ -62,57 +60,35 @@ def linked_requirement_ids_of_case(case_id):
     )
 
 
-def _repository_scope_filter(requirement_id):
-    """配对规则第 4 条：共享库（project 为空）放行，否则必须落在需求已关联的项目里。"""
-    return Q(repository__project__isnull=True) | Q(
-        repository__project_id__in=linked_project_ids(requirement_id)
-    )
-
-
-def linkable_test_cases_queryset(*, slug, requirement, restrict_project_id=None):
-    """需求侧候选池：作用域内、尚未关联进来的用例。
+def linkable_test_cases_queryset(*, slug, requirement):
+    """需求侧候选池：需求所属产品下、尚未关联进来的用例。
 
     repository__deleted_at__isnull=True 必须显式写：外键穿透不走 SoftDeletionManager，
     软删掉的用例库下面的用例照样会被捞出来（同 requirement_project 里那一串
     issue__deleted_at__isnull=True 的理由）。
-
-    `restrict_project_id` 把池子进一步收窄到某个项目的用例库（外加共享库）。项目侧的
-    需求抽屉必须带它 —— 一条需求可能进了多个项目，不收窄的话项目 A 的成员会在选择器里
-    浏览到项目 B 的用例名。同 views/requirement/project.py 里 exclude_cycle_id 也要带
-    project_id 的理由：候选池是主动浏览面，不该露出别的项目的事实。调用方负责先校验这个
-    project 确实在需求的关联项目里。
     """
-    queryset = TestCase.objects.filter(
-        repository__workspace__slug=slug,
-        repository__deleted_at__isnull=True,
-    )
-    if restrict_project_id:
-        queryset = queryset.filter(
-            Q(repository__project__isnull=True)
-            | Q(repository__project_id=restrict_project_id)
-        )
-    else:
-        queryset = queryset.filter(_repository_scope_filter(requirement.id))
     return (
-        queryset.exclude(id__in=linked_case_ids(requirement.id))
+        TestCase.objects.filter(
+            repository__workspace__slug=slug,
+            repository__deleted_at__isnull=True,
+            repository__product_id=requirement.product_id,
+        )
+        .exclude(id__in=linked_case_ids(requirement.id))
         .select_related("repository", "module", "assignee")
         .order_by("repository__name", "code", "id")
     )
 
 
 def linkable_requirements_for_case_queryset(*, slug, case):
-    """用例侧候选池：能挂到这条用例上、且尚未挂上的需求。
+    """用例侧候选池：用例所属产品下、能挂且尚未挂上的需求。
 
     **刻意不叫 linkable_requirements_queryset** —— requirement_project 里已有同名函数，
-    语义完全不同（那个是「哪些需求能进这个项目」）。两个名字撞在一起，读代码的人会以为
-    是同一个池子。
-
-    共享用例库（repository.project 为空）没有项目可收窄，池子就是本工作区所有
-    product 归属的活跃需求。
+    语义完全不同（那个是「哪些需求能进这个项目」）。
     """
-    queryset = (
+    return (
         Requirement.objects.filter(
             workspace__slug=slug,
+            product_id=case.repository.product_id,
             product_id__isnull=False,
         )
         .exclude(status=RequirementItemStatus.CLOSED)
@@ -120,14 +96,6 @@ def linkable_requirements_for_case_queryset(*, slug, case):
         .select_related("product")
         .order_by("product__identifier", "sort_order", "created_at", "id")
     )
-    project_id = case.repository.project_id if case.repository_id else None
-    if project_id:
-        queryset = queryset.filter(
-            id__in=RequirementProject.objects.filter(project_id=project_id)
-            .order_by()
-            .values_list("requirement_id", flat=True)
-        )
-    return queryset
 
 
 def resolve_linkable_test_cases(*, slug, requirement, case_ids):
@@ -150,18 +118,14 @@ def resolve_linkable_test_cases(*, slug, requirement, case_ids):
         ).select_related("repository")
     )
     found = {str(row.id): row for row in rows}
-    allowed_project_ids = {str(pid) for pid in linked_project_ids(requirement.id)}
 
     conflicts = []
     for case_id in requested:
         row = found.get(case_id)
         if row is None:
             conflicts.append({"id": case_id, "reason": "NOT_FOUND"})
-            continue
-        project_id = row.repository.project_id
-        # project 为空是共享用例库，跨项目可用，不参与作用域判定。
-        if project_id and str(project_id) not in allowed_project_ids:
-            conflicts.append({"id": case_id, "reason": "PROJECT_OUT_OF_SCOPE"})
+        elif row.repository.product_id != requirement.product_id:
+            conflicts.append({"id": case_id, "reason": "PRODUCT_OUT_OF_SCOPE"})
 
     if conflicts:
         raise RequirementLinkError(
@@ -193,17 +157,7 @@ def resolve_linkable_requirements_for_case(*, slug, case, requirement_ids):
         )
     )
     found = {str(row.id): row for row in rows}
-    project_id = case.repository.project_id if case.repository_id else None
-    allowed_requirement_ids = (
-        {
-            str(rid)
-            for rid in RequirementProject.objects.filter(project_id=project_id)
-            .order_by()
-            .values_list("requirement_id", flat=True)
-        }
-        if project_id
-        else None
-    )
+    case_product_id = case.repository.product_id if case.repository_id else None
 
     conflicts = []
     for requirement_id in requested:
@@ -214,13 +168,8 @@ def resolve_linkable_requirements_for_case(*, slug, case, requirement_ids):
             conflicts.append({"id": requirement_id, "reason": "NOT_PRODUCT_SCOPED"})
         elif row.status == RequirementItemStatus.CLOSED:
             conflicts.append({"id": requirement_id, "reason": "CLOSED"})
-        elif (
-            allowed_requirement_ids is not None
-            and requirement_id not in allowed_requirement_ids
-        ):
-            # 用例库属于某个项目时，只有进过该项目的需求才配对得上；共享库
-            # （allowed_requirement_ids is None）不做这道收窄。
-            conflicts.append({"id": requirement_id, "reason": "PROJECT_OUT_OF_SCOPE"})
+        elif row.product_id != case_product_id:
+            conflicts.append({"id": requirement_id, "reason": "PRODUCT_OUT_OF_SCOPE"})
 
     if conflicts:
         raise RequirementLinkError(
@@ -252,21 +201,6 @@ def link_test_cases(*, requirement, cases, actor_id=None):
         batch_size=100,
         ignore_conflicts=True,
     )
-
-
-def unlink_test_cases_for_projects(*, requirement_id, project_ids):
-    """需求被移出一批项目时，同步解除这些项目用例库下的用例关联。
-
-    **共享用例库（repository.project 为空）的关联行保留** —— 它不属于任何项目，
-    不该被一次项目解绑带走。`project_id__in` 天然排除 NULL，正好是想要的语义。
-
-    与 views/requirement/project.py 里同步软删 Cycle/Release/Issue 三表同一个理由：
-    级联软删走 Celery，异步窗口期里选择器和列表会先看到已经不该存在的行。
-    """
-    RequirementTestCase.objects.filter(
-        requirement_id=requirement_id,
-        case__repository__project_id__in=list(project_ids),
-    ).delete()
 
 
 def has_project_side_link_permission(user, *, slug, requirement, manage=False):

@@ -39,6 +39,7 @@ from plane.db.models import (
 
 from plane.utils.analytics_plot import build_graph_plot
 from plane.utils.issue_filters import issue_filters
+from plane.utils.qa import project_case_repository_ids, project_product_ids
 
 
 class AnalyticsEndpoint(BaseAPIView):
@@ -669,7 +670,11 @@ class ProjectStatisticsEndpoint(BaseAPIView):
         total_pages = ProjectPage.objects.filter(project_id=project_id, deleted_at__isnull=True).count()
         total_views = IssueView.objects.filter(project_id=project_id, scope="issues", deleted_at__isnull=True).count()
 
-        test_repositories = TestCaseRepository.objects.filter(project_id=project_id, workspace__slug=slug, deleted_at__isnull=True)
+        # 项目用例池：项目已关联产品下的用例库；评审同样取已关联产品的
+        linked_product_ids = project_product_ids(project_id)
+        test_repositories = TestCaseRepository.objects.filter(
+            id__in=project_case_repository_ids(project_id), workspace__slug=slug
+        )
         test_cases = TestCase.objects.filter(repository__in=test_repositories, deleted_at__isnull=True)
         test_repository_count = test_repositories.count()
         test_case_count = test_cases.count()
@@ -799,7 +804,7 @@ class ProjectStatisticsEndpoint(BaseAPIView):
         review_trend_start = today - timedelta(days=29)
         review_pass_by_day = (
             CaseReviewRecord.objects.filter(
-                crt__review__project_id=project_id,
+                crt__review__product_id__in=linked_product_ids,
                 created_at__date__gte=review_trend_start,
                 created_at__date__lte=today,
                 result=CaseReviewRecord.Result.PASS,
@@ -811,7 +816,7 @@ class ProjectStatisticsEndpoint(BaseAPIView):
         )
         review_fail_by_day = (
             CaseReviewRecord.objects.filter(
-                crt__review__project_id=project_id,
+                crt__review__product_id__in=linked_product_ids,
                 created_at__date__gte=review_trend_start,
                 created_at__date__lte=today,
                 result=CaseReviewRecord.Result.FAIL,
@@ -832,7 +837,7 @@ class ProjectStatisticsEndpoint(BaseAPIView):
             review_trend_30d.append({"date": d, "pass": p, "fail": f, "pass_rate": round((p / denom) * 100, 2) if denom else 0})
 
         latest_active_review = (
-            CaseReview.objects.filter(project_id=project_id, deleted_at__isnull=True)
+            CaseReview.objects.filter(product_id__in=linked_product_ids, deleted_at__isnull=True)
             .exclude(state=CaseReview.State.COMPLETED)
             .order_by("-created_at")
             .first()

@@ -13,7 +13,7 @@ import * as LucideIcons from "lucide-react";
 import debounce from "lodash-es/debounce";
 import { CaseService as CaseApiService } from "@/services/qa/case.service";
 import { PlanService as PlanApiService } from "@/services/qa/plan.service";
-import { getEnums } from "@/app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/util";
+import { getEnums } from "@/components/qa/shared/testhub/util";
 import {
   RichTextEditor,
   STEPS_TABLE_TH_STYLE,
@@ -1241,7 +1241,6 @@ export default function TestExecutionPage() {
                           />
                           <CaseMetaForm
                             disabled
-                            projectId={projectId ? String(projectId) : undefined}
                             assignee={normalizeId(caseDetail?.assignee)}
                             onAssigneeChange={() => {}}
                             onAssigneeBlur={() => {}}

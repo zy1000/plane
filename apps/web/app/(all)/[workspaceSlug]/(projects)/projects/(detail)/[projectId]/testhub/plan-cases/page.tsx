@@ -21,7 +21,7 @@ import {
   type TPlanCaseItem,
   type TPlanListItem,
 } from "@/services/qa/plan.service";
-import { formatDateTime, globalEnums } from "../util";
+import { formatDateTime, globalEnums } from "@/components/qa/shared/testhub/util";
 import { useUser } from "@/hooks/store/user";
 import { useTranslation } from "@plane/i18n";
 import {
@@ -1252,7 +1252,6 @@ export default function PlanCasesPage() {
         }}
         caseId={activeCase?.id}
         workspaceSlug={String(workspaceSlug)}
-        projectId={String(projectId || "")}
       />
     </div>
   );

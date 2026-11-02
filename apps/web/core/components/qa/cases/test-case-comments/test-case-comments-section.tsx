@@ -10,7 +10,8 @@ import { buildCommentTree } from "./test-case-comment-utils";
 
 type Props = {
   workspaceSlug: string;
-  projectId: string;
+  /** 用例归产品后没有项目语境，为空时富文本贴图走工作区级上传 */
+  projectId?: string;
   caseId: string;
   disabled?: boolean;
 };

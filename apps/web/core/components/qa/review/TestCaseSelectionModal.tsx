@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { Input, Pagination, Table, Tooltip, Tree } from "antd";
-import { globalEnums, getEnums } from "@/app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/util";
+import { globalEnums, getEnums } from "@/components/qa/shared/testhub/util";
 import type { TableProps, TreeProps } from "antd";
 import { CaseService as QaCaseService } from "@/services/qa/case.service";
 import { Layers, Search, X } from "lucide-react";
@@ -39,7 +39,8 @@ type Props = {
   open: boolean;
   onClose: () => void;
   initialSelectedIds: string[];
-  projectId?: string;
+  /** 用例所属产品（2026-11 起用例 / 评审归产品） */
+  productId?: string;
   reviewId?: string;
   onConfirm: (ids: string[], assignees: string[]) => void;
   onChangeSelected?: (ids: string[]) => void;
@@ -49,15 +50,15 @@ export default function TestCaseSelectionModal({
   open,
   onClose,
   initialSelectedIds,
-  projectId: projectIdProp,
+  productId: productIdProp,
   reviewId,
   onConfirm,
   onChangeSelected,
 }: Props) {
   const { t } = useTranslation();
-  const { workspaceSlug, projectId: projectIdFromParams } = useParams() as { workspaceSlug?: string; projectId?: string };
+  const { workspaceSlug, productId: productIdFromParams } = useParams() as { workspaceSlug?: string; productId?: string };
   const qaCaseService = useMemo(() => new QaCaseService(), []);
-  const projectId = projectIdProp ?? projectIdFromParams;
+  const productId = productIdProp ?? productIdFromParams;
 
   const [caseTree, setCaseTree] = useState<any | null>(null);
   const [expandedKeys, setExpandedKeys] = useState<string[]>([]);
@@ -109,8 +110,8 @@ export default function TestCaseSelectionModal({
       if (reviewId) {
         const data = await qaCaseService.getReviewUnassociatedCaseTree(String(workspaceSlug), { review_id: String(reviewId) });
         setCaseTree(data || null);
-      } else if (projectId) {
-        const data = await qaCaseService.getProjectCaseTree(String(workspaceSlug), { project_id: String(projectId) });
+      } else if (productId) {
+        const data = await qaCaseService.getProjectCaseTree(String(workspaceSlug), { product_id: String(productId) });
         setCaseTree(data || null);
       } else {
         setCaseTree(null);
@@ -124,7 +125,7 @@ export default function TestCaseSelectionModal({
 
   const fetchCases = async (page: number, size: number, repoId?: string, moduleId?: string) => {
     if (!workspaceSlug) return;
-    if (!reviewId && !projectId) return;
+    if (!reviewId && !productId) return;
     setLoadingCases(true);
     try {
       const params: any = {
@@ -132,7 +133,7 @@ export default function TestCaseSelectionModal({
         page_size: size,
       };
       if (reviewId) params.review_id = String(reviewId);
-      else params.project_id = String(projectId);
+      else params.product_id = String(productId);
 
       if (repoId) params.repository_id = repoId;
       if (moduleId) params.module_id = moduleId;
@@ -156,14 +157,14 @@ export default function TestCaseSelectionModal({
   useEffect(() => {
     if (!open) return;
     if (!workspaceSlug) return;
-    if (!reviewId && !projectId) return;
+    if (!reviewId && !productId) return;
     fetchTree();
     fetchCases(1, pageSize, undefined, undefined);
   }, [open]);
 
   useEffect(() => {
     if (!open) return;
-    if (!reviewId && !projectId) return;
+    if (!reviewId && !productId) return;
     fetchCases(1, pageSize, selectedRepositoryId || undefined, selectedModuleId || undefined);
   }, [searchName]);
 
@@ -316,14 +317,14 @@ export default function TestCaseSelectionModal({
 
   const getNodeCaseIds = async (node: any): Promise<string[]> => {
     if (!workspaceSlug) return [];
-    if (!reviewId && !projectId) return [];
+    if (!reviewId && !productId) return [];
     const kind = node?.kind as string | undefined;
     const cacheKey = String(node?.key || "");
     if (cacheKey && nodeCaseIdsCacheRef.current[cacheKey]) return nodeCaseIdsCacheRef.current[cacheKey];
 
     const params: any = {};
     if (reviewId) params.review_id = String(reviewId);
-    else params.project_id = String(projectId);
+    else params.product_id = String(productId);
 
     if (kind === "repository" || kind === "repository_modules_all" || kind === "module") {
       if (node?.repositoryId) params.repository_id = String(node.repositoryId);
@@ -559,7 +560,6 @@ export default function TestCaseSelectionModal({
               <span>评审人</span>
               <MemberDropdown
                 multiple
-                projectId={projectId ? String(projectId) : undefined}
                 value={assignees}
                 onChange={(value) => setAssignees(Array.isArray(value) ? value : [])}
                 placeholder="可不选"

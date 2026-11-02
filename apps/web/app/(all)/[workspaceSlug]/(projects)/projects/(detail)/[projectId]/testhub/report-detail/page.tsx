@@ -16,7 +16,7 @@ import { useWorkspace } from "@/hooks/store/use-workspace";
 import { useProjectPermissions } from "@/hooks/store/use-project-permissions";
 import UnauthorizedImg from "@/app/assets/auth/unauthorized.svg?url";
 import type { TReportDetail, TReportPlanStat } from "@/services/qa/report.service";
-import { tmProjectBasePath } from "../route-helpers";
+import { tmProjectBasePath } from "@/components/qa/shared/testhub/route-helpers";
 import { useReportDetail } from "./use-report-detail";
 import { ReportOverviewCard } from "./report-overview-card";
 import { ReportPlansCard } from "./report-plans-card";

@@ -183,9 +183,12 @@
 
 `db/models/qa.py`（668 行，16 个 model，全部 `BaseModel` 而非 `ProjectBaseModel`）。
 
-**作用域是混合的，这是最容易搞错的点：**
-- 用例侧（`TestCaseRepository` / `CaseModule` / `CaseLabel` / `TestCase`）走 **workspace 级**路由 `workspaces/<slug>/test/...`，且 `TestCaseRepository.project` **可为 null** —— 允许跨项目共享用例库。
-- 计划 / 评审 / 报告走 **project 级**路由 `workspaces/<slug>/projects/<pid>/test/{case,plane,review,report}/`。
+**作用域是混合的，这是最容易搞错的点（2026-11 用例归产品）：**
+- 用例库 / 用例 / 用例评审归**产品**：`TestCaseRepository.product`、`CaseReview.product`、`CaseReviewModule.product`（迁移 `0434`；三表的 `project` 列只为存量迁移保留、代码不读，迁完后删）。CRUD 走 `workspaces/<slug>/products/<product_id>/test/{case,review}/`，其余用例侧接口仍是 workspace 级 `workspaces/<slug>/test/...`，参数从 `project_id` 换成 `product_id`。模板库 `is_template=True` 且 `product` 为空。权限暂不细分（只要工作区成员，`views/qa/product_scope.py::allow_product_scope`），等权限重构。
+- 计划 / 报告留在**项目**：`workspaces/<slug>/projects/<pid>/test/{plane,report}/`。项目能用的用例 = **项目已关联产品（`ProductProject`）下的用例库**，口径只在 `plane/utils/qa.py::project_case_repository_ids` —— 计划加用例、按迭代/模块/发布导入、工作项关联用例、工时挂用例、项目概览/分析统计都走它。
+- 新用例编号 `{产品开发编号}-TC-{n}`（产品内流水）；存量编号不动。删产品时若其用例在任何计划里 → 409 `PRODUCT_HAS_PLAN_CASES`。
+- 存量迁移：`python manage.py move_cases_to_product --export 清单.csv` → 填「目标产品开发编号」→ `--apply 清单.csv [--commit]`（一个项目整体迁到一个产品，顺带补 ProductProject）。
+- 前端：产品页「测试」tab（`products/[productId]/testhub/`，用例 / 用例评审）；项目「测试」只剩计划 / 报告。共用页签栏与外壳在 `core/components/qa/shared/testhub/`。
 
 结构分四块：
 - 用例：`TestCaseRepository`（根容器）→ `CaseModule`（目录树）/ `CaseLabel` → `TestCase` → `TestCaseVersion` / `TestCaseComment` / `TestCaseActivity`
@@ -385,7 +388,7 @@ Project (原生)
   ├── TestPlan ──FK── Cycle
   │      ├──M2M── Module (原生)
   │      └──M2M── Release                         ← QA 与 release 唯一的直接关联
-  ├── TestCase ──M2M── Issue                      （用例覆盖工作项）
+  ├── TestCase ──M2M── Issue                      （用例覆盖工作项；用例库归 Product，只能挂已关联产品的用例）
   │   PlanCase ──M2M── Issue                      （执行中提出的缺陷）
   └── Workflow ──FK── IssueType，Transition ──FK── State，审批人 ──FK── ProjectRole
       IssueTransitionRecord ──FK── Issue

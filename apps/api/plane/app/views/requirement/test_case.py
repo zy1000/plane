@@ -5,16 +5,15 @@
 """需求 ↔ 测试用例的关联端点（产品侧）。
 
 **产品作用域而不是项目作用域** —— 这是与需求的另外四张关联表最大的不同。迭代 / 发布 /
-工作项都是项目级事实，所以那些端点挂在 projects/<project_id>/ 下；测试用例不是：用例的
-作用域间接来自 TestCaseRepository.project，而那一列可空（跨项目共享用例库）。关联本身是
-需求级的，一条需求的关联用例可以横跨它进过的所有项目，按单个项目切开就表达不出来。
+工作项都是项目级事实，所以那些端点挂在 projects/<project_id>/ 下；测试用例不是：用例库
+挂在产品上（TestCaseRepository.product），需求只能挂本产品的用例。
 
 权限是**两道门任一放行**（见 _resolve）：产品侧的 can_view_product /
 can_edit_product_requirements，或该需求已关联项目上的 PROJECT_REQUIREMENT_LINK_VIEW /
 MANAGE。后者不可省 —— 项目成员不一定是产品成员，而 can_view_product 只对 public 产品
 放行非产品成员，只认产品权限的话项目侧的需求抽屉连列表都拉不到。
 
-用例侧还有第三个入口（views/qa/case_requirement.py，项目作用域 + QA_CASE_* 权限），
+用例侧还有第三个入口（views/qa/case_requirement.py，产品作用域），
 写的是同一张表 —— 这正是 RequirementProject 的既有先例：多个入口、不同钥匙、
 一套配对规则。
 
@@ -34,7 +33,6 @@ from plane.utils.requirement_test_case import (
     has_project_side_link_permission,
     link_test_cases,
     linkable_test_cases_queryset,
-    linked_project_ids,
     resolve_linkable_test_cases,
 )
 
@@ -60,8 +58,8 @@ CASE_ROW_FIELDS = (
 CASE_ROW_ANNOTATIONS = {
     "repository_name": F("repository__name"),
     "module_name": F("module__name"),
-    # project 为空表示共享用例库；前端据此打标，也据此解释「为什么别的项目也看得到」
-    "repository_project_id": F("repository__project_id"),
+    # 用例归产品（2026-11）：前端据此打开产品下的用例详情
+    "repository_product_id": F("repository__product_id"),
 }
 
 
@@ -180,21 +178,8 @@ class RequirementTestCaseViewSet(BaseViewSet):
         if error is not None:
             return error
 
-        # 项目侧抽屉传 project_id 把池子收窄到本项目 + 共享库，免得项目 A 的成员在
-        # 选择器里浏览到项目 B 的用例名。只接受确实在这条需求关联项目里的 id ——
-        # 否则这个参数就成了探测任意项目用例库的口子。
-        restrict_project_id = request.query_params.get("project_id") or None
-        if restrict_project_id and restrict_project_id not in {
-            str(pid) for pid in linked_project_ids(requirement.id)
-        }:
-            return Response(
-                {"error": "Project is not linked to this requirement."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        queryset = linkable_test_cases_queryset(
-            slug=slug, requirement=requirement, restrict_project_id=restrict_project_id
-        )
+        # 用例归产品，候选池就是需求所属产品下的用例，不再按项目收窄
+        queryset = linkable_test_cases_queryset(slug=slug, requirement=requirement)
 
         search = (request.query_params.get("search") or "").strip()
         if search:

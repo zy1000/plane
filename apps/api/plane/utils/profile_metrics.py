@@ -98,6 +98,8 @@ REQUIREMENT_PROFILE_METRICS = frozenset(
     }
 )
 PRODUCT_SCOPED_METRICS = REQUIREMENT_PROFILE_METRICS | {"pending_requirement_approvals"}
+# 一级节点是产品的指标：需求类 + 待评审用例（用例评审 2026-11 起归产品）
+PRODUCT_GROUPED_METRICS = PRODUCT_SCOPED_METRICS | {"pending_review_cases"}
 
 
 def _accessible_project_ids(slug, viewer):
@@ -418,8 +420,8 @@ def get_profile_metric_queryset(metric, slug, user_id, viewer):
             case__deleted_at__isnull=True,
             case__repository__deleted_at__isnull=True,
             review__deleted_at__isnull=True,
-            review__project__workspace__slug=slug,
-            review__project_id__in=accessible_project_ids,
+            review__product__workspace__slug=slug,
+            review__product_id__in=accessible_product_ids(slug, viewer),
         )
         .annotate(
             personal_review_status=Subquery(latest_review_result.values("result")[:1])
@@ -428,7 +430,7 @@ def get_profile_metric_queryset(metric, slug, user_id, viewer):
             Q(personal_review_status__isnull=True)
             | Q(personal_review_status=CaseReviewRecord.Result.RE_REVIEW)
         )
-        .select_related("case", "review", "review__project")
+        .select_related("case", "review", "review__product")
         .distinct()
     )
 
@@ -449,8 +451,8 @@ def apply_profile_metric_filters(
         return queryset
 
     if metric == "pending_review_cases":
-        if project_id:
-            queryset = queryset.filter(review__project_id=project_id)
+        if product_id:
+            queryset = queryset.filter(review__product_id=product_id)
         if review_id:
             queryset = queryset.filter(review_id=review_id)
         return queryset
@@ -466,7 +468,7 @@ def build_profile_metric_tree(queryset, metric):
         child_fields = ("plan_id", "plan__name")
         child_type = "plan"
     elif metric == "pending_review_cases":
-        project_fields = ("review__project_id", "review__project__name")
+        project_fields = ("review__product_id", "review__product__name")
         child_fields = ("review_id", "review__name")
         child_type = "review"
     elif metric in PRODUCT_SCOPED_METRICS:
@@ -478,7 +480,7 @@ def build_profile_metric_tree(queryset, metric):
         project_fields = ("project_id", "project__name")
         child_fields = None
         child_type = None
-    node_type = "product" if metric in PRODUCT_SCOPED_METRICS else "project"
+    node_type = "product" if metric in PRODUCT_GROUPED_METRICS else "project"
 
     project_rows = queryset.order_by().values(*project_fields).annotate(count=Count("id", distinct=True))
     children_by_project = {}

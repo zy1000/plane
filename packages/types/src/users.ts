@@ -344,7 +344,9 @@ export interface IProfileMetricReviewCase {
   is_re_review: boolean;
   personal_review_status: string;
   priority: string;
-  project: IProfileMetricProject;
+  /** 用例评审 2026-11 起归产品：project 恒为 null，看 product */
+  project: IProfileMetricProject | null;
+  product: IProfileMetricProduct | null;
   review: { id: string; name: string };
   title: string;
 }

@@ -12,7 +12,7 @@ import { PlanCaseReviewRecordList } from "@/components/qa/plans/plan-case-review
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { ButtonAvatars } from "@/components/dropdowns/member/avatar";
 import { useMember } from "@/hooks/store/use-member";
-import { getEnums } from "@/app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/util";
+import { getEnums } from "@/components/qa/shared/testhub/util";
 import { FileTypeBadge, formatFileSize } from "./execution-file-ui";
 
 export type ExecAttachment = {

@@ -114,7 +114,8 @@ class TimeSheet(BaseModel):
       - issue / test_case 为可选的二级挂靠对象，最多只能同时填写其中一个；
         具体必填/必空关系由 category.key 决定（见 clean()）。
       - 当提供 issue 时，project 由 issue.project 自动回填；
-        当提供 test_case 时，project 由 test_case.repository.project 自动回填。
+        用例归产品（2026-11）后，挂 test_case 时 project 必须显式给，且用例所属产品
+        要已关联到该项目。
     """
 
     member = models.ForeignKey(
@@ -302,11 +303,15 @@ class TimeSheet(BaseModel):
         if self.issue_id and self.project_id and self.issue.project_id != self.project_id:
             raise ValidationError({"issue": "所选工作项不属于当前项目。"})
 
-        # 校验 test_case 与 project 归属一致
+        # 校验 test_case 所属产品已关联到当前项目
         if self.test_case_id and self.project_id:
-            case_project_id = self.test_case.repository.project_id
-            if case_project_id != self.project_id:
-                raise ValidationError({"test_case": "所选测试用例不属于当前项目。"})
+            from .product import ProductProject
+
+            if not ProductProject.objects.filter(
+                project_id=self.project_id,
+                product_id=self.test_case.repository.product_id,
+            ).exists():
+                raise ValidationError({"test_case": "所选测试用例的产品未关联到当前项目。"})
 
         if (
             self.member_id
@@ -334,10 +339,6 @@ class TimeSheet(BaseModel):
         # 挂靠工作项时，自动回填所属项目
         if self.issue_id and not self.project_id:
             self.project_id = self.issue.project_id
-
-        # 挂靠测试用例时，自动回填所属项目
-        if self.test_case_id and not self.project_id:
-            self.project_id = self.test_case.repository.project_id
 
         # category 未指定时按 issue / test_case 兜底推断（兼容旧调用点与迁移期）
         if not self.category_id:

@@ -35,13 +35,12 @@ import { CaseService as ReviewApiService } from "@/services/qa/review.service";
 import {
   formatDateTime,
   globalEnums,
-} from "@/app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/util";
+} from "@/components/qa/shared/testhub/util";
 import { ChevronDownIcon } from "@plane/propel/icons";
 import { isProjectPermissionError } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { qaCaseSetToastError, qaCaseSetToastSuccess } from "@/utils/qa-case-error";
 import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
-import { useUserPermissions } from "@/hooks/store/user";
 import { useTemplatePermissions } from "@/components/template-management/permissions";
 import { FiltersRow } from "@/components/rich-filters/filters-row";
 import { FiltersToggle } from "@/components/rich-filters/filters-toggle";
@@ -79,6 +78,7 @@ type TestCase = {
   code?: string;
   name: string;
   latest_execution_plan_id?: string | null;
+  latest_execution_project_id?: string | null;
   latest_execution_result?: string;
   review?: string;
   remark?: string;
@@ -114,52 +114,38 @@ const treeNodesFind = (nodes: TModuleTreeNode[], key: string): TModuleTreeNode |
   }
   return undefined;
 };
-const QA_CASE_CREATE_PERMISSION_KEY = "qa.case.create" as const;
-const QA_CASE_EDIT_PERMISSION_KEY = "qa.case.edit" as const;
-const QA_CASE_DELETE_PERMISSION_KEY = "qa.case.delete" as const;
-const QA_CASE_IMPORT_EXPORT_PERMISSION_KEY = "qa.case.import_export" as const;
 // 删除走 DELETE ?id__in=，跨页全选上千条时分批发，避免 URL 超长
 const DELETE_BATCH_SIZE = 100;
 
 export type TRepositoryCasesViewProps = {
   workspaceSlug: string;
-  projectId?: string; // 本次抽取后项目页必传；可选是为后续模板模式预留
+  productId?: string; // 产品模式必传（2026-11 起用例归产品）；模板模式不传
   repositoryId: string | null; // 页面在 URL/sessionStorage 解析完成前可能为 null，组件按原页面行为处理空态
   repositoryName?: string;
-  mode?: "project" | "template"; // 本次只实现 "project"（默认），类型先预留
-  treeHeader?: ReactNode; // 树头左侧内容（项目页放用例库切换器），由壳层传入
+  mode?: "product" | "template";
+  treeHeader?: ReactNode; // 树头左侧内容（产品页放用例库切换器），由壳层传入
   toolbarPortalEl?: HTMLElement | null; // 传入后搜索/筛选/操作按钮挂到页头右侧
 };
 
 export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
-  const { workspaceSlug, repositoryId, repositoryName, treeHeader, toolbarPortalEl, mode = "project" } = props;
-  // 模板模式：workspace 级模板库，无项目语境（权限=工作区成员，走 template-case 接口）
+  const { workspaceSlug, repositoryId, repositoryName, treeHeader, toolbarPortalEl, mode = "product" } = props;
+  // 模板模式：workspace 级模板库（走 template-case 接口）；产品模式走产品作用域用例接口
   const isTemplateMode = mode === "template";
-  // project 模式必传；模板模式恒为 undefined
-  const projectId = isTemplateMode ? undefined : props.projectId;
+  // product 模式必传；模板模式恒为 undefined
+  const productId = isTemplateMode ? undefined : props.productId;
   const { t } = useTranslation();
   const router = useRouter();
   const searchParams = useSearchParams();
   const { updateQueryParams } = useQueryParams();
-  const { allowProjectPermissionKeys } = useUserPermissions();
   const workspaceSlugString = String(workspaceSlug || "");
-  const projectIdString = String(projectId || "");
-  // 模板模式走工作区级模板权限（与后端 workspace.case_template.* 口径一致），
-  // 项目模式仍走项目侧 QA key
+  // 模板模式走工作区级模板权限（与后端 workspace.case_template.* 口径一致）；
+  // 产品下的用例暂不细分权限（等权限重构），工作区成员都可操作
   const { canViewCaseTemplates, canManageCaseTemplates, canImportExportCaseTemplates } =
     useTemplatePermissions(workspaceSlugString);
-  const canCreateCase = isTemplateMode
-    ? canManageCaseTemplates
-    : allowProjectPermissionKeys([QA_CASE_CREATE_PERMISSION_KEY], workspaceSlugString, projectIdString);
-  const canEditCase = isTemplateMode
-    ? canManageCaseTemplates
-    : allowProjectPermissionKeys([QA_CASE_EDIT_PERMISSION_KEY], workspaceSlugString, projectIdString);
-  const canDeleteCase = isTemplateMode
-    ? canManageCaseTemplates
-    : allowProjectPermissionKeys([QA_CASE_DELETE_PERMISSION_KEY], workspaceSlugString, projectIdString);
-  const canImportExportCase = isTemplateMode
-    ? canImportExportCaseTemplates
-    : allowProjectPermissionKeys([QA_CASE_IMPORT_EXPORT_PERMISSION_KEY], workspaceSlugString, projectIdString);
+  const canCreateCase = isTemplateMode ? canManageCaseTemplates : true;
+  const canEditCase = isTemplateMode ? canManageCaseTemplates : true;
+  const canDeleteCase = isTemplateMode ? canManageCaseTemplates : true;
+  const canImportExportCase = isTemplateMode ? canImportExportCaseTemplates : true;
   const moduleIdFromUrl = searchParams.get("moduleId");
 
   const [cases, setCases] = useState<TestCase[]>([]);
@@ -219,8 +205,7 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
   const [modules, setModules] = useState<any[]>([]);
   const { areAllConfigsInitialized, configs: casesFilterConfigs } = useCasesFiltersConfig({
     workspaceSlug: String(workspaceSlug || ""),
-    // 模板模式无项目语境：不传 projectId，维护人筛选源切到工作区成员
-    projectId: isTemplateMode ? undefined : String(projectId || ""),
+    // 用例没有项目语境：不传 projectId，维护人筛选源是工作区成员
     reviewEnums,
     caseTypeEnums,
     casePriorityEnums,
@@ -425,12 +410,12 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
       okButtonProps: { danger: true },
       onOk: async () => {
         if (!workspaceSlug) return;
-        if (!isTemplateMode && !projectId) return;
+        if (!isTemplateMode && !productId) return;
         try {
           for (let i = 0; i < selectedCaseIds.length; i += DELETE_BATCH_SIZE) {
             const batch = selectedCaseIds.slice(i, i + DELETE_BATCH_SIZE);
             if (isTemplateMode) await caseService.deleteTemplateCases(workspaceSlugString, batch);
-            else await caseService.deleteCase(workspaceSlug as string, String(projectId), batch);
+            else await caseService.deleteCase(workspaceSlug as string, String(productId), batch);
           }
           qaCaseSetToastSuccess("删除成功");
           setSelectedCaseIds([]);
@@ -474,7 +459,7 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
     orderingParam?: string | null
   ) => {
     if (!workspaceSlug || !repositoryId) return;
-    if (!isTemplateMode && !projectId) return;
+    if (!isTemplateMode && !productId) return;
     try {
       setError(null);
       setAccessDenied(false);
@@ -490,7 +475,7 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
 
       const response: TestCaseResponse = isTemplateMode
         ? await caseService.getTemplateCases(workspaceSlugString, queryParams)
-        : await caseService.getCases(workspaceSlug as string, String(projectId), queryParams);
+        : await caseService.getCases(workspaceSlug as string, String(productId), queryParams);
       setCases(response?.data || []);
       setTotal(response?.count || 0); // 保留：用于当前查询的分页
       setCurrentPage(page);
@@ -524,7 +509,7 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
   );
 
   const casesFilter = useCasesFilter({
-    instanceKey: `${repositoryId || "all"}-${projectId || "all"}`,
+    instanceKey: `${repositoryId || "all"}-${productId || "all"}`,
     initialExpression: EMPTY_CASE_FILTER_EXPRESSION,
     areAllConfigsInitialized,
     configs: casesFilterConfigs,
@@ -654,13 +639,13 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
 
   const handleSelectAllCases = async () => {
     if (!workspaceSlug || !repositoryId) return;
-    if (!isTemplateMode && !projectId) return;
+    if (!isTemplateMode && !productId) return;
     setSelectingAll(true);
     try {
       const queryParams = { ...buildCaseQueryParams(filters), only_ids: "true" };
       const response = isTemplateMode
         ? await caseService.getTemplateCases(workspaceSlugString, queryParams)
-        : await caseService.getCases(workspaceSlugString, String(projectId), queryParams);
+        : await caseService.getCases(workspaceSlugString, String(productId), queryParams);
       setSelectedCaseIds((response?.data || []).map((id: string) => String(id)));
     } catch (e) {
       qaCaseSetToastError(e, t, "选择全部失败");
@@ -672,7 +657,7 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
   const bulkEdit = useCasesBulkEdit({
     isTemplateMode,
     workspaceSlug: workspaceSlugString,
-    projectId,
+    productId,
     cases: cases as TCaseTableRecord[],
     selectedCaseIds,
     clearSelection: () => setSelectedCaseIds([]),
@@ -698,7 +683,8 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
 
   const handleViewLastExecution = (record: TCaseTableRecord) => {
     const ws = String(workspaceSlug || "");
-    const pid = String(projectId || "");
+    // 最近一次执行在某个项目的计划里，跳到该项目的执行页
+    const pid = String(record?.latest_execution_project_id || "");
     if (!record?.id || !record?.latest_execution_plan_id || !ws || !pid) return;
     router.push(
       `/${ws}/projects/${pid}/testhub/test-execution?case_id=${encodeURIComponent(
@@ -710,7 +696,7 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
   const handleDeleteCase = (record: any) => {
     if (!canDeleteCase) return;
     if (!record || !record.id || !workspaceSlug) return;
-    if (!isTemplateMode && !projectId) return;
+    if (!isTemplateMode && !productId) return;
     Modal.confirm({
       title: "确认删除用例",
       content: "删除后不可恢复，是否继续？",
@@ -720,7 +706,7 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
       onOk: async () => {
         try {
           if (isTemplateMode) await caseService.deleteTemplateCases(workspaceSlugString, String(record.id));
-          else await caseService.deleteCase(String(workspaceSlug), String(projectId), String(record.id));
+          else await caseService.deleteCase(String(workspaceSlug), String(productId), String(record.id));
           try {
             qaCaseSetToastSuccess("删除成功");
           } catch {}
@@ -827,11 +813,11 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
           onClick={() => {
             if (!repositoryId) return;
             const ws = String(workspaceSlug || "");
-            const pid = String(projectId || "");
+            const pid = String(productId || "");
             const params = new URLSearchParams();
             params.set("repositoryId", String(repositoryId));
             if (selectedRealModuleId) params.set("moduleId", String(selectedRealModuleId));
-            router.push(`/${ws}/projects/${pid}/testhub/cases/mind?${params.toString()}`);
+            router.push(`/${ws}/products/${pid}/testhub/cases/mind?${params.toString()}`);
           }}
           disabled={!repositoryId}
           className="flex h-8 w-8 items-center justify-center rounded border border-subtle text-secondary hover:bg-layer-1 hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
@@ -1006,7 +992,6 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
                           editPanel={
                             <CasesBulkEditPanel
                               workspaceSlug={workspaceSlugString}
-                              projectId={projectId}
                               repositoryId={repositoryId}
                               selectedCount={selectedCaseIds.length}
                               knownCases={bulkEdit.knownCases}
@@ -1175,7 +1160,6 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
           handleClose={() => setIsCopyModalOpen(false)}
           workspaceSlug={workspaceSlug as string}
           repositoryId={repositoryId}
-          projectId={projectId}
           repositoryQuery={isTemplateMode ? { is_template: true } : undefined}
           emptyProjectGroupLabel={isTemplateMode ? "模板库" : undefined}
           selectedCaseIds={selectedCaseIds}

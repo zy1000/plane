@@ -1,9 +1,8 @@
 """用例模板库（is_template=True）的工作区级鉴权。
 
-模板库没有项目语境，QA 的项目级 key 在它身上必然 403，所以模板相关的读写统一走
-workspace.case_template.*。/test/ 下的模块、标签、用例详情等端点是模板库与项目库
-（含存量「跨项目共享库」）共用的，这里按请求指向的库分流：指到模板库就查模板 key，
-其余维持原来的「工作区成员即可」，不放宽也不收紧非模板库的安全面。
+模板相关的读写统一走 workspace.case_template.*。/test/ 下的模块、标签、用例详情、
+导入导出等端点是模板库与产品用例库共用的，这里按请求指向的库分流：指到模板库就查
+模板 key，其余只要求「工作区成员」（产品用例库的细粒度权限等权限重构再做）。
 """
 
 from functools import wraps
@@ -89,8 +88,12 @@ def _resolve_repository_id(request, kwargs, slug):
     return None
 
 
-def allow_workspace_member_or_template(*permission_keys):
-    """请求指向模板库时要求给定的模板 key，否则退回「活跃工作区成员」。"""
+def allow_workspace_member_or_template(*permission_keys, require_all=False):
+    """请求指向模板库时要求给定的模板 key，否则退回「活跃工作区成员」。
+
+    默认持有任一 key 即可；require_all=True 时要全部持有（往模板库导入 = 写模板用例，
+    导入导出与维护两把钥匙都要）。
+    """
 
     def decorator(view_func):
         @wraps(view_func)
@@ -106,9 +109,11 @@ def allow_workspace_member_or_template(*permission_keys):
             except (ValidationError, ValueError, TypeError):
                 repository_id = None
             if is_template_repository(slug, repository_id):
-                error = template_permission_error(request, slug, *permission_keys)
-                if error is not None:
-                    return error
+                groups = [(key,) for key in permission_keys] if require_all else [permission_keys]
+                for keys in groups:
+                    error = template_permission_error(request, slug, *keys)
+                    if error is not None:
+                        return error
             return view_func(instance, request, *args, **kwargs)
 
         return _wrapped_view

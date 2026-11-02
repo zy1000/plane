@@ -2,12 +2,9 @@
  * 需求详情的「关联测试用例」Section。产品侧整页 / 产品侧抽屉 / 项目侧抽屉三处共用。
  *
  * 与关联工作项的区别：RequirementIssue 挂在 (需求, 项目) 下，那个 Section 必须有确定的
- * 项目语境；用例关联是**需求级**的（用例的 project 来自 repository 且可空，一条需求的
- * 关联用例横跨它进过的所有项目），端点也就落在产品作用域。项目侧靠后端的第二道门
- * （该需求已关联项目的 PROJECT_REQUIREMENT_LINK_*）进来，见
- * apps/api/plane/app/views/requirement/test_case.py 的 _resolve。
- *
- * 项目侧必须传 scopeProjectId 收窄选择器候选池，否则会露出该需求其他项目的用例名。
+ * 项目语境；用例关联是**需求级**的（2026-11 起用例归产品，只能挂需求所属产品的用例），
+ * 端点也就落在产品作用域。项目侧靠后端的第二道门（该需求已关联项目的
+ * PROJECT_REQUIREMENT_LINK_*）进来，见 apps/api/plane/app/views/requirement/test_case.py 的 _resolve。
  *
  * 测试人员那一侧还有第三个入口：用例详情弹窗
  * （components/qa/cases/requirement-display-panel.tsx），写的是同一张表、用 QA 权限。
@@ -46,10 +43,7 @@ export const RequirementTestCaseRow = ({
   onUnlink?: (testCase: TRequirementTestCase) => void;
 }) => {
   const { t } = useTranslation();
-  const scopeLabel =
-    testCase.repository_project_id === null
-      ? t("requirement_detail.test_cases.shared_repository")
-      : (testCase.repository_name ?? "");
+  const scopeLabel = testCase.repository_name ?? "";
   const title = testCase.name || testCase.code || "—";
 
   return (
@@ -107,10 +101,7 @@ type TProps = {
   productId: string;
   requirementId: string;
   canManage: boolean;
-  /**
-   * 项目侧抽屉传本项目 id，把选择器的候选池收窄到本项目用例库 + 共享库。
-   * 不传（产品侧）则是需求关联的全部项目 —— 产品侧本来就该看到全貌。
-   */
+  /** 项目侧抽屉传本项目 id。用例归产品后候选池就是需求所属产品的用例，后端不再按它收窄 */
   scopeProjectId?: string;
   /** 外层已有快捷操作条时，空列表不再占一块折叠头 */
   hideWhenEmpty?: boolean;
@@ -264,7 +255,7 @@ export const RequirementTestCasesSection = (props: TProps) => {
         onClose={() => setActiveCase(null)}
         caseId={activeCase?.id}
         workspaceSlug={workspaceSlug}
-        projectId={activeCase?.repository_project_id ?? scopeProjectId}
+        productId={activeCase?.repository_product_id ?? undefined}
       />
 
       <RequirementTestCaseLinkModal

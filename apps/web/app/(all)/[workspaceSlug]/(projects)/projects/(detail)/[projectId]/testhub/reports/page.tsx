@@ -10,7 +10,7 @@ import { ReportListTable } from "@/components/qa/reports/report-list-table";
 import { UNASSIGNED_MODULE_KEY } from "@/components/qa/module-tree";
 import { ReportModuleTree } from "@/components/qa/reports/report-module-tree";
 import { useReportModules } from "@/hooks/store/use-report-modules";
-import { useTestHub } from "../testhub-context";
+import { useTestHub } from "@/components/qa/shared/testhub/testhub-context";
 import { useProjectPermissions } from "@/hooks/store/use-project-permissions";
 import UnauthorizedImg from "@/app/assets/auth/unauthorized.svg?url";
 import { useTranslation } from "@plane/i18n";

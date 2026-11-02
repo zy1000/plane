@@ -14,8 +14,6 @@ import { WorkspaceService } from "@/services/workspace.service";
 type BasicInfoPanelProps = {
   caseId?: string;
   canEdit?: boolean;
-  /** 模板库模式：路由无 projectId，富文本贴图走 workspace 级上传（CASE_ATTACHMENT，不绑 case） */
-  templateMode?: boolean;
   preconditionValue: string;
   stepsValue: { description?: string; result?: string }[];
   modeValue: number;
@@ -37,7 +35,6 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
   const {
     caseId,
     canEdit = true,
-    templateMode = false,
     preconditionValue,
     stepsValue,
     modeValue,
@@ -57,36 +54,24 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
   const [localRemark, setLocalRemark] = React.useState(remarkValue);
 
   // plane hooks
-  const { workspaceSlug, projectId } = useParams() as { workspaceSlug?: string; projectId?: string };
+  const { workspaceSlug } = useParams() as { workspaceSlug?: string };
   const { getWorkspaceBySlug } = useWorkspace();
   const workspaceId = workspaceSlug ? getWorkspaceBySlug(workspaceSlug)?.id : undefined;
   const { uploadEditorAsset, duplicateEditorAsset } = useEditorAsset();
   const workspaceService = React.useMemo(() => new WorkspaceService(), []);
 
+  // 用例没有项目语境（产品库 / 模板库）：贴图一律走 workspace 级上传，
+  // CASE_ATTACHMENT + 空 entity_identifier（不绑 case，避免混入附件列表）
   const handleUploadFile = async (blockId: string | undefined, file: File) => {
-    if (!workspaceSlug || !caseId || (!templateMode && !projectId)) throw new Error("Missing context");
+    if (!workspaceSlug || !caseId) throw new Error("Missing context");
     try {
-      if (templateMode) {
-        // workspace 级上传：CASE_ATTACHMENT + 空 entity_identifier（不绑 case，避免混入附件列表）
-        const { asset_id } = await uploadEditorAsset({
-          blockId: blockId ?? "",
-          data: {
-            entity_identifier: "",
-            entity_type: EFileAssetType.CASE_ATTACHMENT,
-          },
-          file,
-          workspaceSlug,
-        });
-        return asset_id;
-      }
       const { asset_id } = await uploadEditorAsset({
         blockId: blockId ?? "",
         data: {
-          entity_identifier: projectId,
-          entity_type: EFileAssetType.PROJECT_DESCRIPTION,
+          entity_identifier: "",
+          entity_type: EFileAssetType.CASE_ATTACHMENT,
         },
         file,
-        projectId,
         workspaceSlug,
       });
       return asset_id;
@@ -97,22 +82,12 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
   };
 
   const handleDuplicateFile = async (assetId: string) => {
-    if (!workspaceSlug || !caseId || (!templateMode && !projectId)) throw new Error("Missing context");
+    if (!workspaceSlug || !caseId) throw new Error("Missing context");
     try {
-      if (templateMode) {
-        const { asset_id } = await duplicateEditorAsset({
-          assetId,
-          entityId: "",
-          entityType: EFileAssetType.CASE_ATTACHMENT,
-          workspaceSlug,
-        });
-        return asset_id;
-      }
       const { asset_id } = await duplicateEditorAsset({
         assetId,
-        entityId: projectId,
-        entityType: EFileAssetType.PROJECT_DESCRIPTION,
-        projectId,
+        entityId: "",
+        entityType: EFileAssetType.CASE_ATTACHMENT,
         workspaceSlug,
       });
       return asset_id;
@@ -190,14 +165,14 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
           value={isEditing ? undefined : (localPrecondition ?? "")}
           workspaceSlug={workspaceSlug ?? ""}
           workspaceId={workspaceId ?? ""}
-          projectId={projectId ?? ""}
+          projectId=""
           onChange={(_: any, val: string) => setLocalPrecondition(val)}
           uploadFile={handleUploadFile}
           duplicateFile={handleDuplicateFile}
           searchMentionCallback={async (payload) =>
             await workspaceService.searchEntity(workspaceSlug?.toString() ?? "", {
               ...payload,
-              project_id: projectId?.toString() ?? "",
+              project_id: "",
             })
           }
           containerClassName="-ml-3 min-h-[100px] rounded-md"
@@ -243,14 +218,14 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
                 value={isEditing ? undefined : (localTextDescription ?? "")}
                 workspaceSlug={workspaceSlug ?? ""}
                 workspaceId={workspaceId ?? ""}
-                projectId={projectId ?? ""}
+                projectId=""
                 onChange={(_: any, val: string) => setLocalTextDescription(val)}
                 uploadFile={handleUploadFile}
                 duplicateFile={handleDuplicateFile}
                 searchMentionCallback={async (payload) =>
                   await workspaceService.searchEntity(workspaceSlug?.toString() ?? "", {
                     ...payload,
-                    project_id: projectId?.toString() ?? "",
+                    project_id: "",
                   })
                 }
                 containerClassName="-ml-3 min-h-[100px] rounded-md"
@@ -266,14 +241,14 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
                 value={isEditing ? undefined : (localTextResult ?? "")}
                 workspaceSlug={workspaceSlug ?? ""}
                 workspaceId={workspaceId ?? ""}
-                projectId={projectId ?? ""}
+                projectId=""
                 onChange={(_: any, val: string) => setLocalTextResult(val)}
                 uploadFile={handleUploadFile}
                 duplicateFile={handleDuplicateFile}
                 searchMentionCallback={async (payload) =>
                   await workspaceService.searchEntity(workspaceSlug?.toString() ?? "", {
                     ...payload,
-                    project_id: projectId?.toString() ?? "",
+                    project_id: "",
                   })
                 }
                 containerClassName="-ml-3 min-h-[100px] rounded-md"
@@ -332,14 +307,14 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
           value={isEditing ? undefined : (localRemark ?? "")}
           workspaceSlug={workspaceSlug ?? ""}
           workspaceId={workspaceId ?? ""}
-          projectId={projectId ?? ""}
+          projectId=""
           onChange={(_: any, val: string) => setLocalRemark(val)}
           uploadFile={handleUploadFile}
           duplicateFile={handleDuplicateFile}
           searchMentionCallback={async (payload) =>
             await workspaceService.searchEntity(workspaceSlug?.toString() ?? "", {
               ...payload,
-              project_id: projectId?.toString() ?? "",
+              project_id: "",
             })
           }
           containerClassName="-ml-3 min-h-[100px] rounded-md"

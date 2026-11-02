@@ -1,5 +1,4 @@
 "use client";
-import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { Modal, Space, Button, Input, Table, Tag, message, Select } from "antd";
 import type { TableProps } from "antd";
@@ -14,10 +13,11 @@ import { RepositoryService } from "@/services/qa/repository.service";
 import useDebounce from "@/hooks/use-debounce";
 import styles from "../../../qa/review/TestCaseSelectionModal.module.css";
 import { CasePriorityPill } from "@/components/qa/shared/case-picker-modal-styles";
+import { LinkedProductSelect, useLinkedProductFilter } from "@/components/qa/shared/linked-product-select";
 import {
   globalEnums,
   getEnums,
-} from "@/app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/util";
+} from "@/components/qa/shared/testhub/util";
 
 const toModuleTreeNodes = (list: any[]): TModuleTreeNode[] =>
   (list || []).map((m: any) => ({
@@ -43,6 +43,8 @@ type TTestCaseResponse = {
 type Props = {
   open: boolean;
   workspaceSlug: string;
+  /** 工作项所属项目；工作区级预览（我的工作、收件箱）路由里没有项目，必须显式传 */
+  projectId: string;
   issueId: string;
   onClose: () => void;
   onConfirmed?: () => void;
@@ -76,8 +78,22 @@ const renderEnumTag = (
   return <Tag color={color}>{label}</Tag>;
 };
 
-export default function IssueCaseSelectionModal({ open, workspaceSlug, issueId, onClose, onConfirmed }: Props) {
-  const { projectId } = useParams();
+export default function IssueCaseSelectionModal({
+  open,
+  workspaceSlug,
+  projectId,
+  issueId,
+  onClose,
+  onConfirmed,
+}: Props) {
+  // 用例归产品：工作项只能关联「项目已关联产品」的用例，先选产品再选它的用例库
+  const {
+    links: linkedProducts,
+    error: linkedProductsError,
+    hasNoLinkedProduct,
+    productId,
+    setProductId,
+  } = useLinkedProductFilter(open ? workspaceSlug : undefined, projectId || undefined);
   const qaCaseService = useMemo(() => new QaCaseService(), []);
   const repositoryService = useMemo(() => new RepositoryService(), []);
   const RESIZER_WIDTH = 8;
@@ -179,8 +195,12 @@ export default function IssueCaseSelectionModal({ open, workspaceSlug, issueId, 
 
   useEffect(() => {
     if (!open || !workspaceSlug) return;
-    const params: any = { page: 1, page_size: 10000 };
-    if (projectId) params.project_id = projectId;
+    if (!productId) {
+      setRepositories([]);
+      setSelectedRepositoryId(null);
+      return;
+    }
+    const params: any = { page: 1, page_size: 10000, product_id: productId };
 
     repositoryService
       .getRepositories(workspaceSlug, params)
@@ -188,14 +208,12 @@ export default function IssueCaseSelectionModal({ open, workspaceSlug, issueId, 
         // Adjusting for potential data structure differences
         const list = Array.isArray(res) ? res : res?.results || res?.data || [];
         setRepositories(list);
-        if (list.length > 0) {
-          setSelectedRepositoryId(list[0].id);
-        }
+        setSelectedRepositoryId(list.length > 0 ? list[0].id : null);
       })
       .catch((err) => {
         message.error(err?.message || "获取用例库失败");
       });
-  }, [open, workspaceSlug]);
+  }, [open, workspaceSlug, productId]);
 
   useEffect(() => {
     if (!open || !workspaceSlug || !selectedRepositoryId) return;
@@ -381,6 +399,23 @@ export default function IssueCaseSelectionModal({ open, workspaceSlug, issueId, 
       title={
         <div className="flex items-center gap-4">
           <span>选择测试用例</span>
+          {linkedProductsError ? (
+            <span className="text-13 font-normal text-tertiary">项目关联的产品加载失败：{linkedProductsError}</span>
+          ) : hasNoLinkedProduct ? (
+            <span className="text-13 font-normal text-tertiary">项目还没有关联产品，先在项目的「产品」中关联</span>
+          ) : (
+            <div onClick={(e) => e.stopPropagation()}>
+              <LinkedProductSelect
+                className="w-[200px]"
+                links={linkedProducts}
+                value={productId}
+                onChange={(next) => {
+                  setProductId(next);
+                  setSelectedModuleId(null);
+                }}
+              />
+            </div>
+          )}
           <div onClick={(e) => e.stopPropagation()}>
             <Select
               style={{ width: 200 }}

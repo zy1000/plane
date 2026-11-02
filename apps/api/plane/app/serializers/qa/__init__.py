@@ -411,15 +411,17 @@ class TestCaseRepositorySerializer(ModelSerializer):
 
     class Meta:
         model = TestCaseRepository
-        fields = ["name", "description", "project", "workspace", "is_template"]
+        fields = ["name", "description", "product", "workspace", "is_template"]
         # workspace 由 view 按 URL slug 注入，不信任客户端传值
         extra_kwargs = {"workspace": {"required": False}}
 
     def validate(self, attrs):
         is_template = attrs.get("is_template", getattr(self.instance, "is_template", False))
-        project = attrs.get("project", getattr(self.instance, "project", None))
-        if is_template and project is not None:
-            raise serializers.ValidationError({"project": "模板库不能关联项目"})
+        product = attrs.get("product", getattr(self.instance, "product", None))
+        if is_template and product is not None:
+            raise serializers.ValidationError({"product": "模板库不能关联产品"})
+        if not is_template and product is None:
+            raise serializers.ValidationError({"product": "用例库必须属于一个产品"})
         return attrs
 
 
@@ -533,9 +535,13 @@ class CaseListSerializer(ModelSerializer):
     assignee = UserLiteSerializer(read_only=True)
     labels = CaseLabelListSerializer(many=True, read_only=True)
     repository_name = serializers.CharField(source="repository.name", read_only=True)
+    # 用例所属产品（2026-11 起用例归产品）：项目侧打开用例详情时据此调产品作用域接口
+    product_id = serializers.UUIDField(source="repository.product_id", read_only=True)
     version = serializers.SerializerMethodField(read_only=True)
     latest_execution_result = serializers.SerializerMethodField(read_only=True)
     latest_execution_plan_id = serializers.SerializerMethodField(read_only=True)
+    # 最近一次执行所在计划的项目（用例归产品后，跳执行页要知道是哪个项目）
+    latest_execution_project_id = serializers.SerializerMethodField(read_only=True)
 
     # 保持原有的 review 字段
     review = serializers.SerializerMethodField()
@@ -570,7 +576,7 @@ class CaseListSerializer(ModelSerializer):
                 plan__deleted_at__isnull=True,
             )
             .order_by("-updated_at", "-created_at")
-            .values("result", "plan_id")
+            .values("result", "plan_id", "plan__project_id")
             .first()
         )
         cached = {
@@ -580,6 +586,7 @@ class CaseListSerializer(ModelSerializer):
                 else PlanCase.Result.NOT_START
             ),
             "plan_id": latest_plan_case.get("plan_id") if latest_plan_case else None,
+            "project_id": latest_plan_case.get("plan__project_id") if latest_plan_case else None,
         }
         setattr(obj, "_latest_execution_data_cache", cached)
         return cached
@@ -597,6 +604,13 @@ class CaseListSerializer(ModelSerializer):
             return str(annotated_plan_id) if annotated_plan_id else None
         plan_id = self._get_latest_execution_data(obj).get("plan_id")
         return str(plan_id) if plan_id else None
+
+    def get_latest_execution_project_id(self, obj: TestCase):
+        if hasattr(obj, "_latest_execution_project_id"):
+            annotated_project_id = obj._latest_execution_project_id
+            return str(annotated_project_id) if annotated_project_id else None
+        project_id = self._get_latest_execution_data(obj).get("project_id")
+        return str(project_id) if project_id else None
 
     class Meta:
         model = TestCase
@@ -876,7 +890,7 @@ class TestCaseActivitySerializer(BaseSerializer):
 class ReviewModuleCreateUpdateSerializer(ModelSerializer):
     class Meta:
         model = CaseReviewModule
-        fields = ["name", "project", "parent"]
+        fields = ["name", "product", "parent"]
 
 
 class ReviewModuleDetailSerializer(ModelSerializer):

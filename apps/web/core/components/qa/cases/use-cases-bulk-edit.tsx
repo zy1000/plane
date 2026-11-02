@@ -12,7 +12,7 @@ import type { TCaseTableRecord } from "./cases-table";
 type TParams = {
   isTemplateMode: boolean;
   workspaceSlug: string;
-  projectId?: string;
+  productId?: string;
   cases: TCaseTableRecord[];
   selectedCaseIds: string[];
   clearSelection: () => void;
@@ -39,7 +39,7 @@ const describeChanges = (changes: TCaseBulkChanges) => {
 
 /** 用例列表「修改属性」：面板开关、已知当前值、跨页确认、提交与格子高亮 */
 export const useCasesBulkEdit = (params: TParams) => {
-  const { isTemplateMode, workspaceSlug, projectId, cases, selectedCaseIds, clearSelection, onUpdated } = params;
+  const { isTemplateMode, workspaceSlug, productId, cases, selectedCaseIds, clearSelection, onUpdated } = params;
   const { t } = useTranslation();
   const [isPanelOpen, setIsPanelOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -77,7 +77,7 @@ export const useCasesBulkEdit = (params: TParams) => {
       const payload = { cases_id: ids, ...changes };
       const result = isTemplateMode
         ? await caseService.bulkUpdateTemplateCases(workspaceSlug, payload)
-        : await caseService.bulkUpdateCases(workspaceSlug, String(projectId), payload);
+        : await caseService.bulkUpdateCases(workspaceSlug, String(productId), payload);
       qaCaseSetToastSuccess(`${describeChanges(changes).join("、")}`, `已更新 ${result?.updated ?? ids.length} 条用例`);
       setIsPanelOpen(false);
       clearSelection();

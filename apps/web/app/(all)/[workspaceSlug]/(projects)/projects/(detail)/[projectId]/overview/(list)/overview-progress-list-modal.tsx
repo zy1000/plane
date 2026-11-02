@@ -81,7 +81,12 @@ const SECTION_CONFIG: Record<
     emptyLabel: string;
     pageParamKey: string;
     dataKey: keyof TProjectOverviewStatisticResponse;
-    getNavigateUrl: (itemId: string, workspaceSlug: string, projectId: string) => string;
+    getNavigateUrl: (
+      itemId: string,
+      workspaceSlug: string,
+      projectId: string,
+      item: { product_id?: string | null }
+    ) => string;
   }
 > = {
   cycle: {
@@ -121,8 +126,9 @@ const SECTION_CONFIG: Record<
     emptyLabel: "暂无评审数据",
     pageParamKey: "review_page",
     dataKey: "case_reviews",
-    getNavigateUrl: (itemId, workspaceSlug, projectId) =>
-      `/${workspaceSlug}/projects/${projectId}/testhub/caseManagementReviewDetail?review_id=${itemId}`,
+    // 用例评审归产品：跳到评审所属产品下的详情页
+    getNavigateUrl: (itemId, workspaceSlug, _projectId, item) =>
+      `/${workspaceSlug}/products/${item.product_id}/testhub/caseManagementReviewDetail?review_id=${itemId}`,
   },
 };
 
@@ -235,7 +241,7 @@ export function OverviewProgressListModal({ open, onClose, section, workspaceSlu
                   <TableRow key={item.id} className="transition-colors hover:bg-layer-1">
                     <TableCell className="min-w-0 truncate text-sm text-primary" title={item.name}>
                       <a
-                        href={config.getNavigateUrl(item.id, workspaceSlug, projectId)}
+                        href={config.getNavigateUrl(item.id, workspaceSlug, projectId, item as { product_id?: string | null })}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="truncate text-left !text-primary visited:!text-primary hover:!text-primary hover:underline active:!text-primary"

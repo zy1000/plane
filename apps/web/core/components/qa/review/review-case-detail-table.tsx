@@ -30,7 +30,6 @@ type TReviewCaseDetailTableProps = {
   onOpenCase: (record: ReviewCaseListItem) => void;
   onReview: (record: ReviewCaseListItem) => void;
   onRowSelectChange: (selectedKeysOnCurrentPage: string[]) => void;
-  projectId?: string;
   reviewCases: ReviewCaseListItem[];
   reviewEnums: TReviewEnums;
   selectedCaseIds: string[];
@@ -88,7 +87,6 @@ export const ReviewCaseDetailTable = ({
   onOpenCase,
   onReview,
   onRowSelectChange,
-  projectId,
   reviewCases,
   reviewEnums,
   selectedCaseIds,
@@ -257,7 +255,6 @@ export const ReviewCaseDetailTable = ({
                   >
                     <MemberDropdown
                       multiple
-                      projectId={projectId}
                       value={Array.isArray(record.assignees) ? record.assignees : []}
                       onChange={(val) => onAssigneesChange(record, Array.isArray(val) ? val : [])}
                       onClose={onAssigneesEditClose}

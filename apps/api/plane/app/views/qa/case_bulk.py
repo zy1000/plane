@@ -13,6 +13,7 @@ from rest_framework import status
 from rest_framework.response import Response
 
 from plane.app.permissions import PermissionKey, allow_fine_permission
+from plane.app.views.qa.product_scope import allow_product_scope
 from plane.app.serializers.qa import CaseBulkUpdateSerializer
 from plane.app.views import BaseAPIView
 from plane.bgtasks.test_case_activities_task import test_case_bulk_update_activity
@@ -129,11 +130,11 @@ class TemplateCaseBulkUpdateAPIView(BaseAPIView):
 
 
 class CaseBulkUpdateAPIView(BaseAPIView):
-    """项目用例批量改属性。"""
+    """产品用例批量改属性。"""
 
-    @allow_fine_permission(PermissionKey.QA_CASE_EDIT)
-    def post(self, request, slug, project_id):
+    @allow_product_scope
+    def post(self, request, slug, product_id):
         queryset = TestCase.objects.filter(
-            repository__workspace__slug=slug, repository__project_id=project_id
+            repository__workspace__slug=slug, repository__product_id=product_id
         )
         return _bulk_update_response(request, slug, queryset)

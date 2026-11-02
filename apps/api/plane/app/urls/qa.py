@@ -158,25 +158,23 @@ urlpatterns = [
         name="test-case",
     ),
     path(
-        "workspaces/<str:slug>/projects/<uuid:project_id>/test/case/",
+        "workspaces/<str:slug>/products/<uuid:product_id>/test/case/",
         CaseAPIView.as_view(),
         name="test-case",
     ),
     path(
-        "workspaces/<str:slug>/projects/<uuid:project_id>/test/case/bulk-update/",
+        "workspaces/<str:slug>/products/<uuid:product_id>/test/case/bulk-update/",
         CaseBulkUpdateAPIView.as_view(),
         name="test-case-bulk-update",
     ),
-    # 用例侧的需求关联。项目作用域（而非 workspace 级的 CaseAPI）是为了吃现成的
-    # QA_CASE_* 权限 —— 另一扇门在产品侧要 can_edit_product_requirements，
-    # 这边裸奔就成了绕过口。见 views/qa/case_requirement.py
+    # 用例侧的需求关联（产品作用域）。见 views/qa/case_requirement.py
     path(
-        "workspaces/<str:slug>/projects/<uuid:project_id>/test/case/<uuid:case_id>/requirements/",
+        "workspaces/<str:slug>/products/<uuid:product_id>/test/case/<uuid:case_id>/requirements/",
         CaseRequirementAPIView.as_view(),
         name="test-case-requirements",
     ),
     path(
-        "workspaces/<str:slug>/projects/<uuid:project_id>/test/case/<uuid:case_id>/linkable-requirements/",
+        "workspaces/<str:slug>/products/<uuid:product_id>/test/case/<uuid:case_id>/linkable-requirements/",
         CaseLinkableRequirementAPIView.as_view(),
         name="test-case-linkable-requirements",
     ),
@@ -256,7 +254,7 @@ urlpatterns = [
         name="test-review-module-detail",
     ),
     path(
-        "workspaces/<str:slug>/projects/<uuid:project_id>/test/review/",
+        "workspaces/<str:slug>/products/<uuid:product_id>/test/review/",
         CaseReviewAPIView.as_view(),
         name="test-repository-enums",
     ),

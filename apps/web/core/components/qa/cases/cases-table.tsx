@@ -50,6 +50,7 @@ export type TCaseTableRecord = {
   code?: string;
   labels?: TLabel[];
   latest_execution_plan_id?: string | null;
+  latest_execution_project_id?: string | null;
   latest_execution_result?: string;
   module?: TModule;
   name: string;

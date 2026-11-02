@@ -239,12 +239,8 @@ export const RequirementTestCaseLinkModal = (props: TProps) => {
                     <Tooltip tooltipContent={row.name}>
                       <span className="min-w-0 flex-1 truncate">{row.name}</span>
                     </Tooltip>
-                    {/* 候选池横跨需求关联的多个项目 + 共享库，只靠标题分不出用例来自哪 */}
-                    <span className="shrink-0 text-11 text-secondary">
-                      {row.repository_project_id === null
-                        ? t("requirement_detail.test_cases.shared_repository")
-                        : (row.repository_name ?? "")}
-                    </span>
+                    {/* 候选池是需求所属产品下的多个用例库，标出用例来自哪个库 */}
+                    <span className="shrink-0 text-11 text-secondary">{row.repository_name ?? ""}</span>
                   </Combobox.Option>
                 );
               })}

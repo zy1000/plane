@@ -8,7 +8,7 @@ import { qaCaseSetToastWarning } from "@/utils/qa-case-error";
 import { RepositorySelect } from "../repository-select";
 
 export default function TestCasesPage() {
-  const { workspaceSlug, projectId } = useParams();
+  const { workspaceSlug, productId } = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
   const repositoryIdFromUrl = searchParams.get("repositoryId");
@@ -40,18 +40,18 @@ export default function TestCasesPage() {
   useEffect(() => {
     if (!repositoryId && workspaceSlug) {
       const ws = String(workspaceSlug || "");
-      const current = `/${ws}/projects/${projectId}/testhub/cases${searchParams.toString() ? `?${searchParams.toString()}` : ""}`;
+      const current = `/${ws}/products/${productId}/testhub/cases${searchParams.toString() ? `?${searchParams.toString()}` : ""}`;
       try {
         qaCaseSetToastWarning("未检测到用例库，请选择一个用例库后自动跳回");
       } catch {}
-      router.push(`/${ws}/projects/${projectId}/testhub?redirect_to=${encodeURIComponent(current)}`);
+      router.push(`/${ws}/products/${productId}/testhub?redirect_to=${encodeURIComponent(current)}`);
     }
   }, [repositoryId, workspaceSlug, searchParams, router]);
 
   return (
     <RepositoryCasesView
       workspaceSlug={String(workspaceSlug || "")}
-      projectId={String(projectId || "")}
+      productId={String(productId || "")}
       repositoryId={repositoryId}
       repositoryName={repositoryName}
       // 用例库切换放在树头：树只管当前库
@@ -59,7 +59,7 @@ export default function TestCasesPage() {
         <RepositorySelect
           key={`repository-select-${repositoryId || "all"}`}
           workspaceSlug={String(workspaceSlug || "")}
-          projectId={String(projectId || "")}
+          productId={String(productId || "")}
           className="min-w-0 max-w-full"
           buttonClassName="h-7 min-w-0 max-w-full gap-1.5 rounded-md border-0 px-1.5 text-13 font-medium text-primary hover:bg-layer-transparent-hover"
           labelClassName="max-w-[170px] text-13 leading-4"
@@ -78,9 +78,9 @@ export default function TestCasesPage() {
               }
             } catch {}
             const ws = String(workspaceSlug || "");
-            const pid = String(projectId || "");
-            if (id) router.push(`/${ws}/projects/${pid}/testhub/cases?repositoryId=${encodeURIComponent(String(id))}`);
-            else router.push(`/${ws}/projects/${pid}/testhub/cases`);
+            const pid = String(productId || "");
+            if (id) router.push(`/${ws}/products/${pid}/testhub/cases?repositoryId=${encodeURIComponent(String(id))}`);
+            else router.push(`/${ws}/products/${pid}/testhub/cases`);
           }}
         />
       }

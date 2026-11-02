@@ -55,10 +55,8 @@ import {
   qaCaseSetToastSuccess,
   qaCaseSetToastWarning,
 } from "@/utils/qa-case-error";
-import { useProjectPermissions } from "@/hooks/store/use-project-permissions";
-import { globalEnums } from "../util";
+import { globalEnums } from "@/components/qa/shared/testhub/util";
 
-const QA_REVIEW_EDIT_PERMISSION_KEY = "qa.review.edit" as const;
 
 type ReviewCaseRow = ReviewCaseListItem;
 type TReviewCaseListFilters = {
@@ -69,7 +67,7 @@ const EMPTY_REVIEW_CASE_FILTER_EXPRESSION: TReviewCaseFilterExpression = {};
 
 export default function CaseManagementReviewDetailPage() {
   const { t } = useTranslation();
-  const { workspaceSlug, projectId } = useParams<{ workspaceSlug: string; projectId: string }>();
+  const { workspaceSlug, productId } = useParams<{ workspaceSlug: string; productId: string }>();
   const searchParams = useSearchParams();
   const reviewId = searchParams.get("review_id") ?? "";
   const repositoryIdFromUrl = searchParams.get("repositoryId");
@@ -77,12 +75,9 @@ export default function CaseManagementReviewDetailPage() {
     repositoryIdFromUrl || (typeof window !== "undefined" ? sessionStorage.getItem("selectedRepositoryId") : null);
   const router = useRouter();
   const workspaceSlugString = String(workspaceSlug || "");
-  const projectIdString = String(projectId || "");
-  const { fetched: permissionsFetched, hasPermission } = useProjectPermissions(
-    workspaceSlugString,
-    projectIdString
-  );
-  const canEditReview = permissionsFetched && hasPermission(QA_REVIEW_EDIT_PERMISSION_KEY);
+  const productIdString = String(productId || "");
+  // 用例评审归产品后暂不细分权限（等权限重构），工作区成员都可操作
+  const canEditReview = true;
 
   const caseService = useMemo(() => new CaseApiService(), []);
   const reviewService = useMemo(() => new ReviewApiService(), []);
@@ -114,7 +109,7 @@ export default function CaseManagementReviewDetailPage() {
   const [isCaseSelectionOpen, setIsCaseSelectionOpen] = useState(false);
   const { data: currentUser } = useUser();
   const {
-    project: { getProjectMemberIds },
+    workspace: { getWorkspaceMemberIds },
   } = useMember();
   const [selectedCaseIds, setSelectedCaseIds] = useState<string[]>([]);
   const [selectedCaseMap, setSelectedCaseMap] = useState<Record<string, string>>({});
@@ -263,7 +258,7 @@ export default function CaseManagementReviewDetailPage() {
       const listParams = {
         page,
         page_size: size,
-        ...(projectId ? { project_id: String(projectId) } : {}),
+        ...(productId ? { product_id: String(productId) } : {}),
         ...(effectiveModuleId ? { module_id: effectiveModuleId } : {}),
         ...(effectiveRepositoryId ? { repository_id: effectiveRepositoryId } : {}),
         ...(effectiveOrdering ? { ordering: effectiveOrdering } : {}),
@@ -325,9 +320,10 @@ export default function CaseManagementReviewDetailPage() {
     fetchReviewCaseList(1, pageSize, { filtersParam: nextFilters });
   };
 
+  // 评审人候选：工作区成员（评审归产品，没有项目成员语境）
   const projectMemberIds = useMemo(
-    () => getProjectMemberIds(projectIdString, false) ?? [],
-    [getProjectMemberIds, projectIdString]
+    () => getWorkspaceMemberIds(workspaceSlugString) ?? [],
+    [getWorkspaceMemberIds, workspaceSlugString]
   );
 
   const { areAllConfigsInitialized, configs: reviewCaseFilterConfigs } = useReviewCaseFiltersConfig({
@@ -343,7 +339,7 @@ export default function CaseManagementReviewDetailPage() {
     areAllConfigsInitialized,
     configs: reviewCaseFilterConfigs,
     initialExpression: filterExpression,
-    instanceKey: `review-case-detail-${workspaceSlugString}-${projectIdString}-${reviewId}`,
+    instanceKey: `review-case-detail-${workspaceSlugString}-${productIdString}-${reviewId}`,
     onExpressionChange: handleRichFiltersChange,
   });
 
@@ -372,9 +368,9 @@ export default function CaseManagementReviewDetailPage() {
 
   /** 整体覆盖一批评审用例的评审人；行内编辑与批量设置共用 */
   const applyReviewCaseAssignees = async (throughIds: string[], assigneeIds: string[]) => {
-    if (!workspaceSlug || !projectId || !reviewId || throughIds.length === 0) return false;
+    if (!workspaceSlug || !productId || !reviewId || throughIds.length === 0) return false;
     try {
-      await reviewService.updateReviewCaseAssignees(workspaceSlug as string, projectId as string, {
+      await reviewService.updateReviewCaseAssignees(workspaceSlug as string, productId as string, {
         review_id: reviewId as string,
         ids: throughIds,
         assignees: assigneeIds,
@@ -428,7 +424,7 @@ export default function CaseManagementReviewDetailPage() {
     // 排序随 URL 带到评审页，让评审页用例顺序沿用当前列表；默认值不带参数
     const orderingQuery =
       ordering !== DEFAULT_REVIEW_CASE_ORDERING ? `&ordering=${encodeURIComponent(ordering)}` : "";
-    const href = `/${workspaceSlug}/projects/${projectId}/testhub/case-review?review_id=${encodeURIComponent(
+    const href = `/${workspaceSlug}/products/${productId}/testhub/case-review?review_id=${encodeURIComponent(
       reviewId
     )}&case_id=${encodeURIComponent(record.case_id)}${orderingQuery}`;
     router.push(href);
@@ -438,7 +434,7 @@ export default function CaseManagementReviewDetailPage() {
     if (!canEditReview) return;
     if (!workspaceSlug || !reviewId) return;
     try {
-      await reviewService.CaseCancel(workspaceSlug as string, projectId as string, { ids: [record.id] });
+      await reviewService.CaseCancel(workspaceSlug as string, productId as string, { ids: [record.id] });
       qaCaseSetToastSuccess("已取消关联");
       fetchReviewCaseList(currentPage, pageSize);
     } catch (e: unknown) {
@@ -470,14 +466,14 @@ export default function CaseManagementReviewDetailPage() {
   }, [repositoryId, reviewId]);
 
   useEffect(() => {
-    if (!workspaceSlug || !projectId) return;
+    if (!workspaceSlug || !productId) return;
     setReviewListLoading(true);
     reviewService
-      .getReviewList(String(workspaceSlug), { project_id: String(projectId) })
+      .getReviewList(String(workspaceSlug), { product_id: String(productId) })
       .then((data) => setReviewList(Array.isArray(data) ? data : []))
       .catch(() => setReviewList([]))
       .finally(() => setReviewListLoading(false));
-  }, [workspaceSlug, projectId, reviewService]);
+  }, [workspaceSlug, productId, reviewService]);
 
   const onChangeReview = (nextReviewId: string) => {
     const found = reviewList.find((r) => String(r.id) === String(nextReviewId));
@@ -486,7 +482,7 @@ export default function CaseManagementReviewDetailPage() {
     }
     const params = new URLSearchParams(searchParams.toString());
     params.set("review_id", String(nextReviewId));
-    router.push(`/${workspaceSlug}/projects/${projectId}/testhub/caseManagementReviewDetail?${params.toString()}`);
+    router.push(`/${workspaceSlug}/products/${productId}/testhub/caseManagementReviewDetail?${params.toString()}`);
   };
 
   function getTreeNodeKey(node: any): string {
@@ -630,7 +626,6 @@ export default function CaseManagementReviewDetailPage() {
                         onAssigneesChange={handleCaseAssigneesChange}
                         onAssigneesEditClose={handleCaseAssigneesEditClose}
                         onRowSelectChange={handleRowSelectChange}
-                        projectId={projectIdString}
                         reviewCases={reviewCases}
                         reviewEnums={reviewEnums}
                         selectedCaseIds={selectedCaseIds}
@@ -656,7 +651,6 @@ export default function CaseManagementReviewDetailPage() {
                               value={bulkAssignees}
                               onChange={(value) => setBulkAssignees(Array.isArray(value) ? value : [])}
                               disabled={bulkAssigneeUpdating || !canEditReview}
-                              projectId={projectId ? String(projectId) : undefined}
                               buttonVariant="transparent-with-text"
                               placement="top-start"
                               optionsClassName="z-[80]"
@@ -738,7 +732,7 @@ export default function CaseManagementReviewDetailPage() {
                                 if (!canEditReview) return;
                                 if (!workspaceSlug || !reviewId) return;
                                 try {
-                                  await reviewService.CaseCancel(workspaceSlug as string, projectId as string, {
+                                  await reviewService.CaseCancel(workspaceSlug as string, productId as string, {
                                     ids: selectedCaseIds,
                                   });
                                   qaCaseSetToastSuccess("已批量取消关联");
@@ -803,13 +797,13 @@ export default function CaseManagementReviewDetailPage() {
           open={isCaseSelectionOpen}
           onClose={() => setIsCaseSelectionOpen(false)}
           initialSelectedIds={[]}
-          projectId={projectId ? String(projectId) : undefined}
+          productId={productId ? String(productId) : undefined}
           reviewId={reviewId ? String(reviewId) : undefined}
           onConfirm={async (ids, assignees) => {
             if (!canEditReview) return;
             if (!workspaceSlug || !reviewId) return;
             try {
-              await reviewService.addReviewCases(String(workspaceSlug), String(projectId), {
+              await reviewService.addReviewCases(String(workspaceSlug), String(productId), {
                 review_id: String(reviewId),
                 case_ids: ids || [],
                 ...(assignees && assignees.length > 0 ? { assignees } : {}),

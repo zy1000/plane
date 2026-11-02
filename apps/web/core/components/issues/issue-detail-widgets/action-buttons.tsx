@@ -231,6 +231,7 @@ export const IssueDetailWidgetActionButtons = observer(function IssueDetailWidge
         <IssueCaseSelectionModal
           open={isCaseModalOpen}
           workspaceSlug={workspaceSlug}
+          projectId={projectId}
           issueId={issueId}
           onClose={async () => {
             setIsCaseModalOpen(false);

@@ -25,7 +25,7 @@ type ReviewFormValues = {
 
 export default function CreateReviewModal({ open, onClose, mode = "create", initialValues }: Props) {
   const { t } = useTranslation();
-  const { workspaceSlug, projectId } = useParams() as { workspaceSlug?: string; projectId?: string };
+  const { workspaceSlug, productId } = useParams() as { workspaceSlug?: string; productId?: string };
   const [submitting, setSubmitting] = useState(false);
   const reviewService = useMemo(() => new ReviewService(), []);
   const [moduleOptions, setModuleOptions] = useState<{ value: string; label: string }[]>([]);
@@ -46,9 +46,9 @@ export default function CreateReviewModal({ open, onClose, mode = "create", init
   }, [form]);
 
   useEffect(() => {
-    if (!open || !workspaceSlug || !projectId) return;
+    if (!open || !workspaceSlug || !productId) return;
     reviewService
-      .getReviewModules(String(workspaceSlug), String(projectId))
+      .getReviewModules(String(workspaceSlug), String(productId))
       .then((data) => {
         const flatten = (nodes: any[]): any[] =>
           (nodes || []).flatMap((n) => [n, ...(Array.isArray(n?.children) ? flatten(n.children) : [])]);
@@ -59,7 +59,7 @@ export default function CreateReviewModal({ open, onClose, mode = "create", init
         setModuleOptions(opts);
       })
       .catch(() => setModuleOptions([]));
-  }, [open, workspaceSlug, projectId, reviewService]);
+  }, [open, workspaceSlug, productId, reviewService]);
 
   useEffect(() => {
     if (!open) return;
@@ -74,7 +74,7 @@ export default function CreateReviewModal({ open, onClose, mode = "create", init
   }, [open, initialValues, form]);
 
   const handleSubmit = async () => {
-    if (!workspaceSlug || !projectId) return;
+    if (!workspaceSlug || !productId) return;
     try {
       setSubmitting(true);
       const v = await form.validateFields();
@@ -83,17 +83,16 @@ export default function CreateReviewModal({ open, onClose, mode = "create", init
         name: v.name,
         description: v.description || "",
         module: v.module_id,
-        project: projectId,
       };
       if (mode === "create") {
         payload.started_at = v.started_at ? v.started_at.format("YYYY-MM-DD") : null;
         payload.ended_at = v.ended_at ? v.ended_at.format("YYYY-MM-DD") : null;
-        await reviewService.createReview(String(workspaceSlug), String(projectId), payload);
+        await reviewService.createReview(String(workspaceSlug), String(productId), payload);
         qaCaseSetToastSuccess("评审已创建");
       } else {
         if (v.started_at) payload.started_at = v.started_at.format("YYYY-MM-DD");
         if (v.ended_at) payload.ended_at = v.ended_at.format("YYYY-MM-DD");
-        await reviewService.updateReview(String(workspaceSlug), String(projectId), { id: initialValues?.id, ...payload });
+        await reviewService.updateReview(String(workspaceSlug), String(productId), { id: initialValues?.id, ...payload });
         qaCaseSetToastSuccess("评审已更新");
       }
       onClose();

@@ -63,6 +63,11 @@ export function TestCaseTimesheetField(props: TTestCaseTimesheetFieldProps) {
     fetchTimesheets();
   }, [fetchTimesheets]);
 
+  // 工时记在项目上；产品页打开用例时没有项目语境，到项目的测试计划里登记
+  if (!resolvedProjectId) {
+    return <span className="min-w-0 flex-1 truncate text-sm text-tertiary">在项目的测试计划中登记</span>;
+  }
+
   return (
     <div ref={dropdownRef} className="relative flex-1 min-w-0">
       <button

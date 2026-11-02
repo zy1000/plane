@@ -10,7 +10,6 @@ type Option = { value: string; label: React.ReactNode; title?: string; disabled?
 
 type CaseMetaFormProps = {
   disabled?: boolean;
-  projectId?: string;
   assignee?: string;
   onAssigneeChange: (v: any) => void;
   onAssigneeBlur: () => void;
@@ -57,7 +56,6 @@ export const priorityDotClass = (label: string) => {
 export function CaseMetaForm(props: CaseMetaFormProps) {
   const {
     disabled = false,
-    projectId,
     assignee,
     onAssigneeChange,
     onAssigneeBlur,
@@ -104,7 +102,6 @@ export function CaseMetaForm(props: CaseMetaFormProps) {
       <div className={fieldShell(0)}>
         <MemberDropdown
           multiple={false}
-          projectId={projectId ? String(projectId) : undefined}
           value={assignee ?? null}
           onChange={(val) => {
             if (disabled) return;

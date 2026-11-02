@@ -1,7 +1,7 @@
 import json
 
 from django.db import transaction
-from django.db.models import CharField, Prefetch, UUIDField, Value
+from django.db.models import CharField, Prefetch, Q, UUIDField, Value
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
@@ -246,8 +246,11 @@ class TemplateCaseImportAPIView(BaseAPIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # 目标只能是产品用例库或模板库（还没迁到产品的旧库不再接收新用例）
         target_repository = get_object_or_404(
-            TestCaseRepository, id=target_repository_id, workspace__slug=slug
+            TestCaseRepository.objects.filter(Q(product__isnull=False) | Q(is_template=True)),
+            id=target_repository_id,
+            workspace__slug=slug,
         )
 
         source_cases = list(

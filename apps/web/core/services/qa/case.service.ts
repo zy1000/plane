@@ -27,8 +27,9 @@ export class CaseService extends APIService {
     super(API_BASE_URL);
   }
 
-  async getCases(workspaceSlug: string, projectId: string, queries?: any): Promise<any> {
-    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/test/case/`, {
+  // 用例 CRUD / 批量改 / 关联需求：2026-11 起用例归产品，走产品作用域
+  async getCases(workspaceSlug: string, productId: string, queries?: any): Promise<any> {
+    return this.get(`/api/workspaces/${workspaceSlug}/products/${productId}/test/case/`, {
       params: queries,
     })
       .then((response) => response?.data)
@@ -53,7 +54,8 @@ export class CaseService extends APIService {
       });
   }
 
-  async getPlanUnassociatedCaseTree(workspaceSlug: string, queries: { plan_id: string }): Promise<any> {
+  // 计划候选：项目已关联产品的用例；product_id 收窄到其中一个产品
+  async getPlanUnassociatedCaseTree(workspaceSlug: string, queries: { plan_id: string; product_id?: string }): Promise<any> {
     return this.get(`/api/workspaces/${workspaceSlug}/test/case/plan-unassociated-tree/`, { params: queries })
       .then((response) => response?.data)
       .catch((error) => {
@@ -65,6 +67,7 @@ export class CaseService extends APIService {
     workspaceSlug: string,
     queries: {
       plan_id: string;
+      product_id?: string;
       repository_id?: string;
       module_id?: string;
       page?: number;
@@ -81,7 +84,7 @@ export class CaseService extends APIService {
 
   async getPlanUnassociatedCaseIds(
     workspaceSlug: string,
-    queries: { plan_id: string; repository_id?: string; module_id?: string }
+    queries: { plan_id: string; product_id?: string; repository_id?: string; module_id?: string }
   ): Promise<{ data: string[]; count: number }> {
     return this.get(`/api/workspaces/${workspaceSlug}/test/case/plan-unassociated-case-ids/`, { params: queries })
       .then((response) => ({ data: response?.data?.data ?? [], count: Number(response?.data?.count || 0) }))
@@ -90,7 +93,8 @@ export class CaseService extends APIService {
       });
   }
 
-  async getProjectCaseTree(workspaceSlug: string, queries: { project_id: string }): Promise<any> {
+  // 选用例候选库：product_id = 该产品的库；project_id = 项目用例池（项目已关联产品的库）
+  async getProjectCaseTree(workspaceSlug: string, queries: { project_id?: string; product_id?: string }): Promise<any> {
     return this.get(`/api/workspaces/${workspaceSlug}/test/case/project-case-tree/`, { params: queries })
       .then((response) => response?.data)
       .catch((error) => {
@@ -100,7 +104,7 @@ export class CaseService extends APIService {
 
   async getProjectCases(
     workspaceSlug: string,
-    queries: { project_id: string; repository_id?: string; module_id?: string; page?: number; page_size?: number; name__icontains?: string }
+    queries: { project_id?: string; product_id?: string; repository_id?: string; module_id?: string; page?: number; page_size?: number; name__icontains?: string }
   ): Promise<any> {
     return this.get(`/api/workspaces/${workspaceSlug}/test/case/project-cases/`, { params: queries })
       .then((response) => response?.data)
@@ -111,7 +115,7 @@ export class CaseService extends APIService {
 
   async getProjectCaseIds(
     workspaceSlug: string,
-    queries: { project_id: string; repository_id?: string; module_id?: string }
+    queries: { project_id?: string; product_id?: string; repository_id?: string; module_id?: string }
   ): Promise<{ data: string[]; count: number }> {
     return this.get(`/api/workspaces/${workspaceSlug}/test/case/project-case-ids/`, { params: queries })
       .then((response) => ({ data: response?.data?.data ?? [], count: Number(response?.data?.count || 0) }))
@@ -150,8 +154,8 @@ export class CaseService extends APIService {
       });
   }
 
-  async createCase(workspaceSlug: string, projectId: string, data: any): Promise<any> {
-    return this.post(`/api/workspaces/${workspaceSlug}/projects/${projectId}/test/case/`, data)
+  async createCase(workspaceSlug: string, productId: string, data: any): Promise<any> {
+    return this.post(`/api/workspaces/${workspaceSlug}/products/${productId}/test/case/`, data)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
@@ -210,19 +214,19 @@ export class CaseService extends APIService {
       });
   }
 
-  async updateCase(workspaceSlug: string, projectId: string, data: any): Promise<any> {
-    return this.put(`/api/workspaces/${workspaceSlug}/projects/${projectId}/test/case/`, data)
+  async updateCase(workspaceSlug: string, productId: string, data: any): Promise<any> {
+    return this.put(`/api/workspaces/${workspaceSlug}/products/${productId}/test/case/`, data)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
       });
   }
 
-  async deleteCase(workspaceSlug: string, projectId: string, caseId: string | string[]): Promise<any> {
+  async deleteCase(workspaceSlug: string, productId: string, caseId: string | string[]): Promise<any> {
     const ids = Array.isArray(caseId) ? caseId.join(",") : caseId;
     const query = { id__in: ids };
     return this.delete(
-      `/api/workspaces/${workspaceSlug}/projects/${projectId}/test/case/?${new URLSearchParams(query).toString()}`
+      `/api/workspaces/${workspaceSlug}/products/${productId}/test/case/?${new URLSearchParams(query).toString()}`
     )
       .then((response) => response?.data)
       .catch((error) => {
@@ -232,10 +236,10 @@ export class CaseService extends APIService {
 
   async bulkUpdateCases(
     workspaceSlug: string,
-    projectId: string,
+    productId: string,
     data: TCaseBulkUpdatePayload
   ): Promise<{ updated: number }> {
-    return this.post(`/api/workspaces/${workspaceSlug}/projects/${projectId}/test/case/bulk-update/`, data)
+    return this.post(`/api/workspaces/${workspaceSlug}/products/${productId}/test/case/bulk-update/`, data)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
@@ -595,17 +599,16 @@ export class CaseService extends APIService {
   /* --- 用例 ↔ 需求（RequirementTestCase） ---------------------------------
    * 与上面的 issue-case 系列是两回事：那批挂的是「工作项」（含 IssueType 名为
    * 史诗/特性/用户故事 的那些，界面上也叫"需求"），这批挂的是 requirement 域的真需求。
-   * 端点是项目作用域的（吃 QA_CASE_* 权限），共享用例库（repository.project 为空）
-   * 的用例只能从需求侧关联 —— 见 apps/api/plane/app/views/qa/case_requirement.py。
+   * 端点是产品作用域的（用例归产品）—— 见 apps/api/plane/app/views/qa/case_requirement.py。
    */
 
   /** 这条用例已关联的需求列表 */
   async getCaseRequirements(
     workspaceSlug: string,
-    projectId: string,
+    productId: string,
     caseId: string
   ): Promise<TTestCaseRequirementLink[]> {
-    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/test/case/${caseId}/requirements/`)
+    return this.get(`/api/workspaces/${workspaceSlug}/products/${productId}/test/case/${caseId}/requirements/`)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
@@ -615,12 +618,12 @@ export class CaseService extends APIService {
   /** 候选池：能挂到这条用例上、且尚未挂上的需求。要写权限（会露出未关联的需求内容） */
   async getLinkableRequirements(
     workspaceSlug: string,
-    projectId: string,
+    productId: string,
     caseId: string,
     params: { search?: string; cursor?: string; per_page?: number } = {}
   ): Promise<TLinkableCaseRequirementsResponse> {
     return this.get(
-      `/api/workspaces/${workspaceSlug}/projects/${projectId}/test/case/${caseId}/linkable-requirements/`,
+      `/api/workspaces/${workspaceSlug}/products/${productId}/test/case/${caseId}/linkable-requirements/`,
       { params }
     )
       .then((response) => response?.data)
@@ -632,11 +635,11 @@ export class CaseService extends APIService {
   /** 批量关联需求。全有或全无 —— 409 时 conflicts[].reason 给原因 */
   async addCaseRequirements(
     workspaceSlug: string,
-    projectId: string,
+    productId: string,
     caseId: string,
     requirementIds: string[]
   ): Promise<{ message: string }> {
-    return this.post(`/api/workspaces/${workspaceSlug}/projects/${projectId}/test/case/${caseId}/requirements/`, {
+    return this.post(`/api/workspaces/${workspaceSlug}/products/${productId}/test/case/${caseId}/requirements/`, {
       requirements: requirementIds,
     })
       .then((response) => response?.data)
@@ -648,11 +651,11 @@ export class CaseService extends APIService {
   /** 解除单条需求关联 */
   async deleteCaseRequirement(
     workspaceSlug: string,
-    projectId: string,
+    productId: string,
     caseId: string,
     requirementId: string
   ): Promise<void> {
-    return this.delete(`/api/workspaces/${workspaceSlug}/projects/${projectId}/test/case/${caseId}/requirements/`, {
+    return this.delete(`/api/workspaces/${workspaceSlug}/products/${productId}/test/case/${caseId}/requirements/`, {
       requirement_id: requirementId,
     })
       .then((response) => response?.data)

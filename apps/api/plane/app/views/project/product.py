@@ -60,6 +60,9 @@ class ProjectProductViewSet(BaseViewSet):
     @allow_fine_permission(
         PermissionKey.PROJECT_REQUIREMENT_LINK_VIEW,
         PermissionKey.PROJECT_PRODUCT_LINK_MANAGE,
+        # 用例归产品后，计划里选用例要先列出项目已关联的产品（2026-11）
+        PermissionKey.QA_PLAN_VIEW,
+        PermissionKey.QA_PLAN_EDIT,
     )
     def list(self, request, slug, project_id):
         rows = list(self.get_queryset())

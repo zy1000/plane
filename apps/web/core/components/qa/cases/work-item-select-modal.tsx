@@ -368,7 +368,8 @@ export const WorkItemSelectModal: React.FC<Props> = ({
 
   // 封装获取工作项（带 per_page 与 page 计算 cursor）
   const fetchIssues = async (page: number, perPage: number) => {
-    if (!isOpen || !currentProjectId) return;
+    // 已有用例走 unselect-issues：不带项目时后端返回「关联了用例所属产品」的项目里的工作项（产品页打开用例）
+    if (!isOpen || (!currentProjectId && !caseId)) return;
     setLoadingIssues(true);
     try {
       let res;
@@ -397,6 +398,7 @@ export const WorkItemSelectModal: React.FC<Props> = ({
         if (forceTypeName) {
           queries.type__category__name__in = workItemTypeName(forceTypeName);
         }
+        if (!currentProjectId) return;
         res = await issueService.getIssues(workspaceSlug, currentProjectId, queries);
       }
 
@@ -417,7 +419,7 @@ export const WorkItemSelectModal: React.FC<Props> = ({
   };
 
   useEffect(() => {
-    if (!isOpen || !currentProjectId) {
+    if (!isOpen || (!currentProjectId && !caseId)) {
       setIssues([]);
       return;
     }

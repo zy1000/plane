@@ -172,7 +172,7 @@ export const TestCaseActivityTab: React.FC<Props> = observer((props) => {
       </div>
 
       <div className="min-h-0 flex-1 overflow-hidden">
-        {active === "comment" && projectId ? (
+        {active === "comment" && !templateMode ? (
           <TestCaseCommentsSection workspaceSlug={workspaceSlug} projectId={projectId} caseId={caseId} />
         ) : (
           <div className="px-2 py-5">

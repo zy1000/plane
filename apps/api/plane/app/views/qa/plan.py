@@ -80,6 +80,7 @@ from plane.db.models import (
 )
 from plane.utils.paginator import CustomPaginator
 from plane.utils.qa import (
+    project_case_repository_ids,
     invalid_workspace_member_ids as _invalid_workspace_member_ids,
     invalidate_plan_case_review_records,
     recompute_plan_case_review_statuses,
@@ -100,6 +101,7 @@ from plane.app.permissions import (
     allow_workspace_member,
     PermissionKey,
 )
+from plane.app.views.qa.product_scope import allow_product_scope
 from plane.app.views.qa.template_permissions import (
     CASE_TEMPLATE_READ_KEYS,
     allow_workspace_member_or_template,
@@ -204,15 +206,15 @@ class RepositoryAPIView(BaseAPIView):
     serializer_class = TestCaseRepositorySerializer
     filter_backends = (DjangoFilterBackend, SearchFilter)
     filterset_fields = {
-        "project_id": ["exact", "in"],
-        "project__name": ["exact", "icontains", "in"],
+        "product_id": ["exact", "in"],
+        "product__name": ["exact", "icontains", "in"],
         "id": ["exact", "in"],
         "workspace__slug": ["exact", "icontains", "in"],
         "name": ["exact", "icontains", "in"],
         "is_template": ["exact"],
     }
-    # search 参数在用例库名称与所属项目名称间做 OR 匹配
-    search_fields = ["name", "project__name"]
+    # search 参数在用例库名称与所属产品名称间做 OR 匹配
+    search_fields = ["name", "product__name"]
     pagination_class = CustomPaginator
 
     def get_queryset(self):
@@ -224,17 +226,17 @@ class RepositoryAPIView(BaseAPIView):
         workspace = get_object_or_404(Workspace, slug=slug)
         serializer = self.serializer_class(data=request.data)
         serializer.is_valid(raise_exception=True)
-        # 模板库（is_template=True）走工作区级模板权限；项目库维持「工作区成员即可」
+        # 模板库（is_template=True）走工作区级模板权限；产品库维持「工作区成员即可」
         if serializer.validated_data.get("is_template"):
             error = template_permission_error(
                 request, slug, PermissionKey.WORKSPACE_CASE_TEMPLATE_MANAGE
             )
             if error is not None:
                 return error
-        project = serializer.validated_data.get("project")
-        if project is not None and project.workspace_id != workspace.id:
+        product = serializer.validated_data.get("product")
+        if product is not None and product.workspace_id != workspace.id:
             return Response(
-                {"error": "Project does not belong to this workspace"},
+                {"error": "Product does not belong to this workspace"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         # workspace 由服务端按 URL slug 决定，覆盖客户端传值
@@ -246,9 +248,11 @@ class RepositoryAPIView(BaseAPIView):
     @allow_workspace_member
     def put(self, request, slug):
         repository_id = request.data.pop("id")
-        # is_template 创建后不可变；workspace 不允许改挂
+        # is_template 创建后不可变；workspace / 产品不允许改挂
         request.data.pop("is_template", None)
         request.data.pop("workspace", None)
+        request.data.pop("product", None)
+        request.data.pop("project", None)
         repository = get_object_or_404(self.get_queryset(), id=repository_id)
         if repository.is_template:
             error = template_permission_error(
@@ -268,7 +272,7 @@ class RepositoryAPIView(BaseAPIView):
     def get(self, request, slug):
         queryset = self.get_queryset()
         # 未显式查询 is_template 时默认排除模板库，
-        # 让项目侧列表、库下拉、复制弹窗等存量消费方都看不到模板库
+        # 让产品侧列表、库下拉、复制弹窗等存量消费方都看不到模板库
         if "is_template" not in request.query_params:
             queryset = queryset.filter(is_template=False)
         elif request.query_params.get("is_template") in ("true", "True", "1"):
@@ -1261,7 +1265,13 @@ class PlanView(BaseViewSet):
         )
 
         # 排除无效的 None 值（如果某些 Issue 没有关联 Case）
-        valid_case_ids = [cid for cid in related_case_ids if cid]
+        # 只收项目用例池（项目已关联产品）里的用例
+        valid_case_ids = list(
+            TestCase.objects.filter(
+                id__in=[cid for cid in related_case_ids if cid],
+                repository_id__in=project_case_repository_ids(plan.project_id),
+            ).values_list("id", flat=True)
+        )
 
         if not valid_case_ids:
             return Response(status=status.HTTP_200_OK)
@@ -1334,13 +1344,8 @@ class PlanView(BaseViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        repo_ids = list(
-            TestCaseRepository.objects.filter(
-                project_id=plan.project_id,
-                workspace__slug=slug,
-                deleted_at__isnull=True,
-            ).values_list("id", flat=True)
-        )
+        # 只能加项目用例池（项目已关联产品）里的用例
+        repo_ids = list(project_case_repository_ids(plan.project_id))
 
         found_case_ids = set(
             TestCase.objects.filter(
@@ -1545,7 +1550,13 @@ class PlanView(BaseViewSet):
             .distinct()
         )
 
-        valid_case_ids = [cid for cid in related_case_ids if cid]
+        # 只收项目用例池（项目已关联产品）里的用例
+        valid_case_ids = list(
+            TestCase.objects.filter(
+                id__in=[cid for cid in related_case_ids if cid],
+                repository_id__in=project_case_repository_ids(plan.project_id),
+            ).values_list("id", flat=True)
+        )
 
         if not valid_case_ids:
             plan.modules.add(*module_ids)
@@ -1610,7 +1621,13 @@ class PlanView(BaseViewSet):
             .distinct()
         )
 
-        valid_case_ids = [cid for cid in related_case_ids if cid]
+        # 只收项目用例池（项目已关联产品）里的用例
+        valid_case_ids = list(
+            TestCase.objects.filter(
+                id__in=[cid for cid in related_case_ids if cid],
+                repository_id__in=project_case_repository_ids(plan.project_id),
+            ).values_list("id", flat=True)
+        )
 
         if not valid_case_ids:
             plan.releases.add(*release_ids)
@@ -1679,9 +1696,14 @@ class CaseAPIView(BaseAPIView):
     }
     ordering_fields = ["updated_at", "created_at", "code", "priority"]
 
-    @allow_fine_permission(PermissionKey.QA_CASE_VIEW)
-    def get(self, request, slug, project_id):
-        queryset = self.queryset
+    def product_queryset(self, slug, product_id):
+        return self.queryset.filter(
+            repository__workspace__slug=slug, repository__product_id=product_id
+        )
+
+    @allow_product_scope
+    def get(self, request, slug, product_id):
+        queryset = self.product_queryset(slug, product_id)
         # 按模块过滤时递归包含所有子模块，与模块树上的计数口径保持一致；"none" = 未归类。
         # module_id 是树上选中的节点，module_ids 是筛选器里选的模块，两者取交集。
         for param in ("module_id", "module_ids"):
@@ -1699,12 +1721,12 @@ class CaseAPIView(BaseAPIView):
             .order_by("-created_at")
             .values("result")[:1]
         )
+        # 用例归产品后，「最近一次执行」取所有项目的计划
         latest_execution_subquery = (
             PlanCase.objects.filter(
                 case_id=OuterRef("pk"),
                 deleted_at__isnull=True,
                 plan__deleted_at__isnull=True,
-                plan__project_id=project_id,
             )
             .order_by("-updated_at", "-created_at")
         )
@@ -1725,6 +1747,9 @@ class CaseAPIView(BaseAPIView):
             ),
             _latest_execution_plan_id=Subquery(
                 latest_execution_subquery.values("plan_id")[:1]
+            ),
+            _latest_execution_project_id=Subquery(
+                latest_execution_subquery.values("plan__project_id")[:1]
             ),
         )
 
@@ -1751,10 +1776,20 @@ class CaseAPIView(BaseAPIView):
 
         return list_response(data=data, count=cases.count())
 
-    @allow_fine_permission(PermissionKey.QA_CASE_CREATE)
-    def post(self, request, slug, project_id):
+    @allow_product_scope
+    def post(self, request, slug, product_id):
         serializer = CaseCreateUpdateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        repository = serializer.validated_data.get("repository")
+        if (
+            repository is None
+            or str(repository.product_id) != str(product_id)
+            or repository.workspace.slug != slug
+        ):
+            return Response(
+                {"error": "Repository does not belong to this product."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         test_case = serializer.save()
         test_case_activity.delay(
             type="case.activity.created",
@@ -1767,10 +1802,19 @@ class CaseAPIView(BaseAPIView):
         serializer = self.serializer_class(instance=test_case)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-    @allow_fine_permission(PermissionKey.QA_CASE_EDIT)
-    def put(self, request, slug, project_id):
+    @allow_product_scope
+    def put(self, request, slug, product_id):
         case_id = request.data.pop("id")
-        case = self.queryset.get(id=case_id)
+        case = get_object_or_404(self.product_queryset(slug, product_id), id=case_id)
+        # 换库只能换到同一产品下的库
+        target_repository_id = request.data.get("repository")
+        if target_repository_id and not TestCaseRepository.objects.filter(
+            id=target_repository_id, product_id=product_id, workspace__slug=slug
+        ).exists():
+            return Response(
+                {"error": "Repository does not belong to this product."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         # 在更新前抓快照，用于活动比对
         current_snapshot = build_case_activity_snapshot(case)
         update_serializer = CaseCreateUpdateSerializer(
@@ -1789,14 +1833,9 @@ class CaseAPIView(BaseAPIView):
         serializer = self.serializer_class(instance=case)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    @allow_fine_permission(PermissionKey.QA_CASE_DELETE)
-    def delete(self, request, slug, project_id):
-        cases = self.filter_queryset(
-            self.queryset.filter(
-                repository__workspace__slug=slug,
-                repository__project_id=project_id,
-            )
-        )
+    @allow_product_scope
+    def delete(self, request, slug, product_id):
+        cases = self.filter_queryset(self.product_queryset(slug, product_id))
         # 硬删用例会级联删掉计划用例，受影响的计划状态要重算；plan_id 得在删前取
         plan_ids = set(
             PlanCase.objects.filter(case__in=cases).values_list("plan_id", flat=True)
@@ -1825,7 +1864,7 @@ class CaseDetailAPIView(BaseAPIView):
 
 
 class CaseMindmapAPIView(BaseAPIView):
-    @allow_fine_permission(PermissionKey.QA_MINDMAP_VIEW)
+    @allow_workspace_member_or_template(*CASE_TEMPLATE_READ_KEYS)
     def get(self, request, slug):
         repository_id = request.query_params.get("repository_id")
         module_ids_raw = (
@@ -2235,8 +2274,8 @@ class UserCaseModuleTreeAPIView(BaseAPIView):
     返回当前用户所有工作区的完整用例库模块树，仅需一次请求。
     响应结构：
     [
-      { id, slug, name, projects: [
-          { id, name,                              # id=null 表示"未关联项目"
+      { id, slug, name, products: [
+          { id, name,                              # id=null 表示"未关联产品"（模板库）
             repositories: [
               { id, name,
                 modules: [ { id, name, sort_order, repository, children: [...] } ]
@@ -2259,7 +2298,7 @@ class UserCaseModuleTreeAPIView(BaseAPIView):
         if not workspace_ids:
             return Response([])
 
-        # 2. 获取这些工作区下所有用例库（含 workspace、project 关联，用于分组）
+        # 2. 获取这些工作区下所有用例库（含 workspace、product 关联，用于分组）
         repository_queryset = TestCaseRepository.objects.filter(
             workspace_id__in=workspace_ids,
             deleted_at__isnull=True,
@@ -2274,8 +2313,8 @@ class UserCaseModuleTreeAPIView(BaseAPIView):
             )
         repositories = list(
             repository_queryset
-            .select_related("workspace", "project")
-            .order_by("workspace_id", "project_id", "-created_at")
+            .select_related("workspace", "product")
+            .order_by("workspace_id", "product_id", "-created_at")
         )
         if not repositories:
             return Response([])
@@ -2310,8 +2349,8 @@ class UserCaseModuleTreeAPIView(BaseAPIView):
                 ],
             }
 
-        # 5. 按工作区 → 项目 → 用例库 三层分组
-        # workspace_map[ws_id] = { ..., project_map: { proj_key: { id, name, repos: [] } } }
+        # 5. 按工作区 → 产品 → 用例库 三层分组
+        # workspace_map[ws_id] = { ..., _product_map: { key: { id, name, repos: [] } } }
         workspace_map: dict = {}
         for repo in repositories:
             ws = repo.workspace
@@ -2321,19 +2360,19 @@ class UserCaseModuleTreeAPIView(BaseAPIView):
                     "id": ws_id,
                     "slug": ws.slug,
                     "name": ws.name,
-                    "_project_map": {},
+                    "_product_map": {},
                 }
 
-            proj = repo.project
-            proj_key = str(proj.id) if proj else "__no_project__"
-            proj_map = workspace_map[ws_id]["_project_map"]
-            if proj_key not in proj_map:
-                proj_map[proj_key] = {
-                    "id": str(proj.id) if proj else None,
-                    "name": proj.name if proj else "未关联项目",
+            product = repo.product
+            product_key = str(product.id) if product else "__no_product__"
+            product_map = workspace_map[ws_id]["_product_map"]
+            if product_key not in product_map:
+                product_map[product_key] = {
+                    "id": str(product.id) if product else None,
+                    "name": product.name if product else "未关联产品",
                     "repositories": [],
                 }
-            proj_map[proj_key]["repositories"].append(
+            product_map[product_key]["repositories"].append(
                 {
                     "id": str(repo.id),
                     "name": repo.name,
@@ -2343,10 +2382,10 @@ class UserCaseModuleTreeAPIView(BaseAPIView):
                 }
             )
 
-        # 6. 整理最终结构（去掉内部 _project_map 辅助键）
+        # 6. 整理最终结构（去掉内部 _product_map 辅助键）
         result = []
         for ws_data in workspace_map.values():
-            projects = list(ws_data.pop("_project_map").values())
-            result.append({**ws_data, "projects": projects})
+            products = list(ws_data.pop("_product_map").values())
+            result.append({**ws_data, "products": products})
 
         return Response(result)

@@ -7,7 +7,7 @@
 "use client";
 
 import { cn } from "@plane/utils";
-import { globalEnums } from "@/app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/util";
+import { globalEnums } from "@/components/qa/shared/testhub/util";
 
 /** 优先级色块：L 蓝 / M 黄 / H 红，白字，按枚举数值取色 */
 const PRIORITY_BADGE_CLASS: Record<number, string> = {

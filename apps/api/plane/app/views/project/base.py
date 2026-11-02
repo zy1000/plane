@@ -75,7 +75,6 @@ from plane.db.models import (
     PlanCase,
     TestPlan,
     CaseReview,
-    TestCaseRepository,
     TestCase,
     TimeSheet,
     User,
@@ -95,6 +94,7 @@ from plane.utils.data_dictionary import (
 from plane.utils.host import base_host
 from plane.utils.issue_scheme import mode_linked_type_ids
 from plane.utils.paginator import CustomPaginator
+from plane.utils.qa import project_case_repository_ids, project_product_ids
 from plane.utils.requirement_project import linked_products_by_project
 from plane.utils.project.defaults import setup_new_project
 from plane.utils.response import list_response
@@ -784,22 +784,18 @@ class ProjectViewSet(BaseViewSet):
     @allow_fine_permission(PermissionKey.PROJECT_DELETE)
     def destroy(self, request, slug, pk):
         project = Project.objects.get(pk=pk, workspace__slug=slug)
-        # 项目下的需求关联行随级联软删,但级联是异步的;这里同步软删四张关联行,
+        # 项目下的需求关联行随级联软删,但级联是异步的;这里同步软删关联行,
         # 让产品侧的需求数 / 关联项目立刻对得上。删除项目不改需求状态（只升不降）
         from plane.db.models import (
             RequirementCycle,
             RequirementIssue,
             RequirementProject,
             RequirementRelease,
-            RequirementTestCase,
         )
 
         RequirementCycle.objects.filter(project_id=pk).delete()
         RequirementRelease.objects.filter(project_id=pk).delete()
         RequirementIssue.objects.filter(project_id=pk).delete()
-        # 用例关联没有 project 列（用例的作用域来自 repository），按用例库的项目筛;
-        # 共享用例库(repository.project 为空)的关联行不属于本项目,保留
-        RequirementTestCase.objects.filter(case__repository__project_id=pk).delete()
         RequirementProject.objects.filter(project_id=pk).delete()
         project.delete()
         webhook_activity.delay(
@@ -1517,8 +1513,9 @@ class ProjectAPI(BaseViewSet):
         review_offset = (review_page - 1) * review_page_size
         review_limit = review_offset + review_page_size
 
+        # 用例评审归产品：项目概览展示项目已关联产品的评审
         case_review_queryset = CaseReview.objects.filter(
-            project_id=project_id,
+            product_id__in=project_product_ids(project_id),
             deleted_at__isnull=True,
         )
         case_review_total_count = case_review_queryset.count()
@@ -1542,6 +1539,8 @@ class ProjectAPI(BaseViewSet):
                 {
                     "id": str(review.id),
                     "name": review.name,
+                    # 评审归产品，前端据此跳到产品下的评审页
+                    "product_id": str(review.product_id) if review.product_id else None,
                     "start_date": review.started_at.isoformat() if review.started_at else None,
                     "end_date": review.ended_at.isoformat() if review.ended_at else None,
                     "status": review.state,
@@ -1674,13 +1673,8 @@ class ProjectAPI(BaseViewSet):
         defect_qs = base_issue_qs.filter(type__category__name="缺陷")
         total_defects = defect_qs.count()
 
-        test_repository_ids = list(
-            TestCaseRepository.objects.filter(
-                project_id=project_id,
-                workspace__slug=slug,
-                deleted_at__isnull=True,
-            ).values_list("id", flat=True)
-        )
+        # 项目用例池：项目已关联产品下的用例库
+        test_repository_ids = list(project_case_repository_ids(project_id))
         total_cases = (
             TestCase.objects.filter(
                 repository_id__in=test_repository_ids, deleted_at__isnull=True

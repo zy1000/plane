@@ -25,7 +25,7 @@ type Props = {
   onSuccess: () => void;
   /** 额外合并进用例库列表请求的查询参数（如模板场景传 { is_template: true }）；不传时请求与现状一致 */
   repositoryQuery?: Record<string, any>;
-  /** project 为空的用例库分组标签（如模板场景传「模板库」）；默认「未关联项目」 */
+  /** product 为空的用例库分组标签（如模板场景传「模板库」）；默认「未关联产品」 */
   emptyProjectGroupLabel?: string;
 };
 
@@ -83,7 +83,8 @@ export const CopyCaseModal: React.FC<Props> = ({
       .then((workspaces) => {
         // 接口返回用户所在全部工作空间，这里限定当前工作空间：支持跨项目复制，同时避免跨工作空间越权
         const current = (workspaces || []).find((ws: any) => ws?.slug === workspaceSlug);
-        setProjects(current?.projects || []);
+        // 用例库 2026-11 起按产品分组（接口字段 products）
+        setProjects(current?.products || []);
       })
       .catch((err) => {
         console.error("获取用例库/模块失败:", err);
@@ -163,10 +164,10 @@ export const CopyCaseModal: React.FC<Props> = ({
     const named = projects.map((proj: any) => {
       const hasProject = !!proj?.id;
       const projId = hasProject ? String(proj.id) : NO_PROJECT_KEY;
-      // project 为空的分组（接口返回「未关联项目」），允许调用方自定义标签（如模板场景「模板库」）
+      // product 为空的分组（接口返回「未关联产品」），允许调用方自定义标签（如模板场景「模板库」）
       const projectName = hasProject
         ? String(proj?.name || projId)
-        : emptyProjectGroupLabel || String(proj?.name || "未关联项目");
+        : emptyProjectGroupLabel || String(proj?.name || "未关联产品");
       return { proj, projId, projectName };
     });
     named.sort((a, b) => a.projectName.localeCompare(b.projectName));
@@ -297,7 +298,7 @@ export const CopyCaseModal: React.FC<Props> = ({
                   handleSearchClear();
                 }
               }}
-              placeholder="搜索项目 / 用例库 / 模块"
+              placeholder="搜索产品 / 用例库 / 模块"
               className="copy-module-search h-9 w-full rounded-lg border border-subtle bg-layer-1 pl-9 pr-9 text-[13px] text-primary outline-none transition-shadow placeholder:text-placeholder"
             />
             {search && (
@@ -323,7 +324,7 @@ export const CopyCaseModal: React.FC<Props> = ({
                     image={Empty.PRESENTED_IMAGE_SIMPLE}
                     description={
                       <span className="text-xs text-tertiary">
-                        {search.trim() ? "未找到匹配的项目 / 用例库 / 模块" : "暂无用例库"}
+                        {search.trim() ? "未找到匹配的产品 / 用例库 / 模块" : "暂无用例库"}
                       </span>
                     }
                   />
@@ -350,7 +351,7 @@ export const CopyCaseModal: React.FC<Props> = ({
         {/* Footer */}
         <div className="space-y-3 border-t border-subtle px-5 py-3">
           <span className="text-xs text-tertiary">
-            共 <span className="font-medium text-secondary">{projectCount}</span> 个项目 ·{" "}
+            共 <span className="font-medium text-secondary">{projectCount}</span> 个产品 ·{" "}
             <span className="font-medium text-secondary">{repoCount}</span> 个用例库
           </span>
 

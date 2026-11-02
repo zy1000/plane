@@ -20,7 +20,7 @@ import {
   findModuleTreeLabel,
   type TModuleTreeNode,
 } from "@/components/qa/module-tree";
-import { getEnums, globalEnums } from "@/app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/util";
+import { getEnums, globalEnums } from "@/components/qa/shared/testhub/util";
 import * as LucideIcons from "lucide-react";
 import { useMember } from "@/hooks/store/use-member";
 import { useUser } from "@/hooks/store/user";
@@ -115,7 +115,7 @@ const normalizeId = (v: any): string | undefined => {
 
 export default function CaseReview() {
   const { t } = useTranslation();
-  const { workspaceSlug, projectId } = useParams();
+  const { workspaceSlug, productId } = useParams();
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -252,13 +252,13 @@ export default function CaseReview() {
       if (!silent) setListLoading(true);
       setError(null);
       const input = (kw ?? keyword).trim();
-      const effectiveProjectId = !repositoryId && !moduleId ? (projectId ? String(projectId) : null) : null;
+      const effectiveProductId = !repositoryId && !moduleId ? (productId ? String(productId) : null) : null;
       const res = await reviewService.getReviewCaseList(String(workspaceSlug), String(reviewId), {
         all: true,
         ordering,
         // 卡片只用得到 mine 和待评审头像，别把每行的评审人 id 全拉回来
         slim: true,
-        ...(effectiveProjectId ? { project_id: effectiveProjectId } : {}),
+        ...(effectiveProductId ? { product_id: effectiveProductId } : {}),
         ...(repositoryId ? { repository_id: repositoryId } : {}),
         ...(moduleId ? { module_id: moduleId } : {}),
         ...(input ? { name__icontains: input } : {}),
@@ -377,15 +377,15 @@ export default function CaseReview() {
   }, [workspaceSlug]);
 
   React.useEffect(() => {
-    if (!reviewId || !workspaceSlug || !projectId || reviewName) return;
+    if (!reviewId || !workspaceSlug || !productId || reviewName) return;
     reviewService
-      .getReviewList(String(workspaceSlug), { project_id: String(projectId) })
+      .getReviewList(String(workspaceSlug), { product_id: String(productId) })
       .then((list) => {
         const found = list.find((r) => String(r.id) === String(reviewId));
         if (found?.name) setReviewName(found.name);
       })
       .catch(() => {});
-  }, [reviewId, workspaceSlug, projectId]);
+  }, [reviewId, workspaceSlug, productId]);
 
   React.useEffect(() => {
     fetchEnums();
@@ -474,7 +474,7 @@ export default function CaseReview() {
     setSelectedModuleId(null);
     setSelectedTreeKey("root");
     fetchCases(keyword, null, false, null);
-  }, [workspaceSlug, reviewId, projectId, searchParams.toString()]);
+  }, [workspaceSlug, reviewId, productId, searchParams.toString()]);
 
   React.useEffect(() => {
     if (initialCaseId) fetchCaseDetail(initialCaseId);
@@ -575,14 +575,14 @@ export default function CaseReview() {
   }, [moduleTreeNodes]);
 
   const updateFilterQueryParams = React.useCallback(
-    (next: { project_id?: string | null; repository_id?: string | null; module_id?: string | null }) => {
+    (next: { product_id?: string | null; repository_id?: string | null; module_id?: string | null }) => {
       const params = new URLSearchParams(searchParams.toString());
       if (reviewId) params.set("review_id", String(reviewId));
       params.delete("case_id");
-      params.delete("project_id");
+      params.delete("product_id");
       params.delete("repository_id");
       params.delete("module_id");
-      if (next.project_id) params.set("project_id", String(next.project_id));
+      if (next.product_id) params.set("product_id", String(next.product_id));
       if (next.repository_id) params.set("repository_id", String(next.repository_id));
       if (next.module_id) params.set("module_id", String(next.module_id));
       router.replace(`${pathname}?${params.toString()}`);
@@ -600,7 +600,7 @@ export default function CaseReview() {
       setSelectedCaseId(undefined);
       setCaseDetail(null);
       skipNextUrlSyncedFetchRef.current = true;
-      updateFilterQueryParams({ project_id: projectId ? String(projectId) : null });
+      updateFilterQueryParams({ product_id: productId ? String(productId) : null });
       fetchCases(keyword, null, true, null);
       return;
     }
@@ -762,7 +762,7 @@ export default function CaseReview() {
         <Breadcrumbs.Item
           component={
             <BreadcrumbLink
-              href={`/${workspaceSlug}/projects/${projectId}/testhub/caseManagementReviewDetail?review_id=${encodeURIComponent(String(reviewId))}`}
+              href={`/${workspaceSlug}/products/${productId}/testhub/caseManagementReviewDetail?review_id=${encodeURIComponent(String(reviewId))}`}
               label={reviewName || "用例评审详情"}
             />
           }
@@ -963,7 +963,6 @@ export default function CaseReview() {
                             </div>
                             <CaseMetaForm
                               disabled
-                              projectId={projectId ? String(projectId) : undefined}
                               assignee={normalizeId(caseDetail?.assignee)}
                               onAssigneeChange={() => {}}
                               onAssigneeBlur={() => {}}
@@ -1225,7 +1224,7 @@ export default function CaseReview() {
           }}
           caseId={selectedCaseId}
           workspaceSlug={workspaceSlug ? String(workspaceSlug) : undefined}
-          projectId={projectId ? String(projectId) : undefined}
+          productId={productId ? String(productId) : undefined}
         />
       </div>
     </div>

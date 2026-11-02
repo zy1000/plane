@@ -1,8 +1,8 @@
 import type { ComponentType } from "react";
 import { ClipboardCheck, FolderKanban, Rocket } from "lucide-react";
-import { RequirementIcon } from "@plane/propel/icons";
+import { RequirementIcon, TestManagementIcon } from "@plane/propel/icons";
 
-export type TProductTabKey = "dashboard" | "requirements" | "projects" | "stage-reviews" | "releases";
+export type TProductTabKey = "dashboard" | "requirements" | "projects" | "stage-reviews" | "releases" | "testhub";
 
 export type TProductNavigationItem = {
   key: TProductTabKey;
@@ -36,7 +36,17 @@ export const PRODUCT_NAVIGATION_ITEMS: TProductNavigationItem[] = [
     i18nKey: "workspace_products.navigation.releases",
     managerOnly: false,
   },
+  {
+    // 用例库 / 用例 / 用例评审（2026-11 从项目挪来）
+    key: "testhub",
+    icon: TestManagementIcon,
+    i18nKey: "workspace_products.navigation.testhub",
+    managerOnly: false,
+  },
 ];
+
+/** 有二级页的页签按前缀高亮 */
+export const PRODUCT_PREFIX_ACTIVE_TABS: TProductTabKey[] = ["testhub"];
 
 export const getProductTabPath = (workspaceSlug: string, productId: string, tabKey: TProductTabKey) =>
   `/${workspaceSlug}/products/${productId}/${tabKey}`;

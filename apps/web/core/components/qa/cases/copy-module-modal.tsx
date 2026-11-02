@@ -63,7 +63,7 @@ export const CopyModuleModal: React.FC<Props> = ({
     try {
       const workspaces = await caseModuleService.getUserModuleTree(repositoryQuery);
       setWorkspaceTrees(workspaces || []);
-      // 去掉根节点后默认展开各工作区，打开即见项目一层
+      // 去掉根节点后默认展开各工作区，打开即见产品一层
       setExpandedKeys((workspaces || []).map((ws: any) => `ws:${ws.slug}`));
       setAutoExpandParent(true);
     } catch {
@@ -152,9 +152,10 @@ export const CopyModuleModal: React.FC<Props> = ({
 
   const buildTree = (workspaces: any[]): any[] =>
     workspaces.map((ws) => {
-      const projectNodes = (ws.projects || []).map((proj: any) => {
+      // 用例库 2026-11 起按产品分组（接口字段 products）
+      const projectNodes = (ws.products || []).map((proj: any) => {
         const projKey = proj?.id ? `proj:${ws.slug}:${proj.id}` : `proj:${ws.slug}:__no_project__`;
-        // project 为空的分组（模板库 project=null 会落在这里），允许调用方自定义标签
+        // product 为空的分组（模板库 product=null 会落在这里），允许调用方自定义标签
         const projName = proj?.id ? (proj?.name ?? "-") : (emptyProjectGroupLabel ?? proj?.name ?? "-");
         const repoNodes = (proj.repositories || []).map((repo: any) => ({
           title: renderTitle(repo.name, "repository"),

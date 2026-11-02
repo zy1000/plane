@@ -66,6 +66,8 @@ export type TProjectStatisticSection<T> = {
 export type TProjectStatisticCaseReview = {
   id: string;
   name: string;
+  /** 用例评审归产品（2026-11），跳转到产品下的评审页 */
+  product_id?: string | null;
   start_date: string | null;
   end_date: string | null;
   status: string;

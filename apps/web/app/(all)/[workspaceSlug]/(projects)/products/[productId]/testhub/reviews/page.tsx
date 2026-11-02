@@ -23,9 +23,7 @@ import { DEFAULT_REVIEW_DISPLAY_PROPERTIES } from "@/components/qa/review/review
 import { ReviewsTable } from "@/components/qa/review/reviews-table";
 import type { TReviewTableRecord } from "@/components/qa/review/reviews-table";
 import { useAppRouter } from "@/hooks/use-app-router";
-import { useTestHub } from "../testhub-context";
-import { useProjectPermissions } from "@/hooks/store/use-project-permissions";
-import UnauthorizedImg from "@/app/assets/auth/unauthorized.svg?url";
+import { useTestHub } from "@/components/qa/shared/testhub/testhub-context";
 import { useTranslation } from "@plane/i18n";
 import { qaCaseErrorContent, qaCaseSetToastError, qaCaseSetToastSuccess } from "@/utils/qa-case-error";
 
@@ -56,9 +54,6 @@ type ReviewItem = {
 };
 
 const initialReviews: ReviewItem[] = [];
-const QA_REVIEW_CREATE_PERMISSION_KEY = "qa.review.create" as const;
-const QA_REVIEW_EDIT_PERMISSION_KEY = "qa.review.edit" as const;
-const QA_REVIEW_DELETE_PERMISSION_KEY = "qa.review.delete" as const;
 type TReviewFilters = {
   search?: string;
 };
@@ -104,20 +99,17 @@ const normalizeReviewsResponse = (response: unknown): { count: number; data: Rev
 
 export default function ReviewsPage() {
   const { t } = useTranslation();
-  const { workspaceSlug, projectId } = useParams<{ workspaceSlug: string; projectId: string }>();
+  const { workspaceSlug, productId } = useParams<{ workspaceSlug: string; productId: string }>();
   const searchParams = useSearchParams();
   const router = useAppRouter();
   const repositoryIdFromUrl = searchParams.get("repositoryId");
   const repositoryId =
     repositoryIdFromUrl || (typeof window !== "undefined" ? sessionStorage.getItem("selectedRepositoryId") : null);
   const repositoryKey = repositoryId ? String(repositoryId) : "all";
-  const { fetched: permissionsFetched, hasPermission } = useProjectPermissions(
-    String(workspaceSlug || ""),
-    String(projectId || "")
-  );
-  const canCreateReview = permissionsFetched && hasPermission(QA_REVIEW_CREATE_PERMISSION_KEY);
-  const canEditReview = permissionsFetched && hasPermission(QA_REVIEW_EDIT_PERMISSION_KEY);
-  const canDeleteReview = permissionsFetched && hasPermission(QA_REVIEW_DELETE_PERMISSION_KEY);
+  // 用例评审归产品后暂不细分权限（等权限重构），工作区成员都可操作
+  const canCreateReview = true;
+  const canEditReview = true;
+  const canDeleteReview = true;
   const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null);
   useEffect(() => {
     selectedModuleIdRef.current = selectedModuleId;
@@ -166,8 +158,6 @@ export default function ReviewsPage() {
 
   useEffect(() => {
     if (!workspaceSlug) return;
-    if (!permissionsFetched) return;
-    if (!hasPermission("qa.review.view")) return;
     try {
       if (repositoryIdFromUrl) sessionStorage.setItem("selectedRepositoryId", repositoryIdFromUrl);
     } catch {}
@@ -181,12 +171,12 @@ export default function ReviewsPage() {
     setReviewSearchValue(initFilters.search || "");
     void fetchReviews(1, pageSize, selectedModuleId, initFilters);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspaceSlug, repositoryKey, permissionsFetched, hasPermission]);
+  }, [workspaceSlug, repositoryKey]);
 
   const fetchModules = async () => {
-    if (!workspaceSlug || !projectId) return;
+    if (!workspaceSlug || !productId) return;
     try {
-      const data: ReviewModule[] = await caseService.getReviewModules(workspaceSlug as string, projectId as string);
+      const data: ReviewModule[] = await caseService.getReviewModules(workspaceSlug as string, productId as string);
       setModules(Array.isArray(data) ? data : []);
     } catch {
       // ignore error for placeholder page
@@ -202,11 +192,11 @@ export default function ReviewsPage() {
   };
 
   const fetchAllReviewsTotal = async () => {
-    if (!workspaceSlug || !projectId) return;
+    if (!workspaceSlug || !productId) return;
     try {
       const [res, unassignedRes] = await Promise.all([
-        caseService.getReviews(workspaceSlug as string, projectId as string, { page: 1, page_size: 1 }),
-        caseService.getReviews(workspaceSlug as string, projectId as string, {
+        caseService.getReviews(workspaceSlug as string, productId as string, { page: 1, page_size: 1 }),
+        caseService.getReviews(workspaceSlug as string, productId as string, {
           page: 1,
           page_size: 1,
           module_id: UNASSIGNED_MODULE_KEY,
@@ -227,7 +217,7 @@ export default function ReviewsPage() {
       moduleId: string | null,
       extraFilters: TReviewFilters = {}
     ) => {
-      if (!workspaceSlug || !projectId) return;
+      if (!workspaceSlug || !productId) return;
       setLoading(true);
       setError("");
       try {
@@ -235,7 +225,7 @@ export default function ReviewsPage() {
         if (moduleId) params.module_id = moduleId;
         if (extraFilters?.search) params.name__icontains = extraFilters.search;
 
-        const res = await caseService.getReviews(workspaceSlug as string, projectId as string, params);
+        const res = await caseService.getReviews(workspaceSlug as string, productId as string, params);
         const normalizedResponse = normalizeReviewsResponse(res);
         setReviews(normalizedResponse.data);
         setTotal(normalizedResponse.count);
@@ -247,7 +237,7 @@ export default function ReviewsPage() {
         setLoading(false);
       }
     },
-    [caseService, projectId, t, workspaceSlug]
+    [caseService, productId, t, workspaceSlug]
   );
 
   const handleAddUnderNode = (parentId: string) => {
@@ -261,8 +251,8 @@ export default function ReviewsPage() {
     setEditing(null);
     if (!canCreateReview) return;
     const name = inputValue.trim();
-    if (!name || !workspaceSlug || !projectId) return;
-    const payload: any = { name, project: projectId };
+    if (!name || !workspaceSlug || !productId) return;
+    const payload: any = { name, product: productId };
     if (parentId !== MODULE_TREE_ROOT_KEY) payload.parent = parentId;
     try {
       await caseService.createReviewModule(workspaceSlug as string, payload);
@@ -330,7 +320,7 @@ export default function ReviewsPage() {
       onOk: async () => {
         if (!workspaceSlug || !review?.id) return;
         try {
-          await caseService.deleteReview(workspaceSlug as string, projectId as string, { ids: [review.id] });
+          await caseService.deleteReview(workspaceSlug as string, productId as string, { ids: [review.id] });
           await fetchReviews(currentPage, pageSize, selectedModuleId, filters);
           await fetchModules();
           await fetchAllReviewsTotal();
@@ -422,11 +412,9 @@ export default function ReviewsPage() {
         : undefined;
 
   useEffect(() => {
-    if (!permissionsFetched) return;
-    if (!hasPermission("qa.review.view")) return;
     void fetchReviews(currentPage, pageSize, selectedModuleId, filters);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedModuleId, currentPage, pageSize, filters, permissionsFetched, hasPermission]);
+  }, [selectedModuleId, currentPage, pageSize, filters]);
 
   const totalForCurrent = useMemo(() => {
     return total;
@@ -451,7 +439,7 @@ export default function ReviewsPage() {
     try {
       sessionStorage.setItem("selectedReviewName", record.name || "");
     } catch {}
-    router.push(`/${workspaceSlug}/projects/${projectId}/testhub/caseManagementReviewDetail?review_id=${record.id}`);
+    router.push(`/${workspaceSlug}/products/${productId}/testhub/caseManagementReviewDetail?review_id=${record.id}`);
   };
 
   const handleEditReview = (record: TReviewTableRecord) => {
@@ -484,129 +472,114 @@ export default function ReviewsPage() {
     registerReviewSearch(handleReviewSearch);
   }, [handleReviewSearch, registerReviewSearch]);
 
-  const canViewReviews = permissionsFetched && hasPermission("qa.review.view");
-
   return (
     <div className={styles.container}>
       <PageHead title="评审" />
-      {!permissionsFetched ? (
-        <div className="flex h-full min-h-[50vh] w-full items-center justify-center">
-          <div className="text-secondary">加载中...</div>
-        </div>
-      ) : !canViewReviews ? (
-        <div className="flex h-full min-h-[50vh] w-full flex-col items-center justify-center gap-y-5 text-center">
-          <div className="h-44 w-72">
-            <img src={UnauthorizedImg} className="h-[176px] w-[288px] object-contain" alt="unauthorized" />
-          </div>
-          <h1 className="text-xl font-medium text-primary">您没有查看此页面的权限</h1>
-        </div>
-      ) : (
-        <div className={styles.split}>
-          <ModuleTreePanel
-            root={{ label: "全部评审", count: totalReviews }}
-            nodes={treeNodes}
-            selectedKey={selectedModuleId ?? MODULE_TREE_ROOT_KEY}
-            onSelect={handleTreeSelect}
-            expandedKeys={expandedKeys}
-            onExpandedKeysChange={setExpandedKeys}
-            editing={editing}
-            onEditCommit={handleEditCommit}
-            onEditCancel={() => setEditing(null)}
-            getMenuItems={getMenuItems}
-            dragMode={canEditReview ? "reparent" : "none"}
-            onDrop={handleTreeDrop}
-            onAddRoot={canCreateReview ? () => handleAddUnderNode(MODULE_TREE_ROOT_KEY) : undefined}
-            railLabel={selectedModuleName || "全部评审"}
-          />
-          <div className={`${styles.right} overflow-hidden !py-0`}>
-            <div className="flex h-full flex-col overflow-hidden">
-              <div className="min-h-0 flex-1 overflow-hidden">
-                {error ? (
-                  <div className="m-3 rounded-md border border-danger-subtle bg-danger-subtle p-4">
-                    <div className="text-sm text-danger-primary">{error}</div>
+      <div className={styles.split}>
+        <ModuleTreePanel
+          root={{ label: "全部评审", count: totalReviews }}
+          nodes={treeNodes}
+          selectedKey={selectedModuleId ?? MODULE_TREE_ROOT_KEY}
+          onSelect={handleTreeSelect}
+          expandedKeys={expandedKeys}
+          onExpandedKeysChange={setExpandedKeys}
+          editing={editing}
+          onEditCommit={handleEditCommit}
+          onEditCancel={() => setEditing(null)}
+          getMenuItems={getMenuItems}
+          dragMode={canEditReview ? "reparent" : "none"}
+          onDrop={handleTreeDrop}
+          onAddRoot={canCreateReview ? () => handleAddUnderNode(MODULE_TREE_ROOT_KEY) : undefined}
+          railLabel={selectedModuleName || "全部评审"}
+        />
+        <div className={`${styles.right} overflow-hidden !py-0`}>
+          <div className="flex h-full flex-col overflow-hidden">
+            <div className="min-h-0 flex-1 overflow-hidden">
+              {error ? (
+                <div className="m-3 rounded-md border border-danger-subtle bg-danger-subtle p-4">
+                  <div className="text-sm text-danger-primary">{error}</div>
+                </div>
+              ) : (
+                <div className="flex h-full flex-col overflow-hidden">
+                  <div className="relative min-w-0 flex-1 overflow-hidden px-0">
+                    <ReviewsTable
+                      canDelete={canDeleteReview}
+                      canEdit={canEditReview}
+                      displayProperties={DEFAULT_REVIEW_DISPLAY_PROPERTIES}
+                      loading={loading}
+                      onDelete={(record) => confirmDeleteReview(record as ReviewItem)}
+                      onEdit={handleEditReview}
+                      onOpen={handleOpenReview}
+                      reviewEnums={reviewEnums}
+                      reviews={reviews as TReviewTableRecord[]}
+                    />
                   </div>
-                ) : (
-                  <div className="flex h-full flex-col overflow-hidden">
-                    <div className="relative min-w-0 flex-1 overflow-hidden px-0">
-                      <ReviewsTable
-                        canDelete={canDeleteReview}
-                        canEdit={canEditReview}
-                        displayProperties={DEFAULT_REVIEW_DISPLAY_PROPERTIES}
-                        loading={loading}
-                        onDelete={(record) => confirmDeleteReview(record as ReviewItem)}
-                        onEdit={handleEditReview}
-                        onOpen={handleOpenReview}
-                        reviewEnums={reviewEnums}
-                        reviews={reviews as TReviewTableRecord[]}
-                      />
+                  <div className="flex flex-shrink-0 items-center justify-between border-t border-subtle bg-surface-1 px-4 py-3">
+                    <div className="flex items-center gap-4 text-sm">
+                      <span className="text-secondary">
+                        {totalForCurrent > 0
+                          ? `第 ${(currentPage - 1) * pageSize + 1}-${Math.min(
+                              currentPage * pageSize,
+                              totalForCurrent
+                            )} 条，共 ${totalForCurrent} 条`
+                          : ""}
+                      </span>
                     </div>
-                    <div className="flex flex-shrink-0 items-center justify-between border-t border-subtle bg-surface-1 px-4 py-3">
-                      <div className="flex items-center gap-4 text-sm">
-                        <span className="text-secondary">
-                          {totalForCurrent > 0
-                            ? `第 ${(currentPage - 1) * pageSize + 1}-${Math.min(
-                                currentPage * pageSize,
-                                totalForCurrent
-                              )} 条，共 ${totalForCurrent} 条`
-                            : ""}
-                        </span>
-                      </div>
-                      <Pagination
-                        simple
-                        current={currentPage}
-                        pageSize={pageSize}
-                        total={totalForCurrent}
-                        showSizeChanger
-                        pageSizeOptions={["10", "20", "50", "100"]}
-                        onChange={handlePaginationChange}
-                        onShowSizeChange={handlePageSizeChange}
-                        size="small"
-                      />
-                    </div>
+                    <Pagination
+                      simple
+                      current={currentPage}
+                      pageSize={pageSize}
+                      total={totalForCurrent}
+                      showSizeChanger
+                      pageSizeOptions={["10", "20", "50", "100"]}
+                      onChange={handlePaginationChange}
+                      onShowSizeChange={handlePageSizeChange}
+                      size="small"
+                    />
                   </div>
-                )}
-              </div>
+                </div>
+              )}
             </div>
-            <style
-              dangerouslySetInnerHTML={{
-                __html: `
-                .testhub-reviews-table-scroll{
-                  scrollbar-gutter: stable;
-                }
-
-              `,
-              }}
-            />
           </div>
-          {canCreateReview && (
-            <CreateReviewModal
-              open={createReviewOpen}
-              initialValues={createReviewInitialValues}
-              onClose={() => {
-                fetchReviews(currentPage, pageSize, selectedModuleId, filters);
-                fetchModules();
-                fetchAllReviewsTotal();
-                setCreateReviewOpen(false);
-                setCreateReviewInitialValues(undefined);
-              }}
-            />
-          )}
-          {canEditReview && editOpen && (
-            <CreateReviewModal
-              open={editOpen}
-              mode="edit"
-              initialValues={editReview || undefined}
-              onClose={() => {
-                fetchReviews(currentPage, pageSize, selectedModuleId, filters);
-                fetchModules();
-                fetchAllReviewsTotal();
-                setEditOpen(false);
-                setEditReview(null);
-              }}
-            />
-          )}
+          <style
+            dangerouslySetInnerHTML={{
+              __html: `
+              .testhub-reviews-table-scroll{
+                scrollbar-gutter: stable;
+              }
+
+            `,
+            }}
+          />
         </div>
-      )}
+        {canCreateReview && (
+          <CreateReviewModal
+            open={createReviewOpen}
+            initialValues={createReviewInitialValues}
+            onClose={() => {
+              fetchReviews(currentPage, pageSize, selectedModuleId, filters);
+              fetchModules();
+              fetchAllReviewsTotal();
+              setCreateReviewOpen(false);
+              setCreateReviewInitialValues(undefined);
+            }}
+          />
+        )}
+        {canEditReview && editOpen && (
+          <CreateReviewModal
+            open={editOpen}
+            mode="edit"
+            initialValues={editReview || undefined}
+            onClose={() => {
+              fetchReviews(currentPage, pageSize, selectedModuleId, filters);
+              fetchModules();
+              fetchAllReviewsTotal();
+              setEditOpen(false);
+              setEditReview(null);
+            }}
+          />
+        )}
+      </div>
     </div>
   );
 }

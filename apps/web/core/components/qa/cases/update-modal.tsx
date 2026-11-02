@@ -7,7 +7,7 @@ import { cn } from "@plane/utils";
 import { CaseService } from "../../../services/qa/case.service";
 import { CaseService as ReviewApiService } from "../../../services/qa/review.service";
 import { Tag, Spin, Tooltip, Input, Table, Select, Button } from "antd";
-import { getEnums } from "@/app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/util";
+import { getEnums } from "@/components/qa/shared/testhub/util";
 import { useMember } from "@/hooks/store/use-member";
 import * as LucideIcons from "lucide-react";
 import { ModalHeader } from "./update-modal/modal-header";
@@ -16,7 +16,6 @@ import { CaseMetaForm } from "./update-modal/case-meta-form";
 import { BasicInfoPanel } from "./update-modal/basic-info-panel";
 import { AttachmentsPanel } from "./update-modal/attachments-panel";
 import { SideInfoPanel } from "./update-modal/side-info-panel";
-import { FileUploadService, generateFileUploadPayload, getFileMetaDataForUpload } from "@plane/services";
 import { FileService } from "@/services/file.service";
 import { WorkItemDisplayModal } from "./work-item-display-modal";
 import { RequirementDisplayPanel } from "./requirement-display-panel";
@@ -36,7 +35,6 @@ import { PlanCaseReviewRecordList } from "../plans/plan-case-review-records";
 import { PlanCaseReviewStatusTag } from "../plans/plan-case-tags";
 import { TestCaseActivityTab } from "./test-case-activity/test-case-activity-tab";
 import { useTranslation } from "@plane/i18n";
-import { useUserPermissions } from "@/hooks/store/user";
 import {
   qaCaseErrorContent,
   qaCaseSetToastError,
@@ -44,7 +42,6 @@ import {
   qaCaseSetToastWarning,
 } from "@/utils/qa-case-error";
 
-const QA_CASE_EDIT_PERMISSION_KEY = "qa.case.edit" as const;
 
 type UpdateModalProps = {
   open: boolean;
@@ -52,7 +49,8 @@ type UpdateModalProps = {
   canEdit?: boolean;
   caseId?: string; // 改为传入case ID而不是完整数据
   workspaceSlug?: string;
-  projectId?: string;
+  /** 用例所属产品；不传时取路由 productId，再退到用例自身的 product_id（项目页打开用例时） */
+  productId?: string;
   // 模板库模式：保存走 workspace 级模板用例接口，只保留「基本信息」tab，隐藏项目语境区块
   templateMode?: boolean;
   // 渲染形态：drawer = 抽屉（默认，portal + 遮罩）；page = 独立页面（直接平铺，无头部/底部操作条）
@@ -67,7 +65,7 @@ function UpdateModalBody({
   canEdit,
   caseId,
   workspaceSlug: propWorkspaceSlug,
-  projectId: propProjectId,
+  productId: propProductId,
   templateMode = false,
   variant = "drawer",
   onCaseDataChange,
@@ -80,14 +78,10 @@ function UpdateModalBody({
   const [isRequirementModalOpen, setIsRequirementModalOpen] = useState(false);
   const [requirementReloadToken, setRequirementReloadToken] = useState(0);
   // 增加：本地状态与失焦更新逻辑
-  const params = useParams() as { workspaceSlug?: string; projectId?: string };
+  const params = useParams() as { workspaceSlug?: string; productId?: string };
   const workspaceSlug = propWorkspaceSlug || params.workspaceSlug;
-  const projectId = propProjectId || params.projectId;
-  const projectIdStr = projectId ? String(projectId) : "";
-  const { allowProjectPermissionKeys } = useUserPermissions();
-  const canEditCase =
-    canEdit ??
-    allowProjectPermissionKeys([QA_CASE_EDIT_PERMISSION_KEY], workspaceSlug ? String(workspaceSlug) : "", projectIdStr);
+  // 产品下的用例暂不细分权限（等权限重构），调用方没传 canEdit 就可编辑
+  const canEditCase = canEdit ?? true;
   const caseService = React.useMemo(() => new CaseService(), []);
   const reviewService = React.useMemo(() => new ReviewApiService(), []);
 
@@ -97,7 +91,7 @@ function UpdateModalBody({
    */
   const persistCase = async (payload: any) => {
     if (templateMode) return caseService.updateTemplateCase(String(workspaceSlug), payload);
-    return caseService.updateCase(String(workspaceSlug), projectIdStr, payload);
+    return caseService.updateCase(String(workspaceSlug), productIdStr, payload);
   };
   const loadSeqRef = React.useRef<number>(0);
   const [initialLoading, setInitialLoading] = React.useState<boolean>(false);
@@ -105,6 +99,7 @@ function UpdateModalBody({
 
   // 新增：用例数据状态
   const [caseData, setCaseData] = React.useState<any>(null);
+  const productIdStr = String(propProductId || params.productId || caseData?.product_id || "");
 
   // 用例数据变化时通知外部（首次加载与失焦保存后的本地合并都会触发）
   React.useEffect(() => {
@@ -120,7 +115,7 @@ function UpdateModalBody({
     if (!canEditCase) return;
     const newName = title?.trim();
     const oldName = (caseData?.name ?? "").trim();
-    if (!workspaceSlug || !caseId || (!templateMode && !projectIdStr)) return;
+    if (!workspaceSlug || !caseId || (!templateMode && !productIdStr)) return;
     if (newName === oldName) return;
     try {
       await persistCase({ id: caseId, name: newName });
@@ -135,7 +130,7 @@ function UpdateModalBody({
     if (!canEditCase) return;
     const newCode = (codeValue ?? "").trim();
     const oldCode = String(caseData?.code ?? "");
-    if (!workspaceSlug || !caseId || (!templateMode && !projectIdStr)) return;
+    if (!workspaceSlug || !caseId || (!templateMode && !productIdStr)) return;
     if (newCode === oldCode) return;
     try {
       await persistCase({ id: caseId, code: newCode });
@@ -277,8 +272,8 @@ function UpdateModalBody({
    */
   const handleRequirementConfirm = async (requirementIds: string[]) => {
     if (!canEditCase) return;
-    if (!workspaceSlug || !caseId || !projectIdStr) return;
-    await caseService.addCaseRequirements(String(workspaceSlug), projectIdStr, String(caseId), requirementIds);
+    if (!workspaceSlug || !caseId || !productIdStr) return;
+    await caseService.addCaseRequirements(String(workspaceSlug), productIdStr, String(caseId), requirementIds);
     setRequirementReloadToken((token) => token + 1);
     qaCaseSetToastSuccess("关联需求已更新");
   };
@@ -286,7 +281,7 @@ function UpdateModalBody({
   const handleWorkItemConfirm = async (issues: any[]) => {
     if (!canEditCase) return;
     try {
-      if (!workspaceSlug || !caseId || !projectIdStr) return;
+      if (!workspaceSlug || !caseId || !productIdStr) return;
       const issueIds = (issues || []).map((i) => i.id);
       await persistCase({ id: caseId, issues: issueIds });
       setIsWorkItemModalOpen(false);
@@ -324,7 +319,6 @@ function UpdateModalBody({
     }
   };
 
-  const fileUploadService = useMemo(() => new FileUploadService(), []);
   const fileService = useMemo(() => new FileService(), []);
   const [attachmentAssetIds, setAttachmentAssetIds] = useState<string[]>([]);
   const [attachmentAssetMap, setAttachmentAssetMap] = useState<Record<string, string>>({});
@@ -363,50 +357,21 @@ function UpdateModalBody({
   const uploadAttachmentViaProjectAssetEndpoint = async (file: File) => {
     if (!canEditCase) return;
     try {
-      if (!workspaceSlug || (!templateMode && !projectIdStr)) {
-        qaCaseSetToastWarning("缺少必要参数(workspaceSlug, projectId)，无法上传附件");
+      if (!workspaceSlug || !caseId) {
+        qaCaseSetToastWarning("缺少必要参数，无法上传附件");
         return;
       }
       const key = `${file.name}-${file.size}-${file.lastModified}`;
       setAttachmentUploading((prev) => ({ ...prev, [key]: true }));
 
-      let assetId: string;
-      if (templateMode) {
-        // 模板库：workspace 级一条龙（presign→S3→PATCH）；编辑态 case 已存在，
-        // entity_identifier 直接绑 caseId，presign 即落正式路径，免 rebind 与 putAssetCaseId
-        const signed = await fileService.uploadWorkspaceAsset(
-          String(workspaceSlug),
-          { entity_type: EFileAssetType.CASE_ATTACHMENT, entity_identifier: String(caseId) },
-          file
-        );
-        assetId = String(signed.asset_id);
-      } else {
-        // 1. 获取签名（固定 entity_type 为 CASE_ATTACHMENT）
-        const meta = await getFileMetaDataForUpload(file);
-        const presignResp = await caseService.post(
-          `/api/assets/v2/workspaces/${workspaceSlug}/projects/${projectIdStr}/`,
-          {
-            ...meta,
-            entity_type: "CASE_ATTACHMENT",
-            entity_identifier: "",
-          }
-        );
-        const signed = presignResp?.data ?? presignResp;
-
-        // 2. 直传到对象存储
-        const payload = generateFileUploadPayload(signed, file);
-        await fileUploadService.uploadFile(signed.upload_data.url, payload);
-
-        // 3. 标记已上传
-        await caseService.patch(
-          `/api/assets/v2/workspaces/${workspaceSlug}/projects/${projectIdStr}/${signed.asset_id}/`
-        );
-        // 4. 记录case_id
-        await caseService.putAssetCaseId(String(workspaceSlug), String(signed.asset_id), {
-          case_id: String(caseId),
-        });
-        assetId = String(signed.asset_id);
-      }
+      // workspace 级一条龙（presign→S3→PATCH）：用例归产品后没有项目语境，与模板库同口径；
+      // 编辑态 case 已存在，entity_identifier 直接绑 caseId，presign 即落正式路径
+      const signed = await fileService.uploadWorkspaceAsset(
+        String(workspaceSlug),
+        { entity_type: EFileAssetType.CASE_ATTACHMENT, entity_identifier: String(caseId) },
+        file
+      );
+      const assetId = String(signed.asset_id);
       // 记录 assetId，用于提交与删除
       setAttachmentAssetIds((prev) => [...prev, assetId]);
       setAttachmentAssetMap((prev) => ({ ...prev, [key]: assetId }));
@@ -598,7 +563,7 @@ function UpdateModalBody({
   };
 
   const handleChangeTestType = async (v: string) => {
-    if (!workspaceSlug || !caseId || (!templateMode && !projectIdStr)) return;
+    if (!workspaceSlug || !caseId || (!templateMode && !productIdStr)) return;
     setCaseData((prev: any) => (prev ? { ...prev, test_type: Number(v) } : prev));
     try {
       await persistCase({ id: String(caseId), test_type: Number(v) });
@@ -747,7 +712,7 @@ function UpdateModalBody({
   // 新增：失焦更新（各字段）
   const handleBlurAssignee = async () => {
     if (!canEditCase) return;
-    if (!workspaceSlug || !caseId || (!templateMode && !projectIdStr)) return;
+    if (!workspaceSlug || !caseId || (!templateMode && !productIdStr)) return;
     if (assignee === normalizeId(caseData?.assignee)) return;
     try {
       await persistCase({ id: caseId, assignee });
@@ -759,7 +724,7 @@ function UpdateModalBody({
 
   const handleUpdateAssine = async (v: any) => {
     if (!canEditCase) return;
-    if (!workspaceSlug || !caseId || (!templateMode && !projectIdStr)) return;
+    if (!workspaceSlug || !caseId || (!templateMode && !productIdStr)) return;
 
     if (v === normalizeId(caseData?.assignee)) return;
     try {
@@ -773,7 +738,7 @@ function UpdateModalBody({
 
   const handleBlurState = async () => {
     if (!canEditCase) return;
-    if (!workspaceSlug || !caseId || (!templateMode && !projectIdStr)) return;
+    if (!workspaceSlug || !caseId || (!templateMode && !productIdStr)) return;
     if (stateValue === normalizeId(caseData?.state)) return;
     try {
       await persistCase({ id: caseId, state: stateValue });
@@ -785,7 +750,7 @@ function UpdateModalBody({
 
   const handleBlurType = async () => {
     if (!canEditCase) return;
-    if (!workspaceSlug || !caseId || (!templateMode && !projectIdStr)) return;
+    if (!workspaceSlug || !caseId || (!templateMode && !productIdStr)) return;
     if (typeValue === normalizeId(caseData?.type)) return;
     try {
       await persistCase({ id: caseId, type: typeValue });
@@ -797,7 +762,7 @@ function UpdateModalBody({
 
   const handleBlurPriority = async () => {
     if (!canEditCase) return;
-    if (!workspaceSlug || !caseId || (!templateMode && !projectIdStr)) return;
+    if (!workspaceSlug || !caseId || (!templateMode && !productIdStr)) return;
     if (priorityValue === normalizeId(caseData?.priority)) return;
     try {
       await persistCase({ id: caseId, priority: priorityValue });
@@ -816,7 +781,7 @@ function UpdateModalBody({
     remark: string;
   }) => {
     if (!canEditCase) return;
-    if (!workspaceSlug || !caseId || (!templateMode && !projectIdStr)) return;
+    if (!workspaceSlug || !caseId || (!templateMode && !productIdStr)) return;
 
     const payload: any = {};
     let hasChange = false;
@@ -884,8 +849,8 @@ function UpdateModalBody({
     workspaceSlug && caseId
       ? templateMode
         ? `/${workspaceSlug}/templates/test-cases/case/${caseId}`
-        : projectIdStr
-          ? `/${workspaceSlug}/projects/${projectIdStr}/testhub/cases/${caseId}`
+        : productIdStr
+          ? `/${workspaceSlug}/products/${productIdStr}/testhub/cases/${caseId}`
           : undefined
       : undefined;
 
@@ -930,8 +895,7 @@ function UpdateModalBody({
             />
             <CaseMetaForm
               disabled={!canEditCase}
-              // 模板库模式无项目语境：不传 projectId，成员下拉走工作区成员
-              projectId={!templateMode && projectId ? String(projectId) : undefined}
+              // 用例没有项目语境：不传 projectId，成员下拉走工作区成员
               assignee={assignee}
               onAssigneeChange={(v) => handleUpdateAssine(v)}
               onAssigneeBlur={handleBlurAssignee}
@@ -1091,7 +1055,6 @@ function UpdateModalBody({
               <BasicInfoPanel
                 caseId={caseId}
                 canEdit={canEditCase}
-                templateMode={templateMode}
                 preconditionValue={preconditionValue ?? ""}
                 stepsValue={stepsValue}
                 modeValue={modeValue}
@@ -1100,11 +1063,10 @@ function UpdateModalBody({
                 remarkValue={remarkValue ?? ""}
                 onSave={handleSaveBasicInfo}
                 activityContent={
-                  // 活动读接口是 workspace 级，模板库同样可用；projectId 只喂评论富文本，模板模式不传
-                  caseId && workspaceSlug && (templateMode || projectIdStr) ? (
+                  // 活动读接口是 workspace 级；用例没有项目语境，评论富文本走工作区级上传
+                  caseId && workspaceSlug ? (
                     <TestCaseActivityTab
                       workspaceSlug={String(workspaceSlug)}
-                      projectId={templateMode ? undefined : projectIdStr}
                       caseId={String(caseId)}
                       templateMode={templateMode}
                     />
@@ -1247,7 +1209,7 @@ function UpdateModalBody({
             {activeTab === "req-link" && caseId && (
               <RequirementDisplayPanel
                 caseId={String(caseId)}
-                projectId={projectIdStr}
+                productId={productIdStr}
                 canEdit={canEditCase}
                 reloadToken={requirementReloadToken}
                 onCountChange={(n) => setCurrentCount(n)}
@@ -1314,7 +1276,7 @@ function UpdateModalBody({
         <RequirementSelectModal
           isOpen={isRequirementModalOpen}
           caseId={String(caseId ?? "")}
-          projectId={projectIdStr}
+          productId={productIdStr}
           onClose={() => setIsRequirementModalOpen(false)}
           onConfirm={handleRequirementConfirm}
         />

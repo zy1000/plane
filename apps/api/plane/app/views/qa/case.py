@@ -20,7 +20,6 @@ from django.utils import timezone
 
 from plane.app.permissions import (
     allow_fine_permission,
-    allow_fine_permission_or_template,
     allow_workspace_member,
     PermissionKey,
 )
@@ -37,11 +36,12 @@ from plane.app.views.qa.utils import UNASSIGNED_MODULE_ID, build_module_filter_q
 from plane.utils.import_export import parser_case_file
 from plane.db.models import TestCase, FileAsset, TestCaseComment, TestCaseActivity, PlanCase, Issue, CaseModule, \
     CaseLabel, CaseReview, CaseReviewThrough, CaseReviewRecord, TestCaseRepository, TestPlan, TestCaseVersion, \
-    PlanCaseRecord, PlanCaseReviewRecord
+    PlanCaseRecord, PlanCaseReviewRecord, ProductProject
 from plane.bgtasks.copy_case_assets_task import copy_case_assets
 from plane.bgtasks.test_case_activities_task import test_case_activity
 from plane.utils.exception_logger import log_exception
 from plane.utils.paginator import CustomPaginator
+from plane.utils.qa import project_case_repository_ids
 from plane.utils.response import list_response
 
 
@@ -400,6 +400,22 @@ class TestCaseActivityAPIView(BaseAPIView):
         return list_response(data=serializer.data, count=qs.count())
 
 
+def scoped_case_repositories(request, slug):
+    """选用例接口的候选库。
+
+    传 product_id = 该产品的用例库（产品页建评审时选用例）；传 project_id = 项目用例池
+    （项目已关联产品的库，工时挂用例等用）。都没传返回 None。
+    """
+    queryset = TestCaseRepository.objects.filter(
+        workspace__slug=slug, is_template=False, deleted_at__isnull=True
+    )
+    if product_id := request.query_params.get('product_id'):
+        return queryset.filter(product_id=product_id)
+    if project_id := request.query_params.get('project_id'):
+        return queryset.filter(id__in=project_case_repository_ids(project_id))
+    return None
+
+
 class CaseAPI(BaseViewSet):
     pagination_class = CustomPaginator
 
@@ -442,10 +458,7 @@ class CaseAPI(BaseViewSet):
         return list_response(data=result, count=len(result))
 
     @action(detail=False, methods=['post'], url_path='export')
-    @allow_fine_permission_or_template(
-        PermissionKey.QA_CASE_IMPORT_EXPORT,
-        template_permission_keys=(PermissionKey.WORKSPACE_CASE_TEMPLATE_IMPORT_EXPORT,),
-    )
+    @allow_workspace_member_or_template(PermissionKey.WORKSPACE_CASE_TEMPLATE_IMPORT_EXPORT)
     def export(self, request, slug):
         fields = request.data.get('fields') or []
         if not isinstance(fields, list) or not fields:
@@ -847,8 +860,14 @@ class CaseAPI(BaseViewSet):
 
         plan = get_object_or_404(TestPlan, id=plan_id, deleted_at__isnull=True, project__workspace__slug=slug)
 
+        # 计划只能从项目已关联产品的用例里选；product_id 收窄到其中一个产品
         repositories = list(
-            TestCaseRepository.objects.filter(project_id=plan.project_id, workspace__slug=slug, deleted_at__isnull=True)
+            TestCaseRepository.objects.filter(
+                id__in=project_case_repository_ids(
+                    plan.project_id, product_id=request.query_params.get('product_id')
+                ),
+                workspace__slug=slug,
+            )
             .values('id', 'name')
             .order_by('name')
         )
@@ -969,8 +988,12 @@ class CaseAPI(BaseViewSet):
 
         plan = get_object_or_404(TestPlan, id=plan_id, deleted_at__isnull=True, project__workspace__slug=slug)
         repo_ids = list(
-            TestCaseRepository.objects.filter(project_id=plan.project_id, workspace__slug=slug, deleted_at__isnull=True)
-            .values_list('id', flat=True)
+            TestCaseRepository.objects.filter(
+                id__in=project_case_repository_ids(
+                    plan.project_id, product_id=request.query_params.get('product_id')
+                ),
+                workspace__slug=slug,
+            ).values_list('id', flat=True)
         )
 
         repository_id = request.query_params.get('repository_id')
@@ -1010,8 +1033,12 @@ class CaseAPI(BaseViewSet):
 
         plan = get_object_or_404(TestPlan, id=plan_id, deleted_at__isnull=True, project__workspace__slug=slug)
         repo_ids = list(
-            TestCaseRepository.objects.filter(project_id=plan.project_id, workspace__slug=slug, deleted_at__isnull=True)
-            .values_list('id', flat=True)
+            TestCaseRepository.objects.filter(
+                id__in=project_case_repository_ids(
+                    plan.project_id, product_id=request.query_params.get('product_id')
+                ),
+                workspace__slug=slug,
+            ).values_list('id', flat=True)
         )
 
         repository_id = request.query_params.get('repository_id')
@@ -1033,15 +1060,11 @@ class CaseAPI(BaseViewSet):
 
     @action(detail=False, methods=['get'], url_path='project-case-tree')
     def project_case_tree(self, request, slug):
-        project_id = request.query_params.get('project_id')
-        if not project_id:
-            return Response({"error": "project_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+        scoped = scoped_case_repositories(request, slug)
+        if scoped is None:
+            return Response({"error": "product_id or project_id is required"}, status=status.HTTP_400_BAD_REQUEST)
 
-        repositories = list(
-            TestCaseRepository.objects.filter(project_id=project_id, workspace__slug=slug, deleted_at__isnull=True)
-            .values('id', 'name')
-            .order_by('name')
-        )
+        repositories = list(scoped.values('id', 'name').order_by('name'))
         repo_ids = [str(r['id']) for r in repositories]
 
         modules = list(
@@ -1151,14 +1174,11 @@ class CaseAPI(BaseViewSet):
 
     @action(detail=False, methods=['get'], url_path='project-cases')
     def project_cases(self, request, slug):
-        project_id = request.query_params.get('project_id')
-        if not project_id:
-            return Response({"error": "project_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+        scoped = scoped_case_repositories(request, slug)
+        if scoped is None:
+            return Response({"error": "product_id or project_id is required"}, status=status.HTTP_400_BAD_REQUEST)
 
-        repo_ids = list(
-            TestCaseRepository.objects.filter(project_id=project_id, workspace__slug=slug, deleted_at__isnull=True)
-            .values_list('id', flat=True)
-        )
+        repo_ids = list(scoped.values_list('id', flat=True))
 
         repository_id = request.query_params.get('repository_id')
         module_id = request.query_params.get('module_id')
@@ -1187,14 +1207,11 @@ class CaseAPI(BaseViewSet):
 
     @action(detail=False, methods=['get'], url_path='project-case-ids')
     def project_case_ids(self, request, slug):
-        project_id = request.query_params.get('project_id')
-        if not project_id:
-            return Response({"error": "project_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+        scoped = scoped_case_repositories(request, slug)
+        if scoped is None:
+            return Response({"error": "product_id or project_id is required"}, status=status.HTTP_400_BAD_REQUEST)
 
-        repo_ids = list(
-            TestCaseRepository.objects.filter(project_id=project_id, workspace__slug=slug, deleted_at__isnull=True)
-            .values_list('id', flat=True)
-        )
+        repo_ids = list(scoped.values_list('id', flat=True))
 
         repository_id = request.query_params.get('repository_id')
         module_id = request.query_params.get('module_id')
@@ -1216,11 +1233,11 @@ class CaseAPI(BaseViewSet):
         if not review_id:
             return Response({"error": "review_id is required"}, status=status.HTTP_400_BAD_REQUEST)
 
-        review = get_object_or_404(CaseReview, id=review_id, deleted_at__isnull=True, project__workspace__slug=slug)
+        review = get_object_or_404(CaseReview, id=review_id, deleted_at__isnull=True, product__workspace__slug=slug)
 
         repositories = list(
-            TestCaseRepository.objects.filter(project_id=review.project_id, workspace__slug=slug,
-                                              deleted_at__isnull=True)
+            TestCaseRepository.objects.filter(product_id=review.product_id, workspace__slug=slug,
+                                              is_template=False, deleted_at__isnull=True)
             .values('id', 'name')
             .order_by('name')
         )
@@ -1340,10 +1357,10 @@ class CaseAPI(BaseViewSet):
         if not review_id:
             return Response({"error": "review_id is required"}, status=status.HTTP_400_BAD_REQUEST)
 
-        review = get_object_or_404(CaseReview, id=review_id, deleted_at__isnull=True, project__workspace__slug=slug)
+        review = get_object_or_404(CaseReview, id=review_id, deleted_at__isnull=True, product__workspace__slug=slug)
         repo_ids = list(
-            TestCaseRepository.objects.filter(project_id=review.project_id, workspace__slug=slug,
-                                              deleted_at__isnull=True)
+            TestCaseRepository.objects.filter(product_id=review.product_id, workspace__slug=slug,
+                                              is_template=False, deleted_at__isnull=True)
             .values_list('id', flat=True)
         )
 
@@ -1375,10 +1392,10 @@ class CaseAPI(BaseViewSet):
         if not review_id:
             return Response({"error": "review_id is required"}, status=status.HTTP_400_BAD_REQUEST)
 
-        review = get_object_or_404(CaseReview, id=review_id, deleted_at__isnull=True, project__workspace__slug=slug)
+        review = get_object_or_404(CaseReview, id=review_id, deleted_at__isnull=True, product__workspace__slug=slug)
         repo_ids = list(
-            TestCaseRepository.objects.filter(project_id=review.project_id, workspace__slug=slug,
-                                              deleted_at__isnull=True)
+            TestCaseRepository.objects.filter(product_id=review.product_id, workspace__slug=slug,
+                                              is_template=False, deleted_at__isnull=True)
             .values_list('id', flat=True)
         )
 
@@ -1427,10 +1444,16 @@ class CaseAPI(BaseViewSet):
         case_id = request.query_params.get('case_id')
         project_id = request.query_params.get('project_id')
 
-        select_issues = TestCase.objects.get(id=case_id).issues.filter(type__category__name__in=type_name).values_list('id',
-                                                                                                             flat=True)
-        issues = Issue.objects.filter(type__category__name__in=type_name, project_id=project_id).select_related('type').exclude(
-            id__in=select_issues)
+        case = get_object_or_404(TestCase, id=case_id, repository__workspace__slug=slug)
+        select_issues = case.issues.filter(type__category__name__in=type_name).values_list('id', flat=True)
+        # 只能关联「已关联该用例所属产品」的项目里的工作项；project_id 收窄到其中一个项目
+        linked_project_ids = ProductProject.objects.filter(
+            product_id=case.repository.product_id
+        ).order_by().values_list('project_id', flat=True)
+        issues = Issue.objects.filter(type__category__name__in=type_name, project_id__in=linked_project_ids)
+        if project_id:
+            issues = issues.filter(project_id=project_id)
+        issues = issues.select_related('type').exclude(id__in=select_issues)
         paginator = self.pagination_class()
         paginated_queryset = paginator.paginate_queryset(issues, request)
         serializer = IssueUnselectSerializer(paginated_queryset, many=True)
@@ -1451,9 +1474,14 @@ class CaseAPI(BaseViewSet):
         module_id = request.query_params.get('module_id')
         name__icontains = request.query_params.get('name__icontains')
 
-        issue = Issue.objects.get(id=issue_id)
+        issue = get_object_or_404(Issue, id=issue_id, workspace__slug=slug)
         case_id = issue.cases.values_list('id', flat=True)
-        cases = TestCase.objects.filter(repository__workspace__slug=slug, repository_id=repository_id)
+        # 工作项只能关联项目用例池（项目已关联产品）里的用例
+        cases = TestCase.objects.filter(
+            repository__workspace__slug=slug,
+            repository_id=repository_id,
+            repository_id__in=project_case_repository_ids(issue.project_id),
+        )
         if module_id:
             case_module = CaseModule.objects.get(id=module_id)
             cases = cases.filter(module_id__in=case_module.get_all_children)
@@ -1488,19 +1516,22 @@ class CaseAPI(BaseViewSet):
         if not issue_id or not case_id:
             return Response({"error": "issue_id and case_id are required"}, status=status.HTTP_400_BAD_REQUEST)
 
-        issue = get_object_or_404(Issue, id=issue_id)
-        case = get_object_or_404(TestCase, id=case_id)
+        issue = get_object_or_404(Issue, id=issue_id, workspace__slug=slug)
+        case = get_object_or_404(TestCase, id=case_id, repository__workspace__slug=slug)
+        if case.repository_id not in set(project_case_repository_ids(issue.project_id)):
+            return Response(
+                {"error": "用例所属产品未关联到该工作项的项目"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         issue.cases.add(case)
         return Response(status=status.HTTP_201_CREATED)
 
     @action(detail=False, methods=['post'], url_path='import-case')
-    @allow_fine_permission_or_template(
-        PermissionKey.QA_CASE_IMPORT_EXPORT,
-        # 往模板库里导入 = 写模板用例，导入导出与维护两把钥匙都要
-        template_permission_keys=(
-            PermissionKey.WORKSPACE_CASE_TEMPLATE_IMPORT_EXPORT,
-            PermissionKey.WORKSPACE_CASE_TEMPLATE_MANAGE,
-        ),
+    # 往模板库里导入 = 写模板用例，导入导出与维护两把钥匙都要
+    @allow_workspace_member_or_template(
+        PermissionKey.WORKSPACE_CASE_TEMPLATE_IMPORT_EXPORT,
+        PermissionKey.WORKSPACE_CASE_TEMPLATE_MANAGE,
+        require_all=True,
     )
     def import_case(self, request, slug):
         repository_id = request.data.get('repository_id')
@@ -1609,13 +1640,11 @@ class CaseAPI(BaseViewSet):
                         status=status.HTTP_200_OK)
 
     @action(detail=False, methods=['post'], url_path='validate-import-case')
-    @allow_fine_permission_or_template(
-        PermissionKey.QA_CASE_IMPORT_EXPORT,
-        # 往模板库里导入 = 写模板用例，导入导出与维护两把钥匙都要
-        template_permission_keys=(
-            PermissionKey.WORKSPACE_CASE_TEMPLATE_IMPORT_EXPORT,
-            PermissionKey.WORKSPACE_CASE_TEMPLATE_MANAGE,
-        ),
+    # 往模板库里导入 = 写模板用例，导入导出与维护两把钥匙都要
+    @allow_workspace_member_or_template(
+        PermissionKey.WORKSPACE_CASE_TEMPLATE_IMPORT_EXPORT,
+        PermissionKey.WORKSPACE_CASE_TEMPLATE_MANAGE,
+        require_all=True,
     )
     def validate_import_case(self, request, slug):
         repository_id = request.data.get('repository_id')

@@ -5,7 +5,7 @@
  * ⚠️ 与同目录的 work-item-select-modal 不是一回事：那个选的是**工作项**，这个选的是
  * requirement 域的**真需求**。
  *
- * 候选池 = 用例库所属项目下已关联的需求（非 closed、product 归属），由服务端判定
+ * 候选池 = 用例所属产品下的需求（非 closed），由服务端判定
  * （utils/requirement_test_case.linkable_requirements_for_case_queryset），前端不做二次过滤。
  *
  * 风格跟随 components/qa/**：antd + 硬编码中文。分页用后端游标（形状 "limit:page:is_prev"，
@@ -32,8 +32,8 @@ const REQUIREMENT_STATUS_LABELS: Record<string, string> = {
 type RequirementSelectModalProps = {
   isOpen: boolean;
   caseId: string;
-  /** 显式传入优先于路由参数 —— 用例弹窗也可能从非项目路由（如工作项详情）打开 */
-  projectId?: string;
+  /** 用例所属产品；显式传入优先于路由参数 —— 用例弹窗也可能从项目页（如工作项详情）打开 */
+  productId?: string;
   onClose: () => void;
   /** 返回后由调用方刷新已关联列表并提示 */
   onConfirm: (requirementIds: string[]) => Promise<void>;
@@ -42,13 +42,13 @@ type RequirementSelectModalProps = {
 export const RequirementSelectModal: React.FC<RequirementSelectModalProps> = ({
   isOpen,
   caseId,
-  projectId: propProjectId,
+  productId: propProductId,
   onClose,
   onConfirm,
 }) => {
-  const params = useParams() as { workspaceSlug?: string; projectId?: string };
+  const params = useParams() as { workspaceSlug?: string; productId?: string };
   const workspaceSlug = params.workspaceSlug ? String(params.workspaceSlug) : "";
-  const projectId = propProjectId || (params.projectId ? String(params.projectId) : "");
+  const productId = propProductId || (params.productId ? String(params.productId) : "");
   const caseService = React.useMemo(() => new CaseService(), []);
 
   const [searchTerm, setSearchTerm] = React.useState("");
@@ -65,11 +65,11 @@ export const RequirementSelectModal: React.FC<RequirementSelectModalProps> = ({
 
   const fetchRows = React.useCallback(
     async (nextPage: number) => {
-      if (!isOpen || !workspaceSlug || !projectId || !caseId) return;
+      if (!isOpen || !workspaceSlug || !productId || !caseId) return;
       const requestSequence = ++requestSequenceRef.current;
       setLoading(true);
       try {
-        const res = await caseService.getLinkableRequirements(workspaceSlug, projectId, caseId, {
+        const res = await caseService.getLinkableRequirements(workspaceSlug, productId, caseId, {
           search: debouncedSearchTerm,
           per_page: PAGE_SIZE,
           // 后端游标是 0-based 页序号，antd 分页是 1-based
@@ -87,7 +87,7 @@ export const RequirementSelectModal: React.FC<RequirementSelectModalProps> = ({
         if (requestSequence === requestSequenceRef.current) setLoading(false);
       }
     },
-    [caseId, caseService, debouncedSearchTerm, isOpen, projectId, workspaceSlug]
+    [caseId, caseService, debouncedSearchTerm, isOpen, productId, workspaceSlug]
   );
 
   // 搜索词变化回到第一页；关闭时重置全部状态

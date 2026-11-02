@@ -11,13 +11,10 @@ import { StateDropdown } from "@/components/dropdowns/state/dropdown";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import * as LucideIcons from "lucide-react";
 // 新增：文件上传工具与仓库服务
-import { FileUploadService } from "@/services/file-upload.service";
 import { FileService } from "@/services/file.service";
-import { getFileMetaDataForUpload, generateFileUploadPayload } from "@plane/services";
 import { RepositoryService } from "@/services/qa/repository.service";
 // 修正：使用相对路径导入枚举获取函数
 import { RichTextEditor } from "@/components/editor/rich-text";
-import { useMember } from "@/hooks/store/use-member";
 import { useWorkspace } from "@/hooks/store/use-workspace";
 import { useEditorAsset } from "@/hooks/store/use-editor-asset";
 import { useUser } from "@/hooks/store/user";
@@ -26,7 +23,7 @@ import { EFileAssetType, type TIssue, type TPartialProject } from "@plane/types"
 import { Logo } from "@plane/propel/emoji-icon-picker";
 import { IssueService } from "@/services/issue/issue.service";
 import { ProjectService } from "@/services/project";
-import { getEnums } from "@/app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/util";
+import { getEnums } from "@/components/qa/shared/testhub/util";
 import { WorkItemSelectModal } from "./work-item-select-modal";
 import { WorkItemTypeIcon } from "@/components/issues/work-item-type-icon";
 
@@ -93,9 +90,9 @@ type Props = {
   isOpen: boolean;
   handleClose: () => void;
   workspaceSlug: string;
-  // 项目 ID（可选）：不传时回退到路由参数
-  projectId?: string;
-  // 模板库模式：提交走 workspace 级模板用例接口，隐藏工作项/附件等项目语境区块
+  // 产品 ID（可选）：不传时回退到路由参数（用例 2026-11 起归产品）
+  productId?: string;
+  // 模板库模式：提交走 workspace 级模板用例接口，隐藏工作项等区块
   templateMode?: boolean;
   // 只读展示字段
   repositoryId: string;
@@ -525,7 +522,7 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
     isOpen,
     handleClose,
     workspaceSlug,
-    projectId: propProjectId,
+    productId: propProductId,
     templateMode = false,
     repositoryId,
     repositoryName,
@@ -534,20 +531,17 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
   } = props;
 
   const [form] = Form.useForm();
-  const { projectId: routeProjectId } = useParams();
-  // 模板库模式下没有项目语境，统一将 projectId 归一为 undefined，
-  // 下游（成员下拉、项目成员拉取、附件 presign）据此自然走 workspace 侧或跳过
-  const projectId: string | undefined = templateMode
+  const { productId: routeProductId, projectId: routeProjectId } = useParams();
+  const productId: string | undefined = templateMode
     ? undefined
-    : (propProjectId ?? (routeProjectId ? String(routeProjectId) : undefined));
+    : (propProductId ?? (routeProductId ? String(routeProductId) : undefined));
+  // 新建时的工作项候选按项目取；产品页没有项目语境，建好后在用例详情里关联
+  const canLinkWorkItems = !templateMode && Boolean(routeProjectId);
   const [submitting, setSubmitting] = useState<boolean>(false);
   const title = useMemo(() => "新建测试用例", []);
   const [isWorkItemModalOpen, setIsWorkItemModalOpen] = useState<boolean>(false);
   const { data: currentUser } = useUser();
   const currentUserId = currentUser?.id ? String(currentUser.id) : null;
-  const {
-    project: { fetchProjectMembers },
-  } = useMember();
   // 新增：选中工作项状态（用于表格回显）
   const [selectedIssues, setSelectedIssues] = useState<TIssue[]>([]);
   // 新增：枚举数据状态
@@ -564,51 +558,28 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
   const { uploadEditorAsset, duplicateEditorAsset } = useEditorAsset();
   const workspaceService = useMemo(() => new WorkspaceService(), []);
 
+  // 用例没有项目语境（产品库 / 模板库）：CASE_ATTACHMENT + 空 entity_identifier（不绑 case），
+  // 不传 projectId → asset.store 自动走 workspace 级上传，读路径同样自动降级
   const handleUploadFile = async (blockId: string | undefined, file: File) => {
-    if (!workspaceSlug || (!templateMode && !projectId)) throw new Error("Missing context");
-    if (templateMode) {
-      // 模板库无项目语境：CASE_ATTACHMENT + 空 entity_identifier（不绑 case），
-      // 不传 projectId → asset.store 自动走 workspace 级上传，读路径同样自动降级
-      const { asset_id } = await uploadEditorAsset({
-        blockId: blockId ?? "",
-        data: {
-          entity_identifier: "",
-          entity_type: EFileAssetType.CASE_ATTACHMENT,
-        },
-        file,
-        workspaceSlug,
-      });
-      return asset_id;
-    }
+    if (!workspaceSlug) throw new Error("Missing context");
     const { asset_id } = await uploadEditorAsset({
       blockId: blockId ?? "",
       data: {
-        entity_identifier: String(projectId),
-        entity_type: EFileAssetType.PROJECT_DESCRIPTION,
+        entity_identifier: "",
+        entity_type: EFileAssetType.CASE_ATTACHMENT,
       },
       file,
-      projectId: String(projectId),
       workspaceSlug,
     });
     return asset_id;
   };
 
   const handleDuplicateFile = async (assetId: string) => {
-    if (!workspaceSlug || (!templateMode && !projectId)) throw new Error("Missing context");
-    if (templateMode) {
-      const { asset_id } = await duplicateEditorAsset({
-        assetId,
-        entityId: "",
-        entityType: EFileAssetType.CASE_ATTACHMENT,
-        workspaceSlug,
-      });
-      return asset_id;
-    }
+    if (!workspaceSlug) throw new Error("Missing context");
     const { asset_id } = await duplicateEditorAsset({
       assetId,
-      entityId: String(projectId),
-      entityType: EFileAssetType.PROJECT_DESCRIPTION,
-      projectId: String(projectId),
+      entityId: "",
+      entityType: EFileAssetType.CASE_ATTACHMENT,
       workspaceSlug,
     });
     return asset_id;
@@ -664,7 +635,6 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
   const handlePickAttachments = () => fileInputRef.current?.click();
 
   // 新增：上传服务与仓库服务实例
-  const fileUploadService = useMemo(() => new FileUploadService(), []);
   const fileService = useMemo(() => new FileService(), []);
   const repositoryService = useMemo(() => new RepositoryService(), []);
 
@@ -780,49 +750,23 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
   // 新增：文件键到 assetId 的映射，保证删除时能找到对应资产
   const [attachmentAssetMap, setAttachmentAssetMap] = useState<Record<string, string>>({});
 
-  // 新增：三段式上传函数（ProjectAssetEndpoint -> S3 upload -> PATCH）
-  // 模板库模式走 workspace 级资产端点（fileService 一条龙），项目模式维持原内联三步
+  // workspace 级 presign → S3 → PATCH（先传后绑，创建成功后 bulk 绑定 case）；
+  // 用例归产品后没有项目语境，产品库与模板库同口径
   const uploadAttachmentViaProjectAssetEndpoint = async (file: File) => {
     try {
-      if (!workspaceSlug || (!templateMode && !projectId)) {
-        message.error("缺少必要参数(workspaceSlug, projectId)，无法上传附件");
+      if (!workspaceSlug) {
+        message.error("缺少必要参数，无法上传附件");
         return;
       }
       const key = `${file.name}-${file.size}-${file.lastModified}`;
       setAttachmentUploading((prev) => ({ ...prev, [key]: true }));
 
-      let assetId: string;
-      if (templateMode) {
-        // workspace 级 presign → S3 → PATCH（先传后绑，创建成功后 bulk 绑定 case）
-        const signed = await fileService.uploadWorkspaceAsset(
-          workspaceSlug,
-          { entity_type: EFileAssetType.CASE_ATTACHMENT, entity_identifier: "" },
-          file
-        );
-        assetId = String(signed.asset_id);
-      } else {
-        // 1. 获取签名（固定 entity_type 为 CASE_ATTACHMENT）
-        const meta = await getFileMetaDataForUpload(file);
-        const presignResp = await caseService.post(
-          `/api/assets/v2/workspaces/${workspaceSlug}/projects/${projectId}/`,
-          {
-            ...meta,
-            entity_type: "CASE_ATTACHMENT",
-            entity_identifier: "",
-          }
-        );
-        const signed = presignResp?.data ?? presignResp;
-
-        // 2. 直传到对象存储
-        const payload = generateFileUploadPayload(signed, file);
-        await fileUploadService.uploadFile(signed.upload_data.url, payload);
-
-        // 3. 标记已上传
-        await caseService.patch(
-          `/api/assets/v2/workspaces/${workspaceSlug}/projects/${projectId}/${signed.asset_id}/`
-        );
-        assetId = String(signed.asset_id);
-      }
+      const signed = await fileService.uploadWorkspaceAsset(
+        workspaceSlug,
+        { entity_type: EFileAssetType.CASE_ATTACHMENT, entity_identifier: "" },
+        file
+      );
+      const assetId = String(signed.asset_id);
       // 记录 assetId，用于提交与删除
       setAttachmentAssetIds((prev) => [...prev, assetId]);
       setAttachmentAssetMap((prev) => ({ ...prev, [key]: assetId }));
@@ -894,12 +838,12 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
 
   // 加载项目列表用于“项目”列显示名称与 Logo（模板库模式隐藏工作项区块，无需加载）
   useEffect(() => {
-    if (!isOpen || templateMode) return;
+    if (!isOpen || !canLinkWorkItems) return;
     projectService
       .getProjectsLite(workspaceSlug)
       .then((data) => setProjects(data || []))
       .catch(() => void 0);
-  }, [isOpen, templateMode, workspaceSlug, projectService]);
+  }, [isOpen, canLinkWorkItems, workspaceSlug, projectService]);
 
   useEffect(() => {
     const map = Object.fromEntries((projects || []).map((p) => [String(p.id), p]));
@@ -1043,14 +987,6 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
       });
   }, [isOpen, workspaceSlug, repositoryId]);
 
-  useEffect(() => {
-    if (!isOpen) return;
-    // 模板库模式：维护人下拉走工作区成员（MemberDropdown 不传 projectId 时的默认行为），无需拉取项目成员
-    if (templateMode) return;
-    if (!workspaceSlug || !projectId) return;
-    fetchProjectMembers(workspaceSlug.toString(), String(projectId));
-  }, [isOpen, templateMode, workspaceSlug, projectId, fetchProjectMembers]);
-
   const handleSubmit = async () => {
     try {
       const values = await form.validateFields();
@@ -1108,12 +1044,12 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
       let createdCase: any;
       if (templateMode) {
         createdCase = await caseService.createTemplateCase(workspaceSlug, payload);
-      } else if (!projectId) {
-        message.warning("缺少项目上下文");
+      } else if (!productId) {
+        message.warning("缺少产品上下文");
         setSubmitting(false);
         return;
       } else {
-        createdCase = await caseService.createCase(workspaceSlug, projectId, payload);
+        createdCase = await caseService.createCase(workspaceSlug, productId, payload);
       }
       message.success("测试用例创建成功");
 
@@ -1203,7 +1139,7 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
                 initialValue={form.getFieldValue("precondition") ?? ""}
                 workspaceSlug={workspaceSlug}
                 workspaceId={workspaceId ?? ""}
-                projectId={projectId ? String(projectId) : ""}
+                projectId=""
                 onChange={(_: any, val: string) => form.setFieldsValue({ precondition: val })}
                 uploadFile={handleUploadFile}
                 duplicateFile={handleDuplicateFile}
@@ -1211,7 +1147,7 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
                 searchMentionCallback={async (payload) =>
                   await workspaceService.searchEntity(workspaceSlug?.toString() ?? "", {
                     ...payload,
-                    project_id: projectId?.toString() ?? "",
+                    project_id: "",
                   })
                 }
                 containerClassName="min-h-[100px] rounded-md"
@@ -1263,14 +1199,14 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
                     placeholder='请输入文本描述'
                     workspaceSlug={workspaceSlug}
                     workspaceId={workspaceId ?? ""}
-                    projectId={projectId ? String(projectId) : ""}
+                    projectId=""
                     onChange={(_: any, val: string) => form.setFieldsValue({ text_description: val })}
                     uploadFile={handleUploadFile}
                     duplicateFile={handleDuplicateFile}
                     searchMentionCallback={async (payload) =>
                       await workspaceService.searchEntity(workspaceSlug?.toString() ?? "", {
                         ...payload,
-                        project_id: projectId?.toString() ?? "",
+                        project_id: "",
                       })
                     }
                     containerClassName="min-h-[100px] rounded-md"
@@ -1289,14 +1225,14 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
                     placeholder='请输入预期结果'
                     workspaceSlug={workspaceSlug}
                     workspaceId={workspaceId ?? ""}
-                    projectId={projectId ? String(projectId) : ""}
+                    projectId=""
                     onChange={(_: any, val: string) => form.setFieldsValue({ text_result: val })}
                     uploadFile={handleUploadFile}
                     duplicateFile={handleDuplicateFile}
                     searchMentionCallback={async (payload) =>
                       await workspaceService.searchEntity(workspaceSlug?.toString() ?? "", {
                         ...payload,
-                        project_id: projectId?.toString() ?? "",
+                        project_id: "",
                       })
                     }
                     containerClassName="min-h-[100px] rounded-md"
@@ -1350,14 +1286,14 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
                 workspaceSlug={workspaceSlug}
                 workspaceId={workspaceId ?? ""}
                 placeholder='请输入备注'
-                projectId={projectId ? String(projectId) : ""}
+                projectId=""
                 onChange={(_: any, val: string) => form.setFieldsValue({ remark: val })}
                 uploadFile={handleUploadFile}
                 duplicateFile={handleDuplicateFile}
                 searchMentionCallback={async (payload) =>
                   await workspaceService.searchEntity(workspaceSlug?.toString() ?? "", {
                     ...payload,
-                    project_id: projectId?.toString() ?? "",
+                    project_id: "",
                   })
                 }
                 containerClassName="min-h-[100px] rounded-md"
@@ -1367,8 +1303,8 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
               <Input />
             </Form.Item>
 
-            {/* 模板用例没有工作项关联：模板库模式隐藏该区块 */}
-            {!templateMode && (
+            {/* 模板用例没有工作项关联；产品页新建时也没有项目语境 */}
+            {canLinkWorkItems && (
             <Form.Item
               label={
                 <div style={{ display: "flex", alignItems: "center" }}>
@@ -1461,7 +1397,6 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
             >
               <MemberDropdown
                 multiple={false}
-                projectId={projectId ? String(projectId) : undefined}
                 value={form.getFieldValue("assignee") ?? null}
                 onChange={(val) => form.setFieldsValue({ assignee: val })}
                 placeholder="选择维护人"
@@ -1576,8 +1511,8 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
         </div>
       </Form>
 
-      {/* 新增：选择工作项独立模态组件调用（模板库模式不渲染） */}
-      {!templateMode && (
+      {/* 新增：选择工作项独立模态组件调用（无项目语境不渲染） */}
+      {canLinkWorkItems && (
         <WorkItemSelectModal
           isOpen={isWorkItemModalOpen}
           workspaceSlug={workspaceSlug}

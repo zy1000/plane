@@ -3,12 +3,7 @@
 import { usePathname, useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import React from "react";
-import {
-  PROJECT_QA_CASE_VIEW_PERMISSION_KEY,
-  PROJECT_QA_PLAN_VIEW_PERMISSION_KEY,
-  PROJECT_QA_REPORT_VIEW_PERMISSION_KEY,
-  PROJECT_QA_REVIEW_VIEW_PERMISSION_KEY,
-} from "@plane/constants";
+import { PROJECT_QA_PLAN_VIEW_PERMISSION_KEY, PROJECT_QA_REPORT_VIEW_PERMISSION_KEY } from "@plane/constants";
 import { cn } from "@plane/utils";
 import { useUserPermissions } from "@/hooks/store/user";
 import { CasesSearchInput } from "@/components/qa/cases/cases-search";
@@ -22,55 +17,50 @@ import {
   isTMReviewsMenuActive,
   isTMReportsActive,
   isTMReportsMenuActive,
+  tmBasePath,
+  type TTestHubScopeKind,
 } from "./route-helpers";
 import { useTestHub } from "./testhub-context";
 
 const PROJECT_QA_PLAN_CREATE_PERMISSION_KEY = "qa.plan.create" as const;
 const PROJECT_QA_REPORT_CREATE_PERMISSION_KEY = "qa.report.create" as const;
-const PROJECT_QA_REVIEW_CREATE_PERMISSION_KEY = "qa.review.create" as const;
 
 type TMenuItem = {
   key: string;
   label: string;
-  href: (workspaceSlug: string, projectId: string) => string;
-  isActive: (pathname: string, workspaceSlug: string, projectId: string) => boolean;
+  sub: string;
+  isActive: (pathname: string, base: string) => boolean;
+  /** 项目侧页签按项目权限显示；产品侧暂不细分权限（等权限重构） */
   permissionKey?: string;
 };
 
-const MENU_ITEMS: TMenuItem[] = [
-  {
-    key: "overview",
-    label: "测试用例",
-    href: (ws, pid) => `/${ws}/projects/${pid}/testhub`,
-    isActive: (pathname, ws, pid) => isTMOverviewMenuActive(pathname, ws, pid),
-    permissionKey: PROJECT_QA_CASE_VIEW_PERMISSION_KEY,
-  },
-  {
-    key: "plans",
-    label: "测试计划",
-    href: (ws, pid) => `/${ws}/projects/${pid}/testhub/plans`,
-    isActive: (pathname, ws, pid) => isTMPlansMenuActive(pathname, ws, pid),
-    permissionKey: PROJECT_QA_PLAN_VIEW_PERMISSION_KEY,
-  },
-  {
-    key: "reviews",
-    label: "用例评审",
-    href: (ws, pid) => `/${ws}/projects/${pid}/testhub/reviews`,
-    isActive: (pathname, ws, pid) => isTMReviewsMenuActive(pathname, ws, pid),
-    permissionKey: PROJECT_QA_REVIEW_VIEW_PERMISSION_KEY,
-  },
-  {
-    key: "reports",
-    label: "测试报告",
-    href: (ws, pid) => `/${ws}/projects/${pid}/testhub/reports`,
-    isActive: (pathname, ws, pid) => isTMReportsMenuActive(pathname, ws, pid),
-    permissionKey: PROJECT_QA_REPORT_VIEW_PERMISSION_KEY,
-  },
-];
+// 产品下：用例 / 评审；项目下：计划 / 报告
+const MENU_ITEMS: Record<TTestHubScopeKind, TMenuItem[]> = {
+  product: [
+    { key: "overview", label: "测试用例", sub: "", isActive: isTMOverviewMenuActive },
+    { key: "reviews", label: "用例评审", sub: "/reviews", isActive: isTMReviewsMenuActive },
+  ],
+  project: [
+    {
+      key: "plans",
+      label: "测试计划",
+      sub: "/plans",
+      isActive: isTMPlansMenuActive,
+      permissionKey: PROJECT_QA_PLAN_VIEW_PERMISSION_KEY,
+    },
+    {
+      key: "reports",
+      label: "测试报告",
+      sub: "/reports",
+      isActive: isTMReportsMenuActive,
+      permissionKey: PROJECT_QA_REPORT_VIEW_PERMISSION_KEY,
+    },
+  ],
+};
 
-export const TestManagementMenuBar = () => {
+export const TestManagementMenuBar = ({ scope }: { scope: TTestHubScopeKind }) => {
   const pathname = usePathname();
-  const { workspaceSlug, projectId } = useParams();
+  const { workspaceSlug, projectId, productId } = useParams();
   const searchParams = useSearchParams();
   const {
     overviewSearchValue,
@@ -92,17 +82,18 @@ export const TestManagementMenuBar = () => {
 
   const ws = workspaceSlug?.toString() || "";
   const pid = projectId?.toString() || "";
+  const scopeId = (scope === "product" ? productId : projectId)?.toString() || "";
+  const base = ws && scopeId ? tmBasePath(ws, scope, scopeId) : "";
+  const isProduct = scope === "product";
 
-  const isOverviewActive = !!pathname && !!ws && !!pid && isTMOverviewActive(pathname, ws, pid);
-  const isPlansActive = !!pathname && !!ws && !!pid && isTMPlansActive(pathname, ws, pid);
-  const isReviewsActive = !!pathname && !!ws && !!pid && isTMReviewsActive(pathname, ws, pid);
-  const isReportsActive = !!pathname && !!ws && !!pid && isTMReportsActive(pathname, ws, pid);
+  const isOverviewActive = isProduct && !!pathname && !!base && isTMOverviewActive(pathname, base);
+  const isReviewsActive = isProduct && !!pathname && !!base && isTMReviewsActive(pathname, base);
+  const isPlansActive = !isProduct && !!pathname && !!base && isTMPlansActive(pathname, base);
+  const isReportsActive = !isProduct && !!pathname && !!base && isTMReportsActive(pathname, base);
   const canCreatePlan = !!ws && !!pid && allowProjectPermissionKeys([PROJECT_QA_PLAN_CREATE_PERMISSION_KEY], ws, pid);
-  const canCreateReview =
-    !!ws && !!pid && allowProjectPermissionKeys([PROJECT_QA_REVIEW_CREATE_PERMISSION_KEY], ws, pid);
   const canCreateReport =
     !!ws && !!pid && allowProjectPermissionKeys([PROJECT_QA_REPORT_CREATE_PERMISSION_KEY], ws, pid);
-  const visibleMenuItems = MENU_ITEMS.filter(
+  const visibleMenuItems = MENU_ITEMS[scope].filter(
     (item) => !item.permissionKey || (!!ws && !!pid && allowProjectPermissionKeys([item.permissionKey], ws, pid))
   );
 
@@ -124,10 +115,11 @@ export const TestManagementMenuBar = () => {
       <div className="-ml-3 flex w-full items-center">
         <div className="no-scrollbar flex flex-1 items-center overflow-x-auto">
           {visibleMenuItems.map((item) => {
-            const href = item.href(ws, pid);
-            const active = item.isActive(pathname, ws, pid);
+            const href = `${base}${item.sub}`;
+            const active = !!base && item.isActive(pathname, base);
             const finalHref =
-              repositoryIdForLinks && item.key !== "overview"
+              // 选中的用例库只对产品侧（用例 / 评审）有意义
+              isProduct && repositoryIdForLinks && item.key !== "overview"
                 ? `${href}?repositoryId=${encodeURIComponent(String(repositoryIdForLinks))}`
                 : href;
             return (
@@ -221,11 +213,7 @@ export const TestManagementMenuBar = () => {
             />
             <button
               type="button"
-              disabled={!canCreateReview}
-              onClick={() => {
-                if (!canCreateReview) return;
-                triggerOpenNewReviewModal();
-              }}
+              onClick={triggerOpenNewReviewModal}
               className="flex shrink-0 items-center justify-center gap-1.5 rounded bg-accent-primary px-3 py-1.5 text-xs font-medium whitespace-nowrap text-on-color transition-all hover:bg-accent-primary-hover focus:bg-accent-primary-hover focus:text-on-color disabled:cursor-not-allowed disabled:opacity-50"
             >
               新建评审

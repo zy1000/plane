@@ -512,60 +512,6 @@ def allow_fine_permission(*permission_keys: str, level: str = "PROJECT"):
     return decorator
 
 
-def allow_fine_permission_or_template(
-    *permission_keys: str, template_permission_keys=()
-):
-    """QA 用例端点专用：模板库操作走工作区级模板权限，否则走项目细粒度鉴权。
-
-    模板库（is_template=True，必然 project 为空）没有项目语境，项目分支必 403，
-    故对本工作区的模板库改判 workspace.case_template.*（template_permission_keys，
-    **全部**持有才放行，与项目分支的 OR 语义不同）。
-    分支条件必须是 is_template 而非 project 为空——存量「跨项目共享库」
-    （project 为空且非模板）维持原有行为，不放宽安全面。
-    """
-
-    def decorator(view_func):
-        fine_wrapped = allow_fine_permission(*permission_keys)(view_func)
-        required_template_keys = {
-            key.value if isinstance(key, Enum) else str(key)
-            for key in template_permission_keys
-        }
-
-        @wraps(view_func)
-        def _wrapped_view(instance, request, *args, **kwargs):
-            slug = kwargs.get("slug", "")
-            repository_id = (
-                request.query_params.get("repository_id")
-                or request.data.get("repository_id")
-                or request.query_params.get("repository")
-                or request.data.get("repository")
-            )
-            if repository_id:
-                is_template_repo = TestCaseRepository.objects.filter(
-                    pk=repository_id,
-                    workspace__slug=slug,
-                    is_template=True,
-                ).exists()
-                if is_template_repo:
-                    if not is_workspace_member(request.user, slug):
-                        return Response(
-                            {"error": "You must be an active workspace member."},
-                            status=status.HTTP_403_FORBIDDEN,
-                        )
-                    user_keys = _get_user_workspace_permission_keys(request.user, slug)
-                    if required_template_keys.issubset(user_keys):
-                        return view_func(instance, request, *args, **kwargs)
-                    return Response(
-                        {"error": "您没有所需的用例模板库权限。"},
-                        status=status.HTTP_403_FORBIDDEN,
-                    )
-            return fine_wrapped(instance, request, *args, **kwargs)
-
-        return _wrapped_view
-
-    return decorator
-
-
 def allow_permission(allowed_roles, level="PROJECT", creator=False, model=None):
     def decorator(view_func):
         @wraps(view_func)

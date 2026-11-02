@@ -365,18 +365,13 @@ export const PROJECT_STAGE_READ_PERMISSION_KEYS = [
 ];
 
 /** 测试管理查看权限常量，与后端 PermissionKey.QA_*_VIEW 一致 */
-export const PROJECT_QA_CASE_VIEW_PERMISSION_KEY = "qa.case.view" as const;
 export const PROJECT_QA_PLAN_VIEW_PERMISSION_KEY = "qa.plan.view" as const;
-export const PROJECT_QA_REVIEW_VIEW_PERMISSION_KEY = "qa.review.view" as const;
 export const PROJECT_QA_REPORT_VIEW_PERMISSION_KEY = "qa.report.view" as const;
-export const PROJECT_QA_MINDMAP_VIEW_PERMISSION_KEY = "qa.mindmap.view" as const;
 
+/** 项目「测试」页签只剩测试计划 / 测试报告（用例、用例评审 2026-11 挪到产品下） */
 export const PROJECT_QA_VIEW_PERMISSION_KEYS = [
-  PROJECT_QA_CASE_VIEW_PERMISSION_KEY,
   PROJECT_QA_PLAN_VIEW_PERMISSION_KEY,
-  PROJECT_QA_REVIEW_VIEW_PERMISSION_KEY,
   PROJECT_QA_REPORT_VIEW_PERMISSION_KEY,
-  PROJECT_QA_MINDMAP_VIEW_PERMISSION_KEY,
 ] as const;
 
 export const PROJECT_ARCHIVES_VIEW_PERMISSION_KEYS = [

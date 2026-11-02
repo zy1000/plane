@@ -6,9 +6,7 @@
  * 名为 史诗/特性/用户故事 的那些，界面上也叫"需求"），这个挂的是 requirement 域的**真需求**
  * （RequirementTestCase 关联表）。两者并存，别合并。
  *
- * 端点是项目作用域的（吃 QA_CASE_* 权限）。**共享用例库（repository.project 为空）的用例
- * 只能从需求侧关联** —— 项目级权限键在 project 为空时必然 403，见
- * apps/api/plane/app/views/qa/case_requirement.py 的说明。
+ * 端点是产品作用域的（用例归产品），见 apps/api/plane/app/views/qa/case_requirement.py。
  *
  * 风格跟随 components/qa/**：antd + 硬编码中文（该目录没有任何 i18n 命名空间）。
  */
@@ -31,8 +29,8 @@ const REQUIREMENT_STATUS_LABELS: Record<string, string> = {
 
 type RequirementDisplayPanelProps = {
   caseId: string;
-  /** 显式传入优先于路由参数 —— 用例弹窗也可能从非项目路由（如工作项详情）打开 */
-  projectId?: string;
+  /** 用例所属产品；显式传入优先于路由参数 —— 用例弹窗也可能从项目页（如工作项详情）打开 */
+  productId?: string;
   className?: string;
   reloadToken?: number;
   onCountChange?: (n: number) => void;
@@ -42,15 +40,15 @@ type RequirementDisplayPanelProps = {
 
 export const RequirementDisplayPanel: React.FC<RequirementDisplayPanelProps> = ({
   caseId,
-  projectId: propProjectId,
+  productId: propProductId,
   className,
   reloadToken,
   onCountChange,
   canEdit = true,
 }) => {
-  const params = useParams() as { workspaceSlug?: string; projectId?: string };
+  const params = useParams() as { workspaceSlug?: string; productId?: string };
   const workspaceSlug = params.workspaceSlug ? String(params.workspaceSlug) : "";
-  const projectId = propProjectId || (params.projectId ? String(params.projectId) : "");
+  const productId = propProductId || (params.productId ? String(params.productId) : "");
   const caseService = React.useMemo(() => new CaseService(), []);
 
   const [loading, setLoading] = React.useState<boolean>(false);
@@ -59,10 +57,10 @@ export const RequirementDisplayPanel: React.FC<RequirementDisplayPanelProps> = (
   const [currentPage, setCurrentPage] = React.useState<number>(1);
 
   const fetchRequirements = React.useCallback(async () => {
-    if (!workspaceSlug || !projectId || !caseId) return;
+    if (!workspaceSlug || !productId || !caseId) return;
     setLoading(true);
     try {
-      const res = await caseService.getCaseRequirements(workspaceSlug, projectId, caseId);
+      const res = await caseService.getCaseRequirements(workspaceSlug, productId, caseId);
       const resolved = Array.isArray(res) ? res : [];
       setRows(resolved);
       onCountChange?.(resolved.length);
@@ -75,16 +73,16 @@ export const RequirementDisplayPanel: React.FC<RequirementDisplayPanelProps> = (
     }
     // onCountChange 由父级每次渲染重建，进依赖会导致死循环
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [caseId, caseService, projectId, workspaceSlug]);
+  }, [caseId, caseService, productId, workspaceSlug]);
 
   React.useEffect(() => {
     void fetchRequirements();
   }, [fetchRequirements, reloadToken]);
 
   const handleUnlink = async (requirementId: string) => {
-    if (!workspaceSlug || !projectId || !caseId) return;
+    if (!workspaceSlug || !productId || !caseId) return;
     try {
-      await caseService.deleteCaseRequirement(workspaceSlug, projectId, caseId, requirementId);
+      await caseService.deleteCaseRequirement(workspaceSlug, productId, caseId, requirementId);
       message.success("取消关联成功");
       void fetchRequirements();
     } catch {
@@ -151,7 +149,7 @@ export const RequirementDisplayPanel: React.FC<RequirementDisplayPanelProps> = (
     }
     return base;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canEdit, workspaceSlug, projectId, caseId]);
+  }, [canEdit, workspaceSlug, productId, caseId]);
 
   return (
     <div className={className}>

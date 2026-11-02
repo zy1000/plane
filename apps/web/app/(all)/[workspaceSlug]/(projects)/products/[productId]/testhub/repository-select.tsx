@@ -12,7 +12,7 @@ type TRepository = { id: string; name: string; description?: string | null };
 
 type RepositorySelectProps = {
   workspaceSlug: string;
-  projectId?: string;
+  productId?: string;
   className?: string;
   buttonClassName?: string;
   labelClassName?: string;
@@ -25,7 +25,7 @@ type RepositorySelectProps = {
 
 export const RepositorySelect: React.FC<RepositorySelectProps> = ({
   workspaceSlug,
-  projectId,
+  productId,
   className,
   buttonClassName,
   labelClassName,
@@ -56,7 +56,7 @@ export const RepositorySelect: React.FC<RepositorySelectProps> = ({
       try {
         const service = new RepositoryService();
         const params: any = nameQuery ? { name: nameQuery } : {};
-        if (projectId) params.project_id = projectId;
+        if (productId) params.product_id = productId;
         const resp = await service.getRepositories(workspaceSlug, params);
         const list: TRepository[] =
           resp?.data?.map((r: any) => ({ id: r.id, name: r.name, description: r.description })) ?? [];
@@ -66,7 +66,7 @@ export const RepositorySelect: React.FC<RepositorySelectProps> = ({
         setIsLoading(false);
       }
     },
-    [workspaceSlug, projectId]
+    [workspaceSlug, productId]
   );
 
   React.useEffect(() => {

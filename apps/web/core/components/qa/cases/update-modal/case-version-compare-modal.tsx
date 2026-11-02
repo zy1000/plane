@@ -23,6 +23,8 @@ type Props = {
   onClose: () => void;
   workspaceSlug: string;
   caseId: string;
+  /** 用例所属产品（全屏对比页在产品下）；不传时取路由 productId */
+  productId?: string;
   caseVersions: TCaseVersionItem[];
   latestVersion?: number;
   currentVersionLabel: string;
@@ -36,6 +38,7 @@ export function CaseVersionCompareModal({
   onClose,
   workspaceSlug,
   caseId,
+  productId: propProductId,
   caseVersions,
   latestVersion,
   currentVersionLabel,
@@ -43,7 +46,8 @@ export function CaseVersionCompareModal({
   width = 920,
   height = "70vh",
 }: Props) {
-  const { projectId } = useParams() as { projectId?: string };
+  const { productId: routeProductId } = useParams() as { productId?: string };
+  const productId = propProductId || routeProductId;
   const { setPeekIssue } = useIssueDetail();
   const caseService = React.useMemo(() => new CaseService(), []);
 
@@ -270,22 +274,22 @@ export function CaseVersionCompareModal({
 
   const handleOpenFullscreen = React.useCallback(() => {
     const baseVersion = compareBaseVersion ?? historyVersionOptions[0]?.value;
-    if (!workspaceSlug || !caseId || !projectId) return;
+    if (!workspaceSlug || !caseId || !productId) return;
     if (latestVersion === undefined) return;
     if (baseVersion === undefined) return;
 
     const url =
       `/${encodeURIComponent(String(workspaceSlug))}` +
-      `/projects/${encodeURIComponent(String(projectId))}` +
+      `/products/${encodeURIComponent(String(productId))}` +
       `/testhub/cases/compare?caseId=${encodeURIComponent(String(caseId))}` +
       `&baseVersion=${encodeURIComponent(String(baseVersion))}`;
     window.open(url, "_blank", "noopener,noreferrer");
-  }, [compareBaseVersion, historyVersionOptions, workspaceSlug, caseId, projectId, latestVersion]);
+  }, [compareBaseVersion, historyVersionOptions, workspaceSlug, caseId, productId, latestVersion]);
 
   const canOpenFullscreen =
     !!workspaceSlug &&
     !!caseId &&
-    !!projectId &&
+    !!productId &&
     latestVersion !== undefined &&
     (compareBaseVersion !== undefined || historyVersionOptions.length > 0);
 

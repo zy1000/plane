@@ -6,7 +6,7 @@ import { Select, Spin, Tag } from "antd";
 import { CaseService } from "@/services/qa/case.service";
 import { RichTextEditor, formatCNDateTime } from "@/components/qa/cases/util";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
-import { getEnums } from "../../util";
+import { getEnums } from "@/components/qa/shared/testhub/util";
 import { IssuePeekOverview } from "@/components/issues/peek-overview";
 
 type TCaseVersionItem = { id: string; version: number; created_at?: string };
@@ -20,7 +20,7 @@ type EnumsData = {
 };
 
 export default function CaseVersionCompareFullPage() {
-  const { workspaceSlug, projectId } = useParams() as { workspaceSlug?: string; projectId?: string };
+  const { workspaceSlug, productId } = useParams() as { workspaceSlug?: string; productId?: string };
   const searchParams = useSearchParams();
   const caseId = String(searchParams.get("caseId") || "");
   const baseVersionFromQuery = searchParams.get("baseVersion");
@@ -291,7 +291,7 @@ export default function CaseVersionCompareFullPage() {
   const baseLabel = compareBaseVersion === undefined ? "历史" : `历史 v${Number(compareBaseVersion)}`;
   const changedFields: any[] = Array.isArray(compareData?.changed_fields) ? compareData.changed_fields : [];
 
-  if (!workspaceSlug || !projectId) return null;
+  if (!workspaceSlug || !productId) return null;
 
   return (
     <div className="fixed inset-0 z-[9999] bg-white">

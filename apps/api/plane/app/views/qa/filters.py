@@ -95,7 +95,7 @@ class CaseReviewFilter(filters.FilterSet):
         model = CaseReview
         fields = {
             'name': ['exact', 'icontains', 'in'],
-            'project_id': ['exact', 'in'],
+            'product_id': ['exact', 'in'],
             'state': ['exact', 'in'],
             'mode': ['exact', 'in'],
         }

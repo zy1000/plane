@@ -22,22 +22,24 @@ class ReviewApprovalType(models.TextChoices):
     N_OF_M = "n_of_m", "至少 N 人通过"
 
 
-def generate_case_code(*, project_id, project_identifier, repository_id=None):
-    prefix = f"{project_identifier}-"
+def generate_case_code(*, prefix, product_id=None, repository_id=None):
+    """生成用例编号 `{prefix}{n}`（prefix 含结尾分隔符）。
 
-    queryset = TestCase.objects.filter(deleted_at__isnull=True)
-    if project_id:
-        queryset = queryset.filter(repository__project_id=project_id)
+    产品库在该产品所有库内流水；没有产品的库（模板库）只在本库内流水。
+    """
+    queryset = TestCase.objects.filter(deleted_at__isnull=True, code__startswith=prefix)
+    if product_id:
+        queryset = queryset.filter(repository__product_id=product_id)
     elif repository_id:
         queryset = queryset.filter(repository_id=repository_id)
 
     max_number = 0
-    for code in queryset.filter(code__startswith=prefix).values_list("code", flat=True):
+    for code in queryset.values_list("code", flat=True):
         suffix = code[len(prefix) :]
         if suffix.isdigit():
             max_number = max(max_number, int(suffix))
 
-    return f"{project_identifier}-{max_number + 1}"
+    return f"{prefix}{max_number + 1}"
 
 
 class TestCaseRepository(BaseModel):
@@ -55,6 +57,15 @@ class TestCaseRepository(BaseModel):
     )
     workspace = models.ForeignKey(
         "db.Workspace", on_delete=models.CASCADE, related_name="workspace_%(class)s"
+    )
+    # 用例库归属产品（2026-11 起用例从项目挪到产品）；模板库为空。
+    # project 列只为存量迁移保留、代码不再读；迁移命令写产品时会把它清空（断开项目级联删除）。
+    product = models.ForeignKey(
+        "db.Product",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="test_repositories",
     )
     # 模板库：工作区级的模板用例容器（is_template=True 时 project 必为空）。
     # 注意不能拿 project 为空当模板语义——存量“跨项目共享库”同样 project 为空。
@@ -251,24 +262,21 @@ class TestCase(BaseModel):
         if self.code:
             return super().save(*args, **kwargs)
 
-        project_id = None
-        project_identifier = None
+        product_id = None
+        prefix = "NA-"
         if self.repository_id:
             repository = self.repository
-            if repository and repository.project_id:
-                project_id = repository.project_id
-                project_identifier = repository.project.identifier
-
-        if not project_identifier:
-            project_identifier = "NA"
+            if repository and repository.product_id:
+                product_id = repository.product_id
+                prefix = f"{repository.product.identifier}-TC-"
 
         max_attempts = 5
         for attempt in range(max_attempts):
             try:
                 with transaction.atomic():
                     self.code = generate_case_code(
-                        project_id=project_id,
-                        project_identifier=project_identifier,
+                        prefix=prefix,
+                        product_id=product_id,
                         repository_id=self.repository_id,
                     )
                     return super().save(*args, **kwargs)
@@ -772,6 +780,14 @@ class CaseReviewModule(BaseModel):
         on_delete=models.CASCADE,
         related_name="project_%(class)s",
     )
+    # 评审归属产品（2026-11 起）；project 列只为存量迁移保留。
+    product = models.ForeignKey(
+        "db.Product",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="case_review_modules",
+    )
     is_default = models.BooleanField(default=False)
 
     class Meta:
@@ -836,6 +852,14 @@ class CaseReview(BaseModel):
         on_delete=models.CASCADE,
         related_name="project_%(class)s",
     )
+    # 评审归属产品（2026-11 起）；project 列只为存量迁移保留。
+    product = models.ForeignKey(
+        "db.Product",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="case_reviews",
+    )
     cases = models.ManyToManyField(
         TestCase,
         blank=True,
@@ -848,21 +872,21 @@ class CaseReview(BaseModel):
         verbose_name = "CaseReview"
         verbose_name_plural = "CaseReview"
         constraints = [
-            # 同项目同模块下不允许重名（module 有值时）
+            # 同产品同模块下不允许重名（module 有值时）
             models.UniqueConstraint(
-                fields=["project", "module", "name"],
+                fields=["product", "module", "name"],
                 condition=Q(
-                    project__isnull=False, deleted_at__isnull=True, module__isnull=False
+                    product__isnull=False, deleted_at__isnull=True, module__isnull=False
                 ),
-                name="unique_review_project_module_name_when_not_deleted",
+                name="unique_review_product_module_name_when_not_deleted",
             ),
-            # 同项目下未指定模块时不允许重名（module 为 null 时）
+            # 同产品下未指定模块时不允许重名（module 为 null 时）
             models.UniqueConstraint(
-                fields=["project", "name"],
+                fields=["product", "name"],
                 condition=Q(
-                    project__isnull=False, deleted_at__isnull=True, module__isnull=True
+                    product__isnull=False, deleted_at__isnull=True, module__isnull=True
                 ),
-                name="unique_review_project_name_when_module_null_not_deleted",
+                name="unique_review_product_name_when_module_null_not_deleted",
             ),
         ]
         db_table = "test_case_review"

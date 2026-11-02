@@ -29,12 +29,10 @@ import {
   qaCaseSetToastSuccess,
   qaCaseSetToastWarning,
 } from "@/utils/qa-case-error";
-import { useProjectPermissions } from "@/hooks/store/use-project-permissions";
-import UnauthorizedImg from "@/app/assets/auth/unauthorized.svg?url";
 
 export default function TestCasesMindPage() {
   const { t } = useTranslation();
-  const { workspaceSlug, projectId } = useParams();
+  const { workspaceSlug, productId } = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -85,14 +83,8 @@ export default function TestCasesMindPage() {
   const { data: currentUser } = useUser();
   const currentUserId = currentUser?.id ? String(currentUser.id) : null;
 
-  const {
-    isLoading: permissionsLoading,
-    fetched: permissionsFetched,
-    hasPermission,
-  } = useProjectPermissions(String(workspaceSlug || ""), String(projectId || ""));
-
-  const canViewMindmap = !permissionsFetched || hasPermission("qa.mindmap.view");
-  const canEditMindmap = hasPermission("qa.mindmap.edit");
+  // 产品下的用例暂不细分权限（等权限重构），工作区成员都可查看 / 编辑脑图
+  const canEditMindmap = true;
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -389,7 +381,7 @@ export default function TestCasesMindPage() {
 
   const handleMindOperation = async (op: Operation) => {
     const ws = String(workspaceSlug || "");
-    const pid = String(projectId || "");
+    const pid = String(productId || "");
     if (!ws || !pid) return;
 
     if (op.name === "finishEdit") {
@@ -586,7 +578,7 @@ export default function TestCasesMindPage() {
 
   const handleContextAction = async (action: string, node: NodeObj) => {
     const ws = String(workspaceSlug || "");
-    const pid = String(projectId || "");
+    const pid = String(productId || "");
     const repoId = repositoryId ? String(repositoryId) : "";
     const nodeId = String((node as any)?.id || "");
 
@@ -738,11 +730,11 @@ export default function TestCasesMindPage() {
               try {
                 await caseModuleService.deleteCaseModule(ws, moduleId);
                 setSelectedModuleIds([]);
-                const pid = String(projectId || "");
+                const pid = String(productId || "");
                 const params = new URLSearchParams();
                 params.set("repositoryId", repoId);
                 params.set("moduleId", "all");
-                router.push(`/${ws}/projects/${pid}/testhub/cases/mind?${params.toString()}`);
+                router.push(`/${ws}/products/${pid}/testhub/cases/mind?${params.toString()}`);
                 await refreshAll();
                 qaCaseSetToastSuccess("删除成功");
               } catch (e: any) {
@@ -818,11 +810,11 @@ export default function TestCasesMindPage() {
 
   const listUrl = useMemo(() => {
     const ws = String(workspaceSlug || "");
-    const pid = String(projectId || "");
+    const pid = String(productId || "");
     const params = new URLSearchParams();
     if (repositoryId) params.set("repositoryId", String(repositoryId));
-    return `/${ws}/projects/${pid}/testhub/cases${params.toString() ? `?${params.toString()}` : ""}`;
-  }, [workspaceSlug, projectId, repositoryId]);
+    return `/${ws}/products/${pid}/testhub/cases${params.toString() ? `?${params.toString()}` : ""}`;
+  }, [workspaceSlug, productId, repositoryId]);
 
   return (
     <>
@@ -853,20 +845,20 @@ export default function TestCasesMindPage() {
                 <RepositorySelect
                   key={`repository-select-mind-${repositoryId || "all"}`}
                   workspaceSlug={String(workspaceSlug || "")}
-                  projectId={String(projectId || "")}
+                  productId={String(productId || "")}
                   className="inline-flex"
                   buttonClassName="min-w-0 border-0 px-1.5 py-1 text-14 font-semibold text-primary hover:bg-layer-1 cursor-pointer gap-2 h-full"
                   labelClassName="max-w-[240px] leading-4"
                   defaultRepositoryId={repositoryId}
                   onRepositoryChange={({ id, name }) => {
                     const ws = String(workspaceSlug || "");
-                    const pid = String(projectId || "");
+                    const pid = String(productId || "");
                     setRepositoryName(name ? String(name) : "");
                     if (id)
                       router.push(
-                        `/${ws}/projects/${pid}/testhub/cases/mind?repositoryId=${encodeURIComponent(String(id))}`
+                        `/${ws}/products/${pid}/testhub/cases/mind?repositoryId=${encodeURIComponent(String(id))}`
                       );
-                    else router.push(`/${ws}/projects/${pid}/testhub/cases/mind`);
+                    else router.push(`/${ws}/products/${pid}/testhub/cases/mind`);
                   }}
                 />
               }
@@ -913,23 +905,23 @@ export default function TestCasesMindPage() {
                   onSelect={(selectedKeys) => {
                     const key = String((selectedKeys as any[])?.[0] ?? "");
                     const ws = String(workspaceSlug || "");
-                    const pid = String(projectId || "");
+                    const pid = String(productId || "");
                     const params = new URLSearchParams();
                     if (repositoryId) params.set("repositoryId", String(repositoryId));
                     if (!key || key === "all") {
                       setSelectedModuleIds(allModuleIds);
                       params.set("moduleId", "all");
-                      router.push(`/${ws}/projects/${pid}/testhub/cases/mind?${params.toString()}`);
+                      router.push(`/${ws}/products/${pid}/testhub/cases/mind?${params.toString()}`);
                       return;
                     }
                     setSelectedModuleIds([key]);
                     params.append("moduleId", key);
-                    router.push(`/${ws}/projects/${pid}/testhub/cases/mind?${params.toString()}`);
+                    router.push(`/${ws}/products/${pid}/testhub/cases/mind?${params.toString()}`);
                   }}
                   onCheck={(checkedKeys, info) => {
                     const nextKeys = Array.isArray(checkedKeys) ? checkedKeys : (checkedKeys as any)?.checked || [];
                     const ws = String(workspaceSlug || "");
-                    const pid = String(projectId || "");
+                    const pid = String(productId || "");
                     const params = new URLSearchParams();
                     if (repositoryId) params.set("repositoryId", String(repositoryId));
                     const normalizedKeys = (nextKeys as any[]).map((k) => String(k));
@@ -943,7 +935,7 @@ export default function TestCasesMindPage() {
                         setSelectedModuleIds([]);
                       }
                       const query = params.toString();
-                      router.push(`/${ws}/projects/${pid}/testhub/cases/mind${query ? `?${query}` : ""}`);
+                      router.push(`/${ws}/products/${pid}/testhub/cases/mind${query ? `?${query}` : ""}`);
                       return;
                     }
                     const moduleIds = normalizedKeys.filter((k) => k && k !== "all");
@@ -951,7 +943,7 @@ export default function TestCasesMindPage() {
                       setSelectedModuleIds(allModuleIds);
                       params.set("moduleId", "all");
                       const query = params.toString();
-                      router.push(`/${ws}/projects/${pid}/testhub/cases/mind${query ? `?${query}` : ""}`);
+                      router.push(`/${ws}/products/${pid}/testhub/cases/mind${query ? `?${query}` : ""}`);
                       return;
                     }
                     setSelectedModuleIds(moduleIds);
@@ -959,7 +951,7 @@ export default function TestCasesMindPage() {
                       for (const mid of moduleIds) params.append("moduleId", mid);
                     }
                     const query = params.toString();
-                    router.push(`/${ws}/projects/${pid}/testhub/cases/mind${query ? `?${query}` : ""}`);
+                    router.push(`/${ws}/products/${pid}/testhub/cases/mind${query ? `?${query}` : ""}`);
                   }}
                   onExpand={onExpand}
                   expandedKeys={expandedKeys}
@@ -979,35 +971,26 @@ export default function TestCasesMindPage() {
             </Col>
             <Col flex="auto" className="h-full overflow-hidden">
               <div className="h-full w-full overflow-hidden">
-                {permissionsFetched && !canViewMindmap ? (
-                  <div className="flex h-full w-full flex-col items-center justify-center gap-y-5 text-center">
-                    <div className="h-44 w-72">
-                      <img src={UnauthorizedImg} className="h-[176px] w-[288px] object-contain" alt="unauthorized" />
-                    </div>
-                    <h1 className="text-xl font-medium text-primary">您没有查看此页面的权限</h1>
-                  </div>
-                ) : (
-                  <>
-                    {!repositoryId && (
-                      <div className="flex h-full items-center justify-center text-secondary">请先选择一个用例库</div>
-                    )}
-                    {(permissionsLoading || (repositoryId && loadingMind)) && (
-                      <div className="flex h-full items-center justify-center text-secondary">加载中...</div>
-                    )}
-                    {repositoryId && !permissionsLoading && !loadingMind && mindData && (
-                      <CaseMindmap
-                        data={mindData}
-                        editable={canEditMindmap}
-                        before={mindBefore}
-                        onOperation={canEditMindmap ? handleMindOperation : undefined}
-                        onContextAction={canEditMindmap ? handleContextAction : undefined}
-                      />
-                    )}
-                    {repositoryId && !permissionsLoading && !loadingMind && !mindData && (
-                      <div className="flex h-full items-center justify-center text-secondary">暂无数据</div>
-                    )}
-                  </>
-                )}
+                <>
+                  {!repositoryId && (
+                    <div className="flex h-full items-center justify-center text-secondary">请先选择一个用例库</div>
+                  )}
+                  {repositoryId && loadingMind && (
+                    <div className="flex h-full items-center justify-center text-secondary">加载中...</div>
+                  )}
+                  {repositoryId && !loadingMind && mindData && (
+                    <CaseMindmap
+                      data={mindData}
+                      editable={canEditMindmap}
+                      before={mindBefore}
+                      onOperation={canEditMindmap ? handleMindOperation : undefined}
+                      onContextAction={canEditMindmap ? handleContextAction : undefined}
+                    />
+                  )}
+                  {repositoryId && !loadingMind && !mindData && (
+                    <div className="flex h-full items-center justify-center text-secondary">暂无数据</div>
+                  )}
+                </>
               </div>
             </Col>
           </Row>

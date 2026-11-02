@@ -11,10 +11,10 @@ import { FileText } from "lucide-react";
 
 /** 用例全屏（独立页面）详情：与抽屉共用同一套展示结构（UpdateModal 的 page 形态） */
 export default function TestCaseDetailPage() {
-  const { workspaceSlug, projectId, caseId } = useParams();
+  const { workspaceSlug, productId, caseId } = useParams();
   const router = useRouter();
   const ws = String(workspaceSlug || "");
-  const pid = String(projectId || "");
+  const pid = String(productId || "");
   const id = String(caseId || "");
 
   // 面包屑数据：来自 UpdateModal 内部加载的用例详情（含所属用例库与用例名）
@@ -30,7 +30,7 @@ export default function TestCaseDetailPage() {
 
   if (!ws || !pid || !id) return null;
 
-  const testhubUrl = `/${ws}/projects/${pid}/testhub`;
+  const testhubUrl = `/${ws}/products/${pid}/testhub`;
   const repositoryCasesUrl = repositoryId
     ? `${testhubUrl}/cases?repositoryId=${encodeURIComponent(repositoryId)}`
     : `${testhubUrl}/cases`;
@@ -49,7 +49,7 @@ export default function TestCaseDetailPage() {
           variant="page"
           caseId={id}
           workspaceSlug={ws}
-          projectId={pid}
+          productId={pid}
           onClose={() => router.push(repositoryCasesUrl)}
           onCaseDataChange={handleCaseDataChange}
         />

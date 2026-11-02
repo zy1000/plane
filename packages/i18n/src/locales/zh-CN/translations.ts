@@ -4621,6 +4621,7 @@ export default {
       projects: "项目",
       stage_reviews: "阶段评审",
       releases: "发布",
+      testhub: "测试",
       settings: "设置",
       product_settings: "产品设置",
       no_products: "没有可切换的产品",

@@ -6,7 +6,7 @@ from rest_framework import serializers
 
 from plane.db.models import CaseReviewRecord, CaseReviewThrough
 from plane.utils.profile_metrics import (
-    PRODUCT_SCOPED_METRICS,
+    PRODUCT_GROUPED_METRICS,
     PROFILE_METRIC_KEYS,
     REQUIREMENT_PROFILE_METRICS,
 )
@@ -32,7 +32,7 @@ class WorkspaceUserMetricQuerySerializer(serializers.Serializer):
             raise serializers.ValidationError({"review_id": "This filter is not supported for the selected metric."})
         if attrs.get("plan_id") and attrs.get("review_id"):
             raise serializers.ValidationError("plan_id and review_id cannot be used together.")
-        if attrs.get("product_id") and metric not in PRODUCT_SCOPED_METRICS:
+        if attrs.get("product_id") and metric not in PRODUCT_GROUPED_METRICS:
             raise serializers.ValidationError({"product_id": "This filter is not supported for the selected metric."})
         return attrs
 
@@ -183,7 +183,9 @@ class WorkspaceUserMetricItemSerializer(serializers.Serializer):
             "case_id": instance.case_id,
             "code": instance.case.code,
             "title": instance.case.name,
-            "project": _project_data(instance.review.project),
+            # 用例评审归产品（2026-11），project 留空兼容旧前端
+            "project": None,
+            "product": _product_data(instance.review.product) if instance.review.product_id else None,
             "review": {"id": instance.review_id, "name": instance.review.name},
             "priority": instance.case.get_priority_display(),
             "personal_review_status": personal_review_status or CaseReviewThrough.Result.NOT_START,

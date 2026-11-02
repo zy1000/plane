@@ -10,11 +10,37 @@ from plane.db.models import (
     CaseReviewThrough,
     PlanCase,
     PlanCaseReviewRecord,
+    ProductProject,
     ReviewApprovalType,
     TestCase,
+    TestCaseRepository,
     TestPlan,
     WorkspaceMember,
 )
+
+
+def project_product_ids(project_id):
+    """项目已关联的产品 id（ProductProject 池，子查询用）。"""
+    return (
+        ProductProject.objects.filter(project_id=project_id, product__deleted_at__isnull=True)
+        .order_by()
+        .values_list("product_id", flat=True)
+    )
+
+
+def project_case_repository_ids(project_id, product_id=None):
+    """项目用例池：项目已关联产品下的用例库 id（子查询用）。
+
+    用例归产品后（2026-11），项目只能用已关联产品的用例。计划选用例、工作项关联用例、
+    工时挂用例、项目概览 / 分析的用例统计都走这一个口径。传 product_id 时只取该产品
+    （它不在池内就是空集）。
+    """
+    queryset = TestCaseRepository.objects.filter(
+        is_template=False, product_id__in=project_product_ids(project_id)
+    )
+    if product_id:
+        queryset = queryset.filter(product_id=product_id)
+    return queryset.order_by().values_list("id", flat=True)
 
 
 def invalid_workspace_member_ids(slug, member_ids):

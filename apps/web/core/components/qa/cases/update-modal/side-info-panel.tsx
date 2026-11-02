@@ -108,6 +108,7 @@ export function SideInfoPanel({
           onClose={() => setCompareOpen(false)}
           workspaceSlug={String(workspaceSlug)}
           caseId={String(caseData?.id)}
+          productId={caseData?.product_id ? String(caseData.product_id) : undefined}
           caseVersions={caseVersions}
           latestVersion={latestVersion}
           currentVersionLabel={currentVersionLabel}

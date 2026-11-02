@@ -6,7 +6,7 @@ import { Check, ChevronDown, Minus, Plus, Search } from "lucide-react";
 import { Button } from "@plane/propel/button";
 import { CustomSelect } from "@plane/ui";
 import { cn } from "@plane/utils";
-import { globalEnums } from "@/app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/util";
+import { globalEnums } from "@/components/qa/shared/testhub/util";
 import { BulkEditFieldRow as FieldRow, BulkEditFieldShell as FieldShell } from "@/components/common/bulk-edit-field";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { CaseService } from "@/services/qa/case.service";
@@ -24,7 +24,6 @@ type TLabelPresence = "all" | "some" | "none" | "unknown";
 
 type TProps = {
   workspaceSlug: string;
-  projectId?: string;
   repositoryId: string;
   selectedCount: number;
   /** 选中用例都在已加载的数据里时传入，用来标注当前值；有未加载的（跨页全选）传 null */
@@ -55,7 +54,7 @@ const nextLabelOp = (presence: TLabelPresence, current?: TLabelOp): TLabelOp | u
 };
 
 export function CasesBulkEditPanel(props: TProps) {
-  const { workspaceSlug, projectId, repositoryId, selectedCount, knownCases, submitting, onCancel, onApply } = props;
+  const { workspaceSlug, repositoryId, selectedCount, knownCases, submitting, onCancel, onApply } = props;
   const { t } = useTranslation();
 
   // undefined = 保持不变；assignee 的 null = 清空维护人
@@ -210,7 +209,6 @@ export function CasesBulkEditPanel(props: TProps) {
             ) : (
               <MemberDropdown
                 multiple={false}
-                projectId={projectId}
                 value={assignee ?? null}
                 onChange={(val) => setAssignee(val ?? undefined)}
                 placeholder={KEEP_TEXT}

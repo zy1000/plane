@@ -11,7 +11,7 @@ from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 
-from plane.app.permissions import allow_fine_permission, PermissionKey
+from plane.app.permissions import allow_workspace_member
 from plane.app.serializers.qa import ReviewModuleCreateUpdateSerializer, ReviewModuleDetailSerializer, \
     ReviewModuleListSerializer, ReviewListSerializer, ReviewCreateUpdateSerializer, \
     ReviewCaseRecordsSerializer, ReviewSerializer
@@ -32,31 +32,43 @@ from plane.utils.response import list_response
 from plane.app.views.qa.filters import CaseReviewFilter
 from plane.app.views.qa.plan import NumericSuffixCodeOrderingFilter
 from plane.app.views.qa.utils import build_module_filter_q
+from plane.app.views.qa.product_scope import allow_product_scope, product_repository_ids
 
 
 class ReviewModuleAPIView(BaseAPIView):
-    queryset = CaseReviewModule.objects.all()
     serializer_class = ReviewModuleListSerializer
     filterset_fields = {
         'name': ['exact', 'icontains', 'in'],
-        'project_id': ['exact'],
+        'product_id': ['exact'],
     }
 
+    def workspace_queryset(self, slug):
+        return CaseReviewModule.objects.filter(product__workspace__slug=slug)
+
+    @allow_workspace_member
     def post(self, request, slug):
         serializer = ReviewModuleCreateUpdateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        product = serializer.validated_data.get('product')
+        if product is None or product.workspace.slug != slug:
+            return Response({"error": "product is required"}, status=status.HTTP_400_BAD_REQUEST)
+        parent = serializer.validated_data.get('parent')
+        if parent is not None and parent.product_id != product.id:
+            return Response({"error": "parent belongs to another product"}, status=status.HTTP_400_BAD_REQUEST)
         test_plan = serializer.save()
         serializer = ReviewModuleDetailSerializer(instance=test_plan)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
+    @allow_workspace_member
     def get(self, request, slug):
-        query = self.filter_queryset(self.queryset.filter(parent=None)).order_by('created_at')
+        query = self.filter_queryset(self.workspace_queryset(slug).filter(parent=None)).order_by('created_at')
         serializer = self.serializer_class(instance=query, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
+    @allow_workspace_member
     def delete(self, request, slug):
         module_ids = request.data.pop('ids')
-        self.queryset.filter(id__in=module_ids).delete(soft=False)
+        self.workspace_queryset(slug).filter(id__in=module_ids).delete(soft=False)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -64,13 +76,16 @@ class ReviewModuleDetailAPIView(BaseAPIView):
     queryset = CaseReviewModule.objects.all()
     serializer_class = ReviewModuleCreateUpdateSerializer
 
+    @allow_workspace_member
     def patch(self, request, slug, module_id):
         module = get_object_or_404(
             self.queryset,
             id=module_id,
             deleted_at__isnull=True,
-            project__workspace__slug=slug,
+            product__workspace__slug=slug,
         )
+        # 模块不能借更新挪到别的产品
+        request.data.pop('product', None)
         serializer = self.serializer_class(instance=module, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
@@ -90,36 +105,62 @@ class CaseReviewAPIView(BaseAPIView):
     )
     ordering_fields = ["name", "created_at", "started_at", "ended_at", "state", "mode"]
 
-    @allow_fine_permission(PermissionKey.QA_REVIEW_CREATE)
-    def post(self, request, slug, project_id):
-        serializer = ReviewCreateUpdateSerializer(data=request.data)
+    def product_queryset(self, slug, product_id):
+        return self.queryset.filter(product_id=product_id, product__workspace__slug=slug)
+
+    def invalid_scope(self, serializer, product_id):
+        """评审模块与评审用例都必须属于本产品。"""
+        module = serializer.validated_data.get('module')
+        if module is not None and str(module.product_id) != str(product_id):
+            return Response({"error": "module belongs to another product"}, status=status.HTTP_400_BAD_REQUEST)
+        cases = serializer.validated_data.get('cases') or []
+        repo_ids = set(product_repository_ids(product_id))
+        if any(case.repository_id not in repo_ids for case in cases):
+            return Response({"error": "cases belong to another product"}, status=status.HTTP_400_BAD_REQUEST)
+        return None
+
+    @allow_product_scope
+    def post(self, request, slug, product_id):
+        # 产品由 URL 决定（唯一约束校验需要它出现在载荷里）
+        data = request.data.copy()
+        data.pop('project', None)
+        data['product'] = str(product_id)
+        serializer = ReviewCreateUpdateSerializer(data=data)
         serializer.is_valid(raise_exception=True)
+        error = self.invalid_scope(serializer, product_id)
+        if error is not None:
+            return error
         test_plan = serializer.save()
         serializer = self.serializer_class(instance=test_plan)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-    @allow_fine_permission(PermissionKey.QA_REVIEW_VIEW)
-    def get(self, request, slug, project_id):
-        cases = self.filter_queryset(self.queryset.filter(project_id=project_id))
+    @allow_product_scope
+    def get(self, request, slug, product_id):
+        cases = self.filter_queryset(self.product_queryset(slug, product_id))
         paginator = self.pagination_class()
         paginated_queryset = paginator.paginate_queryset(cases, request)
         serializer = self.serializer_class(instance=paginated_queryset, many=True)
         return list_response(data=serializer.data, count=cases.count())
 
-    @allow_fine_permission(PermissionKey.QA_REVIEW_EDIT)
-    def put(self, request, slug, project_id):
+    @allow_product_scope
+    def put(self, request, slug, product_id):
         review_id = request.data.pop('id')
-        review = self.queryset.get(id=review_id, project_id=project_id)
+        request.data.pop('project', None)
+        request.data.pop('product', None)
+        review = get_object_or_404(self.product_queryset(slug, product_id), id=review_id)
         update_serializer = ReviewCreateUpdateSerializer(instance=review, data=request.data, partial=True)
         update_serializer.is_valid(raise_exception=True)
+        error = self.invalid_scope(update_serializer, product_id)
+        if error is not None:
+            return error
         update_serializer.save()
         serializer = self.serializer_class(instance=review)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    @allow_fine_permission(PermissionKey.QA_REVIEW_DELETE)
-    def delete(self, request, slug, project_id):
+    @allow_product_scope
+    def delete(self, request, slug, product_id):
         ids = request.data.pop('ids')
-        self.queryset.filter(id__in=ids, project_id=project_id).delete()
+        self.product_queryset(slug, product_id).filter(id__in=ids).delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -128,11 +169,12 @@ class ReviewListAPIView(BaseAPIView):
     serializer_class = ReviewSerializer
 
     filterset_fields = {
-        'project_id': ['exact', 'in'],
+        'product_id': ['exact', 'in'],
     }
 
+    @allow_workspace_member
     def get(self, request, slug):
-        queryset = self.filter_queryset(self.queryset.filter(project__workspace__slug=slug)).distinct()
+        queryset = self.filter_queryset(self.queryset.filter(product__workspace__slug=slug)).distinct()
         serializer = self.serializer_class(queryset, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -153,18 +195,20 @@ class CaseReviewView(BaseViewSet):
         return Response(result, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=['post'], url_path='cancel-case')
-    @allow_fine_permission(PermissionKey.QA_REVIEW_EDIT)
+    @allow_workspace_member
     def cancel_case(self, request, slug):
-        project_id = request.query_params.get('project_id')
-        qs = CaseReviewThrough.objects.filter(id__in=request.data['ids'])
-        if project_id:
-            qs = qs.filter(review__project_id=project_id)
+        product_id = request.query_params.get('product_id')
+        qs = CaseReviewThrough.objects.filter(
+            id__in=request.data['ids'], review__product__workspace__slug=slug
+        )
+        if product_id:
+            qs = qs.filter(review__product_id=product_id)
         qs.delete(soft=False)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @transaction.atomic
     @action(detail=False, methods=['post'], url_path='add-cases')
-    @allow_fine_permission(PermissionKey.QA_REVIEW_EDIT)
+    @allow_workspace_member
     def add_cases(self, request, slug):
         review_id = request.data.get('review_id')
         raw_case_ids = request.data.get('case_ids')
@@ -187,20 +231,16 @@ class CaseReviewView(BaseViewSet):
         if not case_ids:
             return Response({"error": "case_ids must be a non-empty list"}, status=status.HTTP_400_BAD_REQUEST)
 
-        project_id = request.query_params.get('project_id')
-        review_lookup = {"id": review_id, "deleted_at__isnull": True, "project__workspace__slug": slug}
-        if project_id:
-            review_lookup["project_id"] = project_id
+        product_id = request.query_params.get('product_id')
+        review_lookup = {"id": review_id, "deleted_at__isnull": True, "product__workspace__slug": slug}
+        if product_id:
+            review_lookup["product_id"] = product_id
         review = get_object_or_404(CaseReview, **review_lookup)
 
         if assignee_ids and invalid_workspace_member_ids(slug, assignee_ids):
             return Response({"error": "assignee is invalid"}, status=status.HTTP_400_BAD_REQUEST)
 
-        repo_ids = list(
-            TestCaseRepository.objects.filter(
-                project_id=review.project_id, workspace__slug=slug, deleted_at__isnull=True
-            ).values_list('id', flat=True)
-        )
+        repo_ids = list(product_repository_ids(review.product_id))
 
         found_case_ids = set(
             TestCase.objects.filter(id__in=case_ids, repository_id__in=repo_ids, deleted_at__isnull=True).values_list(
@@ -236,7 +276,7 @@ class CaseReviewView(BaseViewSet):
 
     @transaction.atomic
     @action(detail=False, methods=['post'], url_path='case-assignees')
-    @allow_fine_permission(PermissionKey.QA_REVIEW_EDIT)
+    @allow_workspace_member
     def case_assignees(self, request, slug):
         """整体覆盖一批评审用例的评审人。ids 传一条即行内编辑，传多条即批量设置。"""
         review_id = request.data.get('review_id')
@@ -254,10 +294,10 @@ class CaseReviewView(BaseViewSet):
         if not isinstance(assignee_ids, list):
             return Response({"error": "assignees must be a list"}, status=status.HTTP_400_BAD_REQUEST)
 
-        project_id = request.query_params.get('project_id')
-        review_lookup = {"id": review_id, "deleted_at__isnull": True, "project__workspace__slug": slug}
-        if project_id:
-            review_lookup["project_id"] = project_id
+        product_id = request.query_params.get('product_id')
+        review_lookup = {"id": review_id, "deleted_at__isnull": True, "product__workspace__slug": slug}
+        if product_id:
+            review_lookup["product_id"] = product_id
         review = get_object_or_404(CaseReview, **review_lookup)
 
         if assignee_ids and invalid_workspace_member_ids(slug, assignee_ids):
@@ -296,12 +336,12 @@ class CaseReviewView(BaseViewSet):
                 review_id=review_id,
                 deleted_at__isnull=True,
                 review__deleted_at__isnull=True,
-                review__project__workspace__slug=slug,
+                review__product__workspace__slug=slug,
                 case__deleted_at__isnull=True,
             )
         )
-        if project_id := request.query_params.get('project_id'):
-            query = query.filter(review__project_id=project_id, case__repository__project_id=project_id)
+        if product_id := request.query_params.get('product_id'):
+            query = query.filter(review__product_id=product_id, case__repository__product_id=product_id)
 
         repository_ids = self._query_param_values(request, 'repository_id', 'repository_ids')
         if repository_ids:
@@ -466,7 +506,7 @@ class CaseReviewView(BaseViewSet):
         instance = get_object_or_404(
             CaseReviewRecord,
             id=record_id,
-            crt__review__project__workspace__slug=slug,
+            crt__review__product__workspace__slug=slug,
         )
 
         if str(instance.assignee_id) != str(request.user.id):

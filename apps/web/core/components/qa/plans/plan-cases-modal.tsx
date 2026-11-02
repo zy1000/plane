@@ -18,7 +18,13 @@ import {
   moduleTreeSwitcherIcon,
 } from "@/components/qa/module-tree";
 import { CASE_PICKER_MODAL_CLASS, CasePickerModalStyles, CaseTreeNodeTitle } from "../shared/case-picker-modal-styles";
-import { globalEnums } from "@/app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/util";
+import { globalEnums } from "@/components/qa/shared/testhub/util";
+import {
+  LinkedProductLoadError,
+  LinkedProductSelect,
+  NoLinkedProductHint,
+  useLinkedProductFilter,
+} from "../shared/linked-product-select";
 import { PlanCasePriorityBadge } from "./plan-case-priority-badge";
 
 type TLabel = { id?: string; name?: string } | string;
@@ -61,6 +67,14 @@ export const PlanCasesModal: React.FC<Props> = ({
   const { t } = useTranslation();
   const caseService = useRef(new CaseService()).current;
   const planService = useRef(new PlanService()).current;
+  // 用例归产品：只能从项目已关联的产品里选，一次看一个产品（选中的用例跨产品保留）
+  const {
+    links: linkedProducts,
+    error: linkedProductsError,
+    hasNoLinkedProduct,
+    productId,
+    setProductId,
+  } = useLinkedProductFilter(isOpen ? workspaceSlug : undefined, projectId);
 
   const [planTree, setPlanTree] = useState<any | null>(null);
   const [expandedKeys, setExpandedKeys] = useState<string[]>([]);
@@ -141,10 +155,25 @@ export const PlanCasesModal: React.FC<Props> = ({
     setSelectedRepositoryId(null);
     setSelectedModuleId(null);
     setSelectedAssignee(null);
-    if (!isOpen || !workspaceSlug || !planId) return;
+  }, [isOpen]);
+
+  // 切产品：树与列表都换成该产品的用例；已勾选的用例保留
+  useEffect(() => {
+    nodeCaseIdsCacheRef.current = {};
+    setCheckedTreeKeys([]);
+    setSelectedTreeKey("root");
+    setSelectedRepositoryId(null);
+    setSelectedModuleId(null);
+    if (!isOpen || !workspaceSlug || !planId || !productId) {
+      setPlanTree(null);
+      setCases([]);
+      setTotal(0);
+      return;
+    }
     fetchPlanTree();
     fetchCases(1, undefined, undefined);
-  }, [isOpen]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, productId]);
 
   useEffect(() => () => {
     clearSearchDebounce();
@@ -170,7 +199,11 @@ export const PlanCasesModal: React.FC<Props> = ({
   const fetchPlanTree = async () => {
     if (!workspaceSlug || !planId) return;
     try {
-      const data = await caseService.getPlanUnassociatedCaseTree(String(workspaceSlug), { plan_id: String(planId) });
+      if (!productId) return;
+      const data = await caseService.getPlanUnassociatedCaseTree(String(workspaceSlug), {
+        plan_id: String(planId),
+        product_id: productId,
+      });
       setPlanTree(data || null);
       setExpandedKeys(data ? collectFirstLevelExpandedKeys(data) : []);
       setAutoExpandParent(true);
@@ -187,11 +220,12 @@ export const PlanCasesModal: React.FC<Props> = ({
     pageSizeArg: number = pageSize
   ) => {
     try {
-      if (!planId) return;
+      if (!planId || !productId) return;
       setLoading(true);
       setError(null);
       const params: any = {
         plan_id: String(planId || ""),
+        product_id: productId,
         page,
         page_size: pageSizeArg,
       };
@@ -284,7 +318,7 @@ export const PlanCasesModal: React.FC<Props> = ({
     const cacheKey = String(node?.key || "");
     if (cacheKey && nodeCaseIdsCacheRef.current[cacheKey]) return nodeCaseIdsCacheRef.current[cacheKey];
 
-    const params: any = { plan_id: String(planId) };
+    const params: any = { plan_id: String(planId), product_id: productId ?? undefined };
     if (kind === "repository" || kind === "repository_modules_all" || kind === "module") {
       if (node?.repositoryId) params.repository_id = String(node.repositoryId);
     }
@@ -478,7 +512,15 @@ export const PlanCasesModal: React.FC<Props> = ({
               className="relative flex flex-col bg-layer-1/40"
               style={{ width: leftWidth, minWidth: 200, maxWidth: 320 }}
             >
-              <div className="flex items-center gap-2 px-3 pb-1.5 pt-3">
+              <div className="flex flex-col gap-2 px-3 pb-1.5 pt-3">
+                {linkedProducts.length > 0 && (
+                  <LinkedProductSelect
+                    className="w-full"
+                    links={linkedProducts}
+                    value={productId}
+                    onChange={setProductId}
+                  />
+                )}
                 <span className="text-xs font-medium text-tertiary">用例目录</span>
               </div>
               <div className="tree-scroll flex-1 min-h-0 px-1.5 pb-3">
@@ -548,7 +590,11 @@ export const PlanCasesModal: React.FC<Props> = ({
                     <div className="text-sm text-danger-primary">{error}</div>
                   </div>
                 )}
-                {!loading && !error && cases.length === 0 && (
+                {linkedProductsError && <LinkedProductLoadError message={linkedProductsError} />}
+                {hasNoLinkedProduct && projectId && (
+                  <NoLinkedProductHint workspaceSlug={workspaceSlug} projectId={projectId} />
+                )}
+                {!hasNoLinkedProduct && !linkedProductsError && !loading && !error && cases.length === 0 && (
                   <div className="flex h-full flex-col items-center justify-center gap-3 py-12 text-center">
                     <span className="flex size-12 items-center justify-center rounded-full bg-layer-1 text-tertiary">
                       <Layers className="size-6" />

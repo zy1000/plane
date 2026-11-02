@@ -654,11 +654,8 @@ export type TRequirementTestCase = {
   repository_name: string | null;
   module_id: string | null;
   module_name: string | null;
-  /**
-   * 用例库所属项目；**为 null 表示跨项目共享用例库**。前端据此打标，也据此解释
-   * 「为什么别的项目也看得到这条用例」。
-   */
-  repository_project_id: string | null;
+  /** 用例库所属产品（2026-11 起用例归产品，与需求同一产品） */
+  repository_product_id: string | null;
   assignee_id: string | null;
   created_at: string;
   updated_at: string;

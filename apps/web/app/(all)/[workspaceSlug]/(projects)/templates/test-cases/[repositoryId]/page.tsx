@@ -14,7 +14,7 @@ import { RepositoryService } from "@/services/qa/repository.service";
 import {
   getEnums,
   globalEnums,
-} from "@/app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/util";
+} from "@/components/qa/shared/testhub/util";
 
 const repositoryService = new RepositoryService();
 

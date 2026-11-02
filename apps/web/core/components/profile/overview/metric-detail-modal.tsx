@@ -273,7 +273,11 @@ function QaCaseTable({
       <TableHeader className="border-y-0 bg-transparent [&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-surface-1 [&_th]:shadow-[inset_0_-1px_0_var(--border-subtle)]">
         <TableRow>
           <TableHead className="h-9 w-[34%]">{t("profile.stats.metric_details.columns.test_case")}</TableHead>
-          <TableHead className="h-9 w-[18%]">{t("profile.stats.metric_details.columns.project")}</TableHead>
+          <TableHead className="h-9 w-[18%]">
+            {isExecution
+              ? t("profile.stats.metric_details.columns.project")
+              : t("profile.stats.metric_details.columns.product")}
+          </TableHead>
           <TableHead className="h-9 w-[20%]">
             {isExecution
               ? t("profile.stats.metric_details.columns.plan")
@@ -292,9 +296,11 @@ function QaCaseTable({
           const executionAssigneeName = executionItem?.assignee?.display_name || "-";
           const reviewItem = item.entity_type === "review_case" ? item : null;
           const parent = executionItem?.plan ?? reviewItem?.review;
+          // 执行在项目的计划里；评审归产品（2026-11）
+          const scopeName = executionItem ? executionItem.project.name : (reviewItem?.product?.name ?? "-");
           const href = executionItem
-            ? `/${workspaceSlug}/projects/${item.project.id}/testhub/test-execution?case_id=${item.case_id}&plan_id=${executionItem.plan.id}`
-            : `/${workspaceSlug}/projects/${item.project.id}/testhub/case-review?review_id=${reviewItem?.review.id}&case_id=${item.case_id}`;
+            ? `/${workspaceSlug}/projects/${executionItem.project.id}/testhub/test-execution?case_id=${item.case_id}&plan_id=${executionItem.plan.id}`
+            : `/${workspaceSlug}/products/${reviewItem?.product?.id}/testhub/case-review?review_id=${reviewItem?.review.id}&case_id=${item.case_id}`;
           return (
             <TableRow key={item.id} className="hover:bg-layer-1">
               <TableCell className="min-w-0">
@@ -303,8 +309,8 @@ function QaCaseTable({
                   {item.title}
                 </TitleLink>
               </TableCell>
-              <TableCell className="truncate" title={item.project.name}>
-                {item.project.name}
+              <TableCell className="truncate" title={scopeName}>
+                {scopeName}
               </TableCell>
               <TableCell className="truncate" title={parent?.name}>
                 {parent?.name}

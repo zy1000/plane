@@ -4434,6 +4434,7 @@ export default {
       projects: "Projects",
       stage_reviews: "Stage reviews",
       releases: "Releases",
+      testhub: "Testing",
       settings: "Settings",
       product_settings: "Product settings",
       no_products: "No products available",
