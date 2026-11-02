@@ -128,10 +128,13 @@ function ProjectCyclesPage({ params }: Route.ComponentProps) {
           </div>
         ) : (
           <>
-            <FiltersRow
-              filter={filter}
-              summary={t("project_cycles.filters.summary", { filtered: filteredCycles, total: totalCycles })}
-            />
+            {/* 实例在 effect 里才建，首帧可能还没有 */}
+            {filter && (
+              <FiltersRow
+                filter={filter}
+                summary={t("project_cycles.filters.summary", { filtered: filteredCycles, total: totalCycles })}
+              />
+            )}
             <CyclesView workspaceSlug={workspaceSlug} projectId={projectId} />
           </>
         )}
