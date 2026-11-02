@@ -261,4 +261,6 @@ export type TRiskAttachment = {
   created_at: string;
   created_by_id: string | null;
   created_by_detail: IUserLite | null;
+  /** 大网 / 小网隔离：列表接口给，false = 当前用户不能下载；没带按可下载 */
+  can_download?: boolean;
 };

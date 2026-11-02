@@ -3,6 +3,7 @@ import { message } from "antd";
 import { PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
+import { canDownloadFile, getDownloadErrorMessage } from "@/helpers/network-zone.helper";
 import { useFileUploadProgress } from "@/hooks/use-file-upload-progress";
 import type {
   TAssetFileVersion,
@@ -11,6 +12,7 @@ import type {
   TFolderStatsResponse,
 } from "@/services/asset-explorer.service";
 import { AssetExplorerService } from "@/services/asset-explorer.service";
+import { isImageSupported } from "@/utils/onlyoffice";
 import type { TAssetExplorerProps, TExplorerRow, TMoveConflictItem } from "./types";
 
 type TUseAssetExplorer = TAssetExplorerProps;
@@ -24,7 +26,8 @@ export const useAssetExplorer = (props: TUseAssetExplorer) => {
   const service = useMemo(() => new AssetExplorerService(), []);
   const isPermissionDenied = useCallback((error: any) => {
     if (isProjectPermissionError(error)) return true;
-    if (Number(error?.status) === 403) return true;
+    // 403 但带了后端自己的 error 文案（如大网 / 小网隔离的「不能下载小网上传的文件」）不算权限错误，照文案显示
+    if (Number(error?.status) === 403) return !String(error?.error ?? "").trim();
     const msg = String(error?.detail ?? error?.message ?? "").trim();
     if (!msg) return false;
     return (
@@ -90,6 +93,16 @@ export const useAssetExplorer = (props: TUseAssetExplorer) => {
   const selectedCount = selectedAssetIds.size + selectedFolderIds.size;
   const selectedAssetIdsArray = useMemo(() => Array.from(selectedAssetIds), [selectedAssetIds]);
   const selectedFolderIdsArray = useMemo(() => Array.from(selectedFolderIds), [selectedFolderIds]);
+  /**
+   * 大网 / 小网隔离：选中的全是不能下载的小网文件（且没选文件夹）时，批量下载按钮置灰并给出原因；
+   * 混着能下载的照常打包，后端会跳过受限的并在响应头里报数。
+   */
+  const batchDownloadBlockedReason = useMemo(() => {
+    if (selectedFolderIds.size > 0 || selectedAssetIds.size === 0) return undefined;
+    const selectedFiles = files.filter((file) => selectedAssetIds.has(file.id));
+    if (selectedFiles.length === 0 || selectedFiles.some(canDownloadFile)) return undefined;
+    return t("network_zone.download_denied");
+  }, [files, selectedAssetIds, selectedFolderIds, t]);
 
   const clearSelection = useCallback(() => {
     setSelectedAssetIds(new Set());
@@ -414,6 +427,10 @@ export const useAssetExplorer = (props: TUseAssetExplorer) => {
 
   const onDownloadAssetVersion = useCallback(
     async (file: TAssetExplorerFile, version: TAssetFileVersion) => {
+      if (!canDownloadFile(version)) {
+        setToast({ type: TOAST_TYPE.ERROR, title: t("network_zone.download_denied") });
+        return;
+      }
       try {
         const url = await service.getAssetVersionPresignedURL(
           workspaceSlug,
@@ -427,7 +444,7 @@ export const useAssetExplorer = (props: TUseAssetExplorer) => {
         handleActionError(error, "下载历史版本失败");
       }
     },
-    [handleActionError, projectId, service, workspaceSlug]
+    [handleActionError, projectId, service, t, workspaceSlug]
   );
 
   const onRenameAssetVersion = useCallback(
@@ -496,6 +513,10 @@ export const useAssetExplorer = (props: TUseAssetExplorer) => {
   const onDownloadFile = useCallback(
     async (asset: TAssetExplorerFile) => {
       if (!asset?.id) return;
+      if (!canDownloadFile(asset)) {
+        setToast({ type: TOAST_TYPE.ERROR, title: t("network_zone.download_denied") });
+        return;
+      }
       try {
         const url = await service.getAssetPresignedURL(workspaceSlug, projectId, asset.id, "attachment");
         if (!url) {
@@ -508,7 +529,7 @@ export const useAssetExplorer = (props: TUseAssetExplorer) => {
           setToast({ type: TOAST_TYPE.ERROR, title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title) });
           return;
         }
-        message.error(error?.error || error?.detail || error?.message || "下载失败");
+        message.error(getDownloadErrorMessage(error, "下载失败"));
       }
     },
     [isPermissionDenied, projectId, service, t, workspaceSlug]
@@ -516,8 +537,12 @@ export const useAssetExplorer = (props: TUseAssetExplorer) => {
 
   const onBatchDownload = useCallback(async () => {
     if (selectedCount === 0) return;
+    if (batchDownloadBlockedReason) {
+      setToast({ type: TOAST_TYPE.ERROR, title: batchDownloadBlockedReason });
+      return;
+    }
     try {
-      const { blob, filename } = await service.downloadBatch(workspaceSlug, projectId, {
+      const { blob, filename, skipped } = await service.downloadBatch(workspaceSlug, projectId, {
         assetIds: selectedAssetIdsArray,
         folderIds: selectedFolderIdsArray,
       });
@@ -529,14 +554,28 @@ export const useAssetExplorer = (props: TUseAssetExplorer) => {
       a.click();
       a.remove();
       window.URL.revokeObjectURL(url);
+      // 打包时被跳过的小网文件要告诉用户，不然压缩包里少了文件没人知道
+      if (skipped > 0) {
+        setToast({ type: TOAST_TYPE.WARNING, title: t("network_zone.skipped_files", { count: skipped }) });
+      }
     } catch (error: any) {
       if (isPermissionDenied(error)) {
         setToast({ type: TOAST_TYPE.ERROR, title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title) });
         return;
       }
-      message.error(error?.error || error?.detail || error?.message || "下载失败");
+      message.error(getDownloadErrorMessage(error, "下载失败"));
     }
-  }, [isPermissionDenied, projectId, selectedAssetIdsArray, selectedCount, selectedFolderIdsArray, service, t, workspaceSlug]);
+  }, [
+    batchDownloadBlockedReason,
+    isPermissionDenied,
+    projectId,
+    selectedAssetIdsArray,
+    selectedCount,
+    selectedFolderIdsArray,
+    service,
+    t,
+    workspaceSlug,
+  ]);
 
   const onBatchDelete = useCallback(async (): Promise<boolean> => {
     try {
@@ -641,6 +680,11 @@ export const useAssetExplorer = (props: TUseAssetExplorer) => {
         await navigateFolder(row.folder.id);
         return;
       }
+      // 大网 / 小网隔离：小网上传的非图片文件不能在线打开（OnlyOffice / xmind），图片照常
+      if (!canDownloadFile(row.file) && !isImageSupported(row.file.name || row.file.filename)) {
+        setToast({ type: TOAST_TYPE.ERROR, title: t("network_zone.view_denied") });
+        return;
+      }
       if (onEdit) {
         await onEdit(row.file);
         return;
@@ -649,7 +693,7 @@ export const useAssetExplorer = (props: TUseAssetExplorer) => {
         await onPreview(row.file);
       }
     },
-    [navigateFolder, onEdit, onPreview]
+    [navigateFolder, onEdit, onPreview, t]
   );
 
   return {
@@ -672,6 +716,7 @@ export const useAssetExplorer = (props: TUseAssetExplorer) => {
     selectedAssetIdsArray,
     selectedFolderIdsArray,
     selectedCount,
+    batchDownloadBlockedReason,
     currentPage,
     pageSize,
     total,

@@ -11,6 +11,7 @@ import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TStageReviewAttachment } from "@plane/types";
 import { XmindPreviewModal } from "@/components/filestore/xmind-preview-modal";
 import { OnlyOfficePreviewModal } from "@/components/onlyoffice/onlyoffice-preview-modal";
+import { canDownloadFile } from "@/helpers/network-zone.helper";
 import { isImageSupported, isOnlyOfficeSupported, isXmindSupported } from "@/utils/onlyoffice";
 
 const I18N = "stage_review";
@@ -32,6 +33,11 @@ export const useStageReviewAttachmentPreview = ({
 
   const requestPreview = useCallback(
     async (asset: TStageReviewAttachment) => {
+      // 大网 / 小网隔离：小网上传的非图片文件，大网用户连在线预览（OnlyOffice / xmind）也不行；图片照常
+      if (!canDownloadFile(asset) && (isXmindSupported(asset.name) || isOnlyOfficeSupported(asset.name))) {
+        setToast({ type: TOAST_TYPE.ERROR, title: t("network_zone.view_denied") });
+        return;
+      }
       if (isXmindSupported(asset.name)) {
         setXmindAsset(asset);
         return;

@@ -37,6 +37,12 @@ from plane.db.models import (
     RequirementModule,
 )
 from plane.utils.asset_zip import build_assets_zip_response
+from plane.utils.network_zone import (
+    ZONE_DOWNLOAD_DENIED,
+    asset_zone_map,
+    requester_restricted,
+    split_downloadable,
+)
 from plane.utils.requirement import (
     ROW_WRITABLE_BUILTIN_COLUMNS,
     RequirementBatchConflict,
@@ -191,11 +197,24 @@ class BaseRequirementRowViewSet(RequirementExcelMixin, BaseViewSet):
         _serializer_context —— 后者不含来源编号映射，source_display_id 会静默返回
         None（不报错，只是编号消失）。
         """
+        # 大网 / 小网：大网用户才需要按批查附件归属，其余用户一律可下载
+        zone_restricted = requester_restricted(self.request)
         return {
             **self._serializer_context(layer, owner),
             "source_display_ids": source_display_id_map(rows),
             # 模块名按批解析：写路径返回的行是内存实例，逐行取 obj.module 会 N+1
             "module_names": module_name_map(rows),
+            "zone_restricted": zone_restricted,
+            "asset_zones": (
+                asset_zone_map(
+                    ref.get("asset_id")
+                    for row in rows
+                    for ref in (row.attachments or [])
+                    if isinstance(ref, dict)
+                )
+                if zone_restricted
+                else {}
+            ),
         }
 
     @staticmethod
@@ -620,8 +639,16 @@ class BaseRequirementRowViewSet(RequirementExcelMixin, BaseViewSet):
                 {"error": "No downloadable files found"},
                 status=status.HTTP_404_NOT_FOUND,
             )
+        assets, skipped = split_downloadable(request, assets)
+        if not assets:
+            return Response(
+                {"error": ZONE_DOWNLOAD_DENIED}, status=status.HTTP_403_FORBIDDEN
+            )
         return build_assets_zip_response(
-            request=request, assets=assets, zip_filename="requirement-attachments.zip"
+            request=request,
+            assets=assets,
+            zip_filename="requirement-attachments.zip",
+            skipped=len(skipped),
         )
 
     def _check_deletable(self, rows):

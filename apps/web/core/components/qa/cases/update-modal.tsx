@@ -41,6 +41,7 @@ import {
   qaCaseSetToastSuccess,
   qaCaseSetToastWarning,
 } from "@/utils/qa-case-error";
+import { canDownloadFile } from "@/helpers/network-zone.helper";
 
 
 type UpdateModalProps = {
@@ -419,6 +420,7 @@ function UpdateModalBody({
   const handleDownloadAttachment = async (attachment: any) => {
     const aid = String(attachment?.id ?? "");
     if (!workspaceSlug || !caseId || !aid) return;
+    if (!canDownloadFile(attachment)) return;
     try {
       const resp = await caseService.getCaseAsset(String(workspaceSlug), String(caseId), aid);
       const blob = resp?.data as Blob;
@@ -431,7 +433,11 @@ function UpdateModalBody({
       a.click();
       a.remove();
       window.URL.revokeObjectURL(url);
-    } catch {}
+    } catch (e: unknown) {
+      // responseType=blob 时 403 的 JSON 错误体也是 Blob，解出来才拿得到后端文案
+      const err = e instanceof Blob ? await e.text().then((text) => JSON.parse(text) as unknown).catch(() => e) : e;
+      qaCaseSetToastError(err, t, "附件下载失败");
+    }
   };
   // 新增：状态 Tag 颜色映射
   const getCaseStateTagColor = (text: string): "blue" | "green" | "red" | "default" => {

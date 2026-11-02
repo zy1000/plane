@@ -6,11 +6,14 @@
 
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { Modal, Typography, message } from "antd";
+import { useTranslation } from "@plane/i18n";
 import type { TIssueServiceType } from "@plane/types";
 import { EIssueServiceType } from "@plane/types";
 // components
 import { XmindPreviewModal, type TXmindPreviewAsset } from "@/components/filestore/xmind-preview-modal";
 import { OnlyOfficePreviewModal } from "@/components/onlyoffice/onlyoffice-preview-modal";
+// helpers
+import { canDownloadFile, getDownloadErrorMessage } from "@/helpers/network-zone.helper";
 // hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 // services
@@ -36,6 +39,7 @@ export const useIssueAttachmentPreview = ({
   issueId,
   issueServiceType = EIssueServiceType.ISSUES,
 }: TUseIssueAttachmentPreviewProps): TUseIssueAttachmentPreviewReturn => {
+  const { t } = useTranslation();
   const {
     attachment: { getAttachmentById },
   } = useIssueDetail(issueServiceType);
@@ -67,6 +71,11 @@ export const useIssueAttachmentPreview = ({
       if (!attachment) return;
       const fileName = attachment.attributes?.name;
 
+      // 大网 / 小网隔离：Xmind / OnlyOffice 预览都要拉原文件，不可下载的只放行图片
+      if (!canDownloadFile(attachment) && (isXmindSupported(fileName) || isOnlyOfficeSupported(fileName))) {
+        message.warning(t("network_zone.view_denied"));
+        return;
+      }
       if (isXmindSupported(fileName)) {
         setXmindPreviewAttachment({ id: attachmentId, name: String(fileName ?? "") });
         return;
@@ -81,13 +90,13 @@ export const useIssueAttachmentPreview = ({
           const url = await fetchAttachmentDownloadURL(attachmentId);
           setImagePreview({ src: url, name: String(fileName ?? "图片") });
         } catch (error: any) {
-          message.error(error?.message || "图片预览失败");
+          message.error(getDownloadErrorMessage(error, "图片预览失败"));
         }
         return;
       }
       message.warning("暂不支持预览此文件类型");
     },
-    [fetchAttachmentDownloadURL, getAttachmentById]
+    [fetchAttachmentDownloadURL, getAttachmentById, t]
   );
 
   const xmindGetFileURL = useMemo(() => {

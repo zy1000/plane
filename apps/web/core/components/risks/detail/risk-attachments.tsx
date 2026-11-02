@@ -4,6 +4,7 @@ import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TRiskAttachment } from "@plane/types";
 import { cn } from "@plane/utils";
+import { canDownloadFile } from "@/helpers/network-zone.helper";
 import {
   RiskAttachmentDeleteModal,
   RiskAttachmentDropOverlay,
@@ -110,6 +111,7 @@ export const RiskAttachments = ({
             >
               <RiskAttachmentUploader asset={asset} />
               <RiskAttachmentMenu
+                canDownload={canDownloadFile(asset)}
                 onDownload={() => onDownload(asset.id)}
                 onDelete={editable ? () => setDeleting(asset) : undefined}
               />

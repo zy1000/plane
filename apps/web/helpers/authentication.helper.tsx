@@ -97,6 +97,9 @@ export enum EAuthenticationErrorCodes {
   ADMIN_USER_ALREADY_EXIST = "5180",
   ADMIN_USER_DOES_NOT_EXIST = "5185",
   ADMIN_USER_DEACTIVATED = "5190",
+  // 大网 / 小网隔离
+  NETWORK_ZONE_MISMATCH = "5195",
+  NETWORK_ZONE_UNKNOWN = "5196",
   // Rate limit
   RATE_LIMIT_EXCEEDED = "5900",
 }
@@ -366,6 +369,14 @@ const errorCodeMessages: {
     title: `Admin user deactivated`,
     message: () => <div>Your account is deactivated</div>,
   },
+  [EAuthenticationErrorCodes.NETWORK_ZONE_MISMATCH]: {
+    title: "网络环境不符",
+    message: () => "该账号已绑定到另一个网络环境（大网 / 小网），请回到绑定的环境登录。",
+  },
+  [EAuthenticationErrorCodes.NETWORK_ZONE_UNKNOWN]: {
+    title: "无法识别网络环境",
+    message: () => "当前网络既不是大网也不是小网，不允许登录，请联系管理员。",
+  },
   [EAuthenticationErrorCodes.RATE_LIMIT_EXCEEDED]: {
     title: "",
     message: () => `Rate limit exceeded. Please try again later.`,
@@ -423,6 +434,8 @@ export const authErrorHandler = (errorCode: EAuthenticationErrorCodes, email?: s
     EAuthenticationErrorCodes.ADMIN_USER_ALREADY_EXIST,
     EAuthenticationErrorCodes.ADMIN_USER_DOES_NOT_EXIST,
     EAuthenticationErrorCodes.ADMIN_USER_DEACTIVATED,
+    EAuthenticationErrorCodes.NETWORK_ZONE_MISMATCH,
+    EAuthenticationErrorCodes.NETWORK_ZONE_UNKNOWN,
     EAuthenticationErrorCodes.RATE_LIMIT_EXCEEDED,
     EAuthenticationErrorCodes.PASSWORD_TOO_WEAK,
   ];

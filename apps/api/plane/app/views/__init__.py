@@ -63,6 +63,7 @@ from .workspace.member import (
     WorkspaceMemberUserViewsEndpoint,
     WorkspaceMemberCustomRolesAPIView,
     WorkspaceMemberGroupsAPIView,
+    WorkspaceMemberNetworkZoneAPIView,
     WorkspaceMyPermissionKeysAPIView,
     WorkspaceMyAccessAPIView,
 )

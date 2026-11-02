@@ -49,6 +49,7 @@ from plane.app.views import (
     WorkspaceGroupRoleViewSet,
     WorkspaceMemberCustomRolesAPIView,
     WorkspaceMemberGroupsAPIView,
+    WorkspaceMemberNetworkZoneAPIView,
     WorkspaceMyPermissionKeysAPIView,
     WorkspaceMyAccessAPIView,
 )
@@ -132,6 +133,11 @@ urlpatterns = [
         "workspaces/<str:slug>/members/<uuid:pk>/groups/",
         WorkspaceMemberGroupsAPIView.as_view(),
         name="workspace-member-groups",
+    ),
+    path(
+        "workspaces/<str:slug>/members/<uuid:pk>/network-zone/",
+        WorkspaceMemberNetworkZoneAPIView.as_view(),
+        name="workspace-member-network-zone",
     ),
     path(
         "workspaces/<str:slug>/members/leave/",

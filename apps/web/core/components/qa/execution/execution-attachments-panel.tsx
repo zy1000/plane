@@ -3,8 +3,10 @@
 import * as React from "react";
 import { Spin } from "antd";
 import { ArrowRight, Download } from "lucide-react";
+import { useTranslation } from "@plane/i18n";
 import { renderFormattedDate } from "@plane/utils";
 import { ButtonAvatars } from "@/components/dropdowns/member/avatar";
+import { canDownloadFile } from "@/helpers/network-zone.helper";
 import { useMember } from "@/hooks/store/use-member";
 import { FileTypeBadge, formatFileSize, getResultTone, PendingFileChip } from "./execution-file-ui";
 import type { ExecAttachment, ExecRecord } from "./execution-records";
@@ -26,26 +28,35 @@ type Props = {
   onDownloadCaseAttachment: (attachment: any) => void;
 };
 
-const FileRow: React.FC<{ name: string; size: number; onDownload: () => void }> = ({ name, size, onDownload }) => (
-  <div className="-mx-2 flex items-center gap-3 rounded-lg px-2 py-[7px] transition-colors hover:bg-layer-1">
-    <FileTypeBadge name={name} size="lg" />
-    <div className="flex min-w-0 flex-1 flex-col">
-      <span className="truncate text-14 leading-5 text-primary" title={name}>
-        {name}
-      </span>
-      <span className="text-12 leading-[17px] text-placeholder">{formatFileSize(size)}</span>
+const FileRow: React.FC<{ name: string; size: number; canDownload?: boolean; onDownload: () => void }> = ({
+  name,
+  size,
+  canDownload = true,
+  onDownload,
+}) => {
+  const { t } = useTranslation();
+  return (
+    <div className="-mx-2 flex items-center gap-3 rounded-lg px-2 py-[7px] transition-colors hover:bg-layer-1">
+      <FileTypeBadge name={name} size="lg" />
+      <div className="flex min-w-0 flex-1 flex-col">
+        <span className="truncate text-14 leading-5 text-primary" title={name}>
+          {name}
+        </span>
+        <span className="text-12 leading-[17px] text-placeholder">{formatFileSize(size)}</span>
+      </div>
+      <button
+        type="button"
+        aria-label={`下载 ${name}`}
+        title={canDownload ? "下载" : t("network_zone.download_denied")}
+        disabled={!canDownload}
+        onClick={onDownload}
+        className="flex size-[30px] shrink-0 items-center justify-center rounded-md text-tertiary transition-colors hover:bg-layer-2 hover:text-primary disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-tertiary"
+      >
+        <Download size={16} />
+      </button>
     </div>
-    <button
-      type="button"
-      aria-label={`下载 ${name}`}
-      title="下载"
-      onClick={onDownload}
-      className="flex size-[30px] shrink-0 items-center justify-center rounded-md text-tertiary transition-colors hover:bg-layer-2 hover:text-primary"
-    >
-      <Download size={16} />
-    </button>
-  </div>
-);
+  );
+};
 
 const SectionTitle: React.FC<{ title: string; count: number; extra?: React.ReactNode }> = ({ title, count, extra }) => (
   <div className="mb-1.5 flex items-baseline justify-between">
@@ -159,7 +170,13 @@ export const ExecutionAttachmentsPanel: React.FC<Props> = (props) => {
                   )}
                 </div>
                 {files.map((f) => (
-                  <FileRow key={f.id} name={f.name} size={f.size} onDownload={() => onDownloadExecutionFile(f)} />
+                  <FileRow
+                    key={f.id}
+                    name={f.name}
+                    size={f.size}
+                    canDownload={canDownloadFile(f)}
+                    onDownload={() => onDownloadExecutionFile(f)}
+                  />
                 ))}
               </div>
             );
@@ -183,6 +200,7 @@ export const ExecutionAttachmentsPanel: React.FC<Props> = (props) => {
                 key={String(a?.id)}
                 name={name}
                 size={Number(a?.attributes?.size ?? a?.size ?? 0)}
+                canDownload={canDownloadFile(a)}
                 onDownload={() => onDownloadCaseAttachment(a)}
               />
             );

@@ -27,6 +27,7 @@ import { cn, convertBytesToSize, getEditorAssetDownloadSrc, getFileExtension, re
 import { FileUploadProgressList } from "@/components/common/file-upload-progress-item";
 import { ButtonAvatars } from "@/components/dropdowns/member/avatar";
 import { getFileIcon } from "@/components/icons";
+import { canDownloadFile } from "@/helpers/network-zone.helper";
 import { useEditorAsset } from "@/hooks/store/use-editor-asset";
 import { useMember } from "@/hooks/store/use-member";
 import { useAttachmentBatchDownload } from "@/hooks/use-attachment-batch-download";
@@ -75,6 +76,8 @@ const AttachmentRow = ({
   const { isMobile } = usePlatformOS();
   const downloadHref = getEditorAssetDownloadSrc({ assetId: asset.asset_id, workspaceSlug }) ?? "";
   const uploader = asset.created_by ? getUserDetails(asset.created_by)?.display_name : undefined;
+  // 大网 / 小网隔离：下载地址是直接开新标签页的，被拒只会露出 JSON，所以前端按标记直接禁掉
+  const canDownload = canDownloadFile(asset);
 
   return (
     <div className="group flex min-h-10 items-center gap-2 py-1 pr-2 pl-1.5 transition-colors hover:bg-surface-2">
@@ -117,8 +120,11 @@ const AttachmentRow = ({
               <span>{t("requirement_detail.attachments.preview")}</span>
             </div>
           </CustomMenu.MenuItem>
-          <CustomMenu.MenuItem onClick={() => window.open(downloadHref, "_blank", "noopener,noreferrer")}>
-            <div className="flex items-center gap-2">
+          <CustomMenu.MenuItem
+            disabled={!canDownload}
+            onClick={() => window.open(downloadHref, "_blank", "noopener,noreferrer")}
+          >
+            <div className="flex items-center gap-2" title={canDownload ? undefined : t("network_zone.download_denied")}>
               <Download className="size-3.5" strokeWidth={1.75} />
               <span>{t("requirement_detail.attachments.download")}</span>
             </div>
@@ -176,6 +182,7 @@ export const RequirementAttachmentsSection = observer(function RequirementAttach
         title: t("requirement_detail.attachments.toast_batch_download_failed"),
         message,
       }),
+    onSkipped: (count) => setToast({ type: TOAST_TYPE.WARNING, title: t("network_zone.skipped_files", { count }) }),
     onSuccess: selection.clear,
   });
 

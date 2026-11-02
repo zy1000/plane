@@ -21,6 +21,7 @@ import { convertBytesToSize, getFileExtension, getFileName, renderFormattedDate 
 import { ButtonAvatars } from "@/components/dropdowns/member/avatar";
 import { getFileIcon } from "@/components/icons";
 // helpers
+import { canDownloadFile } from "@/helpers/network-zone.helper";
 // hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useMember } from "@/hooks/store/use-member";
@@ -49,6 +50,8 @@ export const IssueAttachmentsListItem = observer(function IssueAttachmentsListIt
   const fileName = getFileName(attachment?.attributes.name ?? "");
   const fileExtension = getFileExtension(attachment?.attributes.name ?? "");
   const fileIcon = getFileIcon(fileExtension, 18);
+  // 大网 / 小网隔离：后端明确给 false 才禁用下载
+  const canDownload = canDownloadFile(attachment);
   // hooks
   const { isMobile } = usePlatformOS();
 
@@ -105,11 +108,15 @@ export const IssueAttachmentsListItem = observer(function IssueAttachmentsListIt
         <div className="opacity-0 transition-opacity group-hover:opacity-100">
           <CustomMenu ellipsis closeOnSelect placement="bottom-end" disabled={disabled}>
             <CustomMenu.MenuItem
+              disabled={!canDownload}
               onClick={() => {
                 void onDownload(attachmentId);
               }}
             >
-              <div className="flex items-center gap-2">
+              <div
+                className="flex items-center gap-2"
+                title={canDownload ? undefined : t("network_zone.download_denied")}
+              >
                 <Download className="h-3.5 w-3.5" strokeWidth={1.75} />
                 <span>下载</span>
               </div>

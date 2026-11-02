@@ -22,6 +22,7 @@ import { Avatar, Checkbox, CustomSelect, MultiSelectDropdown, ToggleSwitch } fro
 import type { TDropdownOption } from "@plane/ui";
 import { cn, getEditorAssetDownloadSrc, getEditorAssetSrc, getFileURL, stripAndTruncateHTML } from "@plane/utils";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
+import { canDownloadFile } from "@/helpers/network-zone.helper";
 import { useMember } from "@/hooks/store/use-member";
 import {
   RequirementRichTextCell,
@@ -145,28 +146,41 @@ export const RequirementAttachmentChips = ({
   assets: TRequirementAssetRef[];
   workspaceSlug: string;
   className?: string;
-}) => (
-  <span className="flex max-w-48 flex-wrap gap-1">
-    {assets.map((asset) => (
-      <a
-        key={asset.asset_id}
-        href={getEditorAssetDownloadSrc({
-          assetId: asset.asset_id,
-          workspaceSlug,
-        })}
-        target="_blank"
-        rel="noreferrer noopener"
-        className={cn(
-          "inline-flex max-w-44 items-center gap-1 rounded-md bg-layer-2 px-1.5 py-1 text-primary hover:text-accent-primary",
-          className
-        )}
-      >
-        <File className="size-3" />
-        <span className="truncate">{asset.name}</span>
-      </a>
-    ))}
-  </span>
-);
+}) => {
+  const { t } = useTranslation();
+  const chipClassName = "inline-flex max-w-44 items-center gap-1 rounded-md bg-layer-2 px-1.5 py-1";
+  return (
+    <span className="flex max-w-48 flex-wrap gap-1">
+      {assets.map((asset) =>
+        // 大网 / 小网隔离：下载地址是直接开新标签页的，被拒只会露出 JSON，所以不可下载的不给 href
+        canDownloadFile(asset) ? (
+          <a
+            key={asset.asset_id}
+            href={getEditorAssetDownloadSrc({
+              assetId: asset.asset_id,
+              workspaceSlug,
+            })}
+            target="_blank"
+            rel="noreferrer noopener"
+            className={cn(chipClassName, "text-primary hover:text-accent-primary", className)}
+          >
+            <File className="size-3" />
+            <span className="truncate">{asset.name}</span>
+          </a>
+        ) : (
+          <span
+            key={asset.asset_id}
+            title={t("network_zone.download_denied")}
+            className={cn(chipClassName, "cursor-not-allowed text-placeholder", className)}
+          >
+            <File className="size-3" />
+            <span className="truncate">{asset.name}</span>
+          </span>
+        )
+      )}
+    </span>
+  );
+};
 
 const RequirementImageValue = ({
   assets,
@@ -178,22 +192,25 @@ const RequirementImageValue = ({
   className?: string;
 }) => {
   const { t } = useTranslation();
-  const [preview, setPreview] = useState<{ src: string; downloadSrc: string; name: string } | null>(null);
+  // downloadSrc 为 null = 大网 / 小网隔离下不可下载：看图照常，弹窗里两个下载入口不出现
+  const [preview, setPreview] = useState<{ src: string; downloadSrc: string | null; name: string } | null>(null);
 
   return (
     <>
       <span className="flex max-w-64 flex-wrap gap-1.5">
         {assets.map((asset) => {
           const src = getEditorAssetSrc({ assetId: asset.asset_id, workspaceSlug });
-          const downloadSrc = getEditorAssetDownloadSrc({ assetId: asset.asset_id, workspaceSlug });
+          const downloadSrc = canDownloadFile(asset)
+            ? getEditorAssetDownloadSrc({ assetId: asset.asset_id, workspaceSlug })
+            : null;
           return (
             <button
               key={asset.asset_id}
               type="button"
               title={asset.name}
               onClick={() => {
-                if (!src || !downloadSrc) return;
-                setPreview({ src, downloadSrc, name: asset.name });
+                if (!src) return;
+                setPreview({ src, downloadSrc: downloadSrc ?? null, name: asset.name });
               }}
               className={cn(
                 "block size-12 shrink-0 overflow-hidden rounded-md border border-subtle bg-layer-2 transition-opacity hover:opacity-90",
@@ -240,21 +257,24 @@ const RequirementImageValue = ({
           className="flex items-center justify-center overflow-auto bg-surface-2 p-4"
           style={{ height: "calc(100vh - 56px)" }}
         >
-          {preview?.src && preview.downloadSrc && (
-            <a
-              href={preview.downloadSrc}
-              target="_blank"
-              rel="noreferrer noopener"
-              title={t("page_navigation_pane.tabs.assets.download_button")}
-              className="inline-flex max-h-full max-w-full"
-            >
-              <img
-                src={preview.src}
-                alt={preview.name}
-                className="max-h-full max-w-full cursor-zoom-in object-contain"
-              />
-            </a>
-          )}
+          {preview?.src &&
+            (preview.downloadSrc ? (
+              <a
+                href={preview.downloadSrc}
+                target="_blank"
+                rel="noreferrer noopener"
+                title={t("page_navigation_pane.tabs.assets.download_button")}
+                className="inline-flex max-h-full max-w-full"
+              >
+                <img
+                  src={preview.src}
+                  alt={preview.name}
+                  className="max-h-full max-w-full cursor-zoom-in object-contain"
+                />
+              </a>
+            ) : (
+              <img src={preview.src} alt={preview.name} className="max-h-full max-w-full object-contain" />
+            ))}
         </div>
       </Modal>
     </>

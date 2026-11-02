@@ -10,6 +10,8 @@ import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TIssueServiceType } from "@plane/types";
 import { EIssueServiceType } from "@plane/types";
+// helpers
+import { canDownloadFile, getDownloadErrorMessage } from "@/helpers/network-zone.helper";
 // hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 // types
@@ -81,7 +83,13 @@ export const useAttachmentOperations = (
 ): TAttachmentHelpers => {
   const { t } = useTranslation();
   const {
-    attachment: { createAttachment, removeAttachment, downloadAttachment, getAttachmentsUploadStatusByIssueId },
+    attachment: {
+      createAttachment,
+      removeAttachment,
+      downloadAttachment,
+      getAttachmentById,
+      getAttachmentsUploadStatusByIssueId,
+    },
   } = useIssueDetail(issueServiceType);
 
   const attachmentOperations: TAttachmentOperations = useMemo(
@@ -116,19 +124,24 @@ export const useAttachmentOperations = (
       download: async (attachmentId) => {
         try {
           if (!workspaceSlug || !projectId || !issueId) throw new Error("Missing required fields");
+          // 大网 / 小网隔离：列表项明确标了不可下载的，不请求直接提示
+          if (!canDownloadFile(getAttachmentById(attachmentId))) {
+            setToast({ type: TOAST_TYPE.ERROR, title: t("network_zone.download_denied") });
+            return;
+          }
           const downloadUrl = await downloadAttachment(workspaceSlug, projectId, issueId, attachmentId);
           if (!downloadUrl) throw new Error("Missing download URL");
           window.open(downloadUrl, "_blank", "noopener,noreferrer");
         } catch (error) {
           setToast({
-            message: t("attachment.error"),
+            message: getDownloadErrorMessage(error, t("attachment.error")),
             type: TOAST_TYPE.ERROR,
             title: t("toast.error"),
           });
         }
       },
     }),
-    [workspaceSlug, projectId, issueId, createAttachment, removeAttachment, downloadAttachment, t]
+    [workspaceSlug, projectId, issueId, createAttachment, removeAttachment, downloadAttachment, getAttachmentById, t]
   );
   const attachmentsUploadStatus = getAttachmentsUploadStatusByIssueId(issueId);
 

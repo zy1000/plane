@@ -3,7 +3,9 @@
 import React from "react";
 import { Button, Modal, Table, Tooltip } from "antd";
 import * as LucideIcons from "lucide-react";
+import { useTranslation } from "@plane/i18n";
 import { convertBytesToSize, renderFormattedDate } from "@plane/utils";
+import { canDownloadFile } from "@/helpers/network-zone.helper";
 
 type AttachmentsPanelProps = {
   attachmentsLoading: boolean;
@@ -25,6 +27,7 @@ export function AttachmentsPanel(props: AttachmentsPanelProps) {
     onDownloadAttachment,
     onRemoveCaseAttachment,
   } = props;
+  const { t } = useTranslation();
 
   return (
     <section
@@ -51,7 +54,7 @@ export function AttachmentsPanel(props: AttachmentsPanelProps) {
           onRow={(record: any) => ({
             tabIndex: 0,
             onKeyDown: (e) => {
-              if ((e as React.KeyboardEvent).key === "Enter") onDownloadAttachment(record);
+              if ((e as React.KeyboardEvent).key === "Enter" && canDownloadFile(record)) onDownloadAttachment(record);
             },
           })}
           columns={[
@@ -135,52 +138,59 @@ export function AttachmentsPanel(props: AttachmentsPanelProps) {
             {
               title: "操作",
               key: "actions",
-              render: (_: any, record: any) => (
-                <div className="flex items-center gap-3">
-                  <Tooltip title="下载">
-                    <Button
-                      type="text"
-                      aria-label="下载附件"
-                      icon={
-                        <LucideIcons.Download
-                          size={16}
-                          className="text-secondary hover:text-accent-primary"
-                          aria-hidden="true"
+              render: (_: any, record: any) => {
+                const downloadable = canDownloadFile(record);
+                return (
+                  <div className="flex items-center gap-3">
+                    <Tooltip title={downloadable ? "下载" : t("network_zone.download_denied")}>
+                      {/* 禁用的按钮不响应悬停，套一层 span 让提示还能弹出来 */}
+                      <span className="inline-flex">
+                        <Button
+                          type="text"
+                          aria-label="下载附件"
+                          disabled={!downloadable}
+                          icon={
+                            <LucideIcons.Download
+                              size={16}
+                              className={downloadable ? "text-secondary hover:text-accent-primary" : "text-placeholder"}
+                              aria-hidden="true"
+                            />
+                          }
+                          onClick={() =>
+                            Modal.confirm({
+                              title: "下载附件",
+                              content: `确认下载：${String(record?.attributes?.name ?? "附件")}`,
+                              onOk: () => onDownloadAttachment(record),
+                            })
+                          }
                         />
-                      }
-                      onClick={() =>
-                        Modal.confirm({
-                          title: "下载附件",
-                          content: `确认下载：${String(record?.attributes?.name ?? "附件")}`,
-                          onOk: () => onDownloadAttachment(record),
-                        })
-                      }
-                    />
-                  </Tooltip>
-                  <Tooltip title="删除">
-                    <Button
-                      type="text"
-                      danger
-                      aria-label="删除附件"
-                      disabled={!canEdit}
-                      icon={
-                        <LucideIcons.Trash2
-                          size={16}
-                          className="text-secondary hover:text-danger-primary"
-                          aria-hidden="true"
-                        />
-                      }
-                      onClick={() =>
-                        Modal.confirm({
-                          title: "删除附件",
-                          content: `确认删除：${String(record?.attributes?.name ?? "附件")}`,
-                          onOk: () => onRemoveCaseAttachment(String(record?.id ?? "")),
-                        })
-                      }
-                    />
-                  </Tooltip>
-                </div>
-              ),
+                      </span>
+                    </Tooltip>
+                    <Tooltip title="删除">
+                      <Button
+                        type="text"
+                        danger
+                        aria-label="删除附件"
+                        disabled={!canEdit}
+                        icon={
+                          <LucideIcons.Trash2
+                            size={16}
+                            className="text-secondary hover:text-danger-primary"
+                            aria-hidden="true"
+                          />
+                        }
+                        onClick={() =>
+                          Modal.confirm({
+                            title: "删除附件",
+                            content: `确认删除：${String(record?.attributes?.name ?? "附件")}`,
+                            onOk: () => onRemoveCaseAttachment(String(record?.id ?? "")),
+                          })
+                        }
+                      />
+                    </Tooltip>
+                  </div>
+                );
+              },
             },
           ]}
         />

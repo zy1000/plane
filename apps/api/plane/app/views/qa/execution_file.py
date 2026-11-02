@@ -11,6 +11,7 @@ from plane.bgtasks.storage_metadata_task import get_asset_object_metadata
 from plane.db.models import FileAsset, Workspace
 from plane.db.models.qa import PlanCaseRecord
 from plane.settings.storage import S3Storage
+from plane.utils.network_zone import ZONE_DOWNLOAD_DENIED, can_download_asset
 from plane.utils.asset_upload import presigned_post_for_asset
 from plane.utils.paginator import CustomPaginator
 from plane.utils.response import list_response
@@ -19,9 +20,11 @@ from plane.utils.response import list_response
 PLAN_RECORD_ENTITY_TYPE = FileAsset.EntityTypeContext.PLAN_CASE_RECORD_FILE
 
 
-def _serialize_asset(asset: FileAsset) -> dict:
+def _serialize_asset(asset: FileAsset, request=None) -> dict:
+    """``request`` 传了才算 can_download（列表用）；上传响应是本人刚传的，不用算。"""
     attrs = asset.attributes or {}
     return {
+        "can_download": can_download_asset(request, asset) if request is not None else True,
         "id": str(asset.id),
         "name": attrs.get("name") or "",
         "size": int(asset.size or 0),
@@ -115,7 +118,7 @@ class PlanCaseRecordFileAPI(BaseViewSet):
         paginator = self.pagination_class()
         paginated = paginator.paginate_queryset(assets, request)
         return list_response(
-            data=[_serialize_asset(a) for a in (paginated or [])],
+            data=[_serialize_asset(a, request) for a in (paginated or [])],
             count=assets.count(),
         )
 
@@ -158,6 +161,9 @@ class PlanCaseRecordFileAPI(BaseViewSet):
             )
         except FileAsset.DoesNotExist:
             return Response({'error': 'File not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        if not can_download_asset(request, asset):
+            return Response({"error": ZONE_DOWNLOAD_DENIED}, status=status.HTTP_403_FORBIDDEN)
 
         storage = S3Storage(request=request)
         signed_url = storage.generate_presigned_url(

@@ -180,6 +180,8 @@ class InstanceEndpoint(BaseAPIView):
 
         data["instance_changelog_url"] = settings.INSTANCE_CHANGELOG_URL
         data["is_self_managed"] = settings.IS_SELF_MANAGED
+        # 大网 / 小网隔离开关（docs/network-zone/plan.md）：前端据此显示成员列表的「网络」列
+        data["network_zone_enabled"] = bool(settings.NETWORK_ZONE_ENABLED)
 
         instance_data = serializer.data
         instance_data["workspaces_exist"] = Workspace.objects.count() >= 1

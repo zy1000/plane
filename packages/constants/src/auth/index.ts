@@ -94,6 +94,9 @@ export enum EAdminAuthErrorCodes {
   ADMIN_USER_ALREADY_EXIST = "5180",
   ADMIN_USER_DOES_NOT_EXIST = "5185",
   ADMIN_USER_DEACTIVATED = "5190",
+  // 大网 / 小网隔离
+  NETWORK_ZONE_MISMATCH = "5195",
+  NETWORK_ZONE_UNKNOWN = "5196",
 }
 
 export type TAdminAuthErrorInfo = {

@@ -31,6 +31,7 @@ from plane.db.models import (
     FileAssetVersion,
     Product,
     RequirementLibrary,
+    User,
     Workspace,
 )
 from plane.settings.storage import S3Storage
@@ -60,6 +61,14 @@ from plane.utils.asset_path import (
     filestore_version_prefix,
 )
 from plane.utils.asset_upload import presigned_post_for_asset
+from plane.utils.network_zone import (
+    ZONE_DOWNLOAD_DENIED,
+    ZONE_VIEW_DENIED,
+    asset_restricted,
+    can_download_asset,
+    is_image_asset,
+    tighten_zone_for_operator,
+)
 from plane.utils.asset_versions import (
     ensure_current_asset_version,
     ensure_uploads_bucket_versioning,
@@ -709,6 +718,13 @@ class FilestoreAssetDownloadAPIView(BaseAPIView):
             is_uploaded=True,
             is_deleted=False,
         )
+        # 大网 / 小网：受限文件只允许图片 inline 预览
+        if asset_restricted(request, asset) and not (
+            disposition == "inline" and is_image_asset(asset)
+        ):
+            return Response(
+                {"error": ZONE_DOWNLOAD_DENIED}, status=status.HTTP_403_FORBIDDEN
+            )
 
         storage = S3Storage(request=request)
         if not asset.version_id:
@@ -743,8 +759,14 @@ class FilestoreAssetVersionListAPIView(BaseAPIView):
             .select_related("created_by")
             .order_by("-created_at")
         )
+        can_download = can_download_asset(request, asset)
         return Response(
-            {"versions": [_serialize_file_version(item) for item in versions]},
+            {
+                "versions": [
+                    {**_serialize_file_version(item), "can_download": can_download}
+                    for item in versions
+                ]
+            },
             status=status.HTTP_200_OK,
         )
 
@@ -787,6 +809,12 @@ class FilestoreAssetVersionDownloadAPIView(BaseAPIView):
         if version is None:
             return Response(
                 {"error": "Version not found"}, status=status.HTTP_404_NOT_FOUND
+            )
+        if asset_restricted(request, asset) and not (
+            disposition == "inline" and is_image_asset(asset)
+        ):
+            return Response(
+                {"error": ZONE_DOWNLOAD_DENIED}, status=status.HTTP_403_FORBIDDEN
             )
 
         storage = S3Storage(request=request)
@@ -858,7 +886,10 @@ class FilestoreAssetVersionUploadAPIView(BaseAPIView):
             if request.data.get("size") is not None:
                 attrs["size"] = int(request.data.get("size") or 0)
             asset.attributes = attrs
-            asset.save(update_fields=["attributes"])
+            update_fields = ["attributes"]
+            if tighten_zone_for_operator(asset, request.user):
+                update_fields.append("network_zone")
+            asset.save(update_fields=update_fields)
 
             storage = S3Storage(request=request)
             if not ensure_uploads_bucket_versioning(storage):
@@ -927,6 +958,11 @@ class FilestoreAssetOnlyOfficeConfigAPIView(BaseAPIView):
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER], level="PROJECT")
     def get(self, request, slug, project_id, pk):
         asset = _get_onlyoffice_asset(pk, slug, project_id)
+        # 大网 / 小网：在线预览 / 编辑会把整个文件送到浏览器，受限文件直接拒
+        if asset_restricted(request, asset):
+            return Response(
+                {"error": ZONE_VIEW_DENIED}, status=status.HTTP_403_FORBIDDEN
+            )
         requested_version_id = str(request.query_params.get("version_id") or "").strip()
         source_version = None
         if requested_version_id:
@@ -1241,6 +1277,10 @@ class RequirementAssetOnlyOfficePreviewConfigAPIView(BaseAPIView):
         if asset is None or not _can_view_requirement_asset_owner(request.user, asset):
             return Response(
                 {"error": "Asset not found"}, status=status.HTTP_404_NOT_FOUND
+            )
+        if asset_restricted(request, asset):
+            return Response(
+                {"error": ZONE_VIEW_DENIED}, status=status.HTTP_403_FORBIDDEN
             )
 
         filename = (asset.attributes or {}).get("name") or "file"
@@ -1731,6 +1771,7 @@ class FilestoreAssetOnlyOfficeCallbackAPIView(BaseAPIView):
                     next_sha256 = downloaded["sha256"]
                     version = None
                     created_by_id = None
+                    zone_changed = False
                     checkpoint_version_id_next = checkpoint_version_id
 
                     if not current_sha256 or current_sha256 != next_sha256:
@@ -1753,6 +1794,19 @@ class FilestoreAssetOnlyOfficeCallbackAPIView(BaseAPIView):
                             raise RuntimeError(
                                 "missing storage metadata after upload"
                             )
+                        # 内容已被编辑人替换：小网人保存的文件变小网
+                        editor_id = _onlyoffice_created_by_id(
+                            payload,
+                            asset=asset,
+                            doc_key=doc_key,
+                            trusted_editor_user_id=trusted_editor_user_id,
+                        )
+                        editor = (
+                            User.objects.filter(id=editor_id).first()
+                            if editor_id
+                            else None
+                        )
+                        zone_changed = tighten_zone_for_operator(asset, editor)
 
                         if status_code == 6:
                             checkpoint = record_latest_object_checkpoint(
@@ -1890,7 +1944,11 @@ class FilestoreAssetOnlyOfficeCallbackAPIView(BaseAPIView):
                     asset.attributes = set_onlyoffice_state(
                         asset.attributes, state
                     )
-                    asset.save(update_fields=["attributes"])
+                    asset.save(
+                        update_fields=["attributes", "network_zone"]
+                        if zone_changed
+                        else ["attributes"]
+                    )
                     return Response({"error": 0}, status=status.HTTP_200_OK)
             except Exception as exc:
                 last_exception = exc

@@ -12,6 +12,7 @@ from rest_framework.exceptions import AuthenticationFailed
 
 # Module imports
 from plane.db.models import APIToken
+from plane.utils.network_zone import check_request_for_user, error_message
 
 
 class APIKeyAuthentication(authentication.BaseAuthentication):
@@ -48,4 +49,8 @@ class APIKeyAuthentication(authentication.BaseAuthentication):
 
         # Validate the API token
         user, token = self.validate_api_token(token)
+        # 大网 / 小网：Token 只能从本人所属环境调用
+        zone_error = check_request_for_user(request, user)
+        if zone_error:
+            raise AuthenticationFailed(error_message(zone_error, user))
         return user, token

@@ -4,6 +4,7 @@
  * See the LICENSE file for details.
  */
 
+import { useState } from "react";
 import { observer } from "mobx-react";
 import Link from "next/link";
 
@@ -11,9 +12,12 @@ import { Disclosure } from "@headlessui/react";
 // plane imports
 import { EUserPermissions, MEMBER_TRACKER_ELEMENTS } from "@plane/constants";
 import { TrashIcon, SuspendedUserIcon } from "@plane/propel/icons";
-import type { IUser, IWorkspaceGroup, IWorkspaceMember, IWorkspaceRole } from "@plane/types";
+import { useTranslation } from "@plane/i18n";
+import { TOAST_TYPE, setToast } from "@plane/propel/toast";
+import type { IUser, IWorkspaceGroup, IWorkspaceMember, IWorkspaceRole, TNetworkZone } from "@plane/types";
 // plane ui
-import { PopoverMenu } from "@plane/ui";
+import { AlertModalCore, CustomSelect, PopoverMenu } from "@plane/ui";
+import { useMember } from "@/hooks/store/use-member";
 // helpers
 import { SYSTEM_USER_AVATAR_FALLBACK_COLOR } from "@/helpers/user-avatar.helper";
 import { getFileURL } from "@plane/utils";
@@ -162,5 +166,83 @@ export const TeamsColumn = observer(function TeamsColumn(props: TeamsProps) {
       isLoading={isLoading}
       disabled={!canManageTeams}
     />
+  );
+});
+
+type NetworkZoneProps = {
+  rowData: RowData;
+  workspaceSlug: string;
+  canEditMember: boolean;
+};
+
+const NETWORK_ZONE_OPTIONS: { value: TNetworkZone | null; labelKey: string }[] = [
+  { value: "wan", labelKey: "network_zone.wan" },
+  { value: "lan", labelKey: "network_zone.lan" },
+  { value: null, labelKey: "network_zone.unbound" },
+];
+
+/** 大网 / 小网归属列：改完后端会踢掉此人全部会话，所以先确认再提交 */
+export const NetworkZoneColumn = observer(function NetworkZoneColumn(props: NetworkZoneProps) {
+  const { rowData, workspaceSlug, canEditMember } = props;
+  const { t } = useTranslation();
+  const {
+    workspace: { updateMemberNetworkZone },
+  } = useMember();
+  const [pendingZone, setPendingZone] = useState<TNetworkZone | null | undefined>(undefined);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const isSuspended = rowData.is_active === false;
+  // 成员列表接口把 network_zone 挂在 member 上；RowData.member 的声明类型没有这个键
+  const currentZone = (rowData.member as { network_zone?: TNetworkZone | null }).network_zone ?? null;
+  const labelOf = (zone: TNetworkZone | null) =>
+    t(NETWORK_ZONE_OPTIONS.find((option) => option.value === zone)?.labelKey ?? "network_zone.unbound");
+
+  if (isSuspended) return null;
+
+  const handleConfirm = async () => {
+    if (pendingZone === undefined) return;
+    setIsSubmitting(true);
+    try {
+      await updateMemberNetworkZone(workspaceSlug, rowData.member.id, pendingZone);
+      setToast({ type: TOAST_TYPE.SUCCESS, title: t("network_zone.change_success") });
+      setPendingZone(undefined);
+    } catch (error) {
+      setToast({
+        type: TOAST_TYPE.ERROR,
+        title: t("network_zone.change_failed"),
+        message: (error as { error?: string })?.error,
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <>
+      <AlertModalCore
+        isOpen={pendingZone !== undefined}
+        variant="primary"
+        title={t("network_zone.change_confirm_title")}
+        content={t("network_zone.change_confirm_message")}
+        isSubmitting={isSubmitting}
+        handleClose={() => setPendingZone(undefined)}
+        handleSubmit={handleConfirm}
+      />
+      <CustomSelect
+        value={currentZone}
+        onChange={(zone: TNetworkZone | null) => {
+          if (zone !== currentZone) setPendingZone(zone);
+        }}
+        label={<span className={currentZone ? "" : "text-tertiary"}>{labelOf(currentZone)}</span>}
+        buttonClassName="rounded-md border-none px-2 py-1 text-xs hover:bg-layer-1"
+        optionsClassName="w-32"
+        disabled={!canEditMember}
+      >
+        {NETWORK_ZONE_OPTIONS.map((option) => (
+          <CustomSelect.Option key={String(option.value)} value={option.value}>
+            {t(option.labelKey)}
+          </CustomSelect.Option>
+        ))}
+      </CustomSelect>
+    </>
   );
 });

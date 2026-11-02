@@ -9,7 +9,12 @@ import { action, computed, makeObservable, observable, runInAction } from "mobx"
 import { computedFn } from "mobx-utils";
 // types
 import type { EUserPermissions } from "@plane/constants";
-import type { IWorkspaceBulkInviteFormData, IWorkspaceMember, IWorkspaceMemberInvitation } from "@plane/types";
+import type {
+  IWorkspaceBulkInviteFormData,
+  IWorkspaceMember,
+  IWorkspaceMemberInvitation,
+  TNetworkZone,
+} from "@plane/types";
 // plane-web constants
 // services
 import { WorkspaceService } from "@/services/workspace.service";
@@ -55,6 +60,7 @@ export interface IWorkspaceMemberStore {
   // crud actions
   updateMember: (workspaceSlug: string, userId: string, data: { role: EUserPermissions }) => Promise<void>;
   updateMemberCustomRoles: (workspaceSlug: string, userId: string, customRoleIds: string[]) => Promise<string[]>;
+  updateMemberNetworkZone: (workspaceSlug: string, userId: string, networkZone: TNetworkZone | null) => Promise<void>;
   updateMemberGroups: (
     workspaceSlug: string,
     userId: string,
@@ -322,6 +328,20 @@ export class WorkspaceMemberStore implements IWorkspaceMemberStore {
       });
       throw error;
     }
+  };
+
+  /** 管理员改成员的大网 / 小网归属。成功后同步 memberMap，后端已踢掉此人会话 */
+  updateMemberNetworkZone = async (workspaceSlug: string, userId: string, networkZone: TNetworkZone | null) => {
+    const memberDetails = this.getWorkspaceMemberDetails(userId);
+    if (!memberDetails) throw new Error("Member not found");
+    const response = await this.workspaceService.updateWorkspaceMemberNetworkZone(
+      workspaceSlug,
+      memberDetails.id,
+      networkZone
+    );
+    runInAction(() => {
+      set(this.memberRoot?.memberMap, [userId, "network_zone"], response.network_zone ?? null);
+    });
   };
 
   updateMemberGroups = async (workspaceSlug: string, userId: string, groupIds: string[]) => {

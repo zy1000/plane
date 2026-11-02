@@ -11,6 +11,7 @@ import { AlertModalCore, CircularProgressIndicator, CustomMenu } from "@plane/ui
 import { cn, convertBytesToSize, getFileExtension, renderFormattedDate } from "@plane/utils";
 import { ButtonAvatars } from "@/components/dropdowns/member/avatar";
 import { getFileIcon } from "@/components/icons";
+import { canDownloadFile } from "@/helpers/network-zone.helper";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 import { useFileSize } from "@/plane-web/hooks/use-file-size";
 import { Block, BlockAction } from "./stage-review-content";
@@ -34,6 +35,8 @@ const AttachmentRow = ({
 }) => {
   const { t } = useTranslation();
   const { isMobile } = usePlatformOS();
+  // 大网 / 小网隔离：后端明确给 can_download=false 的（小网上传、当前是大网）不能下载
+  const downloadable = canDownloadFile(asset);
 
   return (
     <div
@@ -67,8 +70,11 @@ const AttachmentRow = ({
         )}
         <div className="opacity-0 transition-opacity group-hover:opacity-100">
           <CustomMenu ellipsis closeOnSelect placement="bottom-end">
-            <CustomMenu.MenuItem onClick={() => onDownload(asset.id)}>
-              <div className="flex items-center gap-2">
+            <CustomMenu.MenuItem disabled={!downloadable} onClick={() => onDownload(asset.id)}>
+              <div
+                className="flex items-center gap-2"
+                title={downloadable ? undefined : t("network_zone.download_denied")}
+              >
                 <Download className="h-3.5 w-3.5" strokeWidth={1.75} />
                 <span>{t(`${I18N}.detail.download`)}</span>
               </div>

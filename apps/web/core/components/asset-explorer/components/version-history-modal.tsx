@@ -1,5 +1,6 @@
 import { Modal } from "antd";
 import { Download, History, Pencil, RotateCcw, X } from "lucide-react";
+import { canDownloadFile } from "@/helpers/network-zone.helper";
 import type { TAssetExplorerFile, TAssetFileVersion } from "@/services/asset-explorer.service";
 import { formatBytes, formatMinIODate } from "../utils/format";
 
@@ -65,6 +66,8 @@ export const VersionHistoryModal = ({
           <div className="h-full overflow-y-auto">
             {versions.map((version) => {
               const label = getVersionLabel(version);
+              // 大网 / 小网隔离：历史版本每项带 can_download，叠加在整体 canDownload 之上
+              const versionDownloadable = canDownloadFile(version);
               return (
                 <div
                   key={version.id || version.version_id}
@@ -97,8 +100,8 @@ export const VersionHistoryModal = ({
                   <div className="flex shrink-0 items-center gap-1">
                     <button
                       type="button"
-                      title="下载版本"
-                      disabled={!canDownload}
+                      title={versionDownloadable ? "下载版本" : "大网环境不能下载小网上传的文件"}
+                      disabled={!canDownload || !versionDownloadable}
                       onClick={() => {
                         if (file) void onDownloadVersion(file, version);
                       }}

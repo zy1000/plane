@@ -5,6 +5,8 @@ type TSelectionBarProps = {
   count: number;
   canUpload: boolean;
   canDownload: boolean;
+  /** 下载置灰的原因（大网 / 小网隔离），悬停显示 */
+  downloadDisabledTitle?: string;
   canDelete: boolean;
   onClear: () => void;
   onBatchDownload: () => void;
@@ -18,16 +20,19 @@ const Pill = ({
   children,
   danger,
   disabled,
+  title,
 }: {
   onClick: () => void;
   children: React.ReactNode;
   danger?: boolean;
   disabled?: boolean;
+  title?: string;
 }) => (
   <button
     type="button"
     onClick={onClick}
     disabled={disabled}
+    title={title}
     className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
       danger
         ? "text-rose-300 hover:bg-rose-500/15 hover:text-rose-200 disabled:hover:bg-transparent disabled:hover:text-rose-300"
@@ -43,6 +48,7 @@ export const SelectionBar = ({
   count,
   canUpload,
   canDownload,
+  downloadDisabledTitle,
   canDelete,
   onClear,
   onBatchDownload,
@@ -69,7 +75,7 @@ export const SelectionBar = ({
           <span className="tracking-tight text-zinc-300">项已选</span>
         </div>
         <div className="mx-1 h-5 w-px bg-white/15" />
-        <Pill onClick={onBatchDownload} disabled={!canDownload}>
+        <Pill onClick={onBatchDownload} disabled={!canDownload} title={canDownload ? undefined : downloadDisabledTitle}>
           <Download className="size-3.5" />
           下载
         </Pill>

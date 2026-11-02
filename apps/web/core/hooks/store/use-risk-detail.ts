@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslation } from "@plane/i18n";
+import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type {
   TRiskActivity,
   TRiskAttachment,
@@ -7,6 +9,7 @@ import type {
   TRiskLinkedIssue,
   TUpdateRiskPayload,
 } from "@plane/types";
+import { getDownloadErrorMessage } from "@/helpers/network-zone.helper";
 import { RiskService } from "@/services/risk.service";
 import { RISK_PENDING_POLL_INTERVAL_MS, RISK_PENDING_POLL_MAX, getRiskError } from "./use-risks";
 
@@ -30,6 +33,7 @@ export const useRiskDetail = (
   projectId: string | undefined,
   riskId: string | null
 ) => {
+  const { t } = useTranslation();
   const [detail, setDetail] = useState<TRiskDetail | null>(null);
   const [attachments, setAttachments] = useState<TRiskAttachment[]>([]);
   const [issues, setIssues] = useState<TRiskLinkedIssue[]>([]);
@@ -293,7 +297,18 @@ export const useRiskDetail = (
 
   const downloadAttachment = useCallback(
     async (assetId: string) => {
-      const url = await getAttachmentUrl(assetId);
+      let url: string | undefined;
+      try {
+        url = await getAttachmentUrl(assetId);
+      } catch (error) {
+        // 取址被拒（大网下载小网文件是 403 带 error 文案）要提示出来，调用方是 void 调用不接拒绝
+        setToast({
+          type: TOAST_TYPE.ERROR,
+          title: t("toast.error"),
+          message: getDownloadErrorMessage(error, t("something_went_wrong")),
+        });
+        return;
+      }
       if (!url) return;
       // 预签名地址带 Content-Disposition: attachment，当前页直接跳过去只触发下载不离开页面
       const link = document.createElement("a");
@@ -303,7 +318,7 @@ export const useRiskDetail = (
       link.click();
       link.remove();
     },
-    [getAttachmentUrl]
+    [getAttachmentUrl, t]
   );
 
   // --- 评论 ----------------------------------------------------------------------

@@ -10,6 +10,7 @@ from mptt.models import MPTTModel, TreeForeignKey
 
 # Module import
 from .base import BaseModel
+from .network_zone import NetworkZone
 
 
 def file_size(value):
@@ -167,6 +168,10 @@ class FileAsset(BaseModel):
         RISK_FILE = "RISK_FILE"
         RISK_COMMENT_DESCRIPTION = "RISK_COMMENT_DESCRIPTION"
 
+    # 大网 / 小网归属：新建时 save() 按当前用户归属填，复制时显式继承源文件；存量全部小网
+    network_zone = models.CharField(
+        max_length=8, choices=NetworkZone.choices, default=""
+    )
     attributes = models.JSONField(default=dict)
     # 末段文件名（含可能的 (1)/(2) 去重后缀）。完整 MinIO key 由 ``path`` 节点链派生 +
     # ``filename`` 拼接而成（见 ``storage_key`` 属性），不再独立存一份对象 key。
@@ -311,6 +316,11 @@ class FileAsset(BaseModel):
         # 从 attributes.name 取原始文件名、清洗、并在同 path 下去重加 (1)(2) 后缀。
         update_fields = kwargs.get("update_fields")
         added_fields: list = []
+
+        if self._state.adding and not self.network_zone:
+            from plane.utils.network_zone import upload_zone_for_current_user
+
+            self.network_zone = upload_zone_for_current_user()
 
         if self.path_id is None:
             try:

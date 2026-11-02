@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TRiskAttachment } from "@plane/types";
+import { getDownloadErrorMessage } from "@/helpers/network-zone.helper";
 import { RiskService } from "@/services/risk.service";
 import { triggerFileDownload, useRiskUploadQueue } from "../attachments/use-risk-upload-queue";
 import { RISK_I18N } from "../constants";
@@ -92,10 +93,19 @@ export const useRiskFormAttachments = ({
   const downloadAttachment = useCallback(
     async (asset: TRiskAttachment) => {
       if (!riskId) return;
-      const url = await riskService.getFileDownloadUrl(workspaceSlug, projectId, riskId, asset.id);
-      if (url) triggerFileDownload(url);
+      try {
+        const url = await riskService.getFileDownloadUrl(workspaceSlug, projectId, riskId, asset.id);
+        if (url) triggerFileDownload(url);
+      } catch (error) {
+        // 取址被拒（大网下载小网文件是 403 带 error 文案）要提示出来，不再静默
+        setToast({
+          type: TOAST_TYPE.ERROR,
+          title: t("toast.error"),
+          message: getDownloadErrorMessage(error, t("something_went_wrong")),
+        });
+      }
     },
-    [riskId, workspaceSlug, projectId]
+    [riskId, workspaceSlug, projectId, t]
   );
 
   const pendingCount = items.filter((item) => item.status === "pending").length;

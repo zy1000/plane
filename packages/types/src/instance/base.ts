@@ -69,6 +69,8 @@ export interface IInstanceConfig {
   is_intercom_enabled: boolean;
   intercom_app_id: string | undefined;
   instance_changelog_url?: string;
+  // 大网 / 小网隔离开关：开着时成员列表显示「网络」列
+  network_zone_enabled?: boolean;
 }
 
 export interface IInstanceAdmin {

@@ -72,6 +72,8 @@ export type TRequirementAssetRef = {
   /** 只有需求级附件（TRequirement.attachments）带这两个键；附件字段的值没有 */
   created_by?: string | null;
   created_at?: string | null;
+  /** 大网 / 小网隔离：false = 当前用户不能下载；没带按可下载 */
+  can_download?: boolean;
 };
 
 export type TRequirementFormRow = {

@@ -309,7 +309,8 @@ export const AssetExplorer = (props: TAssetExplorerProps) => {
             open={explorer.selectedCount > 0}
             count={explorer.selectedCount}
             canUpload={props.permissions.canUpload}
-            canDownload={props.permissions.canDownload}
+            canDownload={props.permissions.canDownload && !explorer.batchDownloadBlockedReason}
+            downloadDisabledTitle={explorer.batchDownloadBlockedReason}
             canDelete={props.permissions.canDelete}
             onClear={explorer.clearSelection}
             onBatchDownload={explorer.onBatchDownload}

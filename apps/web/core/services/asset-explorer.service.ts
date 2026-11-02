@@ -1,6 +1,7 @@
 import type { AxiosRequestConfig } from "axios";
 import { API_BASE_URL } from "@plane/constants";
 import { generateFileUploadPayload, getFileMetaDataForUpload } from "@plane/services";
+import { readZoneSkippedCount } from "@/helpers/network-zone.helper";
 import { APIService } from "@/services/api.service";
 import { FileUploadService } from "@/services/file-upload.service";
 
@@ -37,6 +38,8 @@ export type TAssetExplorerFile = {
   parent_folder_id?: number;
   // 搜索结果中携带：相对 filestore 的所在目录路径，形如 "A/B"
   path?: string;
+  // 大网 / 小网隔离：列表 / 搜索项携带；没带按可下载处理，只有明确 false 才禁用
+  can_download?: boolean;
 };
 
 export type TAssetFileVersion = {
@@ -51,6 +54,8 @@ export type TAssetFileVersion = {
   created_at?: string;
   created_by_id?: string | null;
   created_by_name?: string | null;
+  // 大网 / 小网隔离：历史版本列表每项携带
+  can_download?: boolean;
 };
 
 export type TAssetVersionListResponse = {
@@ -329,7 +334,7 @@ export class AssetExplorerService extends APIService {
     workspaceSlug: string,
     projectId: string,
     params: { assetIds?: string[]; folderIds?: number[] }
-  ): Promise<{ blob: Blob; filename: string }> {
+  ): Promise<{ blob: Blob; filename: string; skipped: number }> {
     const queryParams: Record<string, string> = {};
     if (params.assetIds?.length) queryParams.asset_ids = params.assetIds.join(",");
     if (params.folderIds?.length) queryParams.folder_ids = params.folderIds.join(",");
@@ -347,7 +352,9 @@ export class AssetExplorerService extends APIService {
         const filename = match
           ? decodeURIComponent(match[1].trim().replace(/^"|"$/g, ""))
           : "filestore-assets.zip";
-        return { blob, filename };
+        // 大网 / 小网隔离：打包时跳过的小网文件数，后端放在 X-Zone-Skipped 响应头
+        const skipped = readZoneSkippedCount(response?.headers);
+        return { blob, filename, skipped };
       })
       .catch(async (error) => {
         // responseType=blob 时后端的 JSON 错误体会被包成 Blob，需解回 JSON，便于上层按权限错误识别。

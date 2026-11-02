@@ -32,6 +32,8 @@ type FileItem = {
   name: string;
   size: number;
   created_at: string;
+  /** 大网 / 小网隔离：后端明确给 false 才禁止下载 */
+  can_download?: boolean;
 };
 
 type Props = {

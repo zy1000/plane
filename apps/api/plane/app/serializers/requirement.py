@@ -646,6 +646,45 @@ class RequirementSerializer(BaseSerializer):
     project_ids = serializers.SerializerMethodField()
     module_name = serializers.SerializerMethodField()
 
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        attachments = data.get("attachments")
+        if isinstance(attachments, list) and attachments:
+            data["attachments"] = self._attachments_with_can_download(attachments)
+        return data
+
+    def _attachments_with_can_download(self, attachments):
+        """附件引用是存在行上的 JSON，没有资产对象；大网用户按归属映射补 can_download。
+
+        走 _row_context 的列表带 asset_zones 按批查过；别的入口缺映射时才逐行查一次。
+        """
+        from plane.utils.network_zone import (
+            asset_zone_map,
+            requester_restricted,
+            zone_downloadable,
+        )
+
+        restricted = self.context.get("zone_restricted")
+        if restricted is None:
+            request = self.context.get("request")
+            restricted = requester_restricted(request) if request is not None else False
+        zones = self.context.get("asset_zones")
+        if restricted and zones is None:
+            zones = asset_zone_map(
+                ref.get("asset_id") for ref in attachments if isinstance(ref, dict)
+            )
+        return [
+            {
+                **ref,
+                "can_download": zone_downloadable(
+                    (zones or {}).get(str(ref.get("asset_id"))), restricted
+                ),
+            }
+            if isinstance(ref, dict)
+            else ref
+            for ref in attachments
+        ]
+
     class Meta:
         model = Requirement
         fields = ROW_FIELDS

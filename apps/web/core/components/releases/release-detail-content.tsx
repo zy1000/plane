@@ -48,6 +48,7 @@ import {
 } from "@/components/releases/release-overview";
 import type { ReleaseDetailTabKey, ReleaseTabItem } from "@/components/releases/release-overview";
 import type { TReleaseUpdatePayload } from "@/components/releases/release-status-dropdown";
+import { canDownloadFile } from "@/helpers/network-zone.helper";
 
 type Props = {
   releaseId: string;
@@ -61,6 +62,8 @@ type TReleaseFile = {
   name: string;
   size: number;
   created_at: string;
+  /** 大网 / 小网隔离：后端明确给 false 才禁止下载 */
+  can_download?: boolean;
 };
 
 const DEFAULT_TAB = DEFAULT_RELEASE_DETAIL_TAB;
@@ -186,6 +189,7 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isAr
           fileIds
         ),
       onError: (message) => setToast({ type: TOAST_TYPE.ERROR, title: "批量下载失败", message }),
+      onSkipped: (count) => setToast({ type: TOAST_TYPE.WARNING, title: t("network_zone.skipped_files", { count }) }),
     });
 
   // 与后端 CustomPaginator.max_page_size 一致，单次请求上限；多页时循环拉取直至全部
@@ -444,6 +448,8 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isAr
 
   const handleDownloadReleaseFile = async (fileId: string, _fileName: string) => {
     if (!workspaceSlug || !projectId || !canDownloadReleaseFile) return;
+    const target = releaseFiles.find((file) => file.id === fileId);
+    if (target && !canDownloadFile(target)) return;
     try {
       setReleaseFilesDownloadingId(fileId);
       const url = await releaseService.downloadReleaseFile(workspaceSlug.toString(), projectId.toString(), fileId);

@@ -5,8 +5,10 @@ import { Spin, message, Tag, Modal, Table, Tooltip, Upload, Pagination, Popconfi
 import * as LucideIcons from "lucide-react";
 import { Download, Trash2 } from "lucide-react";
 import { Button as PropelButton } from "@plane/propel/button";
+import { useTranslation } from "@plane/i18n";
 import { ReadonlyDate } from "@/components/readonly/date";
 import { cn, renderFormattedDate } from "@plane/utils";
+import { canDownloadFile } from "@/helpers/network-zone.helper";
 import { PlanService as PlanApiService, type TPlanCaseReviewRecord } from "@/services/qa/plan.service";
 import { PlanCaseReviewRecordList } from "@/components/qa/plans/plan-case-review-records";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
@@ -21,6 +23,8 @@ export type ExecAttachment = {
   size: number;
   type?: string;
   created_at?: string;
+  /** 大网 / 小网隔离：后端明确给 false 才禁止下载 */
+  can_download?: boolean;
 };
 
 export type ExecRecord = {
@@ -54,6 +58,7 @@ type FileItem = {
   path?: string;
   type?: string;
   created_at?: string;
+  can_download?: boolean;
 };
 
 type Props = {
@@ -128,6 +133,7 @@ export const ExecutionRecordList: React.FC<ExecutionRecordListProps> = ({
   onDownloadFile,
   showSequence = false,
 }) => {
+  const { t } = useTranslation();
   const { getUserDetails } = useMember();
 
   const renderResult = (result: string) => {
@@ -185,19 +191,23 @@ export const ExecutionRecordList: React.FC<ExecutionRecordListProps> = ({
                   <div className="text-xs text-placeholder mt-2">{time}</div>
                   {attachments && attachments.length > 0 && (
                     <div className="mt-2.5 flex flex-wrap gap-2">
-                      {attachments.map((f) => (
-                        <button
-                          key={f.id}
-                          type="button"
-                          title={`下载 ${f.name}`}
-                          onClick={() => onDownloadFile?.(f)}
-                          className="inline-flex h-9 max-w-[240px] items-center gap-2 rounded-lg border border-subtle bg-surface-1 pr-3 pl-[5px] transition-colors hover:border-strong hover:bg-layer-1"
-                        >
-                          <FileTypeBadge name={f.name} size="sm" />
-                          <span className="truncate text-13 text-primary">{f.name}</span>
-                          <span className="shrink-0 text-12 text-placeholder">{formatFileSize(f.size)}</span>
-                        </button>
-                      ))}
+                      {attachments.map((f) => {
+                        const downloadable = canDownloadFile(f);
+                        return (
+                          <button
+                            key={f.id}
+                            type="button"
+                            title={downloadable ? `下载 ${f.name}` : t("network_zone.download_denied")}
+                            disabled={!downloadable}
+                            onClick={() => onDownloadFile?.(f)}
+                            className="inline-flex h-9 max-w-[240px] items-center gap-2 rounded-lg border border-subtle bg-surface-1 pr-3 pl-[5px] transition-colors hover:border-strong hover:bg-layer-1 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-subtle disabled:hover:bg-surface-1"
+                          >
+                            <FileTypeBadge name={f.name} size="sm" />
+                            <span className="truncate text-13 text-primary">{f.name}</span>
+                            <span className="shrink-0 text-12 text-placeholder">{formatFileSize(f.size)}</span>
+                          </button>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -262,6 +272,7 @@ export const ExecutionRecordDetailModal: React.FC<ExecutionRecordDetailModalProp
   initialTab = "steps",
   reviewerCount,
 }) => {
+  const { t } = useTranslation();
   const planService = React.useMemo(() => new PlanApiService(), []);
   const [resultColorMap, setResultColorMap] = React.useState<Record<string, string>>({});
   const [reviewStatusColorMap, setReviewStatusColorMap] = React.useState<Record<string, string>>({});
@@ -564,13 +575,20 @@ export const ExecutionRecordDetailModal: React.FC<ExecutionRecordDetailModalProp
                                 </td>
                                 <td className="px-2 py-2">
                                   <div className="flex items-center justify-end gap-2">
-                                    <PropelButton
-                                      variant="link-neutral"
-                                      className="p-0"
-                                      onClick={() => handleDownloadFile(f.id, f.name)}
+                                    {/* 禁用的按钮不响应悬停，提示挂在外层 span 上 */}
+                                    <span
+                                      className="inline-flex"
+                                      title={canDownloadFile(f) ? undefined : t("network_zone.download_denied")}
                                     >
-                                      <Download className="h-3.5 w-3.5" />
-                                    </PropelButton>
+                                      <PropelButton
+                                        variant="link-neutral"
+                                        className="p-0"
+                                        disabled={!canDownloadFile(f)}
+                                        onClick={() => handleDownloadFile(f.id, f.name)}
+                                      >
+                                        <Download className="h-3.5 w-3.5" />
+                                      </PropelButton>
+                                    </span>
                                     <Popconfirm
                                       title="确认删除该文件？"
                                       okText="删除"
@@ -653,6 +671,7 @@ export const ExecutionRecordsPanel: React.FC<Props> = (props) => {
   const handleDownloadFile = React.useCallback(
     async (file: ExecAttachment) => {
       if (!workspaceSlug) return;
+      if (!canDownloadFile(file)) return;
       try {
         const url = await planService.downloadExecutionFile(String(workspaceSlug), file.id);
         window.open(url, "_blank", "noopener,noreferrer");

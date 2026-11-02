@@ -15,6 +15,7 @@ from rest_framework.response import Response
 from plane.bgtasks.storage_metadata_task import get_asset_object_metadata
 from plane.db.models import DeployBoard, FileAsset
 from plane.settings.storage import S3Storage
+from plane.utils.network_zone import ZONE_VIEW_DENIED, can_view_asset
 from plane.utils.asset_upload import presigned_post_for_asset
 
 # Module imports
@@ -54,6 +55,12 @@ class EntityAssetEndpoint(BaseAPIView):
             return Response(
                 {"error": "The requested asset could not be found."},
                 status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # 大网 / 小网：公开页按来源 IP 判，受限时只有图片能看
+        if not can_view_asset(request, asset):
+            return Response(
+                {"error": ZONE_VIEW_DENIED}, status=status.HTTP_403_FORBIDDEN
             )
 
         # Get the presigned URL

@@ -8,10 +8,13 @@ import type { FC } from "react";
 import { useState } from "react";
 import { observer } from "mobx-react";
 import { AlertCircle } from "lucide-react";
+import { useTranslation } from "@plane/i18n";
 import { CloseIcon } from "@plane/propel/icons";
+import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 // ui
 import { Tooltip } from "@plane/propel/tooltip";
 import {
+  cn,
   convertBytesToSize,
   getFileExtension,
   getFileName,
@@ -24,6 +27,7 @@ import { getFileIcon } from "@/components/icons";
 // components
 import { IssueAttachmentDeleteModal } from "@/components/issues/attachment/delete-attachment-modal";
 // helpers
+import { canDownloadFile } from "@/helpers/network-zone.helper";
 // hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useMember } from "@/hooks/store/use-member";
@@ -42,6 +46,7 @@ type TIssueAttachmentsDetail = {
 export const IssueAttachmentsDetail = observer(function IssueAttachmentsDetail(props: TIssueAttachmentsDetail) {
   // props
   const { attachmentId, attachmentHelpers, disabled } = props;
+  const { t } = useTranslation();
   // store hooks
   const { getUserDetails } = useMember();
   const {
@@ -54,6 +59,8 @@ export const IssueAttachmentsDetail = observer(function IssueAttachmentsDetail(p
   const fileName = getFileName(attachment?.attributes.name ?? "");
   const fileExtension = getFileExtension(attachment?.asset_url ?? "");
   const fileIcon = getFileIcon(fileExtension, 28);
+  // 大网 / 小网隔离：后端明确给 false 才禁用下载
+  const canDownload = canDownloadFile(attachment);
   // hooks
   const { isMobile } = usePlatformOS();
 
@@ -70,10 +77,17 @@ export const IssueAttachmentsDetail = observer(function IssueAttachmentsDetail(p
         />
       )}
       <div className="flex h-[60px] items-center justify-between gap-1 rounded-md border-[2px] border-subtle bg-surface-1 px-4 py-2 text-13">
+        {/* 不用 disabled：禁用的 button 收不到 hover，里面的文件名 / 上传人 Tooltip 会失效 */}
         <button
           type="button"
-          className="text-left"
+          className={cn("text-left", !canDownload && "cursor-not-allowed opacity-60")}
+          aria-disabled={!canDownload}
+          title={canDownload ? undefined : t("network_zone.download_denied")}
           onClick={() => {
+            if (!canDownload) {
+              setToast({ type: TOAST_TYPE.ERROR, title: t("network_zone.download_denied") });
+              return;
+            }
             void attachmentHelpers.operations.download(attachmentId);
           }}
         >

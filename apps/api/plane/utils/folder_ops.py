@@ -601,6 +601,7 @@ def copy_assets(
             entity_type=FILESTORE_ENTITY_TYPE,
             is_uploaded=True,
             storage_metadata=asset.storage_metadata or {},
+            network_zone=asset.network_zone,
             path=target_folder,
             filename=new_filename,
         )

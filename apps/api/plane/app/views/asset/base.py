@@ -14,6 +14,7 @@ from plane.utils.minio_utils import get_minio_utils
 # Module imports
 from ..base import BaseAPIView, BaseViewSet
 from plane.db.models import FileAsset, Workspace, File
+from plane.utils.network_zone import ZONE_DOWNLOAD_DENIED, legacy_file_restricted
 from plane.app.serializers import FileAssetSerializer
 
 
@@ -134,6 +135,8 @@ class FileAPIView(BaseAPIView):
         file = File.objects.filter(id=file_id).first()
         if not file:
             return Response({"error": "File not found"}, status=status.HTTP_404_NOT_FOUND)
+        if legacy_file_restricted(request):
+            return Response({"error": ZONE_DOWNLOAD_DENIED}, status=status.HTTP_403_FORBIDDEN)
         response_obj = minio.get_object(object_name=file.path + file.name, bucket_name=self._legacy_bucket())
         if not response_obj:
             return Response({"error": "获取文件失败"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

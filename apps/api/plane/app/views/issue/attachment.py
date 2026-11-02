@@ -27,6 +27,7 @@ from plane.app.permissions import (
     PermissionKey,
 )
 from plane.settings.storage import S3Storage
+from plane.utils.network_zone import ZONE_DOWNLOAD_DENIED, can_download_asset, download_disposition
 from plane.bgtasks.storage_metadata_task import get_asset_object_metadata
 from plane.utils.host import base_host
 from plane.utils.asset_upload import presigned_post_for_asset
@@ -182,10 +183,17 @@ class IssueAttachmentV2Endpoint(BaseAPIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
+            # 大网 / 小网：前端预览图片也走这里，受限图片给 inline；受限非图片 403
+            disposition = download_disposition(request, asset)
+            if disposition is None:
+                return Response(
+                    {"error": ZONE_DOWNLOAD_DENIED}, status=status.HTTP_403_FORBIDDEN
+                )
+
             storage = S3Storage(request=request)
             presigned_url = storage.generate_presigned_url(
                 object_name=asset.storage_key,
-                disposition="attachment",
+                disposition=disposition,
                 filename=asset.attributes.get("name"),
             )
             return Response({"download_url": presigned_url})
@@ -199,8 +207,11 @@ class IssueAttachmentV2Endpoint(BaseAPIView):
             is_uploaded=True,
         )
         # Serialize the attachments
-        serializer = IssueAttachmentSerializer(issue_attachments, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        issue_attachments = list(issue_attachments)
+        data = IssueAttachmentSerializer(issue_attachments, many=True).data
+        for item, asset in zip(data, issue_attachments):
+            item["can_download"] = can_download_asset(request, asset)
+        return Response(data, status=status.HTTP_200_OK)
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
     def patch(self, request, slug, project_id, issue_id, pk):

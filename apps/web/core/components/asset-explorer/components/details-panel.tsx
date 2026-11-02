@@ -1,6 +1,9 @@
 import { Download, Eye, Pencil, SquarePen, Trash2, Upload, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "@plane/i18n";
+import { canDownloadFile } from "@/helpers/network-zone.helper";
 import type { TAssetExplorerFile, TAssetFileVersion } from "@/services/asset-explorer.service";
+import { isImageSupported } from "@/utils/onlyoffice";
 import type { TAssetExplorerPermissions } from "../types";
 import { confirmDeleteFiles } from "./confirm-delete";
 import { FileTypeIcon } from "./file-icon";
@@ -33,13 +36,16 @@ type TActionRowProps = {
   onClick: () => void;
   danger?: boolean;
   disabled?: boolean;
+  /** 置灰原因，悬停显示 */
+  title?: string;
 };
 
-const ActionRow = ({ icon, label, onClick, danger, disabled }: TActionRowProps) => (
+const ActionRow = ({ icon, label, onClick, danger, disabled, title }: TActionRowProps) => (
   <button
     type="button"
     onClick={onClick}
     disabled={disabled}
+    title={title}
     className={`group flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left text-[13px] font-medium transition ${
       danger
         ? "text-secondary hover:bg-danger-subtle hover:text-danger-primary disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-secondary"
@@ -92,6 +98,7 @@ export const DetailsPanel = ({
   onRenameVersion,
   onRestoreVersion,
 }: TDetailsPanelProps) => {
+  const { t } = useTranslation();
   const versionInputRef = useRef<HTMLInputElement>(null);
   const [aliasEditingVersion, setAliasEditingVersion] = useState<TAssetFileVersion | null>(null);
   const [aliasSaving, setAliasSaving] = useState(false);
@@ -101,6 +108,9 @@ export const DetailsPanel = ({
   const ext = file ? getFileExtension(file.name || file.filename) : "";
   const mime = file?.type || "—";
   const currentVersion = versions.find((version) => version.is_current) ?? versions[0] ?? null;
+  // 大网 / 小网隔离：按文件的 can_download 叠加在整体 permissions.canDownload 之上；图片仍可预览，非图片连在线预览也不行
+  const fileDownloadable = canDownloadFile(file);
+  const previewBlocked = !fileDownloadable && !isImageSupported(file?.name || file?.filename);
 
   useEffect(() => {
     setAliasEditingVersion(null);
@@ -168,6 +178,8 @@ export const DetailsPanel = ({
                   <ActionRow
                     icon={<Eye className="size-4" strokeWidth={1.75} />}
                     label="预览"
+                    disabled={previewBlocked}
+                    title={previewBlocked ? t("network_zone.view_denied") : undefined}
                     onClick={() => void onPreviewFile(file)}
                   />
                 )}
@@ -188,7 +200,8 @@ export const DetailsPanel = ({
                 <ActionRow
                   icon={<Download className="size-4" strokeWidth={1.75} />}
                   label="下载"
-                  disabled={!permissions.canDownload}
+                  disabled={!permissions.canDownload || !fileDownloadable}
+                  title={fileDownloadable ? undefined : t("network_zone.download_denied")}
                   onClick={() => void onDownloadFile(file)}
                 />
                 <ActionRow

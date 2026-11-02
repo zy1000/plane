@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslation } from "@plane/i18n";
+import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type {
   TApproveStageReviewPayload,
   TRollbackStageReviewPayload,
@@ -11,6 +13,7 @@ import type {
   TSubmitStageReviewPayload,
   TUpdateStageReviewPayload,
 } from "@plane/types";
+import { getDownloadErrorMessage } from "@/helpers/network-zone.helper";
 import { StageReviewService } from "@/services/stage-review.service";
 import { getStageReviewError } from "./use-stage-reviews";
 
@@ -39,6 +42,7 @@ export const useStageReviewDetail = (
   projectId: string | undefined,
   reviewId: string | null
 ) => {
+  const { t } = useTranslation();
   const [detail, setDetail] = useState<TStageReviewDetail | null>(null);
   const [attachments, setAttachments] = useState<TStageReviewAttachment[]>([]);
   const [comments, setComments] = useState<TStageReviewComment[]>([]);
@@ -261,7 +265,18 @@ export const useStageReviewDetail = (
 
   const downloadAttachment = useCallback(
     async (assetId: string) => {
-      const url = await getAttachmentUrl(assetId);
+      let url: string | undefined;
+      try {
+        url = await getAttachmentUrl(assetId);
+      } catch (error) {
+        // 取址被拒（大网下载小网文件是 403 带 error 文案）要提示出来，调用方是 void 调用不接拒绝
+        setToast({
+          type: TOAST_TYPE.ERROR,
+          title: t("toast.error"),
+          message: getDownloadErrorMessage(error, t("something_went_wrong")),
+        });
+        return;
+      }
       if (!url) return;
       // 预签名地址带 Content-Disposition: attachment，当前页直接跳过去只会触发下载、不会离开页面；
       // 用 window.open 开新标签会先闪出一个空白页再自己关掉
@@ -272,7 +287,7 @@ export const useStageReviewDetail = (
       link.click();
       link.remove();
     },
-    [getAttachmentUrl]
+    [getAttachmentUrl, t]
   );
 
   const createComment = useCallback(

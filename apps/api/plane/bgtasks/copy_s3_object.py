@@ -106,6 +106,7 @@ def copy_assets(entity, entity_identifier, project_id, asset_ids, user_id):
             entity_type=original_asset.entity_type,
             project_id=project_id,
             storage_metadata=original_asset.storage_metadata,
+            network_zone=original_asset.network_zone,
             **get_entity_id_field(original_asset.entity_type, entity_identifier),
         )
         storage.copy_object(

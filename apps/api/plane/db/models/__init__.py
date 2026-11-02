@@ -4,6 +4,7 @@
 
 from .analytic import AnalyticView
 from .api import APIActivityLog, APIToken
+from .network_zone import NetworkZone
 from .asset import FileAsset, FileAssetVersion, File
 from .base import BaseModel
 from .cycle import (

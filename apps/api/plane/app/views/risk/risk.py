@@ -36,6 +36,7 @@ from plane.db.models import (
     Workspace,
 )
 from plane.settings.storage import S3Storage
+from plane.utils.network_zone import ZONE_DOWNLOAD_DENIED, can_download_asset, download_disposition
 from plane.utils.asset_upload import presigned_post_for_asset
 from plane.utils.risk import (
     BEIJING_TZ,
@@ -384,9 +385,10 @@ class RiskFileAPI(BaseViewSet):
         ).first()
 
     @staticmethod
-    def _serialize(asset):
+    def _serialize(asset, request=None):
         attributes = asset.attributes or {}
         return {
+            "can_download": can_download_asset(request, asset) if request is not None else True,
             "id": str(asset.id),
             "name": attributes.get("name") or "",
             "size": int(asset.size or 0),
@@ -413,7 +415,7 @@ class RiskFileAPI(BaseViewSet):
             .select_related("created_by")
             .order_by("created_at")
         )
-        return Response([self._serialize(asset) for asset in assets], status=status.HTTP_200_OK)
+        return Response([self._serialize(asset, request) for asset in assets], status=status.HTTP_200_OK)
 
     @allow_permission(WRITE_ROLES)
     def upload(self, request, slug, project_id, risk_id):
@@ -498,9 +500,15 @@ class RiskFileAPI(BaseViewSet):
         asset = self._asset(slug, project_id, risk_id, asset_id, is_uploaded=True)
         if asset is None:
             return _not_found("File")
+        # 大网 / 小网：前端预览图片也走这里，受限图片给 inline；受限非图片 403
+        disposition = download_disposition(request, asset)
+        if disposition is None:
+            return Response(
+                {"error": ZONE_DOWNLOAD_DENIED}, status=status.HTTP_403_FORBIDDEN
+            )
         signed_url = S3Storage(request=request).generate_presigned_url(
             object_name=asset.storage_key,
-            disposition="attachment",
+            disposition=disposition,
             filename=(asset.attributes or {}).get("name"),
         )
         return Response({"download_url": signed_url}, status=status.HTTP_200_OK)

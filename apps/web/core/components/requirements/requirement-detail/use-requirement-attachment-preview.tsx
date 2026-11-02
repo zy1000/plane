@@ -13,6 +13,7 @@ import type { TRequirementAssetRef } from "@plane/types";
 import { getEditorAssetDownloadSrc, getEditorAssetSrc } from "@plane/utils";
 import { XmindPreviewModal } from "@/components/filestore/xmind-preview-modal";
 import { OnlyOfficePreviewModal } from "@/components/onlyoffice/onlyoffice-preview-modal";
+import { canDownloadFile } from "@/helpers/network-zone.helper";
 import { isImageSupported, isOnlyOfficeSupported, isXmindSupported } from "@/utils/onlyoffice";
 
 export const useRequirementAttachmentPreview = ({ workspaceSlug }: { workspaceSlug: string }) => {
@@ -24,6 +25,11 @@ export const useRequirementAttachmentPreview = ({ workspaceSlug }: { workspaceSl
 
   const requestPreview = useCallback(
     (asset: TRequirementAssetRef) => {
+      // 大网 / 小网隔离：Xmind / OnlyOffice 预览都要拉原文件，不可下载的只放行图片
+      if (!canDownloadFile(asset) && (isXmindSupported(asset.name) || isOnlyOfficeSupported(asset.name))) {
+        setToast({ type: TOAST_TYPE.ERROR, title: t("network_zone.view_denied") });
+        return;
+      }
       if (isXmindSupported(asset.name)) {
         setXmindAsset(asset);
         return;

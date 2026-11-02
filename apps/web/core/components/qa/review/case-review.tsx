@@ -47,6 +47,7 @@ import { CaseVersionCompareModal } from "../cases/update-modal/case-version-comp
 import UpdateModal from "../cases/update-modal";
 import { useTranslation } from "@plane/i18n";
 import { qaCaseErrorContent, qaCaseSetToastError, qaCaseSetToastSuccess, qaCaseSetToastWarning } from "@/utils/qa-case-error";
+import { canDownloadFile } from "@/helpers/network-zone.helper";
 import { WORKSPACE_MEMBERS } from "@/constants/fetch-keys";
 
 type ReviewCaseRow = ReviewCaseListItem;
@@ -357,6 +358,7 @@ export default function CaseReview() {
   const handleDownloadAttachment = async (attachment: any) => {
     const aid = String(attachment?.id ?? "");
     if (!workspaceSlug || !selectedCaseId || !aid) return;
+    if (!canDownloadFile(attachment)) return;
     try {
       const resp = await caseService.getCaseAsset(String(workspaceSlug), String(selectedCaseId), aid);
       const blob = resp?.data as Blob;
@@ -369,7 +371,11 @@ export default function CaseReview() {
       a.click();
       a.remove();
       window.URL.revokeObjectURL(url);
-    } catch {}
+    } catch (e: unknown) {
+      // responseType=blob 时 403 的 JSON 错误体也是 Blob，解出来才拿得到后端文案
+      const err = e instanceof Blob ? await e.text().then((text) => JSON.parse(text) as unknown).catch(() => e) : e;
+      qaCaseSetToastError(err, t, "附件下载失败");
+    }
   };
 
   React.useEffect(() => {
@@ -1093,13 +1099,24 @@ export default function CaseReview() {
                                       title: "操作",
                                       key: "action",
                                       width: 120,
-                                      render: (_: any, record: any) => (
-                                        <Tooltip title="下载">
-                                          <Button type="link" size="small" onClick={() => handleDownloadAttachment(record)}>
-                                            下载
-                                          </Button>
-                                        </Tooltip>
-                                      ),
+                                      render: (_: any, record: any) => {
+                                        const downloadable = canDownloadFile(record);
+                                        return (
+                                          <Tooltip title={downloadable ? "下载" : t("network_zone.download_denied")}>
+                                            {/* 禁用的按钮不响应悬停，套一层 span 让提示还能弹出来 */}
+                                            <span className="inline-flex">
+                                              <Button
+                                                type="link"
+                                                size="small"
+                                                disabled={!downloadable}
+                                                onClick={() => handleDownloadAttachment(record)}
+                                              >
+                                                下载
+                                              </Button>
+                                            </span>
+                                          </Tooltip>
+                                        );
+                                      },
                                     },
                                   ]}
                                 />

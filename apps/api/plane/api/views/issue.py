@@ -73,6 +73,7 @@ from plane.db.models import (
     Workspace,
 )
 from plane.settings.storage import S3Storage
+from plane.utils.network_zone import ZONE_DOWNLOAD_DENIED, can_download_asset
 from plane.bgtasks.storage_metadata_task import get_asset_object_metadata
 from plane.utils.asset_upload import presigned_post_for_asset
 from .base import BaseAPIView
@@ -2053,6 +2054,11 @@ class IssueAttachmentDetailAPIEndpoint(BaseAPIView):
             return Response(
                 {"error": "The asset is not uploaded.", "status": False},
                 status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not can_download_asset(request, asset):
+            return Response(
+                {"error": ZONE_DOWNLOAD_DENIED}, status=status.HTTP_403_FORBIDDEN
             )
 
         storage = S3Storage(request=request)

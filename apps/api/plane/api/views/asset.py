@@ -14,6 +14,7 @@ from drf_spectacular.utils import OpenApiExample, OpenApiRequest
 # Module Imports
 from plane.bgtasks.storage_metadata_task import get_asset_object_metadata
 from plane.settings.storage import S3Storage
+from plane.utils.network_zone import ZONE_DOWNLOAD_DENIED, can_download_asset
 from plane.db.models import FileAsset, User, Workspace
 from plane.api.views.base import BaseAPIView
 from plane.utils.asset_upload import presigned_post_for_asset
@@ -423,6 +424,11 @@ class GenericAssetEndpoint(BaseAPIView):
                 return Response(
                     {"error": "Asset not yet uploaded"},
                     status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            if not can_download_asset(request, asset):
+                return Response(
+                    {"error": ZONE_DOWNLOAD_DENIED}, status=status.HTTP_403_FORBIDDEN
                 )
 
             # Generate presigned URL for GET

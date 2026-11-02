@@ -33,6 +33,7 @@ from plane.db.models import (
     TestCase,
 )
 from plane.settings.storage import S3Storage
+from plane.utils.network_zone import ZONE_DOWNLOAD_DENIED, ZONE_VIEW_DENIED, asset_restricted, can_download_asset, is_image_asset
 from plane.app.permissions import allow_permission, ROLE
 from plane.utils.cache import invalidate_cache_directly
 from plane.bgtasks.storage_metadata_task import get_asset_object_metadata
@@ -614,12 +615,21 @@ class WorkspaceFileAssetEndpoint(BaseAPIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
+        # 大网 / 小网：受限文件只有图片能看（inline 显示），其余 403
+        if asset_restricted(request, asset):
+            if not is_image_asset(asset):
+                return Response(
+                    {"error": ZONE_VIEW_DENIED}, status=status.HTTP_403_FORBIDDEN
+                )
+            disposition = "inline"
+        else:
+            disposition = "attachment"
         # Get the presigned URL
         storage = S3Storage(request=request)
         # Generate a presigned URL to share an S3 object
         signed_url = storage.generate_presigned_url(
             object_name=asset.storage_key,
-            disposition="attachment",
+            disposition=disposition,
             filename=asset.attributes.get("name"),
         )
         # Redirect to the signed URL
@@ -977,12 +987,21 @@ class ProjectAssetEndpoint(BaseAPIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
+        # 大网 / 小网：受限文件只有图片能看（inline 显示），其余 403
+        if asset_restricted(request, asset):
+            if not is_image_asset(asset):
+                return Response(
+                    {"error": ZONE_VIEW_DENIED}, status=status.HTTP_403_FORBIDDEN
+                )
+            disposition = "inline"
+        else:
+            disposition = "attachment"
         # Get the presigned URL
         storage = S3Storage(request=request)
         # Generate a presigned URL to share an S3 object
         signed_url = storage.generate_presigned_url(
             object_name=asset.storage_key,
-            disposition="attachment",
+            disposition=disposition,
             filename=asset.attributes.get("name"),
         )
         # Redirect to the signed URL
@@ -1274,6 +1293,7 @@ class DuplicateAssetEndpoint(BaseAPIView):
             created_by_id=request.user.id,
             entity_type=entity_type,
             storage_metadata=original_asset.storage_metadata,
+            network_zone=original_asset.network_zone,
             **entity_id_fields,
         )
         from plane.utils.asset_upload import build_asset_metadata
@@ -1316,6 +1336,11 @@ class WorkspaceAssetDownloadEndpoint(BaseAPIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
+        if not can_download_asset(request, asset):
+            return Response(
+                {"error": ZONE_DOWNLOAD_DENIED}, status=status.HTTP_403_FORBIDDEN
+            )
+
         storage = S3Storage(request=request)
         signed_url = storage.generate_presigned_url(
             object_name=asset.storage_key,
@@ -1342,6 +1367,11 @@ class ProjectAssetDownloadEndpoint(BaseAPIView):
             return Response(
                 {"error": "The requested asset could not be found."},
                 status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if not can_download_asset(request, asset):
+            return Response(
+                {"error": ZONE_DOWNLOAD_DENIED}, status=status.HTTP_403_FORBIDDEN
             )
 
         storage = S3Storage(request=request)

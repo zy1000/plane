@@ -36,7 +36,12 @@ export interface IUserLite {
   employee_id?: string | null;
   department?: string | null;
   leader?: IUserLeader | null;
+  // 大网 / 小网归属（只有工作区成员列表的管理员视图带）；null = 未绑定
+  network_zone?: TNetworkZone | null;
 }
+
+/** 大网 wan（能上互联网）/ 小网 lan（纯内网） */
+export type TNetworkZone = "wan" | "lan";
 
 export type IUserLeader = {
   id: string;

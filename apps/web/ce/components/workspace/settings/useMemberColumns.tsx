@@ -19,7 +19,13 @@ import { useTranslation } from "@plane/i18n";
 import { renderFormattedDate } from "@plane/utils";
 import { MemberHeaderColumn } from "@/components/project/member-header-column";
 import type { RowData } from "@/components/workspace/settings/member-columns";
-import { CustomRolesColumn, NameColumn, TeamsColumn } from "@/components/workspace/settings/member-columns";
+import {
+  CustomRolesColumn,
+  NameColumn,
+  NetworkZoneColumn,
+  TeamsColumn,
+} from "@/components/workspace/settings/member-columns";
+import { useInstance } from "@/hooks/store/use-instance";
 import { useMember } from "@/hooks/store/use-member";
 import { useWorkspaceGroups } from "@/hooks/store/use-workspace-groups";
 import { useWorkspaceRoles } from "@/hooks/store/use-workspace-roles";
@@ -40,6 +46,7 @@ export const useMemberColumns = () => {
     },
   } = useMember();
   const { t } = useTranslation();
+  const { config } = useInstance();
 
   // derived values
   const canEditMember = allowWorkspacePermissionKeys([WORKSPACE_MEMBER_EDIT_PERMISSION_KEY], workspaceSlug);
@@ -175,6 +182,19 @@ export const useMemberColumns = () => {
         />
       ),
     },
+
+    // 大网 / 小网归属：隔离开关开着、且能编辑成员才有这一列（后端只给管理员视图返回归属）
+    ...(config?.network_zone_enabled && canEditMember
+      ? [
+          {
+            key: "Network zone",
+            content: t("network_zone.label"),
+            tdRender: (rowData: RowData) => (
+              <NetworkZoneColumn rowData={rowData} workspaceSlug={workspaceSlug} canEditMember={canEditMember} />
+            ),
+          },
+        ]
+      : []),
 
     {
       key: "Joining date",

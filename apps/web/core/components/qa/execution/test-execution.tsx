@@ -59,6 +59,7 @@ import {
 import { PlanCaseReviewStatusTag } from "@/components/qa/plans/plan-case-tags";
 import { usePlanAssigneeTree } from "@/components/qa/plans/use-plan-assignee-tree";
 import { usePlanGroupTree } from "@/components/qa/plans/use-plan-group-tree";
+import { canDownloadFile, getDownloadErrorMessage } from "@/helpers/network-zone.helper";
 
 type ReviewCaseRow = {
   id: string | number;
@@ -395,6 +396,7 @@ export default function TestExecutionPage() {
   const handleDownloadAttachment = async (attachment: any) => {
     const aid = String(attachment?.id ?? "");
     if (!workspaceSlug || !selectedCaseId || !aid) return;
+    if (!canDownloadFile(attachment)) return;
     try {
       const resp = await caseService.getCaseAsset(String(workspaceSlug), String(selectedCaseId), aid);
       const blob = resp?.data as Blob;
@@ -407,11 +409,16 @@ export default function TestExecutionPage() {
       a.click();
       a.remove();
       window.URL.revokeObjectURL(url);
-    } catch {}
+    } catch (e: unknown) {
+      // responseType=blob 时 403 的 JSON 错误体也是 Blob，解出来才拿得到后端文案
+      const err = e instanceof Blob ? await e.text().then((text) => JSON.parse(text) as unknown).catch(() => e) : e;
+      message.error(getDownloadErrorMessage(err, "附件下载失败"));
+    }
   };
 
   const handleDownloadExecutionFile = async (file: ExecAttachment) => {
     if (!workspaceSlug) return;
+    if (!canDownloadFile(file)) return;
     try {
       const url = await planService.downloadExecutionFile(String(workspaceSlug), file.id);
       window.open(url, "_blank", "noopener,noreferrer");

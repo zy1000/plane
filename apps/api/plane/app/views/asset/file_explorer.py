@@ -31,6 +31,7 @@ from plane.bgtasks.storage_metadata_task import get_asset_object_metadata
 from plane.db.models import FileAsset, Project
 from plane.db.models.asset import FilePath
 from plane.settings.storage import S3Storage
+from plane.utils.network_zone import ZONE_DOWNLOAD_DENIED, can_download_asset, split_downloadable
 from plane.utils.asset_path import _sanitize_filename
 from plane.utils.asset_upload import presigned_post_for_asset
 from plane.utils.asset_versions import (
@@ -56,10 +57,12 @@ from plane.utils.onlyoffice_sessions import has_active_session
 from plane.utils.paginator import CustomPaginator
 
 
-def _serialize_asset(asset: FileAsset) -> dict:
+def _serialize_asset(asset: FileAsset, request=None) -> dict:
+    """``request`` 传了才算 can_download（列表 / 搜索用）；单个响应默认 True。"""
     attrs = asset.attributes or {}
     created_by = asset.created_by
     return {
+        "can_download": can_download_asset(request, asset) if request is not None else True,
         "id": str(asset.id),
         "name": asset.filename or attrs.get("name") or "",
         "filename": asset.filename or "",
@@ -333,7 +336,7 @@ class FilestoreExplorerViewSet(BaseViewSet):
                 "folders": [_serialize_folder(item) for item in folders],
                 "files": {
                     "count": file_assets.count(),
-                    "data": [_serialize_asset(item) for item in (paginated or [])],
+                    "data": [_serialize_asset(item, request) for item in (paginated or [])],
                 },
             },
             status=status.HTTP_200_OK,
@@ -941,6 +944,13 @@ class FilestoreExplorerViewSet(BaseViewSet):
                 {"error": "No downloadable assets found"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        # 大网 / 小网：跳过受限文件，全部受限直接拒绝
+        downloadable, skipped = split_downloadable(request, selected_assets.values())
+        if not downloadable:
+            return Response(
+                {"error": ZONE_DOWNLOAD_DENIED}, status=status.HTTP_403_FORBIDDEN
+            )
+        selected_assets = {str(asset.id): asset for asset in downloadable}
 
         storage = S3Storage(request=request)
         zip_buffer = io.BytesIO()
@@ -972,6 +982,9 @@ class FilestoreExplorerViewSet(BaseViewSet):
         zip_buffer.seek(0)
         response = StreamingHttpResponse(zip_buffer, content_type="application/zip")
         response["Content-Disposition"] = 'attachment; filename="filestore-assets.zip"'
+        if skipped:
+            response["X-Zone-Skipped"] = str(len(skipped))
+            response["Access-Control-Expose-Headers"] = "X-Zone-Skipped"
         return response
 
     @action(detail=False, methods=["get"], url_path="../search")
@@ -1035,7 +1048,7 @@ class FilestoreExplorerViewSet(BaseViewSet):
             payload["path"] = _build_relative_path(folder.parent_id, node_map)
             combined.append(payload)
         for asset in file_assets:
-            payload = _serialize_asset(asset)
+            payload = _serialize_asset(asset, request)
             payload["kind"] = "file"
             payload["path"] = _build_relative_path(asset.path_id, node_map)
             combined.append(payload)

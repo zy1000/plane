@@ -22,6 +22,7 @@ import { ExportOutlined } from "@ant-design/icons";
 import { AssetExplorer } from "@/components/asset-explorer";
 import { formatBytes, formatMinIODate } from "@/components/asset-explorer/utils/format";
 import { XmindPreviewModal, type TXmindPreviewAsset } from "@/components/filestore/xmind-preview-modal";
+import { canDownloadFile } from "@/helpers/network-zone.helper";
 import { useOnlyOfficeSave } from "@/hooks/use-onlyoffice-save";
 import { useUserPermissions } from "@/hooks/store/user";
 import { FilestoreService, type TFilestoreAsset, type TFilestoreAssetVersion } from "@/services/filestore.service";
@@ -44,7 +45,7 @@ const ONLYOFFICE_SUPPORTED_EXTS = [
 ];
 const XMIND_SUPPORTED_EXTS = ["xmind"];
 
-type TFilestoreAssetLike = Pick<TFilestoreAsset, "id" | "attributes"> & {
+type TFilestoreAssetLike = Pick<TFilestoreAsset, "id" | "attributes" | "can_download"> & {
   name?: string;
   filename?: string;
 };
@@ -426,6 +427,11 @@ function FilestorePage() {
     async (asset: TFilestoreAssetLike) => {
       if (!asset?.id || !workspaceSlug || !projectId) return;
       const filename = getAssetFilename(asset);
+      // 大网 / 小网隔离：小网上传的非图片文件，大网用户连在线预览（OnlyOffice / xmind）也不行；图片照常
+      if (!canDownloadFile(asset) && (isXmindSupported(filename) || isOnlyOfficeSupported(filename))) {
+        setToast({ type: TOAST_TYPE.ERROR, title: t("network_zone.view_denied") });
+        return;
+      }
       if (isXmindSupported(filename)) {
         setXmindAsset(asset);
         setXmindPreviewOpen(true);
@@ -452,7 +458,7 @@ function FilestorePage() {
       }
       message.warning("暂不支持预览此文件类型");
     },
-    [openEditor, projectId, service, workspaceSlug]
+    [openEditor, projectId, service, t, workspaceSlug]
   );
 
   const handleEdit = useCallback(

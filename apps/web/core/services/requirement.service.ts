@@ -1,3 +1,4 @@
+import { readZoneSkippedCount } from "@/helpers/network-zone.helper";
 import { API_BASE_URL } from "@plane/constants";
 import type {
   TCreateRequirementLibraryPayload,
@@ -1600,7 +1601,7 @@ export class RequirementService extends APIService {
     scope: { kind: "product" | "library"; id: string },
     requirementId: string,
     assetIds: string[]
-  ): Promise<Blob> {
+  ): Promise<{ blob: Blob; skipped: number }> {
     const root =
       scope.kind === "product"
         ? `${this.requirementsRoot(workspaceSlug, scope.id)}/${requirementId}`
@@ -1610,7 +1611,10 @@ export class RequirementService extends APIService {
       { params: { asset_ids: assetIds.join(",") } },
       { responseType: "blob" }
     )
-      .then((response) => response?.data as Blob)
+      .then((response) => ({
+        blob: response?.data as Blob,
+        skipped: readZoneSkippedCount(response?.headers),
+      }))
       .catch((error) => {
         throw error?.response?.data;
       });

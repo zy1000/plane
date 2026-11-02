@@ -15,6 +15,7 @@ from django.http import StreamingHttpResponse
 
 from plane.db.models import FileAsset
 from plane.settings.storage import S3Storage
+from plane.utils.network_zone import ZONE_SKIPPED_HEADER
 from plane.utils.asset_path import _sanitize_filename
 
 
@@ -34,9 +35,9 @@ def _dedupe_name(name: str, used_names: set[str]) -> str:
 
 
 def build_assets_zip_response(
-    request, assets: Iterable[FileAsset], zip_filename: str
+    request, assets: Iterable[FileAsset], zip_filename: str, skipped: int = 0
 ) -> StreamingHttpResponse:
-    """把资产列表打包成 zip 并返回可直接下发的响应。"""
+    """把资产列表打包成 zip 并返回可直接下发的响应。``skipped`` 是因大网 / 小网限制被跳过的数量。"""
 
     storage = S3Storage(request=request)
     zip_buffer = io.BytesIO()
@@ -68,4 +69,8 @@ def build_assets_zip_response(
     zip_buffer.seek(0)
     response = StreamingHttpResponse(zip_buffer, content_type="application/zip")
     response["Content-Disposition"] = f'attachment; filename="{zip_filename}"'
+    if skipped:
+        response[ZONE_SKIPPED_HEADER] = str(skipped)
+        # 开发环境前后端跨域，不暴露这个头 axios 读不到
+        response["Access-Control-Expose-Headers"] = ZONE_SKIPPED_HEADER
     return response

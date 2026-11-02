@@ -542,3 +542,32 @@ class WorkspaceProjectMemberEndpoint(BaseAPIView):
             project_members_dict[str(project_id)].append(project_member)
 
         return Response(project_members_dict, status=status.HTTP_200_OK)
+
+
+class WorkspaceMemberNetworkZoneAPIView(BaseAPIView):
+    """管理员改成员的大网 / 小网归属（docs/network-zone/plan.md）。改完踢掉此人全部会话。"""
+
+    @allow_fine_permission(PermissionKey.WORKSPACE_MEMBER_EDIT, level="WORKSPACE")
+    def patch(self, request, slug, pk):
+        from plane.db.models import NetworkZone
+        from plane.utils.network_zone import set_user_zone
+
+        zone = request.data.get("network_zone") or None
+        if zone is not None and zone not in NetworkZone.values:
+            return Response(
+                {"error": "network_zone 只能是 wan / lan 或空"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        workspace_member = WorkspaceMember.objects.filter(
+            pk=pk, workspace__slug=slug, member__is_bot=False, is_active=True
+        ).select_related("member").first()
+        if workspace_member is None:
+            return Response(
+                {"error": "Workspace member not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        set_user_zone(workspace_member.member, zone)
+        return Response(
+            {"id": str(workspace_member.id), "network_zone": zone},
+            status=status.HTTP_200_OK,
+        )

@@ -1,6 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "@plane/i18n";
+import { TOAST_TYPE, setToast } from "@plane/propel/toast";
+import { canDownloadFile } from "@/helpers/network-zone.helper";
 import { useAttachmentBatchDownload } from "@/hooks/use-attachment-batch-download";
 import { useFileUploadProgress } from "@/hooks/use-file-upload-progress";
 import { CycleService } from "@/services/cycle.service";
@@ -10,6 +13,8 @@ export type TCycleFile = {
   name: string;
   size: number;
   created_at: string;
+  /** 大网 / 小网隔离：后端明确给 false 才禁止下载 */
+  can_download?: boolean;
 };
 
 type TUseCycleFilesProps = {
@@ -21,6 +26,7 @@ type TUseCycleFilesProps = {
 const CYCLE_FILES_FETCH_PAGE_SIZE = 100;
 
 export const useCycleFiles = ({ workspaceSlug, projectId, cycleId }: TUseCycleFilesProps) => {
+  const { t } = useTranslation();
   const cycleService = useMemo(() => new CycleService(), []);
   const { uploadStatuses, trackUpload } = useFileUploadProgress();
   const [files, setFiles] = useState<TCycleFile[]>([]);
@@ -53,6 +59,7 @@ export const useCycleFiles = ({ workspaceSlug, projectId, cycleId }: TUseCycleFi
             name: file.name,
             size: Number(file.size ?? 0),
             created_at: file.created_at,
+            can_download: file.can_download,
           });
         }
         if (list.length === 0 || list.length < CYCLE_FILES_FETCH_PAGE_SIZE || aggregated.length >= total) break;
@@ -95,6 +102,8 @@ export const useCycleFiles = ({ workspaceSlug, projectId, cycleId }: TUseCycleFi
   const downloadFile = useCallback(
     async (fileId: string) => {
       if (!workspaceSlug || !projectId) return;
+      const target = files.find((file) => file.id === fileId);
+      if (target && !canDownloadFile(target)) return;
       try {
         setFilesDownloadingId(fileId);
         const url = await cycleService.downloadCycleFile(workspaceSlug, projectId, fileId);
@@ -105,7 +114,7 @@ export const useCycleFiles = ({ workspaceSlug, projectId, cycleId }: TUseCycleFi
         setFilesDownloadingId(null);
       }
     },
-    [cycleService, projectId, workspaceSlug]
+    [cycleService, files, projectId, workspaceSlug]
   );
 
   const fetchFilesZip = useCallback(
@@ -117,6 +126,7 @@ export const useCycleFiles = ({ workspaceSlug, projectId, cycleId }: TUseCycleFi
     filename: "cycle-attachments.zip",
     fetchZip: fetchFilesZip,
     onError: setFilesError,
+    onSkipped: (count) => setToast({ type: TOAST_TYPE.WARNING, title: t("network_zone.skipped_files", { count }) }),
   });
 
   const deleteFile = useCallback(

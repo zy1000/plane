@@ -35,6 +35,8 @@ import { Pagination, Popconfirm, Tag, Tooltip } from "antd";
 import { SingleProgressStats } from "@/components/core/sidebar/single-progress-stats";
 import { StateDropdown } from "@/components/dropdowns/state/dropdown";
 import { SimpleEmptyState } from "@/components/empty-state/simple-empty-state-root";
+// helpers
+import { canDownloadFile, getDownloadErrorMessage } from "@/helpers/network-zone.helper";
 // hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useIssues } from "@/hooks/store/use-issues";
@@ -163,12 +165,14 @@ export const ActiveCycleStats = observer(function ActiveCycleStats(props: Active
   );
 
   const handleDownloadCycleFile = async (fileId: string, _fileName: string) => {
+    const target = cycleFiles.find((file) => file.id === fileId);
+    if (target && !canDownloadFile(target)) return;
     try {
       setCycleFilesDownloadingId(fileId);
       const url = await cycleService.current.downloadCycleFile(workspaceSlug, projectId, fileId);
       window.open(url, "_blank", "noopener,noreferrer");
     } catch (e: unknown) {
-      showCycleFileApiError(e, "下载失败", "请稍后重试");
+      showCycleFileApiError(e, "下载失败", getDownloadErrorMessage(e, "请稍后重试"));
     } finally {
       setCycleFilesDownloadingId(null);
     }
@@ -566,7 +570,8 @@ export const ActiveCycleStats = observer(function ActiveCycleStats(props: Active
                                 <Button
                                   variant="link-neutral"
                                   className="p-0"
-                                  disabled={cycleFilesDownloadingId === file.id}
+                                  disabled={cycleFilesDownloadingId === file.id || !canDownloadFile(file)}
+                                  title={canDownloadFile(file) ? undefined : t("network_zone.download_denied")}
                                   onClick={() => handleDownloadCycleFile(file.id, file.name)}
                                 >
                                   <Download className="h-3.5 w-3.5" />

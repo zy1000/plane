@@ -52,6 +52,7 @@ from plane.db.models import (
     Workspace,
 )
 from plane.settings.storage import S3Storage
+from plane.utils.network_zone import ZONE_DOWNLOAD_DENIED, can_download_asset, download_disposition
 from plane.utils.asset_upload import presigned_post_for_asset
 from plane.utils.review_tailoring import cut_activities, project_stages
 from plane.utils.stage_review import (
@@ -706,9 +707,10 @@ class StageReviewFileAPI(BaseViewSet):
         ).first()
 
     @staticmethod
-    def _serialize(asset):
+    def _serialize(asset, request=None):
         attributes = asset.attributes or {}
         return {
+            "can_download": can_download_asset(request, asset) if request is not None else True,
             "id": str(asset.id),
             "name": attributes.get("name") or "",
             "size": int(asset.size or 0),
@@ -736,7 +738,7 @@ class StageReviewFileAPI(BaseViewSet):
             .order_by("created_at")
         )
         return Response(
-            [self._serialize(asset) for asset in assets], status=status.HTTP_200_OK
+            [self._serialize(asset, request) for asset in assets], status=status.HTTP_200_OK
         )
 
     @allow_fine_permission(STAGE_REVIEW_MANAGE_KEY)
@@ -876,10 +878,16 @@ class StageReviewFileAPI(BaseViewSet):
             return Response(
                 {"error": "File not found"}, status=status.HTTP_404_NOT_FOUND
             )
+        # 大网 / 小网：前端预览图片也走这里，受限图片给 inline；受限非图片 403
+        disposition = download_disposition(request, asset)
+        if disposition is None:
+            return Response(
+                {"error": ZONE_DOWNLOAD_DENIED}, status=status.HTTP_403_FORBIDDEN
+            )
         storage = S3Storage(request=request)
         signed_url = storage.generate_presigned_url(
             object_name=asset.storage_key,
-            disposition="attachment",
+            disposition=disposition,
             filename=(asset.attributes or {}).get("name"),
         )
         return Response({"download_url": signed_url}, status=status.HTTP_200_OK)

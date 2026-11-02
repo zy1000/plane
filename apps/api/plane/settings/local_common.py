@@ -74,6 +74,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "plane.middleware.network_zone.NetworkZoneMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "crum.CurrentRequestUserMiddleware",
     "django.middleware.gzip.GZipMiddleware",
@@ -544,3 +545,16 @@ try:
     )
 except (TypeError, ValueError):
     ONLYOFFICE_SESSION_TTL_SECONDS = 28800
+
+# 大网 / 小网隔离（见 docs/network-zone/plan.md）。默认关；开发机在 10.x，开了会被当成大网
+NETWORK_ZONE_ENABLED = os.environ.get("NETWORK_ZONE_ENABLED", "0").lower() in {
+    "1",
+    "true",
+    "yes",
+}
+NETWORK_ZONE_WAN_CIDRS = os.environ.get("NETWORK_ZONE_WAN_CIDRS", "10.0.0.0/8")
+NETWORK_ZONE_LAN_CIDRS = os.environ.get("NETWORK_ZONE_LAN_CIDRS", "192.168.0.0/16")
+# 只有连接来自这些网段（nginx 容器网段 / 本机）时才相信代理写的 X-Real-IP / X-Forwarded-For
+TRUSTED_PROXY_CIDRS = os.environ.get(
+    "TRUSTED_PROXY_CIDRS", "127.0.0.0/8,::1/128,172.16.0.0/12"
+)

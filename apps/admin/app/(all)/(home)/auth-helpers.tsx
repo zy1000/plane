@@ -73,6 +73,14 @@ const errorCodeMessages: {
     title: `User account deactivated`,
     message: () => `User account deactivated. Please contact ${SUPPORT_EMAIL ? SUPPORT_EMAIL : "administrator"}.`,
   },
+  [EAdminAuthErrorCodes.NETWORK_ZONE_MISMATCH]: {
+    title: "网络环境不符",
+    message: () => "该账号已绑定到另一个网络环境（大网 / 小网），请回到绑定的环境登录。",
+  },
+  [EAdminAuthErrorCodes.NETWORK_ZONE_UNKNOWN]: {
+    title: "无法识别网络环境",
+    message: () => "当前网络既不是大网也不是小网，不允许登录，请联系管理员。",
+  },
 };
 
 export const authErrorHandler = (errorCode: EAdminAuthErrorCodes, email?: string): TAdminAuthErrorInfo | undefined => {
@@ -86,6 +94,8 @@ export const authErrorHandler = (errorCode: EAdminAuthErrorCodes, email?: string
     EAdminAuthErrorCodes.ADMIN_USER_ALREADY_EXIST,
     EAdminAuthErrorCodes.ADMIN_USER_DOES_NOT_EXIST,
     EAdminAuthErrorCodes.ADMIN_USER_DEACTIVATED,
+    EAdminAuthErrorCodes.NETWORK_ZONE_MISMATCH,
+    EAdminAuthErrorCodes.NETWORK_ZONE_UNKNOWN,
   ];
 
   if (bannerAlertErrorCodes.includes(errorCode))

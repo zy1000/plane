@@ -10,10 +10,12 @@ import React from "react";
 import { useRouter } from "next/navigation";
 import { ClipboardList, Download, FileText, Plus, Repeat, Trash2, Unlink, Upload } from "lucide-react";
 import { Checkbox, Popconfirm } from "antd";
+import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { cn } from "@plane/utils";
 import { FileUploadProgressList } from "@/components/common/file-upload-progress-item";
 import { ReadonlyDate } from "@/components/readonly/date";
+import { canDownloadFile } from "@/helpers/network-zone.helper";
 import { useFileSelection } from "@/hooks/use-file-selection";
 import type { TFileUploadStatus } from "@/hooks/use-file-upload-progress";
 import { formatFileSize, formatReleaseOverviewDateRange } from "./release-format";
@@ -41,6 +43,8 @@ type FileItem = {
   name: string;
   size: number;
   created_at: string;
+  /** 大网 / 小网隔离：后端明确给 false 才禁止下载 */
+  can_download?: boolean;
 };
 
 const SECTION_CARD = "flex min-h-[380px] flex-col rounded-xl border border-subtle bg-surface-1";
@@ -379,6 +383,7 @@ export const ReleaseFilesSection: React.FC<FilesSectionProps> = ({
   uploadStatuses = [],
   className,
 }) => {
+  const { t } = useTranslation();
   const selection = useFileSelection(files);
   const canBatchDownload = Boolean(onBatchDownloadFiles) && canDownloadReleaseFile;
 
@@ -440,6 +445,10 @@ export const ReleaseFilesSection: React.FC<FilesSectionProps> = ({
               <tbody>
                 {files.map((file) => {
                   const isDeleteDisabled = filesDeletingId === file.id || !canDeleteReleaseFile;
+                  // 权限是整张表一个值，大网 / 小网限制按行判断
+                  const isZoneRestricted = !canDownloadFile(file);
+                  const isDownloadDisabled =
+                    filesDownloadingId === file.id || !canDownloadReleaseFile || isZoneRestricted;
 
                   return (
                     <tr key={file.id} className="border-b border-subtle last:border-b-0 hover:bg-layer-1">
@@ -461,14 +470,20 @@ export const ReleaseFilesSection: React.FC<FilesSectionProps> = ({
                       </td>
                       <td className="py-2 pr-2 pl-10">
                         <div className="flex items-center justify-start gap-2">
-                          <Button
-                            variant="link-neutral"
-                            className="p-0"
-                            disabled={filesDownloadingId === file.id || !canDownloadReleaseFile}
-                            onClick={() => onDownloadFile(file.id, file.name)}
+                          {/* 禁用的按钮不响应悬停，提示挂在外层 span 上 */}
+                          <span
+                            className="inline-flex"
+                            title={isZoneRestricted ? t("network_zone.download_denied") : undefined}
                           >
-                            <Download className="h-3.5 w-3.5" />
-                          </Button>
+                            <Button
+                              variant="link-neutral"
+                              className="p-0"
+                              disabled={isDownloadDisabled}
+                              onClick={() => onDownloadFile(file.id, file.name)}
+                            >
+                              <Download className="h-3.5 w-3.5" />
+                            </Button>
+                          </span>
                           <Popconfirm
                             title="确认删除该附件？"
                             okText="删除"

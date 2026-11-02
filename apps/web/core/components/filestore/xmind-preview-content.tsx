@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Alert, Button, Input, Select, Spin, Typography } from "antd";
+import { getDownloadErrorMessage } from "@/helpers/network-zone.helper";
 import { AssetExplorerService } from "@/services/asset-explorer.service";
 
 export type TXmindPreviewAsset = {
@@ -356,7 +357,8 @@ export const XmindPreviewContent = ({
       }
       window.open(url, "_blank", "noopener,noreferrer");
     } catch (err: any) {
-      setError(err?.message || "下载失败");
+      // 取址被拒（大网下载小网文件是 403 带 error 文案）时把后端文案显示在 Alert 里
+      setError(getDownloadErrorMessage(err, "下载失败"));
     }
   }, [asset?.id, getFileURL, projectId, service, workspaceSlug]);
 
@@ -795,7 +797,8 @@ export const XmindPreviewContent = ({
         };
       } catch (err: any) {
         if (abortController.signal.aborted || disposed) return;
-        setError(err?.message || "解析 .xmind 失败");
+        // 取址 403（大网看小网文件）时服务层抛的是 { error } 对象，没有 message，这里要读后端文案
+        setError(getDownloadErrorMessage(err, "解析 .xmind 失败"));
       } finally {
         if (!disposed) setLoading(false);
       }

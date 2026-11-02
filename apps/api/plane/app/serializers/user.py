@@ -166,6 +166,7 @@ class UserAdminLiteSerializer(BaseSerializer):
             "display_name",
             "email",
             "last_login_medium",
+            "network_zone",
         ]
         read_only_fields = ["id", "is_bot"]
 

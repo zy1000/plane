@@ -59,6 +59,7 @@ def _copy_one_asset(
         case_id=case_id,
         project_id=project_id,
         storage_metadata=original.storage_metadata,
+        network_zone=original.network_zone,
     )
     result = storage.copy_object(
         original.storage_key,

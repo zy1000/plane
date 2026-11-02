@@ -19,6 +19,7 @@ from plane.bgtasks.cycle_activities_task import cycle_activity as cycle_activity
 from plane.bgtasks.storage_metadata_task import get_asset_object_metadata
 from plane.db.models import Cycle, FileAsset, Workspace
 from plane.settings.storage import S3Storage
+from plane.utils.network_zone import ZONE_DOWNLOAD_DENIED, can_download_asset, split_downloadable
 from plane.utils.asset_upload import presigned_post_for_asset
 from plane.utils.asset_zip import build_assets_zip_response
 from plane.utils.paginator import CustomPaginator
@@ -33,9 +34,11 @@ def _parse_asset_ids(raw: str) -> list[UUID]:
     return [UUID(item.strip()) for item in (raw or "").split(",") if item.strip()]
 
 
-def _serialize_asset(asset: FileAsset) -> dict:
+def _serialize_asset(asset: FileAsset, request=None) -> dict:
+    """``request`` 传了才算 can_download（列表用）；上传响应是本人刚传的，不用算。"""
     attrs = asset.attributes or {}
     return {
+        "can_download": can_download_asset(request, asset) if request is not None else True,
         "id": str(asset.id),
         "name": attrs.get("name") or "",
         "size": int(asset.size or 0),
@@ -139,7 +142,7 @@ class CycleFileAPI(BaseViewSet):
         paginator = self.pagination_class()
         paginated = paginator.paginate_queryset(assets, request)
         return list_response(
-            data=[_serialize_asset(a) for a in (paginated or [])],
+            data=[_serialize_asset(a, request) for a in (paginated or [])],
             count=assets.count(),
         )
 
@@ -209,8 +212,15 @@ class CycleFileAPI(BaseViewSet):
         if not assets:
             return Response({"error": "No downloadable files found"}, status=status.HTTP_404_NOT_FOUND)
 
+        assets, skipped = split_downloadable(request, assets)
+        if not assets:
+            return Response({"error": ZONE_DOWNLOAD_DENIED}, status=status.HTTP_403_FORBIDDEN)
+
         return build_assets_zip_response(
-            request=request, assets=assets, zip_filename="cycle-attachments.zip"
+            request=request,
+            assets=assets,
+            zip_filename="cycle-attachments.zip",
+            skipped=len(skipped),
         )
 
     @allow_fine_permission(PermissionKey.SPRINTS_FILE_DOWNLOAD)
@@ -226,6 +236,9 @@ class CycleFileAPI(BaseViewSet):
             )
         except FileAsset.DoesNotExist:
             return Response({"error": "File not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        if not can_download_asset(request, asset):
+            return Response({"error": ZONE_DOWNLOAD_DENIED}, status=status.HTTP_403_FORBIDDEN)
 
         storage = S3Storage(request=request)
         signed_url = storage.generate_presigned_url(

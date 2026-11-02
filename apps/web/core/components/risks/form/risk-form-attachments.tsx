@@ -5,6 +5,7 @@ import { PlusIcon } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TRiskAttachment } from "@plane/types";
 import { ModalFieldLabel } from "@/components/common/form-modal";
+import { canDownloadFile } from "@/helpers/network-zone.helper";
 import {
   RiskAttachmentDeleteModal,
   RiskAttachmentDropOverlay,
@@ -76,7 +77,8 @@ export const RiskFormAttachments = ({ state, locked }: { state: TRiskFormAttachm
               <RiskAttachmentRow key={asset.id} variant="boxed" name={asset.name} size={asset.size}>
                 <RiskAttachmentUploader asset={asset} />
                 <RiskAttachmentMenu
-                  onDownload={() => void state.downloadAttachment(asset).catch(() => undefined)}
+                  canDownload={canDownloadFile(asset)}
+                  onDownload={() => void state.downloadAttachment(asset)}
                   onDelete={() => setDeleting(asset)}
                 />
               </RiskAttachmentRow>

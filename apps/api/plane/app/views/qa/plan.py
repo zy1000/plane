@@ -108,6 +108,7 @@ from plane.app.views.qa.template_permissions import (
     template_permission_error,
 )
 from plane.settings.storage import S3Storage
+from plane.utils.network_zone import ZONE_DOWNLOAD_DENIED, can_download_asset
 from plane.utils.asset_upload import presigned_post_for_asset
 from plane.utils.product_category import (
     CaseModuleRootLocked,
@@ -2239,6 +2240,11 @@ class CaseAttachmentV2Endpoint(BaseAPIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
+            if not can_download_asset(request, asset):
+                return Response(
+                    {"error": ZONE_DOWNLOAD_DENIED}, status=status.HTTP_403_FORBIDDEN
+                )
+
             storage = S3Storage(request=request)
             s3_resp = storage.s3_client.get_object(
                 Bucket=storage.aws_storage_bucket_name, Key=asset.storage_key
@@ -2267,8 +2273,11 @@ class CaseAttachmentV2Endpoint(BaseAPIView):
             is_uploaded=True,
             is_deleted=False,
         )
-        serializer = CaseAttachmentSerializer(case_attachments, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        case_attachments = list(case_attachments)
+        data = CaseAttachmentSerializer(case_attachments, many=True).data
+        for item, asset in zip(data, case_attachments):
+            item["can_download"] = can_download_asset(request, asset)
+        return Response(data, status=status.HTTP_200_OK)
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
     def patch(self, request, slug, project_id, case_id, pk):

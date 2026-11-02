@@ -14,6 +14,8 @@ export type TFilestoreAsset = {
   created_at?: string;
   created_by?: any;
   is_uploaded?: boolean;
+  // 大网 / 小网隔离：列表项携带；没带按可下载处理，只有明确 false 才禁用
+  can_download?: boolean;
 };
 
 export type TFilestoreAssetListResponse = {

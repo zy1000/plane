@@ -155,14 +155,22 @@ export const RiskAttachmentUploader = ({ asset }: { asset: TRiskAttachment }) =>
   );
 };
 
-/** 悬停才出的「⋯」：下载、删除（不传 onDelete 就只有下载） */
-export const RiskAttachmentMenu = ({ onDownload, onDelete }: { onDownload: () => void; onDelete?: () => void }) => {
+/** 悬停才出的「⋯」：下载、删除（不传 onDelete 就只有下载）；`canDownload=false`（大网看小网文件）时下载置灰 */
+export const RiskAttachmentMenu = ({
+  canDownload = true,
+  onDownload,
+  onDelete,
+}: {
+  canDownload?: boolean;
+  onDownload: () => void;
+  onDelete?: () => void;
+}) => {
   const { t } = useTranslation();
   return (
     <div className="opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
       <CustomMenu ellipsis closeOnSelect placement="bottom-end">
-        <CustomMenu.MenuItem onClick={onDownload}>
-          <div className="flex items-center gap-2">
+        <CustomMenu.MenuItem disabled={!canDownload} onClick={onDownload}>
+          <div className="flex items-center gap-2" title={canDownload ? undefined : t("network_zone.download_denied")}>
             <Download className="h-3.5 w-3.5" strokeWidth={1.75} />
             <span>{t(`${RISK_I18N}.detail.download`)}</span>
           </div>

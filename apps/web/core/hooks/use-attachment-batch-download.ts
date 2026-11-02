@@ -27,13 +27,18 @@ const saveBlob = (blob: Blob, filename: string) => {
   window.URL.revokeObjectURL(url);
 };
 
+/** 后端打包结果；`skipped` 是因大网 / 小网限制被跳过的文件数（响应头 X-Zone-Skipped） */
+export type TZipDownloadResult = { blob: Blob; skipped?: number };
+
 type TUseAttachmentBatchDownloadProps = {
   /** 保存到本地的压缩包文件名 */
   filename: string;
   /** 拉取后端打包好的 zip */
-  fetchZip: (fileIds: string[]) => Promise<Blob>;
+  fetchZip: (fileIds: string[]) => Promise<Blob | TZipDownloadResult>;
   onError?: (message: string) => void;
   onSuccess?: () => void;
+  /** 打包时跳过了受限文件（大网用户选中了小网文件） */
+  onSkipped?: (count: number) => void;
 };
 
 /** 附件批量下载：请求后端打包的 zip 并触发浏览器保存。 */
@@ -42,6 +47,7 @@ export const useAttachmentBatchDownload = ({
   fetchZip,
   onError,
   onSuccess,
+  onSkipped,
 }: TUseAttachmentBatchDownloadProps) => {
   const [isBatchDownloading, setIsBatchDownloading] = useState(false);
 
@@ -50,8 +56,10 @@ export const useAttachmentBatchDownload = ({
       if (!fileIds.length || isBatchDownloading) return;
       try {
         setIsBatchDownloading(true);
-        const blob = await fetchZip(fileIds);
+        const result = await fetchZip(fileIds);
+        const { blob, skipped } = result instanceof Blob ? { blob: result, skipped: 0 } : result;
         saveBlob(blob, filename);
+        if (skipped) onSkipped?.(skipped);
         onSuccess?.();
       } catch (error: unknown) {
         onError?.(await extractErrorMessage(error, "批量下载失败"));
@@ -59,7 +67,7 @@ export const useAttachmentBatchDownload = ({
         setIsBatchDownloading(false);
       }
     },
-    [fetchZip, filename, isBatchDownloading, onError, onSuccess]
+    [fetchZip, filename, isBatchDownloading, onError, onSuccess, onSkipped]
   );
 
   return { isBatchDownloading, batchDownload };

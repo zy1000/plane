@@ -1,3 +1,4 @@
+import { readZoneSkippedCount } from "@/helpers/network-zone.helper";
 import type { AxiosRequestConfig } from "axios";
 import { API_BASE_URL } from "@plane/constants";
 import { generateFileUploadPayload, getFileMetaDataForUpload } from "@plane/services";
@@ -484,13 +485,16 @@ export class ReleaseService extends APIService {
     projectId: string,
     releaseId: string,
     fileIds: string[]
-  ): Promise<Blob> {
+  ): Promise<{ blob: Blob; skipped: number }> {
     return this.get(
       `/api/workspaces/${workspaceSlug}/projects/${projectId}/release/file/batch-download/`,
       { params: { release_id: releaseId, asset_ids: fileIds.join(",") } },
       { responseType: "blob" }
     )
-      .then((response) => response?.data as Blob)
+      .then((response) => ({
+        blob: response?.data as Blob,
+        skipped: readZoneSkippedCount(response?.headers),
+      }))
       .catch((error) => {
         throw error?.response?.data;
       });

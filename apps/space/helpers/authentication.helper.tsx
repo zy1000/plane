@@ -43,6 +43,9 @@ export enum EAuthenticationErrorCodes {
   MAGIC_SIGN_UP_EMAIL_CODE_REQUIRED = "5055",
   // Sign In
   USER_ACCOUNT_DEACTIVATED = "5019",
+  // 大网 / 小网隔离
+  NETWORK_ZONE_MISMATCH = "5195",
+  NETWORK_ZONE_UNKNOWN = "5196",
   USER_DOES_NOT_EXIST = "5060",
   AUTHENTICATION_FAILED_SIGN_IN = "5065",
   REQUIRED_EMAIL_PASSWORD_SIGN_IN = "5070",
@@ -163,6 +166,14 @@ const errorCodeMessages: {
   [EAuthenticationErrorCodes.USER_ACCOUNT_DEACTIVATED]: {
     title: `User account deactivated`,
     message: () => `User account deactivated. Please contact ${SUPPORT_EMAIL ? SUPPORT_EMAIL : "administrator"}.`,
+  },
+  [EAuthenticationErrorCodes.NETWORK_ZONE_MISMATCH]: {
+    title: "网络环境不符",
+    message: () => "该账号已绑定到另一个网络环境（大网 / 小网），请回到绑定的环境登录。",
+  },
+  [EAuthenticationErrorCodes.NETWORK_ZONE_UNKNOWN]: {
+    title: "无法识别网络环境",
+    message: () => "当前网络既不是大网也不是小网，不允许登录，请联系管理员。",
   },
 
   [EAuthenticationErrorCodes.USER_DOES_NOT_EXIST]: {

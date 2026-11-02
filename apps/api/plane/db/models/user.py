@@ -20,6 +20,7 @@ from django.utils import timezone
 from plane.db.models import FileAsset
 from ..mixins import TimeAuditModel
 from .base import BaseModel
+from .network_zone import NetworkZone
 from plane.utils.color import get_random_color
 
 
@@ -112,6 +113,10 @@ class User(AbstractBaseUser, PermissionsMixin):
     last_logout_ip = models.CharField(max_length=255, blank=True)
     last_login_medium = models.CharField(max_length=20, default="email")
     last_login_uagent = models.TextField(blank=True)
+    # 大网 / 小网归属：首次登录时按来源绑定，空 = 未绑定（见 docs/network-zone/plan.md）
+    network_zone = models.CharField(
+        max_length=8, choices=NetworkZone.choices, null=True, blank=True
+    )
     token_updated_at = models.DateTimeField(null=True)
     # my_issues_prop = models.JSONField(null=True)
 

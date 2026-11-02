@@ -33,6 +33,7 @@ import type {
   IWorkspaceRole,
   IWorkspaceMyAccess,
 } from "@plane/types";
+import type { TNetworkZone } from "@plane/types";
 // services
 import { APIService } from "@/services/api.service";
 
@@ -191,6 +192,21 @@ export class WorkspaceService extends APIService {
     memberId: string
   ): Promise<{ custom_role_ids: string[] }> {
     return this.get(`/api/workspaces/${workspaceSlug}/members/${memberId}/custom-roles/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 管理员改成员的大网 / 小网归属；后端会踢掉此人全部会话。memberId 是 WorkspaceMember 主键 */
+  async updateWorkspaceMemberNetworkZone(
+    workspaceSlug: string,
+    memberId: string,
+    networkZone: TNetworkZone | null
+  ): Promise<{ id: string; network_zone: TNetworkZone | null }> {
+    return this.patch(`/api/workspaces/${workspaceSlug}/members/${memberId}/network-zone/`, {
+      network_zone: networkZone,
+    })
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
