@@ -708,14 +708,14 @@ export const coreRoutes: RouteConfigEntry[] = [
             ),
             // Project permission groups（权限组列表 / 详情）
             route(
-              ":workspaceSlug/settings/projects/:projectId/permission-groups",
+              ":workspaceSlug/settings/projects/:projectId/permission",
               "./(all)/[workspaceSlug]/(settings)/settings/projects/[projectId]/permission-groups/page.tsx"
             ),
             route(
-              ":workspaceSlug/settings/projects/:projectId/permission-groups/:groupId",
+              ":workspaceSlug/settings/projects/:projectId/permission/:groupId",
               "./(all)/[workspaceSlug]/(settings)/settings/projects/[projectId]/permission-groups/[groupId]/page.tsx"
             ),
-            // Project products（研发产品：产品研发矩阵）
+            // Project products（产品：产品研发矩阵）
             route(
               ":workspaceSlug/settings/projects/:projectId/products",
               "./(all)/[workspaceSlug]/(settings)/settings/projects/[projectId]/products/page.tsx"

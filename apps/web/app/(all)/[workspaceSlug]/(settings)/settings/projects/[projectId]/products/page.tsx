@@ -27,7 +27,7 @@ import { useUserPermissions } from "@/hooks/store/user";
 import type { Route } from "./+types/page";
 import { ProductsProjectSettingsHeader } from "./header";
 
-/** 项目设置「研发产品」：关联产品 × 角色的研发矩阵（只用来找人：审批人按角色、评审候选人） */
+/** 项目设置「产品」：关联产品 × 角色的研发矩阵（只用来找人：审批人按角色、评审候选人） */
 function ProjectProductsSettingsPage({ params }: Route.ComponentProps) {
   const { workspaceSlug, projectId } = params;
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
@@ -67,7 +67,7 @@ function ProjectProductsSettingsPage({ params }: Route.ComponentProps) {
       header={<ProductsProjectSettingsHeader canLink={canManage} onLink={() => setIsLinkModalOpen(true)} />}
       hugging
     >
-      <PageHead title={currentProjectDetails?.name ? `${currentProjectDetails.name} - 研发产品` : undefined} />
+      <PageHead title={currentProjectDetails?.name ? `${currentProjectDetails.name} - 产品` : undefined} />
       <ProductTeamMatrix projectId={projectId} matrix={matrix} editable={canManage} />
 
       {canManage && (

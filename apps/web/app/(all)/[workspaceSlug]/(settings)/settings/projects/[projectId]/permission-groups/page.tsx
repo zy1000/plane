@@ -70,7 +70,7 @@ function ProjectPermissionGroupsPage({ params }: Route.ComponentProps) {
   const templateCount = groups.filter((group) => group.source === "template").length;
 
   const openDetail = (group: TProjectPermissionGroup) =>
-    router.push(`/${workspaceSlug}/settings/projects/${projectId}/permission-groups/${group.id}/`);
+    router.push(`/${workspaceSlug}/settings/projects/${projectId}/permission/${group.id}/`);
 
   const handlePendingConfirm = async () => {
     if (!pending) return;
@@ -101,7 +101,7 @@ function ProjectPermissionGroupsPage({ params }: Route.ComponentProps) {
       }
       hugging
     >
-      <PageHead title={currentProjectDetails?.name ? `${currentProjectDetails.name} - 权限组` : undefined} />
+      <PageHead title={currentProjectDetails?.name ? `${currentProjectDetails.name} - 权限` : undefined} />
       <div className="flex flex-col gap-4">
         <InheritedGroupsNote workspaceSlug={workspaceSlug} groups={inheritedGroups} />
 

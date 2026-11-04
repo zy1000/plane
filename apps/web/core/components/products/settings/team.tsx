@@ -40,7 +40,7 @@ const MemberChips = observer(function MemberChips({ memberIds }: { memberIds: st
 
 /**
  * 产品设置「研发团队」（只读）：各关联项目的研发矩阵里，这个产品每个角色由谁负责。
- * 在项目设置「研发产品」里维护。
+ * 在项目设置「产品」里维护。
  */
 export const ProductTeamSettings = observer(function ProductTeamSettings() {
   const { t } = useTranslation();
@@ -69,7 +69,7 @@ export const ProductTeamSettings = observer(function ProductTeamSettings() {
         <div>
           <h2 className="text-16 font-semibold text-primary">{title}</h2>
           <p className="mt-1 text-13 text-tertiary">
-            各关联项目里，这个产品的每个角色由谁负责。在项目设置「研发产品」里维护。
+            各关联项目里，这个产品的每个角色由谁负责。在项目设置「产品」里维护。
           </p>
         </div>
         {isLoading && !data ? (

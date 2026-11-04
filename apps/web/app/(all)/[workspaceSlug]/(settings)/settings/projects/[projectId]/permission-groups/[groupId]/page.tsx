@@ -98,7 +98,7 @@ function ProjectPermissionGroupDetailPage({ params }: Route.ComponentProps) {
     }
   };
 
-  const goToList = () => router.push(`/${workspaceSlug}/settings/projects/${projectId}/permission-groups/`);
+  const goToList = () => router.push(`/${workspaceSlug}/settings/projects/${projectId}/permission/`);
 
   const handleDeleteConfirm = async () => {
     if (!group) return;

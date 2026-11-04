@@ -6718,7 +6718,7 @@ export default {
         label: "Workflow",
       },
       roles: {
-        label: "Permission groups",
+        label: "Permissions",
       },
       products: {
         label: "Products",

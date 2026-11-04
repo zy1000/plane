@@ -6847,10 +6847,10 @@ export default {
       label: "工作流",
     },
     roles: {
-      label: "权限组",
+      label: "权限",
     },
     products: {
-      label: "研发产品",
+      label: "产品",
     },
     pms_sync: {
       label: "PMS 缺陷同步",

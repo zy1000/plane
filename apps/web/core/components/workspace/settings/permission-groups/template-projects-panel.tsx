@@ -125,7 +125,7 @@ export const TemplateProjectsPanel = observer(function TemplateProjectsPanel(pro
                 >
                   <div className="flex min-w-0 items-baseline gap-3">
                     <Link
-                      to={`/${workspaceSlug}/settings/projects/${project.id}/permission-groups/`}
+                      to={`/${workspaceSlug}/settings/projects/${project.id}/permission/`}
                       className="truncate font-medium text-primary hover:text-accent-primary hover:underline"
                     >
                       {project.name}
