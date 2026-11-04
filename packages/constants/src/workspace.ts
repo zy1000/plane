@@ -180,10 +180,10 @@ export const WORKSPACE_SETTINGS = {
   roles: {
     key: "roles",
     i18n_label: "workspace_settings.settings.roles.title",
-    href: `/settings/permission-groups`,
-    // 权限组列表与详情（/settings/permission-groups/<id>/）；成员管理员要给人分配权限组，也能看
+    href: `/settings/permission`,
+    // 权限组列表与详情（/settings/permission/<id>/）；成员管理员要给人分配权限组，也能看
     permissionKeys: [WORKSPACE_ROLE_VIEW_PERMISSION_KEY, WORKSPACE_ROLE_EDIT_PERMISSION_KEY, WORKSPACE_MEMBER_EDIT_PERMISSION_KEY],
-    highlight: (pathname: string, baseUrl: string) => pathname.startsWith(`${baseUrl}/settings/permission-groups/`),
+    highlight: (pathname: string, baseUrl: string) => pathname.startsWith(`${baseUrl}/settings/permission/`),
   },
   // 旧地址：项目权限组模板已并进「权限组」页的第二个页签，不再出现在侧栏，只为旧链接保留鉴权
   templates: {

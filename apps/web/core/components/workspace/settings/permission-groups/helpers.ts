@@ -22,10 +22,10 @@ export const DATA_SCOPE_KIND_LABELS = { projects: "项目", products: "产品" }
 /** 白名单是不是「全部」（用来判断「配了白名单却没勾项目权限」的提示） */
 export const isScopeEntryAll = (entry: TDataScopeEntry | undefined) => !entry || entry.mode === "all";
 
-export const getPermissionGroupsPath = (workspaceSlug: string) => `/${workspaceSlug}/settings/permission-groups/`;
+export const getPermissionGroupsPath = (workspaceSlug: string) => `/${workspaceSlug}/settings/permission/`;
 
 export const getPermissionGroupDetailPath = (workspaceSlug: string, roleId: string, tab?: string) =>
-  `/${workspaceSlug}/settings/permission-groups/${roleId}/${tab ? `?tab=${tab}` : ""}`;
+  `/${workspaceSlug}/settings/permission/${roleId}/${tab ? `?tab=${tab}` : ""}`;
 
 /** 后端错误体 → 一句人话 */
 export const getPermissionGroupErrorMessage = (error: unknown, fallback: string) => {

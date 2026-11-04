@@ -5871,7 +5871,7 @@ export default {
         title: "团队",
       },
       roles: {
-        title: "权限组",
+        title: "权限",
         template_flag: "作为项目权限组模板",
         template_hint: "勾上后，数据权限里白名单内的项目会自动引用这个组，项目经理可以把项目成员绑到它上面。",
         referenced_projects: "引用项目",

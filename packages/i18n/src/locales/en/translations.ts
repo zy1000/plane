@@ -5697,7 +5697,7 @@ export default {
         title: "Member groups",
       },
       roles: {
-        title: "Permission groups",
+        title: "Permissions",
         template_flag: "Use as a project permission group template",
         template_hint:
           "Projects in this group's data scope will reference it automatically, so project managers can bind project members to it.",

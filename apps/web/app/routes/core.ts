@@ -620,12 +620,12 @@ export const coreRoutes: RouteConfigEntry[] = [
             "./(all)/[workspaceSlug]/(settings)/settings/(workspace)/groups/page.tsx"
           ),
           route(
-            ":workspaceSlug/settings/permission-groups",
+            ":workspaceSlug/settings/permission",
             "./(all)/[workspaceSlug]/(settings)/settings/(workspace)/permission-groups/page.tsx"
           ),
           // 权限组详情（工作区权限组 / 项目权限组模板）
           route(
-            ":workspaceSlug/settings/permission-groups/:roleId",
+            ":workspaceSlug/settings/permission/:roleId",
             "./(all)/[workspaceSlug]/(settings)/settings/(workspace)/permission-groups/[roleId]/page.tsx"
           ),
           route(
