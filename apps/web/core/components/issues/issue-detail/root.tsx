@@ -38,9 +38,17 @@ import { IssueEditModeActionsPortal } from "./edit-mode-actions";
 import { IssueMainContent } from "./main-content";
 import { changeIssueReleases } from "./release-operations";
 
+/** update 失败时可带回的结果：状态变更被工作流转成了审批申请（整个 PATCH 都没落库） */
+export type TIssueUpdateOutcome = { approvalInitiated?: boolean };
+
 export type TIssueOperations = {
   fetch: (workspaceSlug: string, projectId: string, issueId: string, loader?: boolean) => Promise<void>;
-  update: (workspaceSlug: string, projectId: string, issueId: string, data: Partial<TIssue>) => Promise<void>;
+  update: (
+    workspaceSlug: string,
+    projectId: string,
+    issueId: string,
+    data: Partial<TIssue>
+  ) => Promise<void | TIssueUpdateOutcome>;
   remove: (workspaceSlug: string, projectId: string, issueId: string) => Promise<void>;
   archive?: (workspaceSlug: string, projectId: string, issueId: string) => Promise<void>;
   restore?: (workspaceSlug: string, projectId: string, issueId: string) => Promise<void>;
@@ -130,6 +138,7 @@ export const IssueDetailRoot = observer(function IssueDetailRoot(props: TIssueDe
                 ? "该状态变更需审批人通过后才会生效"
                 : t("entity.update.failed", { entity: t("issue.label") })),
           });
+          return { approvalInitiated };
         }
       },
       remove: async (workspaceSlug: string, projectId: string, issueId: string) => {

@@ -163,20 +163,21 @@ def resolve_transition_approver_ids(issue: Issue, transition: WorkflowTransition
 CONTENT_RESET_CORE_FIELDS = frozenset({"name", "description_html", "priority", "assignee_ids"})
 
 
-def _evaluate_issue_type_required_fields(issue: Issue):
-    missing_type_fields = get_missing_required_extra_fields(issue)
+def _evaluate_issue_type_required_fields(issue: Issue, pending_values=None):
+    missing_type_fields = get_missing_required_extra_fields(issue, pending_values)
     if missing_type_fields:
         names = "、".join(field.name for field in missing_type_fields)
         return False, f"工作项类型必填字段缺失：{names}"
     return True, None
 
 
-def _evaluate_required_fields(transition, issue: Issue):
+def _evaluate_required_fields(transition, issue: Issue, pending_values=None):
     """
     校验 issue 类型必填字段和该 transition 配置的必填字段是否都已有值。
     返回: (ok: bool, error_message: str | None)。transition 为 None 时仅检查类型级必填字段。
+    pending_values: 本次请求里和状态一起提交、还没落库的扩展字段值 {extra_field_id: value}，优先于库里的值。
     """
-    ok, error = _evaluate_issue_type_required_fields(issue)
+    ok, error = _evaluate_issue_type_required_fields(issue, pending_values)
     if not ok:
         return ok, error
 
@@ -187,6 +188,11 @@ def _evaluate_required_fields(transition, issue: Issue):
         workflow=transition, deleted_at__isnull=True
     ).select_related("extra_field")
     for obj in queryset:
+        field_id = str(obj.extra_field_id)
+        if pending_values and field_id in pending_values:
+            if is_extra_field_value_empty(pending_values[field_id]):
+                return False, f"按照工作流规则[{obj.extra_field.name}]是必填项"
+            continue
         value = (
             TypeExtraFieldValue.objects.filter(
                 issue=issue,
@@ -346,10 +352,17 @@ def _normalize_approval_reason(approval_reason=None) -> str:
 
 
 def check_update_state_permission(
-    issue: Issue, to_state: State, user, target_assignee_ids=None, approval_reason=None, **kwargs
+    issue: Issue,
+    to_state: State,
+    user,
+    target_assignee_ids=None,
+    approval_reason=None,
+    pending_extra_values=None,
+    **kwargs,
 ):
     """
     检查是否可以直接变更工作项状态。
+    pending_extra_values: 和状态一起提交、还没落库的扩展字段值 {extra_field_id: value}，必填校验优先用它。
     返回: (allowed: bool, error_message: str | None, transition_record: IssueTransitionRecord | None)
 
     - allowed=True, error=None, record=None  -> 直接放行
@@ -359,7 +372,7 @@ def check_update_state_permission(
     workflow, wft, exist_wft = get_active_transition(issue, to_state)
 
     if not workflow:
-        ok, error = _evaluate_issue_type_required_fields(issue)
+        ok, error = _evaluate_issue_type_required_fields(issue, pending_extra_values)
         if not ok:
             return False, error, None
         return True, None, None
@@ -370,7 +383,7 @@ def check_update_state_permission(
 
     # 没有配置流转规则则放行
     if not wft:
-        ok, error = _evaluate_issue_type_required_fields(issue)
+        ok, error = _evaluate_issue_type_required_fields(issue, pending_extra_values)
         if not ok:
             return False, error, None
         return True, None, None
@@ -387,7 +400,7 @@ def check_update_state_permission(
         return False, error, None
 
     # 2) 流转必填字段校验
-    ok, error = _evaluate_required_fields(wft, issue)
+    ok, error = _evaluate_required_fields(wft, issue, pending_extra_values)
     if not ok:
         return False, error, None
 

@@ -85,7 +85,7 @@ export const IssuePeekOverview = observer(function IssuePeekOverview(props: IWor
       },
       update: async (workspaceSlug: string, projectId: string, issueId: string, data: Partial<TIssue>) => {
         if (issues?.updateIssue) {
-          await issues
+          return await issues
             .updateIssue(workspaceSlug, projectId, issueId, data)
             .then(async () => {
               fetchActivities(workspaceSlug, projectId, issueId);
@@ -104,6 +104,7 @@ export const IssuePeekOverview = observer(function IssuePeekOverview(props: IWor
                     ? "该状态变更需审批人通过后才会生效"
                     : t("entity.update.failed", { entity: t("issue.label", { count: 1 }) })),
               });
+              return { approvalInitiated };
             });
         }
       },

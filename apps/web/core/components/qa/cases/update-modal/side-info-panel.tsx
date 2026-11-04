@@ -5,6 +5,7 @@ import { FolderOutlined } from "@ant-design/icons";
 import { useParams } from "next/navigation";
 import { formatCNDateTime } from "../util";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
+import { CaseModuleField, type TCaseModuleValue } from "./case-module-field";
 import { CaseVersionCompareModal } from "./case-version-compare-modal";
 import { TestCaseTimesheetField } from "./test-case-timesheet-field";
 
@@ -28,6 +29,9 @@ type SideInfoPanelProps = {
     created_at?: string;
   } | null;
   onChangeTestType: (v: string) => void | Promise<void>;
+  onChangeModule: (next: TCaseModuleValue) => void | Promise<void>;
+  /** 无编辑权限时模块只读 */
+  canEdit?: boolean;
   /** 隐藏项目语境区块（工时/变更/最近执行）。模板用例库使用；不传时行为不变 */
   hideProjectSections?: boolean;
 };
@@ -40,6 +44,8 @@ export function SideInfoPanel({
   reviewEnums,
   latestExec,
   onChangeTestType,
+  onChangeModule,
+  canEdit = true,
   hideProjectSections = false,
 }: SideInfoPanelProps) {
   const { workspaceSlug } = useParams() as { workspaceSlug?: string };
@@ -143,6 +149,18 @@ export function SideInfoPanel({
                 <Spin size="small" />
               </div>
             )}
+          </div>
+          <div className="flex items-center gap-3 md:gap-4">
+            <span className="text-sm font-medium text-secondary shrink-0 basis-28 md:basis-32">模块</span>
+            <div className="flex-1 min-w-0 rounded-md border border-transparent transition-colors duration-200 ring-1 ring-transparent focus-within:border-accent-subtle focus-within:ring-accent-subtle">
+              <CaseModuleField
+                workspaceSlug={workspaceSlug}
+                repositoryId={caseData?.repository ? String(caseData.repository) : undefined}
+                value={caseData?.module?.id ? { id: String(caseData.module.id), name: String(caseData.module.name ?? "") } : null}
+                disabled={!canEdit}
+                onChange={onChangeModule}
+              />
+            </div>
           </div>
         </div>
       </div>

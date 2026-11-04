@@ -1884,6 +1884,16 @@ class CaseAPIView(BaseAPIView):
                 {"error": "Repository does not belong to this product."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        # 改模块只能改到用例（换库时为目标库）所在用例库的模块；null = 未归类
+        target_module_id = request.data.get("module")
+        if target_module_id and not CaseModule.objects.filter(
+            id=target_module_id,
+            repository_id=target_repository_id or case.repository_id,
+        ).exists():
+            return Response(
+                {"error": "模块不属于该用例所在的用例库"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         # 在更新前抓快照，用于活动比对
         current_snapshot = build_case_activity_snapshot(case)
         update_serializer = CaseCreateUpdateSerializer(

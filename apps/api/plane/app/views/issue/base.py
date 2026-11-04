@@ -98,7 +98,10 @@ from plane.utils.issue_product import module_path_label
 from plane.utils.order_queryset import order_issue_queryset
 from plane.utils.paginator import GroupedOffsetPaginator, SubGroupedOffsetPaginator
 from plane.utils.timezone_converter import user_timezone_converter
-from plane.utils.extra_field_value import serialize_extra_field_values
+from plane.utils.extra_field_value import (
+    pending_extra_field_values,
+    serialize_extra_field_values,
+)
 from plane.settings.redis import redis_instance
 from plane.utils.workflow import (
     check_update_state_permission,
@@ -869,6 +872,10 @@ class IssueViewSet(BaseViewSet):
                     project_id=project_id,
                     target_assignee_ids=desired_assignee_ids,
                     approval_reason=approval_reason,
+                    # 同一次 PATCH 里填的扩展字段还没落库，必填校验要算上
+                    pending_extra_values=pending_extra_field_values(
+                        request.data.get("extra_field_values")
+                    ),
                 )
                 if not allowed:
                     redis_client.delete(lock_id)

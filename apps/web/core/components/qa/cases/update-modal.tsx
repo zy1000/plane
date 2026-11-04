@@ -15,6 +15,7 @@ import { TitleInput } from "./update-modal/title-input";
 import { CaseMetaForm } from "./update-modal/case-meta-form";
 import { BasicInfoPanel } from "./update-modal/basic-info-panel";
 import { AttachmentsPanel } from "./update-modal/attachments-panel";
+import type { TCaseModuleValue } from "./update-modal/case-module-field";
 import { SideInfoPanel } from "./update-modal/side-info-panel";
 import { FileService } from "@/services/file.service";
 import { WorkItemDisplayModal } from "./work-item-display-modal";
@@ -575,6 +576,19 @@ function UpdateModalBody({
       await persistCase({ id: String(caseId), test_type: Number(v) });
     } catch (e) {
       qaCaseSetToastError(e, t, "更新测试类型失败");
+    }
+  };
+
+  const handleChangeModule = async (next: TCaseModuleValue) => {
+    if (!canEditCase) return;
+    if (!workspaceSlug || !caseId || (!templateMode && !productIdStr)) return;
+    const prevModule = caseData?.module ?? null;
+    setCaseData((prev: any) => (prev ? { ...prev, module: next } : prev));
+    try {
+      await persistCase({ id: String(caseId), module: next?.id ?? null });
+    } catch (e) {
+      setCaseData((prev: any) => (prev ? { ...prev, module: prevModule } : prev));
+      qaCaseSetToastError(e, t, "更新模块失败");
     }
   };
 
@@ -1257,6 +1271,8 @@ function UpdateModalBody({
             reviewEnums={reviewEnums}
             latestExec={latestExec}
             onChangeTestType={handleChangeTestType}
+            onChangeModule={handleChangeModule}
+            canEdit={canEditCase}
             hideProjectSections={templateMode}
           />
         </div>

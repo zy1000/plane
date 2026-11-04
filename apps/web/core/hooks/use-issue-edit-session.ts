@@ -5,7 +5,7 @@
  */
 
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { cloneDeep, isEqual } from "lodash-es";
+import { cloneDeep, isEqual, omit } from "lodash-es";
 // plane imports
 import type { EditorRefApi } from "@plane/editor";
 import type { TIssue, TNameDescriptionLoader } from "@plane/types";
@@ -23,6 +23,8 @@ const AUTOSAVE_ONLY_KEYS = new Set(["name", "description_html", "skip_activity"]
 const PAYLOAD_ONLY_KEYS = new Set(["approval_reason", "skip_activity"]);
 /** 不走 PATCH、各有专用接口的字段 */
 const RELATION_KEYS = new Set(["cycle_id", "module_ids", "release_ids"]);
+/** 状态变更转成审批时随审批单一起走的键（负责人记为审批单的目标负责人，通过后才生效） */
+const APPROVAL_KEYS = ["state_id", "approval_reason", "assignee_ids"];
 
 const LEAVE_MESSAGE = "有未保存的修改，确定离开吗？";
 
@@ -279,7 +281,17 @@ export const useIssueEditSession = (args: TUseIssueEditSessionArgs): TIssueEditS
     // 3. 本地先回到修改前：真实操作自己做乐观更新，列表分组 / 迭代归属都以它读到的「修改前」为准
     revertLocal();
     const real = realOpsRef.current;
-    if (Object.keys(patch).length > 0) await real.update(ws, pid, iid, patch as Partial<TIssue>);
+    let approvalInitiated = false;
+    if (Object.keys(patch).length > 0) {
+      const outcome = await real.update(ws, pid, iid, patch as Partial<TIssue>);
+      approvalInitiated = Boolean(outcome?.approvalInitiated);
+      // 状态变更转成审批时后端整单拒收：状态和负责人随审批生效，其余字段（含流转必填字段）要单独再提交，
+      // 否则审批通过时按库里的值复核必填会失败
+      if (approvalInitiated) {
+        const rest = omit(patch, APPROVAL_KEYS);
+        if (Object.keys(rest).length > 0) await real.update(ws, pid, iid, rest as Partial<TIssue>);
+      }
+    }
     if (dirtyKeys.includes("cycle_id")) {
       const next = state.draft.cycle_id as string | null;
       const prev = state.snapshot.cycle_id as string | null | undefined;
@@ -295,12 +307,31 @@ export const useIssueEditSession = (args: TUseIssueEditSessionArgs): TIssueEditS
       await real.changeReleasesInIssue?.(ws, pid, iid, add, remove);
     }
 
-    // 4. 真实操作内部吞错并回滚本地，这里按「本地是否等于草稿」判断有没有没落下去的；
-    //    有失败的字段就重挂标题 / 描述，让界面回到服务端真实值
+    // 4. 真实操作内部吞错并回滚本地，这里按「本地是否等于草稿」判断有没有没落下去的
     const after = issueStore.getIssueById(iid) as unknown as Record<string, unknown> | undefined;
-    const failed = dirtyKeys.some((key) => !isEqual(after?.[key], state.draft[key]));
-    endSession(failed);
-    return !failed;
+    // 状态变更转成了审批申请：状态 / 负责人已经交给审批，从草稿里拿掉，免得再点保存重复发起
+    const settledKeys = new Set<string>(approvalInitiated ? APPROVAL_KEYS : []);
+    const failedKeys = dirtyKeys.filter((key) => !settledKeys.has(key) && !isEqual(after?.[key], state.draft[key]));
+    if (failedKeys.length === 0) {
+      endSession(false);
+      return true;
+    }
+
+    // 5. 有没保存上的：留在编辑态，已落库 / 已转审批的字段移出草稿，没落下去的改动重新铺回本地，
+    //    标题 / 描述编辑器不重挂，用户改的内容原样留着，修正后可以再点保存
+    for (const key of dirtyKeys) {
+      if (failedKeys.includes(key)) continue;
+      delete state.draft[key];
+      delete state.snapshot[key];
+    }
+    if (!failedKeys.includes("state_id")) delete state.draft.approval_reason;
+    state.snapshot.updated_at = after?.updated_at;
+    const retained: Record<string, unknown> = {};
+    for (const key of failedKeys) retained[key] = state.draft[key];
+    issueStore.updateIssue(iid, retained as Partial<TIssue>);
+    setIsSaving(false);
+    setDraftVersion((version) => version + 1);
+    return false;
   }, [editorRef, endSession, issueStore, revertLocal, stage]);
 
   // 切换到别的工作项：上一个的草稿直接丢弃

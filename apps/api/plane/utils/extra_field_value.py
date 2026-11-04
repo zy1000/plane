@@ -281,8 +281,28 @@ def validate_extra_field_values(
     return items, errors
 
 
-def get_missing_required_extra_fields(issue) -> List[TypeExtraField]:
-    """返回 issue 当前类型下未填写的 active required 自定义字段。"""
+def pending_extra_field_values(raw_values: Any) -> Dict[str, Any]:
+    """把请求里的 `extra_field_values` 列表转成 `{extra_field_id: value}`。
+
+    状态流转的必填校验发生在 serializer 落库之前，要叠加这份本次一起提交的值。
+    """
+
+    if not isinstance(raw_values, list):
+        return {}
+    return {
+        str(raw.get("extra_field_id")): raw.get("value")
+        for raw in raw_values
+        if isinstance(raw, dict) and raw.get("extra_field_id")
+    }
+
+
+def get_missing_required_extra_fields(
+    issue, pending_values: Optional[Dict[str, Any]] = None
+) -> List[TypeExtraField]:
+    """返回 issue 当前类型下未填写的 active required 自定义字段。
+
+    `pending_values` 是本次请求里一起提交、还没落库的 `{extra_field_id: value}`，优先于库里的值。
+    """
 
     if not getattr(issue, "type_id", None):
         return []
@@ -307,6 +327,8 @@ def get_missing_required_extra_fields(issue) -> List[TypeExtraField]:
             deleted_at__isnull=True,
         )
     }
+    if pending_values:
+        value_map.update(pending_values)
     return [
         field
         for field in required_fields
