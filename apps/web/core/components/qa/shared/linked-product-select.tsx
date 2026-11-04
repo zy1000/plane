@@ -9,17 +9,24 @@ import { useProjectProducts } from "@/hooks/store/use-project-products";
 
 /**
  * 项目里选用例的前提：用例归产品（2026-11），项目只能用「已关联产品」的用例。
- * 这个 hook 拉项目已关联的产品，并维护当前选中的那个（默认第一个）。
+ * 这个 hook 拉项目已关联的产品，并维护当前选中的那个（默认首选产品，没有就第一个）。
  */
-export const useLinkedProductFilter = (workspaceSlug: string | undefined, projectId: string | undefined) => {
+export const useLinkedProductFilter = (
+  workspaceSlug: string | undefined,
+  projectId: string | undefined,
+  /** 首选产品（如测试计划的产品）：在关联列表里就默认选它，否则退回第一个 */
+  preferredProductId?: string | null
+) => {
   const { links, isLoading, error } = useProjectProducts({ workspaceSlug, projectId });
   const [productId, setProductId] = useState<string | null>(null);
 
   useEffect(() => {
-    setProductId((prev) =>
-      prev && links.some((link) => link.product === prev) ? prev : (links[0]?.product ?? null)
-    );
-  }, [links]);
+    setProductId((prev) => {
+      if (prev && links.some((link) => link.product === prev)) return prev;
+      if (preferredProductId && links.some((link) => link.product === preferredProductId)) return preferredProductId;
+      return links[0]?.product ?? null;
+    });
+  }, [links, preferredProductId]);
 
   // 加载失败（如没有读取权限）与「确实没关联产品」要分开提示
   const hasNoLinkedProduct = !isLoading && !error && links.length === 0;

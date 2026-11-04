@@ -97,6 +97,8 @@ export type TBaseIssue = {
   /** 项目阶段（ProjectStage）；与迭代上的阶段互不派生 */
   stage_id: string | null;
   stage_name?: string | null;
+  /** 缺陷来源的测试计划（同项目），非必填；只在缺陷类型上展示 */
+  test_plan_id: string | null;
 
   created_at: string;
   updated_at: string;

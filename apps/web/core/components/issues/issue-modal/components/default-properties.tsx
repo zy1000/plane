@@ -32,6 +32,7 @@ import { ReleaseDropdown } from "@/components/dropdowns/release/dropdown";
 import { ProductDropdown } from "@/components/dropdowns/product/dropdown";
 import { ProductModuleDropdown } from "@/components/dropdowns/product-module/dropdown";
 import { ProjectStageDropdown } from "@/components/dropdowns/project-stage/dropdown";
+import { TestPlanDropdown } from "@/components/dropdowns/test-plan/dropdown";
 import { PriorityDropdown } from "@/components/dropdowns/priority";
 import { StateDropdown } from "@/components/dropdowns/state/dropdown";
 import { ParentIssuesListModal } from "@/components/issues/parent-issues-list-modal";
@@ -60,6 +61,8 @@ type TIssueDefaultPropertiesProps = {
   setSelectedParentIssue: (issue: ISearchIssueResponse) => void;
   /** 换产品时清空产品模块用；不传则只改产品字段本身 */
   setValue?: UseFormSetValue<TIssue>;
+  /** 显示「测试计划」下拉（缺陷来源），只有缺陷新建弹窗打开 */
+  showTestPlan?: boolean;
 };
 
 export const IssueDefaultProperties = observer(function IssueDefaultProperties(props: TIssueDefaultPropertiesProps) {
@@ -77,6 +80,7 @@ export const IssueDefaultProperties = observer(function IssueDefaultProperties(p
     handleFormChange,
     setSelectedParentIssue,
     setValue,
+    showTestPlan = false,
   } = props;
   // states
   const [parentIssueListModalOpen, setParentIssueListModalOpen] = useState(false);
@@ -389,6 +393,28 @@ export const IssueDefaultProperties = observer(function IssueDefaultProperties(p
                   handleFormChange();
                 }}
                 placeholder={t("stage_field.label")}
+                buttonVariant="border-with-text"
+                tabIndex={getIndex("stage_id")}
+              />
+            </div>
+          )}
+        />
+      )}
+      {showTestPlan && projectId && workspaceSlug && (
+        <Controller
+          control={control}
+          name="test_plan_id"
+          render={({ field: { value, onChange } }) => (
+            <div className="h-7">
+              <TestPlanDropdown
+                workspaceSlug={workspaceSlug}
+                projectId={projectId}
+                value={value ?? null}
+                onChange={(testPlanId) => {
+                  onChange(testPlanId);
+                  handleFormChange();
+                }}
+                placeholder="测试计划"
                 buttonVariant="border-with-text"
                 tabIndex={getIndex("stage_id")}
               />

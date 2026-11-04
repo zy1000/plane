@@ -77,6 +77,8 @@ export type TReportPlanStat = {
   pass_rate: TReportPassRate;
   overall_pass_rate: number;
   completion_rate: number;
+  /** 本计划提出的缺陷（缺陷的来源测试计划 = 本计划） */
+  defect_count: number;
 };
 
 export type TReportAnalysis = {
@@ -91,7 +93,7 @@ export type TReportAnalysis = {
   not_started_plan_count: number;
   /** 同一用例进多个计划只算一次 */
   distinct_case_count: number;
-  /** 报告内用例关联的缺陷（去重） */
+  /** 报告内各计划提出的缺陷（缺陷的来源测试计划在报告内） */
   defect_count: number;
   high_priority_defect_count: number;
 };

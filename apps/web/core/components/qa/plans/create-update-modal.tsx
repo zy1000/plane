@@ -12,6 +12,7 @@ import { PlanReviewRuleFields } from "./plan-review-rule-fields";
 import { usePlanReviewRule } from "./use-plan-review-rule";
 import type { TPlanReviewApprovalType } from "@/services/qa/plan.service";
 import { useUser } from "@/hooks/store/user";
+import { useProjectProducts } from "@/hooks/store/use-project-products";
 import { qaCaseSetToastError, qaCaseSetToastSuccess } from "@/utils/qa-case-error";
 // services
 import { PlanService } from "@/services/qa/plan.service";
@@ -34,6 +35,7 @@ type Props = {
   initialData?: {
     name?: string;
     description?: string;
+    product?: string | null;
     module?: string | null;
     cycle?: string | null;
     begin_time?: string | Date | null;
@@ -137,6 +139,7 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
   // 表单状态
   const [name, setName] = useState<string>(initialData?.name ?? "");
   const [description, setDescription] = useState<string>(initialData?.description ?? "");
+  const [productId, setProductId] = useState<string | null>(initialData?.product ?? null);
   const [moduleId, setModuleId] = useState<string | null>(initialData?.module ?? null);
   const [cycleId, setCycleId] = useState<string | null>(initialData?.cycle ?? null);
   const reviewRule = usePlanReviewRule({
@@ -157,15 +160,40 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [errors, setErrors] = useState<{
     name?: string;
+    product?: string;
     beginTime?: string;
     endTime?: string;
     threshold?: string;
   }>({});
 
+  // 产品候选 = 项目已关联的产品
+  const { links: productLinks, isLoading: productsLoading } = useProjectProducts({
+    workspaceSlug: isOpen ? workspaceSlug : undefined,
+    projectId: isOpen ? projectId : undefined,
+  });
+  const productOptions = useMemo<TSelectOption[]>(
+    () =>
+      productLinks.map((link) => {
+        const label = link.product_identifier ? `${link.product_name}（${link.product_identifier}）` : link.product_name;
+        return {
+          value: String(link.product),
+          query: `${link.product_name} ${link.product_identifier ?? ""}`,
+          content: <span className="flex-grow truncate">{label}</span>,
+        };
+      }),
+    [productLinks]
+  );
+  // 新建时项目只关联了一个产品就直接选上
+  React.useEffect(() => {
+    if (!isOpen || mode !== "create" || productId || productLinks.length !== 1) return;
+    setProductId(String(productLinks[0].product));
+  }, [isOpen, mode, productId, productLinks]);
+
   // 关闭时重置所有字段
   const resetForm = () => {
     setName(initialData?.name ?? "");
     setDescription(initialData?.description ?? "");
+    setProductId(initialData?.product ?? null);
     setModuleId(initialData?.module ?? null);
     setCycleId(initialData?.cycle ?? null);
     reviewRule.reset({
@@ -195,6 +223,7 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
     if (!isOpen) return;
     setName(initialData?.name ?? "");
     setDescription(initialData?.description ?? "");
+    setProductId(initialData?.product ?? null);
     setModuleId(initialData?.module ?? null);
     setCycleId(initialData?.cycle ?? null);
     reviewRule.reset({
@@ -277,12 +306,16 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
   const validate = (): boolean => {
     const nextErrors: {
       name?: string;
+      product?: string;
       beginTime?: string;
       endTime?: string;
       threshold?: string;
     } = {};
     if (!name || !name.trim()) {
       nextErrors.name = "请输入计划名称";
+    }
+    if (!productId) {
+      nextErrors.product = "请选择产品";
     }
     if (!beginTime) {
       nextErrors.beginTime = "请选择开始日期";
@@ -313,6 +346,7 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
         begin_time: beginTime ? renderFormattedPayloadDate(beginTime) : null,
         end_time: endTime ? renderFormattedPayloadDate(endTime) : null,
         threshold,
+        product: productId,
         module: moduleId,
         cycle: cycleId,
         ...reviewRule.buildPayload(),
@@ -328,6 +362,7 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
           threshold: payload.threshold,
           begin_time: payload.begin_time,
           end_time: payload.end_time,
+          product: payload.product,
           module: payload.module,
           cycle: payload.cycle,
           reviewers: payload.reviewers,
@@ -407,6 +442,26 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
         <div data-modal-wheel-scroll className="vertical-scrollbar scrollbar-sm min-h-0 flex-1 overflow-y-auto px-8">
           <FormFieldGroup title="归属">
             <div className={grid}>
+              <FormFieldShell label="产品" required editable error={errors.product} styles={styles}>
+                <CustomSearchSelect
+                  value={productId ?? undefined}
+                  onChange={(val: string | null) => {
+                    setProductId(val ?? null);
+                    if (errors.product) setErrors((prev) => ({ ...prev, product: undefined }));
+                  }}
+                  options={productOptions}
+                  multiple={false}
+                  customButtonClassName={selectButtonClassName}
+                  customButton={
+                    <SelectButton
+                      label={productOptions.find((o) => o.value === productId)?.content}
+                      placeholder={
+                        !productsLoading && productOptions.length === 0 ? "本项目还没有关联产品" : "请选择产品"
+                      }
+                    />
+                  }
+                />
+              </FormFieldShell>
               <FormFieldShell label="所属模块" required={false} editable styles={styles}>
                 <CustomSearchSelect
                   value={moduleId ?? undefined}

@@ -4,7 +4,7 @@ from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from django.db.models import Count, Q
+from django.db.models import Count, F, Q
 from django.shortcuts import get_object_or_404
 
 from plane.app.serializers.qa import (
@@ -21,6 +21,7 @@ from plane.app.serializers.qa.report import (
 from plane.app.views import BaseAPIView, BaseViewSet
 from plane.app.views.qa.filters import TestReportFilter
 from plane.app.permissions import allow_fine_permission, PermissionKey
+from plane.app.permissions.base import DEFECT_CATEGORY_NAME
 from plane.db.models import TestReport, PlanCase, ReportModule
 from plane.utils.paginator import CustomPaginator
 from plane.utils.response import list_response
@@ -274,9 +275,14 @@ class ReportView(BaseViewSet):
             PlanCase.objects.select_related("case", "plan", "case__module", "assignee")
             .filter(plan_id__in=plan_ids, deleted_at__isnull=True, plan__deleted_at__isnull=True)
             .annotate(
+                # 只算这条用例上、来源测试计划就是本行计划的缺陷
                 defect_count=Count(
                     "case__issues",
-                    filter=Q(case__issues__deleted_at__isnull=True),
+                    filter=Q(
+                        case__issues__deleted_at__isnull=True,
+                        case__issues__test_plan_id=F("plan_id"),
+                        case__issues__type__category__name=DEFECT_CATEGORY_NAME,
+                    ),
                     distinct=True,
                 )
             )

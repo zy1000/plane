@@ -63,6 +63,7 @@ import { PlanCasesTable } from "@/components/qa/plans/plan-cases-table";
 import { PlanCaseResultTag, PlanCaseReviewStatusTag, PlanStateTag } from "@/components/qa/plans/plan-case-tags";
 import { TestHubEntityBar } from "@/components/qa/shared/testhub-entity-bar";
 import { TestHubHeaderActions } from "@/components/qa/shared/testhub-header-actions";
+import { PlanCreateDefectButton } from "@/components/qa/plans/plan-create-defect-button";
 import { ButtonAvatars } from "@/components/dropdowns/member/avatar";
 import { ClipboardList } from "lucide-react";
 import { PlanCaseReviewModal } from "@/components/qa/plans/plan-case-review-modal";
@@ -976,6 +977,12 @@ export default function PlanCasesPage() {
               </PlaneButton>
             </Dropdown>
           </div>
+          <PlanCreateDefectButton
+            workspaceSlug={String(workspaceSlug || "")}
+            projectId={String(projectId || "")}
+            planId={String(planId || "")}
+            productId={currentPlan?.product}
+          />
           <PlaneButton
             variant="secondary"
             size="xl"
@@ -994,6 +1001,9 @@ export default function PlanCasesPage() {
                   <PlanStateTag state={currentPlan.state} />
                   <TestHubEntityBar.Divider />
                 </>
+              )}
+              {currentPlan?.product_name && (
+                <TestHubEntityBar.Meta label="产品">{currentPlan.product_name}</TestHubEntityBar.Meta>
               )}
               <TestHubEntityBar.Meta label="用例">{activeTree.total ?? 0}</TestHubEntityBar.Meta>
               {planPeriod && <TestHubEntityBar.Meta label="周期">{planPeriod}</TestHubEntityBar.Meta>}
@@ -1183,6 +1193,7 @@ export default function PlanCasesPage() {
             repositoryId={String(repositoryId)}
             repositoryName={repositoryName || ""}
             planId={String(planId || "")}
+            defaultProductId={currentPlan?.product}
             initialSelectedCaseIds={(cases || []).map((c) => c?.case?.id).filter((id): id is string => Boolean(id))}
             onClosed={() => {
               // 关闭后刷新列表，保留当前查询参数与筛选

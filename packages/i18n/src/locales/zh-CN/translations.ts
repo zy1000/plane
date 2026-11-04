@@ -1869,6 +1869,7 @@ export default {
       product: "产品",
       product_module: "产品模块",
       stage: "阶段",
+      test_plan: "测试计划",
       type: "类型",
       relation: "关联",
     },

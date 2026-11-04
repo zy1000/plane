@@ -46,6 +46,7 @@ from plane.db.models import (
     EstimatePoint, IssueType,
     Product,
     ProjectStage,
+    TestPlan,
 )
 from plane.db.seed_data.issue_scheme import (
     BUG as SYSTEM_BUG,
@@ -57,6 +58,7 @@ from plane.db.seed_data.issue_scheme import (
 )
 from plane.utils.issue_scheme import is_type_visible_to_project, project_scheme_id
 from plane.utils.issue_stage import validate_stage_in_project
+from plane.utils.issue_test_plan import validate_test_plan_in_project
 from plane.utils.issue_product import (
     apply_resolved_product_fields,
     product_module_queryset,
@@ -158,6 +160,10 @@ class IssueCreateSerializer(BaseSerializer):
     )
     stage_id = serializers.PrimaryKeyRelatedField(
         source="stage", queryset=ProjectStage.objects.all(), required=False, allow_null=True
+    )
+    # 缺陷的来源测试计划（非必填），规则在 utils/issue_test_plan.py
+    test_plan_id = serializers.PrimaryKeyRelatedField(
+        source="test_plan", queryset=TestPlan.objects.all(), required=False, allow_null=True
     )
     label_ids = serializers.ListField(
         child=serializers.PrimaryKeyRelatedField(queryset=Label.objects.all()),
@@ -345,6 +351,11 @@ class IssueCreateSerializer(BaseSerializer):
         if "stage" in attrs:
             validate_stage_in_project(
                 attrs.get("stage"),
+                self.context.get("project_id") or (self.instance.project_id if self.instance else None),
+            )
+        if "test_plan" in attrs:
+            validate_test_plan_in_project(
+                attrs.get("test_plan"),
                 self.context.get("project_id") or (self.instance.project_id if self.instance else None),
             )
 
@@ -979,6 +990,7 @@ class IssueSerializer(DynamicBaseSerializer):
             "product_id",
             "product_module_id",
             "stage_id",
+            "test_plan_id",
         ]
         read_only_fields = fields
 
@@ -1042,6 +1054,7 @@ class IssueListDetailSerializer(serializers.Serializer):
             "product_id": instance.product_id,
             "product_module_id": instance.product_module_id,
             "stage_id": instance.stage_id,
+            "test_plan_id": instance.test_plan_id,
             "module_ids": self.get_module_ids(instance),
             "release_ids": self.get_release_ids(instance),
             "label_ids": self.get_label_ids(instance),

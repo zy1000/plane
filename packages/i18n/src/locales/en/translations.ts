@@ -1696,6 +1696,7 @@ export default {
       product: "the product",
       product_module: "the product module",
       stage: "the stage",
+      test_plan: "the test plan",
       type: "the type",
       relation: "relation",
     },

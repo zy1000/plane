@@ -295,6 +295,8 @@ export const BugIssueFormRoot: FC<BugIssueFormProps> = observer((props) => {
         getCreateFormValues({
           project_id: getValues<"project_id">("project_id"),
           type_id: getValues<"type_id">("type_id"),
+          // 从测试计划页打开时连续创建，后续缺陷仍挂同一个计划
+          test_plan_id: data?.test_plan_id ?? null,
           description_html: "<p></p>",
         })
       );
@@ -439,6 +441,7 @@ export const BugIssueFormRoot: FC<BugIssueFormProps> = observer((props) => {
                   handleFormChange={handleFormChange}
                   setSelectedParentIssue={setSelectedParentIssue}
                   setValue={setValue}
+                  showTestPlan
                 />
               </div>
               {showActionButtons && (

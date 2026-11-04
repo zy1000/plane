@@ -220,6 +220,8 @@ export default function TestExecutionPage() {
   const [isCurrentUserAssignee, setIsCurrentUserAssignee] = React.useState<boolean>(false);
   /** 所属计划的复核人数，用于复核记录区的通过进度 */
   const [planReviewerCount, setPlanReviewerCount] = React.useState<number>(0);
+  // 计划的产品：提缺陷时作为缺陷所属产品的默认值
+  const [planProductId, setPlanProductId] = React.useState<string | null>(null);
   const [stepActualResultMap, setStepActualResultMap] = React.useState<Record<number, string>>({});
   const [stepExecResultMap, setStepExecResultMap] = React.useState<Record<number, string>>({});
   const [stepViewMode, setStepViewMode] = React.useState<number>(0);
@@ -440,6 +442,7 @@ export default function TestExecutionPage() {
         const found = list.find((p) => String(p.id) === String(planId));
         if (found?.name) setPlanName(found.name);
         setPlanReviewerCount((found?.reviewers ?? []).length);
+        setPlanProductId(found?.product ?? null);
       })
       .catch(() => {});
   }, [planId, workspaceSlug, projectId]);
@@ -1588,7 +1591,12 @@ export default function TestExecutionPage() {
           modalTitle="新增缺陷"
           isDraft={false}
           initialDescriptionHtml={buildStepsHtml()}
-          data={{ project_id: projectId }}
+          // 缺陷自动记上来源测试计划；计划有产品就带作默认产品
+          data={{
+            project_id: projectId,
+            test_plan_id: planId || null,
+            ...(planProductId ? { product_id: planProductId } : {}),
+          }}
           isProjectSelectionDisabled={true}
           onSubmit={async (res) => {
             try {

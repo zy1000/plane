@@ -51,6 +51,8 @@ type Props = {
   repositoryId: string;
   repositoryName?: string;
   planId?: string;
+  /** 计划的产品：打开时默认看这个产品的用例 */
+  defaultProductId?: string | null;
   initialSelectedCaseIds?: string[];
   onClosed?: () => void;
 };
@@ -61,6 +63,7 @@ export const PlanCasesModal: React.FC<Props> = ({
   workspaceSlug,
   projectId,
   planId,
+  defaultProductId,
   initialSelectedCaseIds,
   onClosed,
 }) => {
@@ -74,7 +77,7 @@ export const PlanCasesModal: React.FC<Props> = ({
     hasNoLinkedProduct,
     productId,
     setProductId,
-  } = useLinkedProductFilter(isOpen ? workspaceSlug : undefined, projectId);
+  } = useLinkedProductFilter(isOpen ? workspaceSlug : undefined, projectId, defaultProductId);
 
   const [planTree, setPlanTree] = useState<any | null>(null);
   const [expandedKeys, setExpandedKeys] = useState<string[]>([]);

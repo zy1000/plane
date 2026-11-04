@@ -204,6 +204,16 @@ class Issue(ProjectBaseModel):
         blank=True,
         verbose_name="所属阶段",
     )
+    # 缺陷从哪个测试计划提出（可改、可空）；只要求属于同一项目
+    # （utils/issue_test_plan.py）。计划是软删，删除接口里同步置空。
+    test_plan = models.ForeignKey(
+        "db.TestPlan",
+        on_delete=models.SET_NULL,
+        related_name="defects",
+        null=True,
+        blank=True,
+        verbose_name="来源测试计划",
+    )
 
     issue_objects = IssueManager()
 

@@ -70,6 +70,9 @@ export type TPlanListItem = {
   module?: string | null;
   /** 计划所属模块的祖先链（根 → 计划所属模块），无模块时为空数组 */
   module_path?: TPlanModulePathItem[];
+  /** 被测产品（项目已关联产品之一）；存量计划可能为空 */
+  product?: string | null;
+  product_name?: string | null;
   /** 复核人（可多人）：只有他们可复核该计划下各条用例的执行结果 */
   reviewers?: string[];
   /** 多人复核的通过规则；单人时无意义，后端存 all */
@@ -99,6 +102,9 @@ export type TPlanListRow = {
   cycle_name?: string | null;
   /** 关联发布名称（列表展示用） */
   release_names?: string[];
+  /** 被测产品（项目已关联产品之一）；存量计划可能为空 */
+  product?: string | null;
+  product_name?: string | null;
   /** 通过阈值 0-100 */
   threshold?: number | null;
   case_count?: number;

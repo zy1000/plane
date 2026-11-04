@@ -83,6 +83,7 @@ export const ReportPlansCard = ({ plans, loading = false, plansHref, onOpenPlan 
               <span className="flex gap-2.5 whitespace-nowrap text-12 text-tertiary tabular-nums">
                 <span>{plan.case_count} 条用例</span>
                 <span>{plan.assignee_count} 位执行人</span>
+                <span title="本计划提出的缺陷">{plan.defect_count ?? 0} 个缺陷</span>
                 {plan.state && <span className={PLAN_STATE_CLASS[plan.state] ?? "text-tertiary"}>{plan.state}</span>}
               </span>
             </button>

@@ -169,6 +169,7 @@ def issue_on_results(
         "product_module_id",
         "product_module_name",
         "stage_id",
+        "test_plan_id",
         "stage_name",
     ]
 

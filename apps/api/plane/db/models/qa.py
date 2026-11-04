@@ -529,6 +529,16 @@ class TestPlan(BaseModel):
         on_delete=models.CASCADE,
         related_name="project_%(class)s",
     )
+    # 被测产品：从项目已关联的产品（ProductProject）里单选。新建 / 编辑必填由序列化器保证，
+    # 库里可空（存量计划、产品被删后 SET_NULL）
+    product = models.ForeignKey(
+        "db.Product",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="test_plans",
+        verbose_name="TestPlan Product",
+    )
     cases = models.ManyToManyField(
         TestCase,
         blank=True,

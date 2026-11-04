@@ -181,7 +181,7 @@ def _rate(numerator, denominator):
 def build_report_plan_stats(report):
     """详情页「执行概览 + 关联计划」用的扩展统计。
 
-    返回 {plans: [每个计划的五态计数 / 通过率 / 完成率 / 执行人数], not_started_plan_count,
+    返回 {plans: [每个计划的五态计数 / 通过率 / 完成率 / 执行人数 / 缺陷数], not_started_plan_count,
     distinct_case_count, defect_count, high_priority_defect_count}。
     用例数与 build_report_stats_map 同口径（同一用例进两个计划算两条），去重数单独给。
     """
@@ -212,6 +212,23 @@ def build_report_plan_stats(report):
         ):
             per_plan[row["plan_id"]]["assignee_count"] = row["count"]
 
+    # 计划产生的缺陷 = 来源测试计划（Issue.test_plan）是报告内计划的缺陷类工作项
+    from plane.app.permissions.base import DEFECT_CATEGORY_NAME
+
+    defects = Issue.objects.filter(
+        test_plan_id__in=plan_ids,
+        type__category__name=DEFECT_CATEGORY_NAME,
+        deleted_at__isnull=True,
+    )
+    defect_count_by_plan = (
+        {
+            row["test_plan_id"]: row["count"]
+            for row in defects.order_by().values("test_plan_id").annotate(count=Count("id"))
+        }
+        if plan_ids
+        else {}
+    )
+
     plan_rows = []
     for plan in plans:
         entry = per_plan[plan["id"]]
@@ -230,15 +247,10 @@ def build_report_plan_stats(report):
                 "pass_rate": entry["pass_rate"],
                 "overall_pass_rate": _rate(entry["success_count"], entry["case_count"]),
                 "completion_rate": _rate(entry["case_count"] - not_start, entry["case_count"]),
+                "defect_count": defect_count_by_plan.get(plan["id"], 0),
             }
         )
 
-    # 缺陷挂在用例上（TestCase.issues），按报告内所有用例去重
-    defects = Issue.objects.filter(
-        cases__plan_cases__plan_id__in=plan_ids,
-        cases__plan_cases__deleted_at__isnull=True,
-        deleted_at__isnull=True,
-    )
     return {
         "plans": plan_rows,
         "not_started_plan_count": sum(1 for p in plans if p["state"] == TestPlan.State.NOT_START),

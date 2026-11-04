@@ -23,6 +23,7 @@ const LABELED_FIELDS = new Set([
   "product",
   "product_module",
   "stage",
+  "test_plan",
   "type",
 ]);
 

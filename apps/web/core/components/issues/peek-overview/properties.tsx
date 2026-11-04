@@ -5,11 +5,12 @@
  */
 
 import { observer } from "mobx-react";
-import { Boxes, CalendarClock, CalendarPlus, Layers, Package, Rocket, UserRound } from "lucide-react";
+import { Boxes, CalendarClock, CalendarPlus, ClipboardCheck, Layers, Package, Rocket, UserRound } from "lucide-react";
 // i18n
 import { useTranslation } from "@plane/i18n";
 // ui icons
 import { CycleIcon, EstimatePropertyIcon, ModuleIcon, LabelPropertyIcon } from "@plane/propel/icons";
+import { EIssueServiceType } from "@plane/types";
 import { cn, renderFormattedDate, renderFormattedTime } from "@plane/utils";
 import { EstimateDropdown } from "@/components/dropdowns/estimate";
 // helpers
@@ -29,6 +30,8 @@ import { IssueReleaseSelect } from "../issue-detail/release-select";
 import { IssueProductSelect } from "../issue-detail/product-select";
 import { IssueProductModuleSelect } from "../issue-detail/product-module-select";
 import { IssueStageSelect } from "../issue-detail/stage-select";
+import { IssueTestPlanSelect } from "../issue-detail/test-plan-select";
+import { useIsDefectWorkItem } from "../issue-detail-widgets/work-item-risks/use-is-defect-work-item";
 import { PeekOverviewBasicProperties, PeekOverviewDateProperties } from "./basic-properties";
 import { PropertyGroupSection, StructureFieldLabel, StructureFieldValue } from "./property-field";
 
@@ -54,6 +57,8 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
     issue: { getIssueById },
   } = useIssueDetail();
   const { getUserDetails } = useMember();
+  // 「测试计划」只对缺陷显示；hook 要在下面的提前 return 之前调用
+  const isDefect = useIsDefectWorkItem(workspaceSlug, projectId, issueId, EIssueServiceType.ISSUES);
   // derived values
   const issue = getIssueById(issueId);
   if (!issue) return <></>;
@@ -244,6 +249,22 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
                 disabled={disabled}
               />
             </StructureFieldValue>
+
+            {isDefect && (
+              <>
+                <StructureFieldLabel icon={ClipboardCheck} label="测试计划" />
+                <StructureFieldValue>
+                  <IssueTestPlanSelect
+                    className="h-7.5 w-full grow"
+                    workspaceSlug={workspaceSlug}
+                    projectId={projectId}
+                    issueId={issueId}
+                    issueOperations={issueOperations}
+                    disabled={disabled}
+                  />
+                </StructureFieldValue>
+              </>
+            )}
 
           </div>
         </PropertyGroupSection>

@@ -37,6 +37,7 @@ from plane.db.models import (
     TestReport,
     ProductCategory,
 )
+from plane.utils.issue_product import is_product_linked
 from plane.utils.product_category import seed_repository_root_modules
 from plane.utils.qa import (
     compute_plan_result,
@@ -163,6 +164,12 @@ class TestPlanCreateUpdateSerializer(ModelSerializer):
             date_errors["end_time"] = "结束日期不能早于开始日期"
         if date_errors:
             raise serializers.ValidationError(date_errors)
+
+        # 产品必须在计划所在项目的产品池（ProductProject）内
+        if "product" in attrs:
+            project = attrs.get("project") or (instance.project if instance else None)
+            if not is_product_linked(getattr(project, "id", None), attrs["product"].id):
+                raise serializers.ValidationError({"product": "所选产品未关联到本项目"})
         return attrs
 
     def create(self, validated_data):
@@ -209,6 +216,7 @@ class TestPlanCreateUpdateSerializer(ModelSerializer):
             "begin_time",
             "end_time",
             "project",
+            "product",
             "threshold",
             "cases",
             "cycle",
@@ -217,6 +225,12 @@ class TestPlanCreateUpdateSerializer(ModelSerializer):
             "review_required_count",
         ]
         extra_kwargs = {
+            # 新建必填；PUT 是 partial，不传不校验，但不能清空
+            "product": {
+                "required": True,
+                "allow_null": False,
+                "error_messages": {"required": "请选择产品", "null": "请选择产品"},
+            },
             "begin_time": {
                 "required": True,
                 "allow_null": False,
@@ -230,8 +244,18 @@ class TestPlanCreateUpdateSerializer(ModelSerializer):
         }
 
 
+def _plan_product_name(obj: TestPlan):
+    """调用方需 select_related("product")；产品已软删时不显示"""
+    product = obj.product
+    return product.name if product and product.deleted_at is None else None
+
+
 class PlanListSerializer(ModelSerializer):
     module_path = serializers.SerializerMethodField()
+    product_name = serializers.SerializerMethodField()
+
+    def get_product_name(self, obj: TestPlan):
+        return _plan_product_name(obj)
 
     def get_module_path(self, obj: TestPlan):
         """根 → 计划所属模块的 [{id, name}]；依赖 context["module_map"]（id -> (name, parent_id)），缺省返回 []。"""
@@ -255,6 +279,8 @@ class PlanListSerializer(ModelSerializer):
             "state",
             "module",
             "module_path",
+            "product",
+            "product_name",
             "reviewers",
             "review_approval_type",
             "review_required_count",
@@ -376,6 +402,8 @@ class TestPlanListSerializer(ModelSerializer):
     # 列表展示用名称；调用方需 select_related("cycle") + prefetch_related("releases")
     cycle_name = serializers.SerializerMethodField()
     release_names = serializers.SerializerMethodField()
+    # 调用方需 select_related("product")
+    product_name = serializers.SerializerMethodField()
 
     def _stats(self, obj: TestPlan):
         plan_stats = self.context.get("plan_stats") or {}
@@ -401,6 +429,9 @@ class TestPlanListSerializer(ModelSerializer):
 
     def get_release_names(self, obj: TestPlan):
         return [release.name for release in obj.releases.all()]
+
+    def get_product_name(self, obj: TestPlan):
+        return _plan_product_name(obj)
 
     def get_result(self, obj: TestPlan):
         stats = self._stats(obj)

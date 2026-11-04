@@ -350,8 +350,8 @@ class PlanAPIView(BaseAPIView):
     filterset_class = TestPlanFilter
 
     def get_queryset(self):
-        # reviewers / releases 是 M2M，列表逐行取会 N+1；cycle 供列表显示迭代名
-        return TestPlan.objects.select_related("cycle").prefetch_related(
+        # reviewers / releases 是 M2M，列表逐行取会 N+1；cycle / product 供列表显示名称
+        return TestPlan.objects.select_related("cycle", "product").prefetch_related(
             "reviewers", "releases"
         )
 
@@ -402,6 +402,8 @@ class PlanAPIView(BaseAPIView):
     def delete(self, request, slug, project_id):
         plan_ids = request.data.pop("ids")
         self.queryset.filter(id__in=plan_ids).delete()
+        # 计划是软删，库级 SET_NULL 不会触发：同步清掉缺陷上的来源计划（含已归档）
+        Issue.all_objects.filter(test_plan_id__in=plan_ids).update(test_plan=None)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -416,6 +418,7 @@ class PlanListAPIView(BaseAPIView):
     def get(self, request, slug):
         queryset = (
             self.filter_queryset(self.queryset.filter(project__workspace__slug=slug))
+            .select_related("product")
             .prefetch_related("reviewers")
             .distinct()
         )

@@ -31,6 +31,7 @@ from plane.db.models import (
     Product,
     Project,
     ProjectStage,
+    TestPlan,
     Release,
     RequirementModule,
     State,
@@ -432,6 +433,51 @@ def track_stage(
             comment="updated the stage to",
             old_identifier=current_stage_id,
             new_identifier=requested_stage_id,
+            epoch=epoch,
+        )
+    )
+
+
+# 缺陷的来源测试计划：写法同 track_stage，值存计划名（计划已删也照样取名）
+def track_test_plan(
+    requested_data,
+    current_instance,
+    issue_id,
+    project_id,
+    workspace_id,
+    actor_id,
+    issue_activities,
+    epoch,
+):
+    current_plan_id = current_instance.get("test_plan_id")
+    requested_plan_id = requested_data.get("test_plan_id")
+
+    if current_plan_id is not None and not is_valid_uuid(current_plan_id):
+        current_plan_id = None
+    if requested_plan_id is not None and not is_valid_uuid(requested_plan_id):
+        requested_plan_id = None
+
+    if str(current_plan_id) == str(requested_plan_id):
+        return
+
+    def _plan_name(plan_id):
+        if not plan_id:
+            return ""
+        return TestPlan.all_objects.filter(id=plan_id).values_list("name", flat=True).first() or ""
+
+    issue_activities.append(
+        IssueActivity(
+            issue_id=issue_id,
+            actor_id=actor_id,
+            verb="removed" if requested_plan_id is None else "updated",
+            old_value=_plan_name(current_plan_id),
+            new_value=_plan_name(requested_plan_id),
+            field="test_plan",
+            project_id=project_id,
+            workspace_id=workspace_id,
+            comment="updated the test plan to",
+            old_identifier=current_plan_id,
+            new_identifier=requested_plan_id,
             epoch=epoch,
         )
     )
@@ -975,6 +1021,7 @@ def update_issue_activity(
         "product_id": track_product,
         "product_module_id": track_product_module,
         "stage_id": track_stage,
+        "test_plan_id": track_test_plan,
         # External endpoint keys
         "parent": track_parent,
         "state": track_state,
