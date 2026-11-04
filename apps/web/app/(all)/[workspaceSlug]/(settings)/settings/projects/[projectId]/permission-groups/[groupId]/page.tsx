@@ -11,7 +11,7 @@ import { PROJECT_SETTINGS } from "@plane/constants";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { AlertModalCore, Loader } from "@plane/ui";
-import { cn, renderFormattedPayloadDate } from "@plane/utils";
+import { renderFormattedPayloadDate } from "@plane/utils";
 // components
 import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
 import { PageHead } from "@/components/core/page-title";
@@ -26,16 +26,26 @@ import {
 } from "@/components/project/settings/permission-groups/shared";
 import { useProjectPermissionGroupDetail } from "@/components/project/settings/permission-groups/use-permission-group-detail";
 import { SettingsContentWrapper } from "@/components/settings/content-wrapper";
-import { PermissionGroupEditor, PermissionGroupSaveBar } from "@/components/workspace/settings/permission-groups";
+import {
+  PermissionGroupEditor,
+  PermissionGroupIdentity,
+  PermissionGroupSaveBar,
+  PermissionGroupTiles,
+  countDepartments,
+  getScopeKeys,
+} from "@/components/workspace/settings/permission-groups";
+import type { TDetailTile } from "@/components/workspace/settings/permission-groups";
 // hooks
+import { useMember } from "@/hooks/store/use-member";
 import { useUserPermissions } from "@/hooks/store/user";
 import { useAppRouter } from "@/hooks/use-app-router";
 // local imports
 import type { Route } from "./+types/page";
 import { RolesProjectSettingsHeader } from "../header";
 
-type TTab = "members" | "permissions";
+type TTab = "permissions" | "members";
 
+/** 项目设置 › 权限组详情：与工作区设置的权限组详情同一套样式（头部 + 数字卡片页签：权限 / 成员） */
 function ProjectPermissionGroupDetailPage({ params }: Route.ComponentProps) {
   const { workspaceSlug, projectId, groupId } = params;
   const router = useAppRouter();
@@ -45,6 +55,7 @@ function ProjectPermissionGroupDetailPage({ params }: Route.ComponentProps) {
   const [isPendingSubmitting, setIsPendingSubmitting] = useState(false);
   const [isRenameOpen, setIsRenameOpen] = useState(false);
 
+  const { getUserDetails } = useMember();
   const { workspaceUserInfo, allowProjectPermissionKeys } = useUserPermissions();
   const canView = allowProjectPermissionKeys(PROJECT_SETTINGS.roles.permissionKeys ?? [], workspaceSlug, projectId);
   const canManage = allowProjectPermissionKeys(PROJECT_SETTINGS.roles.editPermissionKeys ?? [], workspaceSlug, projectId);
@@ -59,6 +70,24 @@ function ProjectPermissionGroupDetailPage({ params }: Route.ComponentProps) {
         .map((row) => ({ id: row.id, name: row.name, badge: GROUP_SOURCE_LABEL[row.source] })),
     [roles, groupId]
   );
+  const totalKeyCount = useMemo(() => getScopeKeys("project").length, []);
+  // 不用 useMemo：成员详情晚于成员 id 到达时要跟着重算（observer 会重渲）
+  const departmentCount = countDepartments(memberIds ?? [], getUserDetails);
+
+  // 权限卡片跟草稿走：勾了还没保存也能看到数字在变
+  const permissionCount = draft
+    ? draft.permission_keys.filter((key) => key.startsWith("project.")).length
+    : (group?.permission_count ?? 0);
+  const tiles: TDetailTile<TTab>[] = [
+    { key: "permissions", label: "权限", value: permissionCount, unit: "项", sub: `项目权限共 ${totalKeyCount} 项` },
+    {
+      key: "members",
+      label: "成员",
+      value: memberIds?.length ?? group?.member_count ?? 0,
+      unit: "人",
+      sub: departmentCount > 0 ? `来自 ${departmentCount} 个部门` : undefined,
+    },
+  ];
 
   const handleSave = async () => {
     try {
@@ -91,129 +120,109 @@ function ProjectPermissionGroupDetailPage({ params }: Route.ComponentProps) {
     return <NotAuthorizedView section="settings" isProjectView className="h-auto" />;
   }
 
-  const headerActions = group && canManage && (
-    <div className="flex items-center gap-2">
-      {group.source === "project" && (
-        <Button variant="secondary" size="lg" onClick={() => setIsRenameOpen(true)}>
-          编辑
+  const actions =
+    group && canManage ? (
+      <>
+        {group.source === "project" && (
+          <Button variant="secondary" size="xl" className="h-9 px-4" onClick={() => setIsRenameOpen(true)}>
+            编辑
+          </Button>
+        )}
+        <Button
+          variant="secondary"
+          size="xl"
+          className="h-9 px-4 text-danger-primary"
+          onClick={() => setIsDeletePending(true)}
+        >
+          {deleteActionLabel(group)}
         </Button>
-      )}
-      <Button variant="secondary" size="lg" className="text-danger-primary" onClick={() => setIsDeletePending(true)}>
-        {deleteActionLabel(group)}
-      </Button>
-    </div>
-  );
+      </>
+    ) : undefined;
 
-  const subtitle = group
-    ? [
-        "项目权限组",
-        `${group.member_count} 人`,
-        group.updated_at
-          ? `${group.source === "project" ? "更新于" : "模板更新于"} ${renderFormattedPayloadDate(group.updated_at)}`
-          : null,
-      ]
-        .filter(Boolean)
-        .join(" · ")
-    : "";
+  const meta = group?.updated_at
+    ? `${group.source === "project" ? "更新于" : "模板更新于"} ${renderFormattedPayloadDate(group.updated_at)}`
+    : null;
 
   return (
-    <SettingsContentWrapper
-      header={<RolesProjectSettingsHeader currentLabel={group?.name} rightItem={headerActions || undefined} />}
-      hugging
-    >
+    <SettingsContentWrapper header={<RolesProjectSettingsHeader currentLabel={group?.name} />} hugging>
       <PageHead title={group ? `${group.name} - 权限组` : "权限组"} />
-      <div className="flex flex-col gap-5">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-20 font-semibold text-primary">{group?.name ?? "…"}</h1>
-            {group && <PermissionGroupSourceBadge source={group.source} />}
-          </div>
-          <p className="mt-1 text-13 text-tertiary">{subtitle}</p>
-          {group?.description && <p className="mt-1 text-13 text-secondary">{group.description}</p>}
-        </div>
+      {!group ? (
+        <Loader className="flex flex-col gap-3">
+          <Loader.Item height="36px" width="240px" />
+          <Loader.Item height="96px" />
+          <Loader.Item height="480px" />
+        </Loader>
+      ) : (
+        <div className="flex flex-col gap-5">
+          <PermissionGroupIdentity
+            name={group.name}
+            badge={<PermissionGroupSourceBadge source={group.source} />}
+            description={group.description}
+            meta={meta}
+            actions={actions}
+          />
 
-        <div className="flex items-center gap-6 border-b border-subtle">
-          {(
-            [
-              { key: "members", label: "成员", count: group?.member_count },
-              { key: "permissions", label: "权限" },
-            ] as { key: TTab; label: string; count?: number }[]
-          ).map((item) => (
-            <button
-              key={item.key}
-              type="button"
-              onClick={() => setTab(item.key)}
-              className={cn(
-                "-mb-px flex items-center gap-1.5 border-b-2 pb-2.5 text-14 transition-colors",
-                tab === item.key
-                  ? "border-accent-strong font-medium text-accent-primary"
-                  : "border-transparent text-secondary hover:text-primary"
-              )}
-            >
-              {item.label}
-              {item.count !== undefined && (
-                <span className="rounded-full bg-layer-1 px-1.5 text-11 text-tertiary tabular-nums">{item.count}</span>
-              )}
-            </button>
-          ))}
-        </div>
+          <PermissionGroupTiles tiles={tiles} active={tab} onSelect={setTab} />
 
-        {tab === "members" ? (
-          <PermissionGroupMembersTab memberIds={memberIds} />
-        ) : (
-          permissionState.isLoading && !draft ? (
-            <Loader className="flex flex-col gap-3">
-              <Loader.Item height="36px" />
-              <Loader.Item height="480px" />
-            </Loader>
-          ) : !content || !draft ? (
-            <div className="rounded-lg border border-subtle py-12 text-center">
-              <p className="text-13 text-secondary">读取权限失败</p>
-              <Button
-                className="mt-3"
-                variant="secondary"
-                size="lg"
-                onClick={() => void detail.loadRolePermissions(groupId, true)}
-              >
-                重试
-              </Button>
-            </div>
-          ) : (
-            <>
-              <PermissionGroupEditor
-                scopes={["project"]}
-                defaultScope="project"
-                value={draft}
-                onChange={detail.setDraft}
-                typeOptions={content.type_options}
-                typeSourceLabel={group?.source === "project" ? "本项目" : "类型库"}
-                readOnly={readOnly}
-                notice={
-                  !content.is_editable ? (
-                    <div className="rounded-lg border border-subtle bg-layer-1 px-4 py-2.5 text-13 text-secondary">
-                      这是工作区的模板组，权限请到工作区设置里改；本项目里只能绑人或「删除引用」。
-                    </div>
-                  ) : !canManage ? (
-                    <div className="rounded-lg border border-subtle bg-layer-1 px-4 py-2.5 text-13 text-secondary">
-                      你没有管理项目权限组的权限，只能查看。
-                    </div>
-                  ) : null
-                }
-                copySources={copySources}
-                loadCopySource={readOnly ? undefined : detail.loadCopySource}
+          <div className="mt-1">
+            {tab === "members" ? (
+              <PermissionGroupMembersTab
+                memberIds={memberIds}
+                membersPath={`/${workspaceSlug}/settings/projects/${projectId}/members/`}
               />
-              {detail.isDirty && !readOnly && (
-                <PermissionGroupSaveBar
-                  count={detail.changedCount}
-                  isSaving={detail.isSaving}
-                  onDiscard={detail.discard}
-                  onSave={() => void handleSave()}
+            ) : permissionState.isLoading && !draft ? (
+              <Loader className="flex flex-col gap-3">
+                <Loader.Item height="36px" />
+                <Loader.Item height="480px" />
+              </Loader>
+            ) : !content || !draft ? (
+              <div className="rounded-xl border border-subtle py-12 text-center">
+                <p className="text-13 text-secondary">读取权限失败</p>
+                <Button
+                  className="mt-3"
+                  variant="secondary"
+                  size="lg"
+                  onClick={() => void detail.loadRolePermissions(groupId, true)}
+                >
+                  重试
+                </Button>
+              </div>
+            ) : (
+              <>
+                <PermissionGroupEditor
+                  scopes={["project"]}
+                  value={draft}
+                  onChange={detail.setDraft}
+                  typeOptions={content.type_options}
+                  typeSourceLabel={group.source === "project" ? "本项目" : "类型库"}
+                  readOnly={readOnly}
+                  notice={
+                    !content.is_editable ? (
+                      <div className="rounded-lg border border-subtle bg-layer-1 px-4 py-2.5 text-13 text-secondary">
+                        这是工作区的模板组，权限请到工作区设置里改；本项目里只能绑人或「删除引用」。
+                      </div>
+                    ) : !canManage ? (
+                      <div className="rounded-lg border border-subtle bg-layer-1 px-4 py-2.5 text-13 text-secondary">
+                        你没有管理项目权限组的权限，只能查看。
+                      </div>
+                    ) : null
+                  }
+                  copySources={copySources}
+                  loadCopySource={readOnly ? undefined : detail.loadCopySource}
                 />
-              )}
-            </>
-          )
-        )}
-      </div>
+                {detail.isDirty && !readOnly && (
+                  <PermissionGroupSaveBar
+                    count={detail.changedCount}
+                    isSaving={detail.isSaving}
+                    onDiscard={detail.discard}
+                    onSave={() => void handleSave()}
+                  />
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       <ProjectPermissionGroupFormModal
         isOpen={isRenameOpen}

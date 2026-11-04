@@ -6,12 +6,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { observer } from "mobx-react";
-import { Search } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Checkbox, Loader } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { useProject } from "@/hooks/store/use-project";
 import { ProductService } from "@/services/product.service";
+import { PermissionGroupSearch } from "../ui";
 
 const I18N = "workspace_settings.settings.roles.data_scope";
 const productService = new ProductService();
@@ -98,20 +98,16 @@ export const DataScopeSelectedPicker = observer(function DataScopeSelectedPicker
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center gap-3">
-        <div className="flex h-8 w-64 items-center gap-1.5 rounded-md border border-subtle bg-surface-1 px-2.5 focus-within:border-accent-strong">
-          <Search className="size-3.5 shrink-0 text-placeholder" />
-          <input
-            className="min-w-0 flex-1 bg-transparent text-13 text-primary outline-none placeholder:text-placeholder"
-            placeholder={t(`${I18N}.search`, { kind: t(`${I18N}.${kind}`) })}
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-          />
-        </div>
-        <span className="ml-auto text-12 text-tertiary tabular-nums">
+        <PermissionGroupSearch
+          value={query}
+          onChange={setQuery}
+          placeholder={t(`${I18N}.search`, { kind: t(`${I18N}.${kind}`) })}
+        />
+        <span className="ml-auto text-13 text-tertiary tabular-nums">
           {t(`${I18N}.selected_count`, { count: selectedIds.length })}
         </span>
       </div>
-      <div className="max-h-72 overflow-y-auto rounded-lg border border-subtle bg-surface-1">
+      <div className="max-h-80 overflow-y-auto rounded-lg border border-subtle bg-surface-1">
         {isLoading && options.length === 0 ? (
           <Loader className="flex flex-col gap-2 p-3">
             {[0, 1, 2].map((index) => (
@@ -127,13 +123,13 @@ export const DataScopeSelectedPicker = observer(function DataScopeSelectedPicker
               <label
                 key={option.id}
                 className={cn(
-                  "flex h-9 cursor-pointer items-center gap-3 border-b border-subtle px-3 text-13 last:border-b-0 hover:bg-layer-1-hover",
+                  "flex h-10 cursor-pointer items-center gap-3 border-b border-subtle px-4 text-14 last:border-b-0 hover:bg-layer-1-hover",
                   readOnly && "cursor-default"
                 )}
               >
                 <Checkbox checked={isChecked} onChange={() => toggle(option.id)} disabled={readOnly} />
                 <span className="min-w-0 flex-1 truncate text-primary">{option.name}</span>
-                <span className="shrink-0 text-12 text-tertiary">{option.identifier}</span>
+                <span className="shrink-0 text-13 text-tertiary">{option.identifier}</span>
                 {option.archived && <span className="shrink-0 text-11 text-placeholder">{t(`${I18N}.archived`)}</span>}
               </label>
             );

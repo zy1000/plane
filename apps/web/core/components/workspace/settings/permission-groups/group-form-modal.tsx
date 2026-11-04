@@ -8,7 +8,7 @@ import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { Button } from "@plane/propel/button";
 import type { IPermissionGroup } from "@plane/types";
-import { Checkbox, CustomSelect, EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
+import { CustomSelect, EModalPosition, EModalWidth, ModalCore, ToggleSwitch } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { getPermissionGroupErrorMessage } from "./helpers";
 
@@ -30,7 +30,7 @@ type Props = {
 };
 
 const INPUT =
-  "h-9 w-full rounded-md border border-subtle-1 bg-layer-2 px-3 text-13 text-primary outline-none transition-colors placeholder:text-placeholder focus:border-accent-strong";
+  "h-10 w-full rounded-lg border border-subtle-1 bg-layer-2 px-3 text-14 text-primary outline-none transition-colors placeholder:text-placeholder focus:border-accent-strong";
 
 /** 新建 / 编辑权限组：名称、描述、「作为项目权限组模板」；新建时可以选「复制自」，按那个组的权限内容建 */
 export function PermissionGroupFormModal(props: Props) {
@@ -89,7 +89,7 @@ export function PermissionGroupFormModal(props: Props) {
   return (
     <ModalCore isOpen={isOpen} handleClose={onClose} position={EModalPosition.TOP} width={EModalWidth.XL}>
       <div className="flex items-center justify-between border-b border-subtle px-5 py-4">
-        <h2 className="text-14 font-medium text-primary">{isEdit ? "编辑权限组" : "新建权限组"}</h2>
+        <h2 className="text-18 font-semibold text-primary">{isEdit ? "编辑权限组" : "新建权限组"}</h2>
         <button
           type="button"
           className="grid size-8 place-items-center rounded-md text-secondary transition-colors hover:bg-layer-transparent-hover disabled:opacity-50"
@@ -100,9 +100,9 @@ export function PermissionGroupFormModal(props: Props) {
           <X className="size-4" />
         </button>
       </div>
-      <form className="flex flex-col gap-4 px-5 py-5" onSubmit={handleSubmit}>
+      <form className="flex flex-col gap-5 px-5 py-5" onSubmit={handleSubmit}>
         <div className="flex flex-col gap-1.5">
-          <label className="flex items-center gap-1 text-12 font-medium text-secondary" htmlFor="permission-group-name">
+          <label className="flex items-center gap-1 text-14 font-medium text-primary" htmlFor="permission-group-name">
             名称
             <span className="text-danger-primary">*</span>
           </label>
@@ -121,12 +121,12 @@ export function PermissionGroupFormModal(props: Props) {
         </div>
 
         <div className="flex flex-col gap-1.5">
-          <label className="text-12 font-medium text-secondary" htmlFor="permission-group-description">
+          <label className="text-14 font-medium text-primary" htmlFor="permission-group-description">
             描述
           </label>
           <textarea
             id="permission-group-description"
-            className="min-h-20 w-full resize-none rounded-md border border-subtle-1 bg-layer-2 px-3 py-2 text-13 leading-5 text-primary outline-none transition-colors placeholder:text-placeholder focus:border-accent-strong"
+            className="min-h-22 w-full resize-none rounded-lg border border-subtle-1 bg-layer-2 px-3 py-2.5 text-14 leading-5 text-primary outline-none transition-colors placeholder:text-placeholder focus:border-accent-strong"
             maxLength={500}
             rows={3}
             placeholder="请输入描述"
@@ -135,23 +135,19 @@ export function PermissionGroupFormModal(props: Props) {
           />
         </div>
 
-        <label className="flex cursor-pointer items-start gap-2.5 rounded-md border border-subtle bg-layer-1 px-3 py-2.5">
-          <Checkbox
-            checked={value.is_template}
+        <div className="flex h-12 items-center justify-between gap-3 rounded-lg border border-subtle bg-layer-1 px-3.5">
+          <span className="text-14 font-medium text-primary">作为项目权限组模板</span>
+          <ToggleSwitch
+            value={value.is_template}
+            label="作为项目权限组模板"
+            size="md"
             onChange={() => setValue((current) => ({ ...current, is_template: !current.is_template }))}
-            className="mt-0.5"
           />
-          <span className="flex flex-col gap-0.5">
-            <span className="text-13 font-medium text-primary">作为项目权限组模板</span>
-            <span className="text-12 leading-4 text-tertiary">
-              勾上后，数据权限里白名单内的项目会自动引用这个组，项目经理可以把项目成员绑到它上面；改这个组，引用它的项目同步生效。
-            </span>
-          </span>
-        </label>
+        </div>
 
         {!isEdit && (
           <div className="flex flex-col gap-1.5">
-            <span className="text-12 font-medium text-secondary">复制自</span>
+            <span className="text-14 font-medium text-primary">复制权限自</span>
             <CustomSelect
               value={value.copy_from}
               onChange={(copyFrom: string | null) => setValue((current) => ({ ...current, copy_from: copyFrom }))}
@@ -160,7 +156,7 @@ export function PermissionGroupFormModal(props: Props) {
                   {copySource ? copySource.name : "不复制"}
                 </span>
               }
-              buttonClassName="h-9 w-full rounded-md border border-subtle-1 bg-layer-2 px-3 text-13"
+              buttonClassName="h-10 w-full rounded-lg border border-subtle-1 bg-layer-2 px-3 text-14"
               // 浮层 portal 到 body，w-full 会撑满整屏；按字段宽度（弹窗 576 - 两侧 20）给定宽
               optionsClassName="w-[536px] max-w-[calc(100vw-4.5rem)] text-13"
               maxHeight="md"

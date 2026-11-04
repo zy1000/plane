@@ -27,6 +27,7 @@ export type TDataScope = {
 
 /** 列表接口给的一眼能看的摘要：count 只在 selected 时有 */
 export type TDataScopeSummary = {
+  /** count：当前命中数（全部 = 工作区总数，指定 = 勾选数，按条件 = 现在满足条件的个数） */
   projects: { mode: TDataScopeMode; count: number | null };
   products: { mode: TDataScopeMode; count: number | null };
 };
@@ -44,7 +45,10 @@ export type TTemplateProjectRef = {
   identifier: string;
   logo_props: Record<string, unknown> | null;
   archived_at: string | null;
+  project_lead_id: string | null;
   excluded: boolean;
+  /** 本项目里绑在这个模板上的成员数 */
+  bound_member_count: number;
 };
 
 export const DEFAULT_DATA_SCOPE: TDataScope = { projects: { mode: "all" }, products: { mode: "all" } };

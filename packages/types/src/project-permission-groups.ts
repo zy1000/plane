@@ -24,6 +24,8 @@ export type TProjectPermissionGroup = {
   description: string;
   source: TProjectPermissionGroupSource;
   member_count: number;
+  /** 前 3 个成员的用户 id（列表叠放头像） */
+  member_preview_ids?: string[];
   updated_at: string | null;
   permission_count: number;
 };

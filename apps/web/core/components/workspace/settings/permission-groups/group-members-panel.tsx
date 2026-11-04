@@ -6,7 +6,6 @@
 
 import { useMemo, useState } from "react";
 import { observer } from "mobx-react";
-import { Search, X } from "lucide-react";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { IPermissionGroup } from "@plane/types";
@@ -15,29 +14,28 @@ import { cn } from "@plane/utils";
 import { AddMemberModal } from "@/components/workspace/settings/groups/add-member-modal";
 import { useJobRoles } from "@/hooks/store/use-job-roles";
 import { useMember } from "@/hooks/store/use-member";
-import { usePermissionGroupMembers } from "@/hooks/store/use-permission-group-detail";
+import type { usePermissionGroupMembers } from "@/hooks/store/use-permission-group-detail";
 import { getPermissionGroupErrorMessage } from "./helpers";
 import { JobRoleTags } from "./job-role-tags";
 import { MemberIdentityCell, getMemberDisplayName } from "./member-identity-cell";
+import { PermissionGroupSearch } from "./ui";
 
 type Props = {
   workspaceSlug: string;
   group: IPermissionGroup;
   canManage: boolean;
+  /** 成员数据由详情页取（数字卡片也要用），这里只渲染和增删 */
+  members: ReturnType<typeof usePermissionGroupMembers>;
   /** 加人 / 移人后刷新列表里的人数 */
   onChanged: () => void;
 };
 
-const GRID = "grid grid-cols-[minmax(220px,1.6fr)_100px_minmax(120px,1fr)_minmax(160px,1.2fr)_80px] items-center gap-x-4 px-4";
+const GRID = "grid grid-cols-[minmax(220px,1.6fr)_104px_minmax(120px,1fr)_minmax(180px,1.2fr)_56px] items-center gap-x-4 px-5";
 
 /** 工作区权限组详情的「成员」页签：直绑在这个组上的人。团队绑定带来的不在这里列（在团队页看） */
 export const PermissionGroupMembersPanel = observer(function PermissionGroupMembersPanel(props: Props) {
-  const { workspaceSlug, group, canManage, onChanged } = props;
-  const { memberIds, isLoading, error, reload, addMembers, removeMember } = usePermissionGroupMembers(
-    workspaceSlug,
-    group.id,
-    true
-  );
+  const { workspaceSlug, group, canManage, members, onChanged } = props;
+  const { memberIds, isLoading, error, reload, addMembers, removeMember } = members;
   const {
     getUserDetails,
     workspace: { getWorkspaceMemberIds, workspaceMemberMap },
@@ -99,36 +97,23 @@ export const PermissionGroupMembersPanel = observer(function PermissionGroupMemb
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center gap-3">
-        <div className="flex h-8 w-64 items-center gap-1.5 rounded-md border border-subtle bg-surface-1 px-2.5 focus-within:border-accent-strong">
-          <Search className="size-3.5 shrink-0 text-placeholder" />
-          <input
-            className="min-w-0 flex-1 bg-transparent text-13 text-primary outline-none placeholder:text-placeholder"
-            placeholder="搜索姓名、邮箱、工号"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-          />
-          {query && (
-            <button type="button" aria-label="清除搜索" onClick={() => setQuery("")}>
-              <X className="size-3 text-placeholder hover:text-primary" />
-            </button>
-          )}
-        </div>
-        <span className="ml-auto text-13 text-tertiary tabular-nums">{memberIds.length} 人</span>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <PermissionGroupSearch value={query} onChange={setQuery} placeholder="搜索姓名、邮箱、工号" className="w-72" />
         {canManage && (
-          <Button variant="primary" size="lg" onClick={() => setIsAddOpen(true)}>
+          <Button variant="primary" size="xl" className="h-9 px-4" onClick={() => setIsAddOpen(true)}>
             添加成员
           </Button>
         )}
       </div>
 
-      <div className="overflow-hidden rounded-lg border border-subtle bg-surface-1">
-        <div className={cn(GRID, "h-10 border-b border-subtle bg-layer-1 text-12 font-medium text-tertiary")}>
+      <div className="overflow-x-auto rounded-xl border border-subtle bg-surface-1">
+        <div className="min-w-[760px]">
+        <div className={cn(GRID, "h-11 border-b border-subtle bg-layer-1 text-13 font-medium text-tertiary")}>
           <span>成员</span>
           <span>工号</span>
           <span>部门</span>
           <span>角色</span>
-          <span className="text-right">操作</span>
+          <span className="flex justify-end">操作</span>
         </div>
         {isLoading && memberIds.length === 0 ? (
           <Loader className="flex flex-col gap-2 p-4">
@@ -144,26 +129,24 @@ export const PermissionGroupMembersPanel = observer(function PermissionGroupMemb
             </Button>
           </div>
         ) : rows.length === 0 ? (
-          <p className="py-12 text-center text-13 text-placeholder">
-            {keyword ? "没有匹配的成员" : "还没有成员，点右上角「添加成员」把人加进来"}
-          </p>
+          <p className="py-14 text-center text-14 text-placeholder">{keyword ? "没有匹配的成员" : "还没有成员"}</p>
         ) : (
           rows.map(({ userId, user }) => {
             const extra = user as { employee_id?: string | null; department?: string | null } | undefined;
             const membership = workspaceMemberMap?.[workspaceSlug]?.[userId];
             return (
-              <div key={userId} className={cn(GRID, "min-h-13 border-b border-subtle py-2 text-13 last:border-b-0")}>
-                <MemberIdentityCell user={user} />
+              <div key={userId} className={cn(GRID, "min-h-16 border-b border-subtle py-2 text-14 last:border-b-0")}>
+                <MemberIdentityCell user={user} size="lg" />
                 <span className="truncate text-secondary tabular-nums">{extra?.employee_id || "—"}</span>
                 <span className="truncate text-secondary" title={extra?.department ?? ""}>
                   {extra?.department || "—"}
                 </span>
                 <JobRoleTags jobRoleIds={membership?.job_role_ids} jobRoleMap={jobRoleMap} isColored={isColored} />
-                <span className="text-right">
+                <span className="flex justify-end">
                   {canManage && (
                     <button
                       type="button"
-                      className="text-13 text-danger-primary hover:underline"
+                      className="text-14 text-secondary hover:text-danger-primary hover:underline"
                       onClick={() => setPendingRemove(userId)}
                     >
                       移出
@@ -174,6 +157,7 @@ export const PermissionGroupMembersPanel = observer(function PermissionGroupMemb
             );
           })
         )}
+        </div>
       </div>
 
       <AddMemberModal

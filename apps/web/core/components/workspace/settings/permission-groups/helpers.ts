@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import type { TDataScopeEntry, TDataScopeMode, TDataScopeSummary } from "@plane/types";
+import type { TDataScopeEntry, TDataScopeMode } from "@plane/types";
 import { getScopeKeys } from "./editor/catalog";
 
 export const WORKSPACE_KEY_TOTAL = getScopeKeys("workspace").length;
@@ -19,12 +19,6 @@ export const DATA_SCOPE_MODE_LABELS: Record<TDataScopeMode, string> = {
 export const DATA_SCOPE_KIND_LABELS = { projects: "项目", products: "产品" } as const;
 
 /** 列表里「数据权限」列的一行文字：全部 / 指定 3 个 / 按条件 */
-export const formatScopeSummary = (summary: TDataScopeSummary[keyof TDataScopeSummary] | undefined) => {
-  if (!summary) return DATA_SCOPE_MODE_LABELS.all;
-  if (summary.mode === "selected") return `${DATA_SCOPE_MODE_LABELS.selected} ${summary.count ?? 0} 个`;
-  return DATA_SCOPE_MODE_LABELS[summary.mode] ?? DATA_SCOPE_MODE_LABELS.all;
-};
-
 /** 白名单是不是「全部」（用来判断「配了白名单却没勾项目权限」的提示） */
 export const isScopeEntryAll = (entry: TDataScopeEntry | undefined) => !entry || entry.mode === "all";
 

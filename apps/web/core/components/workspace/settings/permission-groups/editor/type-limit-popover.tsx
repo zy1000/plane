@@ -62,12 +62,11 @@ export function TypeLimitPopover(props: Props) {
         type="button"
         disabled={disabled}
         className={cn(
-          "inline-flex h-6 shrink-0 items-center gap-0.5 rounded border px-1.5 text-11 font-medium transition-colors",
-          excludedCount > 0
-            ? "border-accent-primary/30 bg-accent-primary/10 text-accent-primary"
-            : "border-subtle bg-layer-1 text-tertiary",
-          allExcluded && "border-transparent bg-danger-subtle text-danger-primary",
-          disabled ? "cursor-default" : "hover:border-strong"
+          // 嵌在勾选块右半截：左侧一条分隔线；限定了才变色
+          "inline-flex h-4 shrink-0 items-center gap-0.5 border-l border-accent-subtle pl-2 text-12 transition-colors",
+          excludedCount > 0 ? "font-medium text-warning-primary" : "text-tertiary",
+          allExcluded && "text-danger-primary",
+          disabled ? "cursor-default" : "hover:text-primary"
         )}
       >
         {pillText}

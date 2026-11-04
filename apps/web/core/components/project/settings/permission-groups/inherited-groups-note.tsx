@@ -15,37 +15,42 @@ type Props = {
   groups: TProjectInheritedGroup[];
 };
 
-/** 列表上方的说明：白名单含本项目、带项目权限的工作区权限组，以及本项目里在组里的人 */
+/**
+ * 项目「权限组」页顶部：白名单含本项目、带项目权限的工作区权限组，以及本项目里有谁在组里。
+ * 这些组的项目权限对组内成员在本项目同样生效（2026-11-03 用户看不懂继承才加的说明块）。
+ */
 export function InheritedGroupsNote({ workspaceSlug, groups }: Props) {
   if (groups.length === 0) {
     return (
-      <p className="rounded-lg border border-subtle bg-layer-1 px-4 py-3 text-13 text-tertiary">
+      <p className="rounded-xl border border-subtle bg-layer-1 px-5 py-3.5 text-13 text-tertiary">
         本项目没有成员通过工作区权限组获得项目权限
       </p>
     );
   }
 
   return (
-    <div className="flex flex-col gap-2 rounded-lg border border-subtle bg-layer-1 px-4 py-3">
-      <p className="text-13 text-secondary">
-        以下工作区权限组的白名单包含本项目，它们的项目权限对组内成员在本项目生效：
-      </p>
+    <div className="overflow-hidden rounded-xl border border-subtle bg-surface-1">
+      <div className="flex h-11 items-center gap-2 border-b border-subtle bg-layer-1 px-5">
+        <span className="text-14 font-medium text-primary">工作区权限组在本项目生效</span>
+        <span className="text-13 text-tertiary tabular-nums">{groups.length}</span>
+      </div>
       {groups.map((group) => {
         const names = group.members.map((member) => member.display_name);
         const shown = names.slice(0, MAX_NAMES).join("、");
         return (
-          <div key={group.id} className="flex flex-wrap items-center gap-x-4 gap-y-1 text-13">
+          <div
+            key={group.id}
+            className="grid min-h-12 grid-cols-[200px_120px_minmax(0,1fr)] items-center gap-x-4 border-b border-subtle px-5 text-14 last:border-b-0"
+          >
             <Link
               to={getPermissionGroupDetailPath(workspaceSlug, group.id)}
-              className="w-32 shrink-0 truncate font-medium text-accent-primary hover:underline"
+              className="truncate font-medium text-primary hover:text-accent-primary hover:underline"
               title={group.name}
             >
               {group.name}
             </Link>
-            <span className="w-28 shrink-0 text-secondary tabular-nums">
-              {group.project_permission_count} 项项目权限
-            </span>
-            <span className="min-w-0 flex-1 truncate text-secondary" title={names.join("、")}>
+            <span className="text-secondary tabular-nums">{group.project_permission_count} 项项目权限</span>
+            <span className="truncate text-secondary" title={names.join("、")}>
               {names.length > MAX_NAMES ? `${shown} 等 ${names.length} 人` : shown}
             </span>
           </div>

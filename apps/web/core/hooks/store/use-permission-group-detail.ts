@@ -264,7 +264,10 @@ export const usePermissionGroupTemplateProjects = (
     async (projectId: string) => {
       if (!workspaceSlug || !roleId) return;
       await workspaceService.excludeTemplateProject(workspaceSlug, roleId, projectId);
-      setProjects((prev) => prev.map((row) => (row.id === projectId ? { ...row, excluded: true } : row)));
+      // 移除时项目里绑到这个组的人已解绑
+      setProjects((prev) =>
+        prev.map((row) => (row.id === projectId ? { ...row, excluded: true, bound_member_count: 0 } : row))
+      );
     },
     [workspaceSlug, roleId]
   );

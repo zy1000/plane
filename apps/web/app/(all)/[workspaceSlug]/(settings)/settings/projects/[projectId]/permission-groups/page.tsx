@@ -7,11 +7,10 @@
 import { useMemo, useState } from "react";
 import { observer } from "mobx-react";
 import useSWR from "swr";
-import { Search } from "lucide-react";
 // plane imports
 import { PROJECT_SETTINGS } from "@plane/constants";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import type { TProjectPermissionGroup } from "@plane/types";
+import type { TProjectPermissionGroup, TProjectPermissionGroupSource } from "@plane/types";
 import { AlertModalCore } from "@plane/ui";
 // components
 import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
@@ -21,7 +20,11 @@ import { ProjectPermissionGroupFormModal } from "@/components/project/settings/p
 import { ProjectPermissionGroupsTable } from "@/components/project/settings/permission-groups/permission-groups-table";
 import { deleteActionLabel, deleteConfirmCopy, errorMessage } from "@/components/project/settings/permission-groups/shared";
 import { SettingsContentWrapper } from "@/components/settings/content-wrapper";
-import { getScopeKeys } from "@/components/workspace/settings/permission-groups";
+import {
+  PermissionGroupSearch,
+  PermissionGroupSegmented,
+  getScopeKeys,
+} from "@/components/workspace/settings/permission-groups";
 // hooks
 import { useProject } from "@/hooks/store/use-project";
 import { useProjectRoles } from "@/hooks/store/use-project-roles";
@@ -35,6 +38,7 @@ function ProjectPermissionGroupsPage({ params }: Route.ComponentProps) {
   const { workspaceSlug, projectId } = params;
   const router = useAppRouter();
   const [query, setQuery] = useState("");
+  const [sourceFilter, setSourceFilter] = useState<"all" | TProjectPermissionGroupSource>("all");
   const [formState, setFormState] = useState<{ open: boolean; group: TProjectPermissionGroup | null }>({
     open: false,
     group: null,
@@ -57,8 +61,12 @@ function ProjectPermissionGroupsPage({ params }: Route.ComponentProps) {
   const totalKeyCount = useMemo(() => getScopeKeys("project").length, []);
   const filteredGroups = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return q ? groups.filter((group) => group.name.toLowerCase().includes(q)) : groups;
-  }, [groups, query]);
+    return groups.filter(
+      (group) =>
+        (sourceFilter === "all" || group.source === sourceFilter) &&
+        (!q || group.name.toLowerCase().includes(q) || (group.description ?? "").toLowerCase().includes(q))
+    );
+  }, [groups, query, sourceFilter]);
   const templateCount = groups.filter((group) => group.source === "template").length;
 
   const openDetail = (group: TProjectPermissionGroup) =>
@@ -94,22 +102,20 @@ function ProjectPermissionGroupsPage({ params }: Route.ComponentProps) {
       hugging
     >
       <PageHead title={currentProjectDetails?.name ? `${currentProjectDetails.name} - 权限组` : undefined} />
-      <div className="flex flex-col gap-5">
+      <div className="flex flex-col gap-4">
         <InheritedGroupsNote workspaceSlug={workspaceSlug} groups={inheritedGroups} />
 
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex h-9 w-64 items-center gap-1.5 rounded-lg border border-subtle bg-surface-1 px-3">
-            <Search className="size-3.5 shrink-0 text-placeholder" />
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="搜索权限组"
-              className="min-w-0 flex-1 border-none bg-transparent text-13 outline-none placeholder:text-placeholder"
-            />
-          </div>
-          <span className="text-13 text-tertiary">
-            {groups.length} 个权限组 · {templateCount} 个引用模板
-          </span>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <PermissionGroupSegmented<"all" | TProjectPermissionGroupSource>
+            items={[
+              { key: "all", label: "全部", count: groups.length },
+              { key: "template", label: "模板", count: templateCount },
+              { key: "project", label: "本项目", count: groups.length - templateCount },
+            ]}
+            value={sourceFilter}
+            onChange={setSourceFilter}
+          />
+          <PermissionGroupSearch value={query} onChange={setQuery} placeholder="搜索权限组" />
         </div>
 
         <ProjectPermissionGroupsTable
@@ -117,6 +123,7 @@ function ProjectPermissionGroupsPage({ params }: Route.ComponentProps) {
           totalKeyCount={totalKeyCount}
           canManage={canManage}
           isLoading={isLoading}
+          emptyText={query.trim() || sourceFilter !== "all" ? "没有匹配的权限组" : "还没有权限组"}
           onOpen={openDetail}
           onEdit={(group) => setFormState({ open: true, group })}
           onDelete={(group) => setPending(group)}

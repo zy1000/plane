@@ -13,13 +13,19 @@ export const GROUP_SOURCE_LABEL: Record<TProjectPermissionGroupSource, string> =
 };
 
 const GROUP_SOURCE_CLASS: Record<TProjectPermissionGroupSource, string> = {
-  template: "border-accent-subtle-1 bg-accent-subtle text-accent-primary",
-  project: "border-success-subtle bg-success-subtle text-success-primary",
+  template: "bg-accent-subtle text-accent-primary",
+  project: "bg-success-subtle text-success-primary",
 };
 
+/** 组名后的来源标签（与工作区设置里的「模板」标签同款） */
 export function PermissionGroupSourceBadge({ source }: { source: TProjectPermissionGroupSource }) {
   return (
-    <span className={cn("inline-flex rounded-sm border px-1.5 py-0.5 text-11 leading-4", GROUP_SOURCE_CLASS[source])}>
+    <span
+      className={cn(
+        "inline-flex h-[22px] shrink-0 items-center rounded-md px-2 text-12 font-medium",
+        GROUP_SOURCE_CLASS[source]
+      )}
+    >
       {GROUP_SOURCE_LABEL[source]}
     </span>
   );

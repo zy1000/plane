@@ -14,7 +14,7 @@ import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { IPermissionGroup } from "@plane/types";
 import { Breadcrumbs, Header, Loader } from "@plane/ui";
-import { cn, renderFormattedDate } from "@plane/utils";
+import { renderFormattedPayloadDate } from "@plane/utils";
 import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { PageHead } from "@/components/core/page-title";
@@ -25,6 +25,7 @@ import {
   fetchPermissionGroupContent,
   usePermissionGroupDataScope,
   usePermissionGroupDetail,
+  usePermissionGroupMembers,
   usePermissionGroupTemplateProjects,
 } from "@/hooks/store/use-permission-group-detail";
 import { useWorkspaceRoles } from "@/hooks/store/use-workspace-roles";
@@ -35,11 +36,14 @@ import { PermissionGroupEditor } from "./editor";
 import type { TCopySource } from "./editor";
 import { PermissionGroupFormModal } from "./group-form-modal";
 import { PermissionGroupMembersPanel } from "./group-members-panel";
-import { formatScopeSummary, getPermissionGroupErrorMessage, getPermissionGroupsPath } from "./helpers";
+import { TemplateTag } from "./groups-list";
+import { DATA_SCOPE_MODE_LABELS, getPermissionGroupErrorMessage, getPermissionGroupsPath } from "./helpers";
 import { PermissionGroupSaveBar } from "./save-bar";
 import { TemplateProjectsPanel } from "./template-projects-panel";
+import { PermissionGroupIdentity, PermissionGroupTiles, countDepartments } from "./ui";
+import type { TDetailTile } from "./ui";
 
-type TDetailTab = "members" | "permissions" | "data-scope" | "referenced";
+type TDetailTab = "permissions" | "data-scope" | "members" | "referenced";
 
 const I18N = "workspace_settings.settings.roles";
 
@@ -50,7 +54,7 @@ const READ_KEYS = [
 ];
 
 /**
- * 权限组详情：成员 / 权限 / 数据权限 / 引用项目（最后一个只有模板组有）。
+ * 权限组详情：头部 + 数字卡片（兼做页签）：权限 / 数据权限 / 成员 / 引用项目（最后一个只有模板组有）。
  * 权限与数据权限各自是草稿 + 底部保存条，整份提交。
  */
 export const PermissionGroupDetail = observer(function PermissionGroupDetail(props: {
@@ -76,6 +80,7 @@ export const PermissionGroupDetail = observer(function PermissionGroupDetail(pro
   const editor = usePermissionGroupDetail(canView ? workspaceSlug : undefined, roleId);
   const dataScope = usePermissionGroupDataScope(canView ? workspaceSlug : undefined, roleId);
   const templateProjects = usePermissionGroupTemplateProjects(workspaceSlug, roleId, canView && isTemplate);
+  const members = usePermissionGroupMembers(workspaceSlug, roleId, canView);
 
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<IPermissionGroup | null>(null);
@@ -84,19 +89,76 @@ export const PermissionGroupDetail = observer(function PermissionGroupDetail(pro
     () => templateProjects.projects.filter((project) => !project.excluded).length,
     [templateProjects.projects]
   );
-  const tabs = useMemo<{ key: TDetailTab; label: string; count?: number }[]>(() => {
+  const excludedCount = templateProjects.projects.length - referencingCount;
+  // 不用 useMemo：成员详情晚于成员 id 到达时要跟着重算（observer 会重渲）
+  const departmentCount = countDepartments(members.memberIds, getUserDetails);
+
+  // 权限卡片跟草稿走：勾了还没保存也能看到数字在变
+  const draftKeys = editor.draft?.permission_keys;
+  const projectPermissionCount = draftKeys
+    ? draftKeys.filter((key) => key.startsWith("project.")).length
+    : (group?.project_permission_count ?? 0);
+  const workspacePermissionCount = draftKeys
+    ? draftKeys.filter((key) => key.startsWith("workspace.")).length
+    : (group?.workspace_permission_count ?? 0);
+
+  const tiles = useMemo<TDetailTile<TDetailTab>[]>(() => {
     if (!group) return [];
-    const list: { key: TDetailTab; label: string; count?: number }[] = [
-      { key: "members", label: "成员", count: group.member_count },
-      { key: "permissions", label: "权限" },
-      { key: "data-scope", label: t(`${I18N}.data_scope.title`) },
+    const projectsScope = group.data_scope_summary?.projects;
+    const productsScope = group.data_scope_summary?.products;
+    const productText =
+      !productsScope || productsScope.mode === "all" ? "产品全部" : `产品 ${productsScope.count ?? 0} 个`;
+    const list: TDetailTile<TDetailTab>[] = [
+      {
+        key: "permissions",
+        label: "权限",
+        value: projectPermissionCount + workspacePermissionCount,
+        unit: "项",
+        sub: `项目 ${projectPermissionCount} · 工作区 ${workspacePermissionCount}`,
+      },
+      {
+        key: "data-scope",
+        label: t(`${I18N}.data_scope.title`),
+        value: projectsScope?.count ?? "—",
+        unit: "个项目",
+        sub: `${DATA_SCOPE_MODE_LABELS[projectsScope?.mode ?? "all"]} · ${productText}`,
+      },
+      {
+        key: "members",
+        label: "成员",
+        value: members.isLoading && members.memberIds.length === 0 ? group.member_count : members.memberIds.length,
+        unit: "人",
+        sub: departmentCount > 0 ? `来自 ${departmentCount} 个部门` : undefined,
+      },
     ];
-    if (isTemplate) list.push({ key: "referenced", label: t(`${I18N}.referenced_projects`), count: referencingCount });
+    if (isTemplate)
+      list.push({
+        key: "referenced",
+        label: t(`${I18N}.referenced_projects`),
+        value: templateProjects.isLoading && templateProjects.projects.length === 0
+          ? (group.referenced_project_count ?? 0)
+          : referencingCount,
+        unit: "个",
+        sub: excludedCount > 0 ? `已移除 ${excludedCount} 个` : undefined,
+      });
     return list;
-  }, [group, isTemplate, referencingCount, t]);
+  }, [
+    group,
+    isTemplate,
+    projectPermissionCount,
+    workspacePermissionCount,
+    members.isLoading,
+    members.memberIds.length,
+    departmentCount,
+    templateProjects.isLoading,
+    templateProjects.projects.length,
+    referencingCount,
+    excludedCount,
+    t,
+  ]);
 
   const requestedTab = searchParams.get("tab") as TDetailTab | null;
-  const activeTab: TDetailTab = tabs.some((tab) => tab.key === requestedTab) ? requestedTab! : "permissions";
+  const activeTab: TDetailTab = tiles.some((tile) => tile.key === requestedTab) ? requestedTab! : "permissions";
   const setTab = (tab: TDetailTab) => setSearchParams({ tab }, { replace: true });
 
   // 组被删了 / id 不对：列表拉回来后还找不到就回列表
@@ -153,21 +215,11 @@ export const PermissionGroupDetail = observer(function PermissionGroupDetail(pro
   const RolesIcon = WORKSPACE_SETTINGS_ICONS.roles;
   const listPath = getPermissionGroupsPath(workspaceSlug);
   const updater = group?.updated_by ? getUserDetails(group.updated_by) : undefined;
-  const subtitle = group
-    ? [
-        isTemplate ? "模板" : null,
-        `${group.member_count} 人`,
-        isTemplate ? `${group.referenced_project_count ?? 0} 个项目引用` : null,
-        `项目白名单：${formatScopeSummary(group.data_scope_summary?.projects)}`,
-        group.updated_at
-          ? `${updater?.display_name ? `${updater.display_name} ` : ""}更新于 ${renderFormattedDate(group.updated_at)}`
-          : null,
-      ]
-        .filter(Boolean)
-        .join(" · ")
-    : "";
+  const meta = group?.updated_at
+    ? `${updater?.display_name ? `${updater.display_name} ` : ""}更新于 ${renderFormattedPayloadDate(group.updated_at)}`
+    : null;
   const readOnly = !canManage || !editor.detail?.is_editable;
-  const projectPermissionCount = editor.draft?.permission_keys.filter((key) => key.startsWith("project.")).length ?? 0;
+  const saveHint = isTemplate && referencingCount > 0 ? `保存后 ${referencingCount} 个引用项目同步生效` : undefined;
 
   const header = (
     <Header>
@@ -181,21 +233,6 @@ export const PermissionGroupDetail = observer(function PermissionGroupDetail(pro
           <Breadcrumbs.Item component={<BreadcrumbLink label={group?.name ?? "…"} isLast />} />
         </Breadcrumbs>
       </Header.LeftItem>
-      {canManage && group && (
-        <Header.RightItem>
-          <Button variant="secondary" size="lg" onClick={() => setIsEditOpen(true)}>
-            编辑
-          </Button>
-          <Button
-            variant="ghost"
-            size="lg"
-            className="text-danger-primary"
-            onClick={() => setPendingDelete(group)}
-          >
-            删除
-          </Button>
-        </Header.RightItem>
-      )}
     </Header>
   );
 
@@ -205,47 +242,44 @@ export const PermissionGroupDetail = observer(function PermissionGroupDetail(pro
       {!group ? (
         <Loader className="flex flex-col gap-3">
           <Loader.Item height="36px" width="240px" />
-          <Loader.Item height="20px" width="360px" />
+          <Loader.Item height="96px" />
           <Loader.Item height="480px" />
         </Loader>
       ) : (
-        <div className="flex flex-col">
-          <h1 className="text-20 font-semibold text-primary">{group.name}</h1>
-          <p className="mt-1 text-13 text-tertiary">{subtitle}</p>
-          {group.description && <p className="mt-1 max-w-3xl text-13 text-secondary">{group.description}</p>}
+        <div className="flex flex-col gap-5">
+          <PermissionGroupIdentity
+            name={group.name}
+            badge={isTemplate ? <TemplateTag /> : undefined}
+            description={group.description}
+            meta={meta}
+            actions={
+              canManage ? (
+                <>
+                  <Button variant="secondary" size="xl" className="h-9 px-4" onClick={() => setIsEditOpen(true)}>
+                    编辑
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="xl"
+                    className="h-9 px-4 text-danger-primary"
+                    onClick={() => setPendingDelete(group)}
+                  >
+                    删除
+                  </Button>
+                </>
+              ) : undefined
+            }
+          />
 
-          <div className="mt-5 flex items-end gap-6 border-b border-subtle">
-            {tabs.map((tab) => {
-              const isActive = tab.key === activeTab;
-              return (
-                <button
-                  key={tab.key}
-                  type="button"
-                  className={cn(
-                    "-mb-px flex h-10 items-center gap-2 border-b-2 px-1 text-14 font-medium transition-colors",
-                    isActive
-                      ? "border-accent-strong text-accent-primary"
-                      : "border-transparent text-secondary hover:text-primary"
-                  )}
-                  onClick={() => setTab(tab.key)}
-                >
-                  {tab.label}
-                  {tab.count !== undefined && (
-                    <span className="rounded-full bg-layer-1 px-1.5 text-11 leading-5 text-tertiary tabular-nums">
-                      {tab.count}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
+          <PermissionGroupTiles tiles={tiles} active={activeTab} onSelect={setTab} />
 
-          <div className="mt-5">
+          <div className="mt-1">
             {activeTab === "members" && (
               <PermissionGroupMembersPanel
                 workspaceSlug={workspaceSlug}
                 group={group}
                 canManage={canManage}
+                members={members}
                 onChanged={() => void refreshRole(roleId).catch(() => undefined)}
               />
             )}
@@ -265,31 +299,27 @@ export const PermissionGroupDetail = observer(function PermissionGroupDetail(pro
               ) : (
                 <>
                   <PermissionGroupEditor
-                    scopes={["workspace", "project"]}
-                    defaultScope="project"
+                    scopes={["project", "workspace"]}
                     value={editor.draft}
                     onChange={editor.setDraft}
                     typeOptions={editor.detail.type_options}
                     typeSourceLabel="类型库"
                     readOnly={readOnly}
                     notice={
-                      <div className="flex flex-col gap-2">
-                        {!canManage && (
-                          <div className="rounded-lg border border-subtle bg-layer-1 px-4 py-2.5 text-13 text-secondary">
-                            你没有管理权限组的权限，只能查看。
-                          </div>
-                        )}
-                        {projectPermissionCount === 0 && (
-                          <div className="rounded-lg border border-subtle bg-warning-subtle px-4 py-2.5 text-13 text-warning-primary">
-                            {t(`${I18N}.data_scope.empty_project_permissions`)}
-                          </div>
-                        )}
-                        {isTemplate && (
-                          <p className="text-13 text-tertiary">
-                            改动保存后，引用这个模板的 {group.referenced_project_count ?? 0} 个项目立即生效。
-                          </p>
-                        )}
-                      </div>
+                      !canManage || projectPermissionCount === 0 ? (
+                        <div className="flex flex-col gap-2">
+                          {!canManage && (
+                            <div className="rounded-lg border border-subtle bg-layer-1 px-4 py-2.5 text-13 text-secondary">
+                              你没有管理权限组的权限，只能查看。
+                            </div>
+                          )}
+                          {projectPermissionCount === 0 && (
+                            <div className="rounded-lg border border-warning-subtle bg-warning-subtle px-4 py-2.5 text-13 text-warning-primary">
+                              {t(`${I18N}.data_scope.empty_project_permissions`)}
+                            </div>
+                          )}
+                        </div>
+                      ) : undefined
                     }
                     copySources={copySources}
                     loadCopySource={readOnly ? undefined : loadCopySource}
@@ -297,6 +327,7 @@ export const PermissionGroupDetail = observer(function PermissionGroupDetail(pro
                   {editor.isDirty && !readOnly && (
                     <PermissionGroupSaveBar
                       count={editor.changedCount}
+                      hint={saveHint}
                       isSaving={editor.isSaving}
                       onDiscard={editor.discard}
                       onSave={() => void handleSave()}

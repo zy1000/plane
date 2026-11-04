@@ -6,7 +6,10 @@
 
 import { useTranslation } from "@plane/i18n";
 import type { TDataScope, TDataScopeEntry, TDataScopeMode } from "@plane/types";
-import { cn } from "@plane/utils";
+import { Spinner } from "@plane/ui";
+import { dataScopeEntryHasConditions, useDataScopePreview } from "@/hooks/store/use-data-scope-editor";
+import { DATA_SCOPE_MODE_LABELS } from "../helpers";
+import { PermissionGroupSegmented } from "../ui";
 import { ProductScopeFilterBuilder, ProjectScopeFilterBuilder } from "./filter-builder";
 import { DataScopePreview } from "./scope-preview";
 import { DataScopeSelectedPicker } from "./selected-picker";
@@ -28,6 +31,7 @@ const withMode = (entry: TDataScopeEntry, mode: TDataScopeMode): TDataScopeEntry
   return { mode: "filter", filter: entry.mode === "filter" ? entry.filter : {} };
 };
 
+/** 一段白名单：左边标题 + 当前命中数，右边「全部 / 指定 / 按条件」和对应的内容 */
 function DataScopeSection(props: {
   workspaceSlug: string;
   kind: "projects" | "products";
@@ -37,40 +41,30 @@ function DataScopeSection(props: {
 }) {
   const { workspaceSlug, kind, entry, onChange, readOnly } = props;
   const { t } = useTranslation();
-  const kindLabel = t(`${I18N}.${kind}`);
+  const { preview, isLoading, error } = useDataScopePreview(workspaceSlug, kind, entry);
   const FilterBuilder = kind === "projects" ? ProjectScopeFilterBuilder : ProductScopeFilterBuilder;
+  const noCondition = entry.mode === "filter" && !dataScopeEntryHasConditions(entry.filter);
+  const count = entry.mode === "selected" ? entry.ids.length : noCondition ? null : preview?.count;
 
   return (
-    <section className="rounded-lg border border-subtle bg-surface-1">
-      <div className="flex flex-col gap-1 border-b border-subtle px-4 py-3">
-        <h3 className="text-14 font-medium text-primary">{kindLabel}</h3>
-        <p className="text-12 leading-4 text-tertiary">{t(`${I18N}.${kind}_hint`)}</p>
-      </div>
-      <div className="flex flex-col gap-4 px-4 py-4">
-        <div className="flex flex-wrap items-center gap-5" role="radiogroup">
-          {MODES.map((mode) => {
-            const isActive = entry.mode === mode;
-            return (
-              <label
-                key={mode}
-                className={cn("flex cursor-pointer items-center gap-2 text-13", readOnly && "cursor-default")}
-              >
-                <input
-                  type="radio"
-                  name={`data-scope-${kind}`}
-                  className="size-3.5 accent-accent-primary"
-                  checked={isActive}
-                  disabled={readOnly}
-                  onChange={() => onChange(withMode(entry, mode))}
-                />
-                <span className={isActive ? "font-medium text-primary" : "text-secondary"}>
-                  {t(`${I18N}.mode_${mode}`)}
-                </span>
-                <span className="text-12 text-placeholder">{t(`${I18N}.mode_${mode}_hint`, { kind: kindLabel })}</span>
-              </label>
-            );
-          })}
+    <section className="grid grid-cols-1 gap-x-8 gap-y-4 rounded-xl border border-subtle bg-surface-1 px-7 py-6 md:grid-cols-[180px_minmax(0,1fr)]">
+      <div>
+        <h3 className="text-16 font-semibold text-primary">{t(`${I18N}.${kind}`)}</h3>
+        <div className="mt-4 flex items-center gap-2 text-32 leading-tight font-semibold text-primary tabular-nums">
+          {count ?? "—"}
+          {isLoading && <Spinner height="16px" width="16px" />}
         </div>
+        <p className="mt-0.5 text-13 text-tertiary">{kind === "projects" ? "个项目可见" : "个产品可见"}</p>
+      </div>
+
+      <div className="flex min-w-0 flex-col gap-4">
+        <PermissionGroupSegmented<TDataScopeMode>
+          items={MODES.map((mode) => ({ key: mode, label: DATA_SCOPE_MODE_LABELS[mode] }))}
+          value={entry.mode}
+          onChange={(mode) => onChange(withMode(entry, mode))}
+          disabled={readOnly}
+          size="lg"
+        />
 
         {entry.mode === "selected" && (
           <DataScopeSelectedPicker
@@ -82,16 +76,18 @@ function DataScopeSection(props: {
           />
         )}
         {entry.mode === "filter" && (
-          <div className="rounded-md border border-subtle bg-layer-1 px-3 py-2">
-            <FilterBuilder
-              workspaceSlug={workspaceSlug}
-              value={entry.filter}
-              onChange={(filter) => onChange({ mode: "filter", filter })}
-              readOnly={readOnly}
-            />
-          </div>
+          <FilterBuilder
+            workspaceSlug={workspaceSlug}
+            value={entry.filter}
+            onChange={(filter) => onChange({ mode: "filter", filter })}
+            readOnly={readOnly}
+          />
         )}
-        <DataScopePreview workspaceSlug={workspaceSlug} kind={kind} entry={entry} />
+        {noCondition ? (
+          <p className="text-13 text-placeholder">{t(`${I18N}.no_condition`)}</p>
+        ) : (
+          <DataScopePreview kind={kind} mode={entry.mode} preview={preview} error={error} />
+        )}
       </div>
     </section>
   );
@@ -99,10 +95,8 @@ function DataScopeSection(props: {
 
 /** 权限组详情「数据权限」页签：项目、产品两段白名单，各自「全部 / 指定 / 按条件」 */
 export function DataScopeTab({ workspaceSlug, value, onChange, readOnly }: Props) {
-  const { t } = useTranslation();
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-13 text-tertiary">{t(`${I18N}.description`)}</p>
       <DataScopeSection
         workspaceSlug={workspaceSlug}
         kind="projects"

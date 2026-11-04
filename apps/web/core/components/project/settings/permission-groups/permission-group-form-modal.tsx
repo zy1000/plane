@@ -70,7 +70,7 @@ export function ProjectPermissionGroupFormModal({ isOpen, group, copySources, on
         }}
       >
         <div className="border-b border-subtle px-6 py-4">
-          <h3 className="text-16 font-medium text-primary">{isEdit ? "编辑权限组" : "新建权限组"}</h3>
+          <h3 className="text-18 font-semibold text-primary">{isEdit ? "编辑权限组" : "新建权限组"}</h3>
         </div>
         <div className="flex flex-col gap-5 px-6 py-5">
           <div>
@@ -86,7 +86,7 @@ export function ProjectPermissionGroupFormModal({ isOpen, group, copySources, on
                 setName(event.target.value);
                 setNameError(undefined);
               }}
-              placeholder="如：软件测试负责人"
+              placeholder="请输入名称"
               className={cn(MODAL_FIELD_CLASS, nameError ? "border-danger-strong" : "border-subtle", "bg-surface-1 outline-none focus:border-accent-strong")}
             />
             <ModalFieldError message={nameError} />
@@ -98,23 +98,23 @@ export function ProjectPermissionGroupFormModal({ isOpen, group, copySources, on
               value={description}
               rows={3}
               onChange={(event) => setDescription(event.target.value)}
-              placeholder="这个权限组给谁用"
+              placeholder="请输入描述"
               className="w-full resize-none rounded-[10px] border border-subtle bg-surface-1 px-3.5 py-2.5 text-14 outline-none focus:border-accent-strong"
             />
           </div>
           {!isEdit && (
             <div>
-              <ModalFieldLabel note="新建后按它的勾选起步，可再调整">复制自</ModalFieldLabel>
+              <ModalFieldLabel>复制权限自</ModalFieldLabel>
               <CustomSelect
                 value={copyFrom}
                 onChange={(value: string | null) => setCopyFrom(value)}
-                label={<span className={copyLabel ? "text-primary" : "text-placeholder"}>{copyLabel ?? "不复制，从空白开始"}</span>}
+                label={<span className={copyLabel ? "text-primary" : "text-placeholder"}>{copyLabel ?? "不复制"}</span>}
                 buttonClassName={cn(MODAL_FIELD_CLASS, "flex items-center justify-between border-subtle")}
                 // 浮层 portal 到 body，w-full 会撑满整屏；按字段宽度（弹窗 576 - 两侧 24）给定宽
                 optionsClassName="w-[528px] max-w-[calc(100vw-5rem)]"
                 input
               >
-                <CustomSelect.Option value={null}>不复制，从空白开始</CustomSelect.Option>
+                <CustomSelect.Option value={null}>不复制</CustomSelect.Option>
                 {copySources.map((source) => (
                   <CustomSelect.Option key={source.id} value={source.id}>
                     {source.name}

@@ -36,6 +36,8 @@ export type TPermissionGroupTypeOption = {
 export interface IPermissionGroup extends IWorkspaceRole {
   /** 直绑人数 */
   member_count: number;
+  /** 前 3 个直绑成员的用户 id（列表叠放头像） */
+  member_preview_ids?: string[];
   permission_keys_count: number;
   workspace_permission_count: number;
   project_permission_count: number;

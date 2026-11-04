@@ -168,6 +168,28 @@ def workspace_group_member_counts(workspace) -> dict:
     )
 
 
+def _preview_ids(pairs, limit=3) -> dict:
+    """[(组 id, 用户 id), ...] → {组 id: [最多 limit 个用户 id]}，按出现顺序去重。"""
+    result = {}
+    for role_id, user_id in pairs:
+        ids = result.setdefault(role_id, [])
+        user_id = str(user_id)
+        if len(ids) < limit and user_id not in ids:
+            ids.append(user_id)
+    return result
+
+
+def workspace_group_member_previews(workspace) -> dict:
+    """{组 id: [前 3 个直绑成员的用户 id]}：列表「成员」列叠放头像用。"""
+    return _preview_ids(
+        WorkspaceMemberRole.objects.filter(
+            workspace=workspace, member__is_active=True, member__deleted_at__isnull=True
+        )
+        .order_by("created_at")
+        .values_list("role_id", "member__member_id")
+    )
+
+
 def template_usage_counts(workspace) -> dict:
     """{模板 id: {"referenced": 引用它的项目数}}（白名单命中 − 排除）。"""
     return {
@@ -183,9 +205,27 @@ def template_projects(template):
     if not scope.all:
         queryset = queryset.filter(id__in=list(scope.ids))
     excluded = excluded_project_ids(template)
+    bound_counts = dict(
+        ProjectMemberRole.objects.filter(
+            role__source_template=template, member__is_active=True, member__deleted_at__isnull=True
+        )
+        .values("role__project_id")
+        .annotate(n=Count("member_id", distinct=True))
+        .values_list("role__project_id", "n")
+    )
     rows = []
-    for row in queryset.order_by("name").values("id", "name", "identifier", "logo_props", "archived_at"):
-        rows.append({**row, "id": str(row["id"]), "excluded": str(row["id"]) in excluded})
+    for row in queryset.order_by("name").values(
+        "id", "name", "identifier", "logo_props", "archived_at", "project_lead_id"
+    ):
+        rows.append(
+            {
+                **row,
+                "id": str(row["id"]),
+                "project_lead_id": str(row["project_lead_id"]) if row["project_lead_id"] else None,
+                "excluded": str(row["id"]) in excluded,
+                "bound_member_count": bound_counts.get(row["id"], 0),
+            }
+        )
     return {"projects": rows}
 
 
@@ -262,6 +302,11 @@ def project_group_rows(project):
         .annotate(n=Count("member_id", distinct=True))
         .values_list("role_id", "n")
     )
+    member_previews = _preview_ids(
+        ProjectMemberRole.objects.filter(project=project, member__is_active=True, member__deleted_at__isnull=True)
+        .order_by("created_at")
+        .values_list("role_id", "member__member_id")
+    )
     by_template = {row.source_template_id: row for row in rows if row.source_template_id}
 
     def entry(**values):
@@ -281,6 +326,7 @@ def project_group_rows(project):
                 description=template.description,
                 source="template",
                 member_count=member_counts.get(row.id, 0) if row else 0,
+                member_preview_ids=member_previews.get(row.id, []) if row else [],
                 updated_at=template.updated_at,
                 payload=effective_payload(template),
             )
@@ -298,6 +344,7 @@ def project_group_rows(project):
                 description=row.description,
                 source="project",
                 member_count=member_counts.get(row.id, 0),
+                member_preview_ids=member_previews.get(row.id, []),
                 updated_at=row.updated_at,
                 payload=effective_payload(row),
             )

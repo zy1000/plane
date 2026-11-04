@@ -18,7 +18,7 @@ from plane.app.serializers import (
 )
 from plane.app.views.base import BaseAPIView, BaseViewSet
 from plane.db.models import Permission, Project, Workspace, WorkspaceRole
-from plane.utils.data_scope import DataScopeError, preview_entry, validate_data_scope
+from plane.utils.data_scope import MODELS, DataScopeError, preview_entry, role_scope, validate_data_scope
 from plane.utils.permission_groups import (
     PermissionGroupError,
     bind_workspace_group_members,
@@ -31,6 +31,7 @@ from plane.utils.permission_groups import (
     template_usage_counts,
     unbind_workspace_group_member,
     workspace_group_member_counts,
+    workspace_group_member_previews,
     workspace_type_options,
 )
 
@@ -67,15 +68,18 @@ class WorkspaceRoleViewSet(BaseViewSet):
 
     def _with_stats(self, roles, workspace):
         member_counts = workspace_group_member_counts(workspace)
+        member_previews = workspace_group_member_previews(workspace)
         usage = template_usage_counts(workspace)
+        totals = {kind: MODELS[kind].objects.filter(workspace=workspace).count() for kind in ("projects", "products")}
         data = []
         for role, item in zip(roles, self.get_serializer(roles, many=True).data):
             payload = effective_payload(role)
             item["member_count"] = member_counts.get(role.id, 0)
+            item["member_preview_ids"] = member_previews.get(role.id, [])
             item["permission_keys_count"] = len(payload["permission_keys"])
             item["workspace_permission_count"] = len([k for k in payload["permission_keys"] if k.startswith("workspace.")])
             item["project_permission_count"] = len([k for k in payload["permission_keys"] if k.startswith("project.")])
-            item["data_scope_summary"] = _scope_summary(role)
+            item["data_scope_summary"] = _scope_summary(role, totals)
             if role.is_template:
                 item["referenced_project_count"] = usage.get(role.id, {}).get("referenced", 0)
             data.append(item)
@@ -263,14 +267,22 @@ class WorkspaceRoleTemplateProjectsAPIView(BaseAPIView):
         return Response(template_projects(role), status=status.HTTP_200_OK)
 
 
-def _scope_summary(role):
-    """列表里一眼能看的数据权限：{"projects": {"mode", "count"}, "products": {...}}。count 只对 selected 给。"""
+def _scope_summary(role, totals):
+    """列表 / 详情卡片一眼能看的数据权限：{"projects": {"mode", "count"}, "products": {...}}。
+    count 是当前命中数：全部 = 工作区总数，指定 = 勾选数，按条件 = 现在满足条件的个数。"""
     scope = role.data_scope if isinstance(role.data_scope, dict) else {}
     summary = {}
     for kind in ("projects", "products"):
         entry = scope.get(kind) if isinstance(scope.get(kind), dict) else {}
         mode = entry.get("mode", "all")
-        summary[kind] = {"mode": mode, "count": len(entry.get("ids") or []) if mode == "selected" else None}
+        if mode == "selected":
+            count = len(entry.get("ids") or [])
+        elif mode == "filter":
+            result = role_scope(role, kind, role.workspace)
+            count = totals[kind] if result.all else len(result.ids)
+        else:
+            count = totals[kind]
+        summary[kind] = {"mode": mode, "count": count}
     return summary
 
 

@@ -42,7 +42,8 @@ export const useDataScopePreview = (
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!workspaceSlug || !debounced || debounced.mode === "all") {
+    // 「全部」也问一次：左侧大数字要总数，右侧列前几条
+    if (!workspaceSlug || !debounced) {
       setPreview(null);
       setError(null);
       return;
