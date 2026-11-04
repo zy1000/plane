@@ -12,8 +12,6 @@ import { ChartNoAxesColumn, ChevronDown, PanelRight, SlidersHorizontal } from "l
 // plane imports
 import {
   EIssueFilterType,
-  EUserPermissions,
-  EUserPermissionsLevel,
   ISSUE_DISPLAY_FILTERS_BY_PAGE,
   WORK_ITEM_TRACKER_ELEMENTS,
   PROJECT_REQUIREMENT_LINK_MANAGE_PERMISSION_KEY,
@@ -89,7 +87,7 @@ export const CycleIssuesHeader = observer(function CycleIssuesHeader() {
   const { toggleCreateIssueModal } = useCommandPalette();
   const { currentProjectDetails, loader } = useProject();
   const { isMobile } = usePlatformOS();
-  const { allowPermissions, allowProjectPermissionKeys } = useUserPermissions();
+  const { allowIssuePermission, allowProjectPermissionKeys } = useUserPermissions();
   const workspaceSlugValue = workspaceSlug?.toString() ?? "";
   const projectIdValue = projectId?.toString() ?? "";
   /**
@@ -141,10 +139,7 @@ export const CycleIssuesHeader = observer(function CycleIssuesHeader() {
   // derived values
   const cycleDetails = cycleId ? getCycleById(cycleId.toString()) : undefined;
   const isCompletedCycle = cycleDetails?.status === "completed";
-  const canUserCreateIssue = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.PROJECT
-  );
+  const canUserCreateIssue = allowIssuePermission("create", undefined, workspaceSlugValue, projectIdValue);
   const canManageSprintIssues = allowProjectPermissionKeys(
     [PROJECT_SPRINTS_ISSUE_MANAGE_PERMISSION_KEY],
     workspaceSlugValue,

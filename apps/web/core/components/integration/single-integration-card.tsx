@@ -9,7 +9,7 @@ import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 import useSWR, { mutate } from "swr";
 import { CheckCircle } from "lucide-react";
-import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import { PERMISSION_KEYS } from "@plane/constants";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Tooltip } from "@plane/propel/tooltip";
@@ -56,9 +56,9 @@ export const SingleIntegrationCard = observer(function SingleIntegrationCard({ i
   const { workspaceSlug } = useParams();
   // store hooks
   const { config } = useInstance();
-  const { allowPermissions } = useUserPermissions();
+  const { allowWorkspacePermissionKeys } = useUserPermissions();
 
-  const isUserAdmin = allowPermissions([EUserPermissions.ADMIN], EUserPermissionsLevel.WORKSPACE);
+  const isUserAdmin = allowWorkspacePermissionKeys([PERMISSION_KEYS.WORKSPACE_INTEGRATION_MANAGE]);
   const { isMobile } = usePlatformOS();
   const { startAuth, isConnecting: isInstalling } = useIntegrationPopup({
     provider: integration.provider,

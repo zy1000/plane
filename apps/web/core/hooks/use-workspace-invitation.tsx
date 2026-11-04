@@ -7,13 +7,14 @@
 import { useEffect } from "react";
 import type { Control, FieldArrayWithId, FormState, UseFormWatch } from "react-hook-form";
 import { useFieldArray, useForm } from "react-hook-form";
-// plane imports
-import { EUserPermissions } from "@plane/constants";
+
+/** 整数角色已退役：邀请统一按普通成员发，权限看权限组（custom_role_ids） */
+const DEFAULT_INVITE_ROLE = 15;
 
 type EmailRole = {
   email: string;
   /** 后端仍要求的旧角色字段，权限实际由 custom_role_ids 决定 */
-  role: EUserPermissions;
+  role: number;
   custom_role_ids: string[];
 };
 
@@ -25,7 +26,7 @@ const SEND_WORKSPACE_INVITATION_MODAL_DEFAULT_VALUES: InvitationFormValues = {
   emails: [
     {
       email: "",
-      role: EUserPermissions.MEMBER,
+      role: DEFAULT_INVITE_ROLE,
       custom_role_ids: [],
     },
   ],
@@ -68,7 +69,7 @@ export const useWorkspaceInvitationActions = (props: TUseWorkspaceInvitationProp
   };
 
   const appendField = () => {
-    append({ email: "", role: EUserPermissions.MEMBER, custom_role_ids: [] });
+    append({ email: "", role: DEFAULT_INVITE_ROLE, custom_role_ids: [] });
   };
 
   const onSubmitForm = async (data: InvitationFormValues) => {
@@ -78,7 +79,7 @@ export const useWorkspaceInvitationActions = (props: TUseWorkspaceInvitationProp
   };
 
   useEffect(() => {
-    if (fields.length === 0) append([{ email: "", role: EUserPermissions.MEMBER, custom_role_ids: [] }]);
+    if (fields.length === 0) append([{ email: "", role: DEFAULT_INVITE_ROLE, custom_role_ids: [] }]);
   }, [fields, append]);
 
   return {

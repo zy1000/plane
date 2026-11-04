@@ -8,7 +8,6 @@ import React from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 import { Ban } from "lucide-react";
-import { EUserProjectRoles } from "@plane/types";
 // plane ui
 import { Avatar, CustomSearchSelect } from "@plane/ui";
 // helpers
@@ -36,8 +35,6 @@ export const MemberSelect = observer(function MemberSelect(props: Props) {
       const memberDetails = projectId ? getProjectMemberDetails(userId, projectId.toString()) : null;
 
       if (!memberDetails?.member) return;
-      const isGuest = memberDetails.role === EUserProjectRoles.GUEST;
-      if (isGuest) return;
 
       return {
         value: `${memberDetails?.member.id}`,

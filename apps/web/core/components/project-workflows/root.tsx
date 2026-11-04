@@ -27,10 +27,10 @@ import { WorkflowCard } from "./workflow-card";
 import { WorkflowFormModal } from "./workflow-form-modal";
 
 const WORKFLOW_PERMISSION_KEYS = {
-  create: "workflow.create",
-  edit: "workflow.edit",
-  delete: "workflow.delete",
-  config: "workflow.config",
+  create: "project.workflow.manage",
+  edit: "project.workflow.manage",
+  delete: "project.workflow.manage",
+  config: "project.workflow.manage",
 } as const;
 
 const PROJECT_PERMISSION_DENIED_ERROR = { error: "You don't have the required permissions." };

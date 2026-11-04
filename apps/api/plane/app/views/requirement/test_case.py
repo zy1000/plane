@@ -123,7 +123,7 @@ class RequirementTestCaseViewSet(BaseViewSet):
 
         if for_write:
             can_write = has_product_permission(
-                request.user, product, PermissionKey.PRODUCT_TEST_CASE_LINK_MANAGE
+                request.user, product, PermissionKey.PROJECT_REQUIREMENT_EDIT
             ) or has_project_side_link_permission(
                 request.user, slug=slug, requirement=requirement, manage=True
             )

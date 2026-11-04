@@ -536,7 +536,7 @@ class ReleaseArchiveUnarchiveEndpoint(BaseAPIView):
 
             return Response(data, status=status.HTTP_200_OK)
 
-    @allow_fine_permission(PermissionKey.RELEASES_ARCHIVE)
+    @allow_fine_permission(PermissionKey.PROJECT_RELEASE_ARCHIVE)
     def post(self, request, slug, project_id, release_id):
         release = Release.objects.get(pk=release_id, project_id=project_id, workspace__slug=slug)
         if release.status not in ["completed", "cancelled"]:
@@ -554,7 +554,7 @@ class ReleaseArchiveUnarchiveEndpoint(BaseAPIView):
         ).delete()
         return Response({"archived_at": str(release.archived_at)}, status=status.HTTP_200_OK)
 
-    @allow_fine_permission(PermissionKey.RELEASES_ARCHIVE)
+    @allow_fine_permission(PermissionKey.PROJECT_RELEASE_ARCHIVE)
     def delete(self, request, slug, project_id, release_id):
         release = Release.objects.get(pk=release_id, project_id=project_id, workspace__slug=slug)
         release.archived_at = None

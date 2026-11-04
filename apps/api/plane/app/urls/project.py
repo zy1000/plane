@@ -26,7 +26,11 @@ from plane.app.views.project.member import ProjectMyPermissionKeysAPIView
 from plane.app.views.project.announcement import AnnouncementAPIView
 from plane.app.views.project.base import ProjectAPI
 from plane.app.views.project.pms import PmsSyncAPIView, ProjectPmsInfoAPIView, ProjectPmsInfoDetailAPIView
-from plane.app.views.project.role import ProjectRoleViewSet, ProjectRoleImportAPIView, ProjectRolePermissionAPIView
+from plane.app.views.project.role import (
+    ProjectRoleMembersAPIView,
+    ProjectRolePermissionAPIView,
+    ProjectRoleViewSet,
+)
 from plane.app.views.project.group import ProjectGroupRoleViewSet, ProjectGroupViewSet
 from plane.app.views.project.template import ProjectTemplateAPIView
 
@@ -170,9 +174,9 @@ urlpatterns = [
         name="project-role-detail",
     ),
     path(
-        "workspaces/<str:slug>/projects/<uuid:project_id>/roles/import/",
-        ProjectRoleImportAPIView.as_view(),
-        name="project-role-import",
+        "workspaces/<str:slug>/projects/<uuid:project_id>/roles/<uuid:pk>/members/",
+        ProjectRoleMembersAPIView.as_view(),
+        name="project-role-members",
     ),
     path(
         "workspaces/<str:slug>/projects/<uuid:project_id>/roles/<uuid:pk>/permissions/",

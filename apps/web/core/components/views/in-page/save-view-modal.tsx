@@ -26,6 +26,8 @@ type TSaveViewModalProps = {
   initialAccess?: EViewAccess;
   initialIsDefault?: boolean;
   summary?: TViewSummaryRow[];
+  /** 能不能设成「项目所有成员」：没有公共视图管理权限时不给这个选项（已经公开的视图编辑时保留） */
+  canPublish?: boolean;
   /** 只在新建、且有研发模式编辑权限的跟随项目里传 */
   modeOption?: TSaveViewModeOption;
   /** 当前筛选里本项目自有的属性名（迭代 / 模块 / 发布 / 标签），选研发模式时不能带 */
@@ -84,6 +86,7 @@ export const SaveViewModal = (props: TSaveViewModalProps) => {
     initialAccess = EViewAccess.PRIVATE,
     initialIsDefault = false,
     summary,
+    canPublish = true,
     modeOption,
     blockedFilterLabels = EMPTY_LABELS,
     onClose,
@@ -109,7 +112,10 @@ export const SaveViewModal = (props: TSaveViewModalProps) => {
   const showModeOption = mode === "create" && !!modeOption;
   const toMode = showModeOption && visibility === "mode";
   const blockedLabels = toMode ? blockedFilterLabels : EMPTY_LABELS;
-  const options = showModeOption ? VISIBILITY_OPTIONS : VISIBILITY_OPTIONS.slice(0, 2);
+  const allowPublic = canPublish || initialAccess === EViewAccess.PUBLIC;
+  const options = (showModeOption ? VISIBILITY_OPTIONS : VISIBILITY_OPTIONS.slice(0, 2)).filter(
+    (option) => option.value !== "public" || allowPublic
+  );
   const canSubmit = name.trim().length > 0 && !isSubmitting && blockedLabels.length === 0;
 
   const handleSubmit = async () => {

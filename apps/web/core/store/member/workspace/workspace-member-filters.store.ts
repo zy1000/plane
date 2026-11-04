@@ -7,7 +7,6 @@
 import { action, makeObservable, observable } from "mobx";
 import { computedFn } from "mobx-utils";
 // types
-import type { EUserPermissions } from "@plane/constants";
 import type { IUserLite } from "@plane/types";
 // local imports
 import type { IMemberFilters } from "../utils";
@@ -17,8 +16,10 @@ import { sortWorkspaceMembers } from "../utils";
 interface IWorkspaceMembership {
   id: string;
   member: string;
-  role: EUserPermissions;
   is_active?: boolean;
+  job_role_ids?: string[];
+  custom_role_ids?: string[];
+  group_role_ids?: string[];
 }
 
 export interface IWorkspaceMemberFiltersStore {

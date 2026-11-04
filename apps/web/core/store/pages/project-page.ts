@@ -9,7 +9,6 @@ import { computedFn } from "mobx-utils";
 // constants
 import {
   EPageAccess,
-  EUserPermissions,
   PROJECT_NOTES_ACCESS_MANAGE_PERMISSION_KEY,
   PROJECT_NOTES_ARCHIVE_PERMISSION_KEY,
   PROJECT_NOTES_CREATE_PERMISSION_KEY,
@@ -87,21 +86,13 @@ export class ProjectPage extends BasePage implements TProjectPage {
     });
   }
 
-  private getHighestRoleAcrossProjects = computedFn((): EUserPermissions | undefined => {
+  /** 页面挂的项目里，当前用户是不是至少其中一个的成员 */
+  private isMemberOfAnyProject = computedFn((): boolean => {
     const { workspaceSlug } = this.rootStore.router;
-    if (!workspaceSlug || !this.project_ids?.length) return;
-    let highestRole: EUserPermissions | undefined = undefined;
-    this.project_ids.map((projectId) => {
-      const currentUserProjectRole = this.rootStore.user.permission.getProjectRoleByWorkspaceSlugAndProjectId(
-        workspaceSlug?.toString() || "",
-        projectId?.toString() || ""
-      );
-      if (currentUserProjectRole) {
-        if (!highestRole) highestRole = currentUserProjectRole;
-        else if (currentUserProjectRole > highestRole) highestRole = currentUserProjectRole;
-      }
-    });
-    return highestRole;
+    if (!workspaceSlug || !this.project_ids?.length) return false;
+    return this.project_ids.some((projectId) =>
+      this.rootStore.user.permission.isProjectMember(workspaceSlug.toString(), projectId?.toString() || "")
+    );
   });
 
   private hasPermissionAcrossProjects = computedFn((permissionKey: string): boolean => {
@@ -128,11 +119,11 @@ export class ProjectPage extends BasePage implements TProjectPage {
    * @description returns true if the current logged in user can edit the page
    */
   get canCurrentUserEditPage() {
-    const highestRole = this.getHighestRoleAcrossProjects();
+    const isProjectMember = this.isMemberOfAnyProject();
     const isPagePublic = this.access === EPageAccess.PUBLIC;
     return (
       this.hasPermissionAcrossProjects(PROJECT_NOTES_EDIT_PERMISSION_KEY) &&
-      ((isPagePublic && !!highestRole && highestRole >= EUserPermissions.MEMBER) ||
+      ((isPagePublic && isProjectMember) ||
         (!isPagePublic && this.isCurrentUserOwner))
     );
   }
@@ -178,8 +169,8 @@ export class ProjectPage extends BasePage implements TProjectPage {
    * @description returns true if the current logged in user can favorite the page
    */
   get canCurrentUserFavoritePage() {
-    const highestRole = this.getHighestRoleAcrossProjects();
-    return this.canCurrentUserAccessPage && !!highestRole && highestRole >= EUserPermissions.MEMBER;
+    const isProjectMember = this.isMemberOfAnyProject();
+    return this.canCurrentUserAccessPage && isProjectMember;
   }
 
   /**
@@ -200,7 +191,7 @@ export class ProjectPage extends BasePage implements TProjectPage {
    * @description returns true if the page can be edited
    */
   get isContentEditable() {
-    const highestRole = this.getHighestRoleAcrossProjects();
+    const isProjectMember = this.isMemberOfAnyProject();
     const isOwner = this.isCurrentUserOwner;
     const isPublic = this.access === EPageAccess.PUBLIC;
     const isArchived = this.archived_at;
@@ -210,7 +201,7 @@ export class ProjectPage extends BasePage implements TProjectPage {
       this.hasPermissionAcrossProjects(PROJECT_NOTES_EDIT_PERMISSION_KEY) &&
       !isArchived &&
       !isLocked &&
-      (isOwner || (isPublic && !!highestRole && highestRole >= EUserPermissions.MEMBER))
+      (isOwner || (isPublic && isProjectMember))
     );
   }
 

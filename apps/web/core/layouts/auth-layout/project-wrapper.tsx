@@ -5,11 +5,10 @@
  */
 
 import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { observer } from "mobx-react";
 import useSWR from "swr";
 // plane imports
-import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 import { GANTT_TIMELINE_TYPE } from "@plane/types";
 // components
 import { ProjectAccessRestriction } from "@/components/auth-screens/project/project-access-restriction";
@@ -51,12 +50,9 @@ interface IProjectAuthWrapper {
 
 export const ProjectAuthWrapper = observer(function ProjectAuthWrapper(props: IProjectAuthWrapper) {
   const { workspaceSlug, projectId, children, isLoading: isParentLoading = false } = props;
-  // states
-  const [isJoiningProject, setIsJoiningProject] = useState(false);
   // store hooks
-  const { fetchUserProjectInfo, allowPermissions, getProjectRoleByWorkspaceSlugAndProjectId } = useUserPermissions();
+  const { fetchUserProjectInfo, isProjectMember } = useUserPermissions();
   const { fetchProjectDetails } = useProject();
-  const { joinProject } = useUserPermissions();
   const { fetchAllCycles } = useCycle();
   const { fetchModulesSlim, fetchModules } = useModule();
   const { fetchReleases } = useRelease();
@@ -72,14 +68,10 @@ export const ProjectAuthWrapper = observer(function ProjectAuthWrapper(props: IP
   const { fetchProjectLabels } = useLabel();
   const { getProjectEstimates } = useProjectEstimates();
   // derived values
-  const hasPermissionToCurrentProject = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
-    EUserPermissionsLevel.PROJECT,
-    workspaceSlug,
-    projectId
-  );
-  const currentProjectRole = getProjectRoleByWorkspaceSlugAndProjectId(workspaceSlug, projectId);
-  const isWorkspaceAdmin = allowPermissions([EUserPermissions.ADMIN], EUserPermissionsLevel.WORKSPACE, workspaceSlug);
+  // 能进 = 成员 / 负责人 / 直通 / 白名单访客（与后端 utils/visibility.py 同口径）
+  const hasPermissionToCurrentProject = isProjectMember(workspaceSlug, projectId);
+  // 只用来拼 SWR key：能进与否变了就重新拉一遍项目数据
+  const currentProjectRole = hasPermissionToCurrentProject;
   // Initialize module timeline chart
   useEffect(() => {
     initGantt();
@@ -167,24 +159,13 @@ export const ProjectAuthWrapper = observer(function ProjectAuthWrapper(props: IP
     revalidateOnFocus: false,
   });
 
-  // handle join project
-  const handleJoinProject = () => {
-    setIsJoiningProject(true);
-    joinProject(workspaceSlug, projectId).finally(() => setIsJoiningProject(false));
-  };
-
   const isProjectLoading = (isParentLoading || isProjectDetailsLoading) && !projectDetailsError;
 
   if (isProjectLoading) return null;
 
   if (!isProjectLoading && hasPermissionToCurrentProject === false) {
     return (
-      <ProjectAccessRestriction
-        errorStatusCode={projectDetailsError?.status}
-        isWorkspaceAdmin={isWorkspaceAdmin}
-        handleJoinProject={handleJoinProject}
-        isJoinButtonDisabled={isJoiningProject}
-      />
+      <ProjectAccessRestriction errorStatusCode={projectDetailsError?.status} />
     );
   }
 

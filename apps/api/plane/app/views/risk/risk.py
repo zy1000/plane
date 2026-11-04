@@ -13,7 +13,7 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.response import Response
 
-from plane.app.permissions import ROLE, allow_permission
+from plane.app.permissions import allow_fine_permission, PermissionKey
 from plane.app.serializers.risk import (
     RiskActivitySerializer,
     RiskCommentSerializer,
@@ -52,8 +52,6 @@ from plane.utils.risk import (
     write_activity,
 )
 
-READ_ROLES = [ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST]
-WRITE_ROLES = [ROLE.ADMIN, ROLE.MEMBER]
 RISK_FILE_ENTITY_TYPE = FileAsset.EntityTypeContext.RISK_FILE
 
 
@@ -142,20 +140,20 @@ class RiskViewSet(BaseViewSet):
         risk = self._risk(slug, project_id, pk)
         return Response(RiskDetailSerializer(risk).data, status=http_status)
 
-    @allow_permission(READ_ROLES)
+    @allow_fine_permission(PermissionKey.PROJECT_RISK_VIEW)
     def list(self, request, slug, project_id):
         # 全量返回，筛选 / 排序在前端做（同阶段评审）：一个项目的风险量级是几十到几百条
         risks = self.get_queryset().order_by("-created_at")
         return Response(RiskListSerializer(risks, many=True).data, status=status.HTTP_200_OK)
 
-    @allow_permission(READ_ROLES)
+    @allow_fine_permission(PermissionKey.PROJECT_RISK_VIEW)
     def retrieve(self, request, slug, project_id, pk):
         risk = self._risk(slug, project_id, pk)
         if risk is None:
             return _not_found()
         return Response(RiskDetailSerializer(risk).data, status=status.HTTP_200_OK)
 
-    @allow_permission(WRITE_ROLES)
+    @allow_fine_permission(PermissionKey.PROJECT_RISK_CREATE)
     def create(self, request, slug, project_id):
         project = Project.objects.filter(workspace__slug=slug, pk=project_id).first()
         if project is None:
@@ -171,7 +169,7 @@ class RiskViewSet(BaseViewSet):
         risk = create_risk(project, request.user, dict(serializer.validated_data))
         return self._detail(slug, project_id, risk.pk, status.HTTP_201_CREATED)
 
-    @allow_permission(WRITE_ROLES)
+    @allow_fine_permission(PermissionKey.PROJECT_RISK_EDIT)
     def partial_update(self, request, slug, project_id, pk):
         risk = Risk.objects.filter(workspace__slug=slug, project_id=project_id, pk=pk).first()
         if risk is None:
@@ -186,7 +184,7 @@ class RiskViewSet(BaseViewSet):
             return risk_error_response(exc)
         return self._detail(slug, project_id, pk)
 
-    @allow_permission(WRITE_ROLES)
+    @allow_fine_permission(PermissionKey.PROJECT_RISK_DELETE)
     def destroy(self, request, slug, project_id, pk):
         risk = Risk.objects.filter(workspace__slug=slug, project_id=project_id, pk=pk).first()
         if risk is None:
@@ -195,7 +193,7 @@ class RiskViewSet(BaseViewSet):
         delete_risk(risk)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-    @allow_permission(WRITE_ROLES)
+    @allow_fine_permission(PermissionKey.PROJECT_RISK_EDIT)
     def resync(self, request, slug, project_id, pk):
         """详情页「重新同步」：推送失败的再推一遍（没绑定就重新建）。不同步的风险原样返回。"""
         risk = Risk.objects.filter(workspace__slug=slug, project_id=project_id, pk=pk).first()
@@ -206,7 +204,7 @@ class RiskViewSet(BaseViewSet):
 
     # --- 关联缺陷 ---------------------------------------------------------
 
-    @allow_permission(READ_ROLES)
+    @allow_fine_permission(PermissionKey.PROJECT_RISK_VIEW)
     def issues(self, request, slug, project_id, pk):
         if not Risk.objects.filter(workspace__slug=slug, project_id=project_id, pk=pk).exists():
             return _not_found()
@@ -214,7 +212,7 @@ class RiskViewSet(BaseViewSet):
         rows = _lite_issue_rows(Issue.objects.filter(project_id=project_id, id__in=Subquery(linked)))
         return Response(rows, status=status.HTTP_200_OK)
 
-    @allow_permission(WRITE_ROLES)
+    @allow_fine_permission(PermissionKey.PROJECT_RISK_EDIT)
     def link_issues(self, request, slug, project_id, pk):
         risk = Risk.objects.filter(workspace__slug=slug, project_id=project_id, pk=pk).first()
         if risk is None:
@@ -229,7 +227,7 @@ class RiskViewSet(BaseViewSet):
         # 装饰器从 kwargs 取 slug / project_id，必须按关键字传
         return self.issues(request, slug=slug, project_id=project_id, pk=pk)
 
-    @allow_permission(WRITE_ROLES)
+    @allow_fine_permission(PermissionKey.PROJECT_RISK_EDIT)
     def unlink_issue(self, request, slug, project_id, pk, issue_id):
         risk = Risk.objects.filter(workspace__slug=slug, project_id=project_id, pk=pk).first()
         if risk is None:
@@ -254,13 +252,13 @@ class IssueRiskViewSet(BaseViewSet):
         risks = _risk_queryset(slug, project_id).filter(id__in=Subquery(linked)).order_by("-created_at")
         return Response(RiskListSerializer(risks, many=True).data, status=status.HTTP_200_OK)
 
-    @allow_permission(READ_ROLES)
+    @allow_fine_permission(PermissionKey.PROJECT_RISK_VIEW)
     def list(self, request, slug, project_id, issue_id):
         if self._issue(slug, project_id, issue_id) is None:
             return _not_found("Issue")
         return self._linked(slug, project_id, issue_id)
 
-    @allow_permission(WRITE_ROLES)
+    @allow_fine_permission(PermissionKey.PROJECT_RISK_EDIT)
     def create(self, request, slug, project_id, issue_id):
         issue = self._issue(slug, project_id, issue_id)
         if issue is None:
@@ -274,7 +272,7 @@ class IssueRiskViewSet(BaseViewSet):
             return risk_error_response(exc)
         return self._linked(slug, project_id, issue_id)
 
-    @allow_permission(WRITE_ROLES)
+    @allow_fine_permission(PermissionKey.PROJECT_RISK_EDIT)
     def destroy(self, request, slug, project_id, issue_id, risk_id):
         risk = Risk.objects.filter(workspace__slug=slug, project_id=project_id, pk=risk_id).first()
         if risk is None:
@@ -306,12 +304,12 @@ class RiskCommentViewSet(BaseViewSet):
             .order_by("created_at")
         )
 
-    @allow_permission(READ_ROLES)
+    @allow_fine_permission(PermissionKey.PROJECT_RISK_VIEW)
     def list(self, request, slug, project_id, risk_id):
         serializer = self.get_serializer(self.get_queryset(), many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    @allow_permission(WRITE_ROLES)
+    @allow_fine_permission(PermissionKey.PROJECT_RISK_VIEW)
     def create(self, request, slug, project_id, risk_id):
         risk = Risk.objects.filter(id=risk_id, project_id=project_id, workspace__slug=slug).first()
         if risk is None:
@@ -336,7 +334,7 @@ class RiskCommentViewSet(BaseViewSet):
             )
         return Response(self.get_serializer(comment).data, status=status.HTTP_201_CREATED)
 
-    @allow_permission(WRITE_ROLES)
+    @allow_fine_permission(PermissionKey.PROJECT_RISK_VIEW)
     def destroy(self, request, slug, project_id, risk_id, pk):
         comment = RiskComment.objects.filter(
             workspace__slug=slug, project_id=project_id, risk_id=risk_id, pk=pk
@@ -355,7 +353,7 @@ class RiskCommentViewSet(BaseViewSet):
 class RiskActivityEndpoint(BaseAPIView):
     """变更历史。按时间升序全量返回。"""
 
-    @allow_permission(READ_ROLES)
+    @allow_fine_permission(PermissionKey.PROJECT_RISK_VIEW)
     def get(self, request, slug, project_id, risk_id):
         activities = (
             RiskActivity.objects.filter(workspace__slug=slug, project_id=project_id, risk_id=risk_id)
@@ -401,7 +399,7 @@ class RiskFileAPI(BaseViewSet):
             else None,
         }
 
-    @allow_permission(READ_ROLES)
+    @allow_fine_permission(PermissionKey.PROJECT_RISK_VIEW)
     def list(self, request, slug, project_id, risk_id):
         assets = (
             FileAsset.objects.filter(
@@ -417,7 +415,7 @@ class RiskFileAPI(BaseViewSet):
         )
         return Response([self._serialize(asset, request) for asset in assets], status=status.HTTP_200_OK)
 
-    @allow_permission(WRITE_ROLES)
+    @allow_fine_permission(PermissionKey.PROJECT_RISK_EDIT)
     def upload(self, request, slug, project_id, risk_id):
         risk = self._risk(slug, project_id, risk_id)
         if risk is None:
@@ -447,7 +445,7 @@ class RiskFileAPI(BaseViewSet):
             status=status.HTTP_200_OK,
         )
 
-    @allow_permission(WRITE_ROLES)
+    @allow_fine_permission(PermissionKey.PROJECT_RISK_EDIT)
     def mark_uploaded(self, request, slug, project_id, risk_id, asset_id):
         risk = self._risk(slug, project_id, risk_id)
         if risk is None:
@@ -469,7 +467,7 @@ class RiskFileAPI(BaseViewSet):
         )
         return Response(self._serialize(asset), status=status.HTTP_200_OK)
 
-    @allow_permission(WRITE_ROLES)
+    @allow_fine_permission(PermissionKey.PROJECT_RISK_EDIT)
     def destroy(self, request, slug, project_id, risk_id, asset_id):
         risk = self._risk(slug, project_id, risk_id)
         if risk is None:
@@ -495,7 +493,7 @@ class RiskFileAPI(BaseViewSet):
             pass
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-    @allow_permission(READ_ROLES)
+    @allow_fine_permission(PermissionKey.PROJECT_RISK_VIEW)
     def download(self, request, slug, project_id, risk_id, asset_id):
         asset = self._asset(slug, project_id, risk_id, asset_id, is_uploaded=True)
         if asset is None:

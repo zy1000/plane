@@ -18,8 +18,8 @@ import jwt
 import requests
 
 from plane.app.permissions import (
-    allow_permission,
-    ROLE,
+    allow_workspace_member,
+    allow_project_member,
     allow_fine_permission,
     PermissionKey,
 )
@@ -549,7 +549,7 @@ def _serialize_file_version(version: FileAssetVersion) -> dict:
 
 class FilestoreAssetAPIView(BaseAPIView):
 
-    @allow_fine_permission(PermissionKey.PROJECT_ASSET_VIEW)
+    @allow_fine_permission(PermissionKey.PROJECT_FILESTORE_VIEW)
     def get(self, request, slug, project_id):
         name__icontains = request.query_params.get("name__icontains")
 
@@ -586,7 +586,7 @@ class FilestoreAssetAPIView(BaseAPIView):
         ]
         return list_response(data=data, count=count)
 
-    @allow_fine_permission(PermissionKey.PROJECT_ASSET_UPLOAD)
+    @allow_fine_permission(PermissionKey.PROJECT_FILESTORE_EDIT)
     def post(self, request, slug, project_id):
         name = request.data.get("name")
         file_type = request.data.get("type", False)
@@ -640,7 +640,7 @@ class FilestoreAssetAPIView(BaseAPIView):
 
 
 class FilestoreAssetDetailAPIView(BaseAPIView):
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER], level="PROJECT")
+    @allow_fine_permission(PermissionKey.PROJECT_FILESTORE_EDIT)
     def patch(self, request, slug, project_id, pk):
         with transaction.atomic():
             asset = FileAsset.objects.select_for_update().get(
@@ -679,7 +679,7 @@ class FilestoreAssetDetailAPIView(BaseAPIView):
                 )
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-    @allow_fine_permission(PermissionKey.PROJECT_ASSET_DELETE)
+    @allow_fine_permission(PermissionKey.PROJECT_FILESTORE_DELETE)
     def delete(self, request, slug, project_id, pk):
         with transaction.atomic():
             asset = FileAsset.objects.select_for_update().get(
@@ -704,7 +704,7 @@ class FilestoreAssetDetailAPIView(BaseAPIView):
 
 
 class FilestoreAssetDownloadAPIView(BaseAPIView):
-    @allow_fine_permission(PermissionKey.PROJECT_ASSET_DOWNLOAD)
+    @allow_fine_permission(PermissionKey.PROJECT_FILESTORE_VIEW)
     def get(self, request, slug, project_id, pk):
         disposition = request.query_params.get("disposition") or "attachment"
         if disposition not in ["attachment", "inline"]:
@@ -749,7 +749,7 @@ class FilestoreAssetDownloadAPIView(BaseAPIView):
 
 
 class FilestoreAssetVersionListAPIView(BaseAPIView):
-    @allow_fine_permission(PermissionKey.PROJECT_ASSET_VIEW)
+    @allow_fine_permission(PermissionKey.PROJECT_FILESTORE_VIEW)
     def get(self, request, slug, project_id, pk):
         asset = _get_filestore_asset(pk, slug, project_id)
         storage = S3Storage(request=request)
@@ -772,7 +772,7 @@ class FilestoreAssetVersionListAPIView(BaseAPIView):
 
 
 class FilestoreAssetVersionDetailAPIView(BaseAPIView):
-    @allow_fine_permission(PermissionKey.PROJECT_ASSET_EDIT)
+    @allow_fine_permission(PermissionKey.PROJECT_FILESTORE_EDIT)
     def patch(self, request, slug, project_id, pk, version_id):
         asset = _get_filestore_asset(pk, slug, project_id)
         alias = str(request.data.get("alias") or "").strip()
@@ -796,7 +796,7 @@ class FilestoreAssetVersionDetailAPIView(BaseAPIView):
 
 
 class FilestoreAssetVersionDownloadAPIView(BaseAPIView):
-    @allow_fine_permission(PermissionKey.PROJECT_ASSET_DOWNLOAD)
+    @allow_fine_permission(PermissionKey.PROJECT_FILESTORE_VIEW)
     def get(self, request, slug, project_id, pk, version_id):
         disposition = request.query_params.get("disposition") or "attachment"
         if disposition not in ["attachment", "inline"]:
@@ -833,7 +833,7 @@ class FilestoreAssetVersionDownloadAPIView(BaseAPIView):
 
 
 class FilestoreAssetVersionUploadAPIView(BaseAPIView):
-    @allow_fine_permission(PermissionKey.PROJECT_ASSET_EDIT)
+    @allow_fine_permission(PermissionKey.PROJECT_FILESTORE_EDIT)
     def post(self, request, slug, project_id, pk):
         asset = _get_filestore_asset(pk, slug, project_id)
         if _has_active_onlyoffice_session(asset):
@@ -865,7 +865,7 @@ class FilestoreAssetVersionUploadAPIView(BaseAPIView):
             status=status.HTTP_200_OK,
         )
 
-    @allow_fine_permission(PermissionKey.PROJECT_ASSET_EDIT)
+    @allow_fine_permission(PermissionKey.PROJECT_FILESTORE_EDIT)
     def patch(self, request, slug, project_id, pk):
         with transaction.atomic():
             asset = FileAsset.objects.select_for_update().get(
@@ -909,7 +909,7 @@ class FilestoreAssetVersionUploadAPIView(BaseAPIView):
 
 
 class FilestoreAssetVersionRestoreAPIView(BaseAPIView):
-    @allow_fine_permission(PermissionKey.PROJECT_ASSET_EDIT)
+    @allow_fine_permission(PermissionKey.PROJECT_FILESTORE_EDIT)
     def post(self, request, slug, project_id, pk, version_id):
         with transaction.atomic():
             asset = FileAsset.objects.select_for_update().get(
@@ -955,7 +955,7 @@ class FilestoreAssetVersionRestoreAPIView(BaseAPIView):
 
 
 class FilestoreAssetOnlyOfficeConfigAPIView(BaseAPIView):
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER], level="PROJECT")
+    @allow_fine_permission(PermissionKey.PROJECT_FILESTORE_VIEW)
     def get(self, request, slug, project_id, pk):
         asset = _get_onlyoffice_asset(pk, slug, project_id)
         # 大网 / 小网：在线预览 / 编辑会把整个文件送到浏览器，受限文件直接拒
@@ -1010,31 +1010,26 @@ class FilestoreAssetOnlyOfficeConfigAPIView(BaseAPIView):
             or is_stage_review_file
             or document_type == "pdf"
         )
-        # 其余均为编辑请求：必须具备「编辑项目资产」权限，否则直接拒绝并提示，
-        # 不再降级为只读，确保无权限用户无法打开在线编辑器。
-        # 复用 allow_fine_permission 的标准文案，便于前端统一按权限错误识别处理。
-        if (
-            not view_only
-            and PermissionKey.PROJECT_ASSET_EDIT not in user_permission_keys
-        ):
-            return Response(
-                {"error": "您没有所需的项目权限。"},
-                status=status.HTTP_403_FORBIDDEN,
-            )
+        # 项目资产没有单独的 key：能进项目（装饰器已判成员）就能在线编辑与下载。
         mode = "view" if view_only else "edit"
 
-        # 下载按钮受细粒度下载权限控制：无权限的用户在预览/编辑界面看不到下载入口。
-        # 工作项附件与项目资产使用各自的下载权限 key。
+        # 工作项附件下载跟随工作项「查看」（工作项或缺陷任一），项目资产随成员身份
         if is_issue_attachment:
-            download_permission_key = PermissionKey.ISSUE_ATTACHMENT_DOWNLOAD
+            can_download_attachment = bool(
+                {
+                    PermissionKey.PROJECT_ISSUE_VIEW.value,
+                    PermissionKey.PROJECT_DEFECT_VIEW.value,
+                }
+                & set(user_permission_keys)
+            )
         else:
-            download_permission_key = PermissionKey.PROJECT_ASSET_DOWNLOAD
-        can_download = download_permission_key in user_permission_keys or (
+            can_download_attachment = True
+        can_download = can_download_attachment or (
             # 评审附件在抽屉里能看评审就能下载，预览里口径一致
             is_stage_review_file
             and (
                 PermissionKey.PROJECT_STAGE_REVIEW_VIEW in user_permission_keys
-                or PermissionKey.PROJECT_STAGE_REVIEW_MANAGE in user_permission_keys
+                or PermissionKey.PROJECT_STAGE_REVIEW_EDIT in user_permission_keys
             )
         )
 
@@ -1271,7 +1266,7 @@ class RequirementAssetOnlyOfficePreviewConfigAPIView(BaseAPIView):
     download 两个端点，也不碰编辑会话状态。
     """
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
+    @allow_workspace_member
     def get(self, request, slug, pk):
         asset = _get_requirement_onlyoffice_asset(pk, slug)
         if asset is None or not _can_view_requirement_asset_owner(request.user, asset):
@@ -1988,7 +1983,7 @@ class FilestoreAssetOnlyOfficeCallbackAPIView(BaseAPIView):
 
 
 class FilestoreAssetOnlyOfficeStatusAPIView(BaseAPIView):
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER], level="PROJECT")
+    @allow_fine_permission(PermissionKey.PROJECT_FILESTORE_VIEW)
     def get(self, request, slug, project_id, pk):
         asset = FileAsset.objects.get(
             id=pk,
@@ -2026,7 +2021,7 @@ class FilestoreAssetOnlyOfficeStatusAPIView(BaseAPIView):
 
 
 class FilestoreAssetOnlyOfficeVersionsAPIView(BaseAPIView):
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER], level="PROJECT")
+    @allow_fine_permission(PermissionKey.PROJECT_FILESTORE_VIEW)
     def get(self, request, slug, project_id, pk):
         asset = FileAsset.objects.get(
             id=pk,
@@ -2050,7 +2045,7 @@ class FilestoreAssetOnlyOfficeVersionsAPIView(BaseAPIView):
 
 
 class FilestoreAssetOnlyOfficeRestoreVersionAPIView(BaseAPIView):
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER], level="PROJECT")
+    @allow_fine_permission(PermissionKey.PROJECT_FILESTORE_EDIT)
     def post(self, request, slug, project_id, pk):
         version_key = request.data.get("version_key")
         if not version_key:
@@ -2144,7 +2139,7 @@ class FilestoreAssetOnlyOfficeRestoreVersionAPIView(BaseAPIView):
 
 
 class FilestoreAssetOnlyOfficeForceSaveAPIView(BaseAPIView):
-    @allow_fine_permission(PermissionKey.PROJECT_ASSET_EDIT)
+    @allow_fine_permission(PermissionKey.PROJECT_FILESTORE_EDIT)
     def post(self, request, slug, project_id, pk):
         doc_key = str(request.data.get("doc_key") or "").strip()
         if not doc_key:

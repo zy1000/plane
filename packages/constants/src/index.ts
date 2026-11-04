@@ -29,6 +29,8 @@ export * from "./module";
 export * from "./notification";
 export * from "./page";
 export * from "./payment";
+export * from "./permission-access";
+export * from "./permission-keys.generated";
 export * from "./product";
 export * from "./profile";
 export * from "./project";

@@ -81,7 +81,6 @@ class ProjectCreateSerializer(BaseSerializer):
             "issue_views_view",
             "page_view",
             "intake_view",
-            "guest_view_all_features",
             "archive_in",
             "close_in",
             "timezone",
@@ -198,7 +197,7 @@ class ProjectSerializer(BaseSerializer):
     total_modules = serializers.IntegerField(read_only=True)
     is_member = serializers.BooleanField(read_only=True)
     sort_order = serializers.FloatField(read_only=True)
-    member_role = serializers.IntegerField(read_only=True)
+    is_member = serializers.BooleanField(read_only=True)
     is_deployed = serializers.BooleanField(read_only=True)
     cover_image_url = serializers.CharField(read_only=True)
 

@@ -16,10 +16,8 @@ import { useTheme } from "next-themes";
 import Masonry from "react-masonry-component";
 
 // plane imports
-import { EUserPermissionsLevel } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { PlusIcon } from "@plane/propel/icons";
-import { EUserWorkspaceRoles } from "@plane/types";
 // assets
 import darkStickiesAsset from "@/app/assets/empty-state/stickies/stickies-dark.webp?url";
 import lightStickiesAsset from "@/app/assets/empty-state/stickies/stickies-light.webp?url";
@@ -57,7 +55,7 @@ export const StickiesList = observer(function StickiesList(props: TProps) {
   const { t } = useTranslation();
   // store hooks
   const { getWorkspaceStickyIds, toggleShowNewSticky, searchQuery, loader } = useSticky();
-  const { allowPermissions } = useUserPermissions();
+  const { isWorkspaceMember } = useUserPermissions();
   // sticky operations
   const { stickyOperations } = useStickyOperations({ workspaceSlug: workspaceSlug?.toString() });
   // derived values
@@ -65,10 +63,8 @@ export const StickiesList = observer(function StickiesList(props: TProps) {
   const itemWidth = `${100 / columnCount}%`;
   const totalRows = Math.ceil(workspaceStickyIds.length / columnCount);
   const isStickiesPage = pathname?.includes("stickies");
-  const hasGuestLevelPermissions = allowPermissions(
-    [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER, EUserWorkspaceRoles.GUEST],
-    EUserPermissionsLevel.WORKSPACE
-  );
+  // 便签是个人的，工作区成员就行
+  const hasGuestLevelPermissions = isWorkspaceMember(workspaceSlug?.toString());
   const stickiesResolvedPath = resolvedTheme === "light" ? lightStickiesAsset : darkStickiesAsset;
   const stickiesSearchResolvedPath = resolvedTheme === "light" ? lightStickiesSearchAsset : darkStickiesSearchAsset;
   const masonryRef = useRef<any>(null);

@@ -5,13 +5,14 @@
  */
 
 import { RotateCcw, UsersRound } from "lucide-react";
-import type { IProjectGroup, IProjectRole } from "@plane/types";
+import type { IProjectGroup } from "@plane/types";
 import { Button } from "@plane/propel/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
 import { cn } from "@plane/utils";
 import { MembersSettingsLoader } from "@/components/ui/loader/settings/members";
 import type { TProjectGroupRoleMutationResult } from "@/hooks/store/use-project-groups";
 import { ProjectGroupRoleMultiSelect } from "./project-group-role-multi-select";
+import type { TProjectGroupGrantOption } from "./project-group-role-multi-select";
 
 type Props = {
   groups: IProjectGroup[];
@@ -19,7 +20,7 @@ type Props = {
   error: string | null;
   hasSearch: boolean;
   activeGroupId: string | null;
-  roles: IProjectRole[];
+  roles: TProjectGroupGrantOption[];
   isRolesLoading: boolean;
   canEditRole: boolean;
   onOpen: (group: IProjectGroup) => void;
@@ -78,7 +79,7 @@ export function ProjectGroupsList({
           <TableHead className="h-auto px-2.5 py-2 font-medium text-placeholder">团队</TableHead>
           <TableHead className="h-auto px-2.5 py-2 font-medium text-placeholder">描述</TableHead>
           <TableHead className="h-auto w-32 px-2.5 py-2 font-medium text-placeholder">项目成员</TableHead>
-          <TableHead className="h-auto w-56 px-2.5 py-2 font-medium text-placeholder">项目角色</TableHead>
+          <TableHead className="h-auto w-56 px-2.5 py-2 font-medium text-placeholder">权限组</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>

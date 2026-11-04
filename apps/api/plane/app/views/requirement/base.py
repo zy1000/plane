@@ -79,19 +79,19 @@ class RequirementConfigurationAPIView(BaseAPIView):
                 "can_edit": can_write_requirements(request.user, product),
                 # 下面几个按动作拆开，前端按钮显隐直接读；项目侧的 configuration 恒 false
                 "can_create": can_write_requirements(
-                    request.user, product, PermissionKey.PRODUCT_REQUIREMENT_CREATE
+                    request.user, product, PermissionKey.PROJECT_REQUIREMENT_CREATE
                 ),
                 "can_delete": can_write_requirements(
-                    request.user, product, PermissionKey.PRODUCT_REQUIREMENT_DELETE
+                    request.user, product, PermissionKey.PROJECT_REQUIREMENT_DELETE
                 ),
                 "can_manage_modules": can_write_requirements(
-                    request.user, product, PermissionKey.PRODUCT_REQUIREMENT_MODULE_MANAGE
+                    request.user, product, PermissionKey.PROJECT_REQUIREMENT_MODULE_MANAGE
                 ),
                 "can_submit_review": can_write_requirements(
-                    request.user, product, PermissionKey.PRODUCT_CHANGE_REQUEST_SUBMIT
+                    request.user, product, PermissionKey.PROJECT_CHANGE_REQUEST_CREATE
                 ),
                 "can_manage_baselines": can_write_requirements(
-                    request.user, product, PermissionKey.PRODUCT_BASELINE_MANAGE
+                    request.user, product, PermissionKey.PROJECT_REQUIREMENT_BASELINE_MANAGE
                 ),
                 # 现在一个产品下可以同时有多张待审单，所以给计数而不是单个 id
                 "pending_change_request_count": RequirementChangeRequest.objects.filter(

@@ -7,10 +7,9 @@ import { useMemo } from "react";
 import { X } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
-import type { IUserLite, TRequirement, TRequirementApprovalSpec, TRequirementChangeType } from "@plane/types";
+import type { TRequirement, TRequirementApprovalSpec, TRequirementChangeType } from "@plane/types";
 import { EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
-import { useProductMembers } from "@/hooks/store/use-product-members";
-import { useUser } from "@/hooks/store/user";
+import { useProductMemberCandidates } from "../../use-product-member-candidates";
 import { RequirementApprovalRuleFields } from "./approval-rule-fields";
 import { useSubmitReviewForm } from "./use-submit-review-form";
 
@@ -39,18 +38,11 @@ export function SubmitReviewModal({
   onSubmit: (payload: TRequirementApprovalSpec & { reason: string }) => void;
 }) {
   const { t } = useTranslation();
-  const { members } = useProductMembers(workspaceSlug, productId);
-  const { data: currentUser } = useUser();
   const form = useSubmitReviewForm({ isOpen });
   const isDelete = changeType === "delete";
 
-  /** 候选池 = 产品成员 ∪ 当前用户：提交人可以把自己选为审批人 */
-  const memberOptions = useMemo(() => {
-    const byId = new Map<string, IUserLite>();
-    members.forEach((membership) => byId.set(membership.member, membership.member_detail));
-    if (currentUser) byId.set(currentUser.id, currentUser);
-    return Array.from(byId.values());
-  }, [currentUser, members]);
+  /** 候选池 = 工作区活跃成员（含当前用户：提交人可以把自己选为审批人）；资格由后端校验 */
+  const { members: memberOptions } = useProductMemberCandidates(workspaceSlug, productId ? { id: productId } : null);
 
   const rows = useMemo(() => {
     const byId = new Map(requirements.map((row) => [row.id, row]));

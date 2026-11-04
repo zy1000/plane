@@ -8,7 +8,6 @@ import { set, sortBy } from "lodash-es";
 import { action, computed, makeObservable, observable, runInAction } from "mobx";
 import { computedFn } from "mobx-utils";
 // types
-import type { EUserPermissions } from "@plane/constants";
 import type {
   IWorkspaceBulkInviteFormData,
   IWorkspaceMember,
@@ -30,8 +29,12 @@ import type { RootStore } from "@/plane-web/store/root.store";
 export interface IWorkspaceMembership {
   id: string;
   member: string;
-  role: EUserPermissions;
+  /** @deprecated 整数角色已退役，接口在删列前仍会带 */
+  role?: number;
+  /** 直绑的工作区权限组（不含隐式的「工作区成员」） */
   custom_role_ids: string[];
+  /** 角色（数据字典 job_role 的值） */
+  job_role_ids: string[];
   group_role_ids: string[];
   group_ids: string[];
   is_active?: boolean;
@@ -58,8 +61,13 @@ export interface IWorkspaceMemberStore {
   fetchWorkspaceMembers: (workspaceSlug: string) => Promise<IWorkspaceMember[]>;
   fetchWorkspaceMemberInvitations: (workspaceSlug: string) => Promise<IWorkspaceMemberInvitation[]>;
   // crud actions
-  updateMember: (workspaceSlug: string, userId: string, data: { role: EUserPermissions }) => Promise<void>;
   updateMemberCustomRoles: (workspaceSlug: string, userId: string, customRoleIds: string[]) => Promise<string[]>;
+  /** 整份替换成员的权限组和 / 或角色，没传的那一项不动 */
+  updateMemberAccess: (
+    workspaceSlug: string,
+    userId: string,
+    payload: { custom_role_ids?: string[]; job_role_ids?: string[] }
+  ) => Promise<{ custom_role_ids: string[]; job_role_ids: string[] }>;
   updateMemberNetworkZone: (workspaceSlug: string, userId: string, networkZone: TNetworkZone | null) => Promise<void>;
   updateMemberGroups: (
     workspaceSlug: string,
@@ -104,8 +112,8 @@ export class WorkspaceMemberStore implements IWorkspaceMemberStore {
       memberMap: computed,
       // actions
       fetchWorkspaceMembers: action,
-      updateMember: action,
       updateMemberCustomRoles: action,
+      updateMemberAccess: action,
       updateMemberGroups: action,
       removeMemberFromWorkspace: action,
       fetchWorkspaceMemberInvitations: action,
@@ -186,9 +194,11 @@ export class WorkspaceMemberStore implements IWorkspaceMemberStore {
     const searchedWorkspaceMemberIds = filteredMemberIds.filter((userId) => {
       const memberDetails = this.getWorkspaceMemberDetails(userId);
       if (!memberDetails) return false;
+      // 姓名 / 显示名 / 邮箱 / 工号（工号在成员接口里，存在 memberMap 上）
+      const employeeId = (memberDetails.member as { employee_id?: string | null } | undefined)?.employee_id ?? "";
       const memberSearchQuery = `${memberDetails.member.first_name} ${memberDetails.member.last_name} ${
         memberDetails.member?.display_name
-      } ${memberDetails.member.email ?? ""}`;
+      } ${memberDetails.member.email ?? ""} ${employeeId}`;
       return memberSearchQuery.toLowerCase()?.includes(searchQuery.toLowerCase());
     });
     return searchedWorkspaceMemberIds;
@@ -224,8 +234,9 @@ export class WorkspaceMemberStore implements IWorkspaceMemberStore {
 
     const memberDetails: IWorkspaceMember = {
       id: workspaceMember.id,
-      role: workspaceMember.role,
+      role: workspaceMember.role as IWorkspaceMember["role"],
       custom_role_ids: workspaceMember.custom_role_ids,
+      job_role_ids: workspaceMember.job_role_ids,
       group_role_ids: workspaceMember.group_role_ids,
       group_ids: workspaceMember.group_ids,
       member: this.memberRoot?.memberMap?.[workspaceMember.member],
@@ -269,6 +280,7 @@ export class WorkspaceMemberStore implements IWorkspaceMemberStore {
             member: member.member.id,
             role: member.role,
             custom_role_ids: member.custom_role_ids ?? [],
+            job_role_ids: member.job_role_ids ?? [],
             group_role_ids: member.group_role_ids ?? [],
             group_ids: member.group_ids ?? [],
             is_active: member.is_active,
@@ -278,53 +290,42 @@ export class WorkspaceMemberStore implements IWorkspaceMemberStore {
       return response;
     });
 
-  /**
-   * @description update the role of a workspace member
-   * @param workspaceSlug
-   * @param userId
-   * @param data
-   */
-  updateMember = async (workspaceSlug: string, userId: string, data: { role: EUserPermissions }) => {
-    const memberDetails = this.getWorkspaceMemberDetails(userId);
-    if (!memberDetails) throw new Error("Member not found");
-    // original data to revert back in case of error
-    const originalProjectMemberData = { ...this.workspaceMemberMap?.[workspaceSlug]?.[userId] };
-    try {
-      runInAction(() => {
-        set(this.workspaceMemberMap, [workspaceSlug, userId, "role"], data.role);
-      });
-      await this.workspaceService.updateWorkspaceMember(workspaceSlug, memberDetails.id, data);
-    } catch (error) {
-      // revert back to original members in case of error
-      runInAction(() => {
-        set(this.workspaceMemberMap, [workspaceSlug, userId], originalProjectMemberData);
-      });
-      throw error;
-    }
+  updateMemberCustomRoles = async (workspaceSlug: string, userId: string, customRoleIds: string[]) => {
+    const response = await this.updateMemberAccess(workspaceSlug, userId, { custom_role_ids: customRoleIds });
+    return response.custom_role_ids;
   };
 
-  updateMemberCustomRoles = async (workspaceSlug: string, userId: string, customRoleIds: string[]) => {
+  updateMemberAccess = async (
+    workspaceSlug: string,
+    userId: string,
+    payload: { custom_role_ids?: string[]; job_role_ids?: string[] }
+  ) => {
     const memberDetails = this.getWorkspaceMemberDetails(userId);
     if (!memberDetails) throw new Error("Member not found");
-    const previousRoleIds = this.workspaceMemberMap?.[workspaceSlug]?.[userId]?.custom_role_ids ?? [];
+    const previous = { ...this.workspaceMemberMap?.[workspaceSlug]?.[userId] };
 
     runInAction(() => {
-      set(this.workspaceMemberMap, [workspaceSlug, userId, "custom_role_ids"], customRoleIds);
+      if (payload.custom_role_ids)
+        set(this.workspaceMemberMap, [workspaceSlug, userId, "custom_role_ids"], payload.custom_role_ids);
+      if (payload.job_role_ids)
+        set(this.workspaceMemberMap, [workspaceSlug, userId, "job_role_ids"], payload.job_role_ids);
     });
 
     try {
       const response = await this.workspaceService.updateWorkspaceMemberCustomRoles(
         workspaceSlug,
         memberDetails.id,
-        customRoleIds
+        payload
       );
       runInAction(() => {
-        set(this.workspaceMemberMap, [workspaceSlug, userId, "custom_role_ids"], response.custom_role_ids);
+        set(this.workspaceMemberMap, [workspaceSlug, userId, "custom_role_ids"], response.custom_role_ids ?? []);
+        set(this.workspaceMemberMap, [workspaceSlug, userId, "job_role_ids"], response.job_role_ids ?? []);
       });
-      return response.custom_role_ids;
+      return response;
     } catch (error) {
       runInAction(() => {
-        set(this.workspaceMemberMap, [workspaceSlug, userId, "custom_role_ids"], previousRoleIds);
+        set(this.workspaceMemberMap, [workspaceSlug, userId, "custom_role_ids"], previous.custom_role_ids ?? []);
+        set(this.workspaceMemberMap, [workspaceSlug, userId, "job_role_ids"], previous.job_role_ids ?? []);
       });
       throw error;
     }

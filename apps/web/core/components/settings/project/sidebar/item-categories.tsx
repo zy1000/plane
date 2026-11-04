@@ -8,7 +8,7 @@ import { observer } from "mobx-react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useParams } from "react-router";
 // plane imports
-import { EUserPermissionsLevel, GROUPED_PROJECT_SETTINGS, PROJECT_SETTINGS_CATEGORIES } from "@plane/constants";
+import { GROUPED_PROJECT_SETTINGS, PROJECT_SETTINGS_CATEGORIES } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 // components
 import { SettingsSidebarItem } from "@/components/settings/sidebar/item";
@@ -31,7 +31,7 @@ export const ProjectSettingsSidebarItemCategories = observer(function ProjectSet
   const searchParams = useSearchParams();
   const settingsSearch = searchParams.toString();
   // store hooks
-  const { allowPermissions, allowProjectPermissionKeys } = useUserPermissions();
+  const { allowProjectPermissionKeys } = useUserPermissions();
   // translation
   const { t } = useTranslation();
 
@@ -40,9 +40,7 @@ export const ProjectSettingsSidebarItemCategories = observer(function ProjectSet
       {PROJECT_SETTINGS_CATEGORIES.map((category) => {
         const categoryItems = GROUPED_PROJECT_SETTINGS[category];
         const accessibleItems = categoryItems.filter((item) =>
-          item.permissionKeys?.length
-            ? allowProjectPermissionKeys(item.permissionKeys, workspaceSlug, projectId)
-            : allowPermissions(item.access, EUserPermissionsLevel.PROJECT, workspaceSlug, projectId)
+          allowProjectPermissionKeys(item.permissionKeys ?? [], workspaceSlug, projectId)
         );
 
         if (accessibleItems.length === 0) return null;

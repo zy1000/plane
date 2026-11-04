@@ -80,7 +80,6 @@ export function useProjectSettingsForm(params: Params) {
   const save = async (formData: TProject) => {
     const payload: Partial<TProject> = {
       name: formData.name,
-      network: formData.network,
       identifier: formData.identifier,
       description_html: formData.description_html ?? "<p></p>",
       logo_props: formData.logo_props,

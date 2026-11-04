@@ -5,36 +5,42 @@
  */
 
 import { API_BASE_URL } from "@plane/constants";
-import type { IProjectRole, IProjectRolePermissionData } from "@plane/types";
+import type {
+  TPermissionGroupContent,
+  TProjectPermissionGroup,
+  TProjectPermissionGroupDetail,
+  TProjectPermissionGroupList,
+} from "@plane/types";
 import { APIService } from "@/services/api.service";
 
+/**
+ * 项目设置 › 权限组（后端 plane/app/views/project/role.py）。
+ * 列表 = 引用了本项目的工作区模板组 + 本项目自定义组；引用来的组只读，只能「删除引用」（本项目不再引用它）。
+ */
 export class ProjectRoleService extends APIService {
   constructor() {
     super(API_BASE_URL);
   }
 
-  async list(workspaceSlug: string, projectId: string): Promise<IProjectRole[]> {
-    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/roles/`)
+  private base(workspaceSlug: string, projectId: string) {
+    return `/api/workspaces/${workspaceSlug}/projects/${projectId}`;
+  }
+
+  async list(workspaceSlug: string, projectId: string): Promise<TProjectPermissionGroupList> {
+    return this.get(`${this.base(workspaceSlug, projectId)}/roles/`)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
       });
   }
 
-  async retrieve(workspaceSlug: string, projectId: string, roleId: string): Promise<IProjectRole> {
-    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/roles/${roleId}/`)
-      .then((response) => response?.data)
-      .catch((error) => {
-        throw error?.response?.data;
-      });
-  }
-
+  /** 新建本项目自定义组；copy_from 可给引用中的模板 id 或本项目组 id，照它的权限起步 */
   async create(
     workspaceSlug: string,
     projectId: string,
-    data: { name: string; description?: string }
-  ): Promise<IProjectRole> {
-    return this.post(`/api/workspaces/${workspaceSlug}/projects/${projectId}/roles/`, data)
+    data: { name: string; description?: string; copy_from?: string | null }
+  ): Promise<TProjectPermissionGroup> {
+    return this.post(`${this.base(workspaceSlug, projectId)}/roles/`, data)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
@@ -44,32 +50,20 @@ export class ProjectRoleService extends APIService {
   async update(
     workspaceSlug: string,
     projectId: string,
-    roleId: string,
+    groupId: string,
     data: Partial<{ name: string; description: string }>
-  ): Promise<IProjectRole> {
-    return this.patch(`/api/workspaces/${workspaceSlug}/projects/${projectId}/roles/${roleId}/`, data)
+  ): Promise<TProjectPermissionGroup> {
+    return this.patch(`${this.base(workspaceSlug, projectId)}/roles/${groupId}/`, data)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
       });
   }
 
-  async destroy(workspaceSlug: string, projectId: string, roleId: string): Promise<void> {
-    return this.delete(`/api/workspaces/${workspaceSlug}/projects/${projectId}/roles/${roleId}/`)
+  /** 本项目组：删除；模板 id 或它的引用行：本项目不再引用（记排除、解绑本项目里绑到它的成员） */
+  async destroy(workspaceSlug: string, projectId: string, groupId: string): Promise<void> {
+    return this.delete(`${this.base(workspaceSlug, projectId)}/roles/${groupId}/`)
       .then(() => undefined)
-      .catch((error) => {
-        throw error?.response?.data;
-      });
-  }
-
-  /** 从工作区角色模板导入为项目角色（独立副本，与模板解绑） */
-  async importFromTemplate(
-    workspaceSlug: string,
-    projectId: string,
-    payload: { workspace_role_id: string }
-  ): Promise<IProjectRole> {
-    return this.post(`/api/workspaces/${workspaceSlug}/projects/${projectId}/roles/import/`, payload)
-      .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
       });
@@ -78,9 +72,9 @@ export class ProjectRoleService extends APIService {
   async fetchPermissions(
     workspaceSlug: string,
     projectId: string,
-    roleId: string
-  ): Promise<IProjectRolePermissionData> {
-    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/roles/${roleId}/permissions/`)
+    groupId: string
+  ): Promise<TProjectPermissionGroupDetail> {
+    return this.get(`${this.base(workspaceSlug, projectId)}/roles/${groupId}/permissions/`)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
@@ -90,13 +84,20 @@ export class ProjectRoleService extends APIService {
   async updatePermissions(
     workspaceSlug: string,
     projectId: string,
-    roleId: string,
-    permissionKeys: string[]
-  ): Promise<IProjectRolePermissionData> {
-    return this.patch(`/api/workspaces/${workspaceSlug}/projects/${projectId}/roles/${roleId}/permissions/`, {
-      permission_keys: permissionKeys,
-    })
+    groupId: string,
+    data: TPermissionGroupContent
+  ): Promise<TProjectPermissionGroupDetail> {
+    return this.patch(`${this.base(workspaceSlug, projectId)}/roles/${groupId}/permissions/`, data)
       .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 组里的成员（用户 id） */
+  async fetchMemberIds(workspaceSlug: string, projectId: string, groupId: string): Promise<string[]> {
+    return this.get(`${this.base(workspaceSlug, projectId)}/roles/${groupId}/members/`)
+      .then((response) => (response?.data?.member_ids as string[]) ?? [])
       .catch((error) => {
         throw error?.response?.data;
       });

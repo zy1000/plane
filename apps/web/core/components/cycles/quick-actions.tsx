@@ -10,8 +10,6 @@ import { MoreHorizontal } from "lucide-react";
 // ui
 import {
   CYCLE_TRACKER_EVENTS,
-  EUserPermissions,
-  EUserPermissionsLevel,
   PROJECT_SPRINTS_ARCHIVE_PERMISSION_KEY,
   PROJECT_SPRINTS_EDIT_PERMISSION_KEY,
   PROJECT_SPRINTS_DELETE_PERMISSION_KEY,
@@ -52,18 +50,14 @@ export const CycleQuickActions = observer(function CycleQuickActions(props: Prop
   const [archiveCycleModal, setArchiveCycleModal] = useState(false);
   const [deleteModal, setDeleteModal] = useState(false);
   // store hooks
-  const { allowPermissions, allowProjectPermissionKeys } = useUserPermissions();
+  const { isProjectMember, allowProjectPermissionKeys } = useUserPermissions();
   const { getCycleById, restoreCycle } = useCycle();
   const { t } = useTranslation();
   // derived values
   const cycleDetails = getCycleById(cycleId);
   // auth
-  const isEditingAllowed = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.PROJECT,
-    workspaceSlug,
-    projectId
-  );
+  // 具体动作各有 key（下面三个），这里只是「是不是本项目成员」
+  const isEditingAllowed = isProjectMember(workspaceSlug, projectId);
   const canEditSprint = allowProjectPermissionKeys([PROJECT_SPRINTS_EDIT_PERMISSION_KEY], workspaceSlug, projectId);
   const canDeleteSprint = allowProjectPermissionKeys([PROJECT_SPRINTS_DELETE_PERMISSION_KEY], workspaceSlug, projectId);
   const canArchiveSprint = allowProjectPermissionKeys([PROJECT_SPRINTS_ARCHIVE_PERMISSION_KEY], workspaceSlug, projectId);

@@ -2,6 +2,9 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
+from plane.app.permissions import PermissionKey, allow_fine_permission
+from plane.app.permissions.base import resolve_project_grant
+
 # Python imports
 import json
 
@@ -42,7 +45,6 @@ from plane.db.models import (
     Project,
     FileAsset,
     IssueLink,
-    ProjectMember,
     UserFavorite,
 )
 from plane.utils.cycle_transfer_issues import transfer_cycle_issues
@@ -75,6 +77,7 @@ from plane.utils.openapi import (
     UNARCHIVED_RESPONSE,
     REQUIRED_FIELDS_RESPONSE,
 )
+from plane.utils.visibility import visible_projects_q
 
 
 class CycleListCreateAPIEndpoint(BaseAPIView):
@@ -91,8 +94,7 @@ class CycleListCreateAPIEndpoint(BaseAPIView):
             Cycle.objects.filter(workspace__slug=self.kwargs.get("slug"))
             .filter(project_id=self.kwargs.get("project_id"))
             .filter(
-                project__project_projectmember__member=self.request.user,
-                project__project_projectmember__is_active=True,
+                visible_projects_q(self.request.user, self.kwargs.get("slug"), "project"),
             )
             .select_related("project")
             .select_related("workspace")
@@ -296,6 +298,7 @@ class CycleListCreateAPIEndpoint(BaseAPIView):
             ),
         },
     )
+    @allow_fine_permission(PermissionKey.PROJECT_CYCLE_CREATE)
     def post(self, request, slug, project_id):
         """Create cycle
 
@@ -369,8 +372,7 @@ class CycleDetailAPIEndpoint(BaseAPIView):
             Cycle.objects.filter(workspace__slug=self.kwargs.get("slug"))
             .filter(project_id=self.kwargs.get("project_id"))
             .filter(
-                project__project_projectmember__member=self.request.user,
-                project__project_projectmember__is_active=True,
+                visible_projects_q(self.request.user, self.kwargs.get("slug"), "project"),
             )
             .select_related("project")
             .select_related("workspace")
@@ -488,6 +490,7 @@ class CycleDetailAPIEndpoint(BaseAPIView):
             ),
         },
     )
+    @allow_fine_permission(PermissionKey.PROJECT_CYCLE_EDIT)
     def patch(self, request, slug, project_id, pk):
         """Update cycle
 
@@ -568,13 +571,8 @@ class CycleDetailAPIEndpoint(BaseAPIView):
         """
         cycle = Cycle.objects.get(workspace__slug=slug, project_id=project_id, pk=pk)
         if cycle.owned_by_id != request.user.id and (
-            not ProjectMember.objects.filter(
-                workspace__slug=slug,
-                member=request.user,
-                role=20,
-                project_id=project_id,
-                is_active=True,
-            ).exists()
+            PermissionKey.PROJECT_CYCLE_DELETE.value
+            not in resolve_project_grant(request.user, slug, str(project_id)).keys
         ):
             return Response(
                 {"error": "Only admin or creator can delete the cycle"},
@@ -616,8 +614,7 @@ class CycleArchiveUnarchiveAPIEndpoint(BaseAPIView):
             Cycle.objects.filter(workspace__slug=self.kwargs.get("slug"))
             .filter(project_id=self.kwargs.get("project_id"))
             .filter(
-                project__project_projectmember__member=self.request.user,
-                project__project_projectmember__is_active=True,
+                visible_projects_q(self.request.user, self.kwargs.get("slug"), "project"),
             )
             .filter(archived_at__isnull=False)
             .select_related("project")
@@ -752,6 +749,7 @@ class CycleArchiveUnarchiveAPIEndpoint(BaseAPIView):
             400: CYCLE_CANNOT_ARCHIVE_RESPONSE,
         },
     )
+    @allow_fine_permission(PermissionKey.PROJECT_CYCLE_ARCHIVE)
     def post(self, request, slug, project_id, cycle_id):
         """Archive cycle
 
@@ -783,6 +781,7 @@ class CycleArchiveUnarchiveAPIEndpoint(BaseAPIView):
             204: UNARCHIVED_RESPONSE,
         },
     )
+    @allow_fine_permission(PermissionKey.PROJECT_CYCLE_ARCHIVE)
     def delete(self, request, slug, project_id, cycle_id):
         """Unarchive cycle
 
@@ -815,8 +814,7 @@ class CycleIssueListCreateAPIEndpoint(BaseAPIView):
             .filter(workspace__slug=self.kwargs.get("slug"))
             .filter(project_id=self.kwargs.get("project_id"))
             .filter(
-                project__project_projectmember__member=self.request.user,
-                project__project_projectmember__is_active=True,
+                visible_projects_q(self.request.user, self.kwargs.get("slug"), "project"),
             )
             .filter(cycle_id=self.kwargs.get("cycle_id"))
             .select_related("project")
@@ -909,6 +907,7 @@ class CycleIssueListCreateAPIEndpoint(BaseAPIView):
             400: REQUIRED_FIELDS_RESPONSE,
         },
     )
+    @allow_fine_permission(PermissionKey.PROJECT_CYCLE_EDIT)
     def post(self, request, slug, project_id, cycle_id):
         """Add cycle issues
 
@@ -1027,8 +1026,7 @@ class CycleIssueDetailAPIEndpoint(BaseAPIView):
             .filter(workspace__slug=self.kwargs.get("slug"))
             .filter(project_id=self.kwargs.get("project_id"))
             .filter(
-                project__project_projectmember__member=self.request.user,
-                project__project_projectmember__is_active=True,
+                visible_projects_q(self.request.user, self.kwargs.get("slug"), "project"),
             )
             .filter(cycle_id=self.kwargs.get("cycle_id"))
             .select_related("project")
@@ -1075,6 +1073,7 @@ class CycleIssueDetailAPIEndpoint(BaseAPIView):
             204: DELETED_RESPONSE,
         },
     )
+    @allow_fine_permission(PermissionKey.PROJECT_CYCLE_EDIT)
     def delete(self, request, slug, project_id, cycle_id, issue_id):
         """Remove cycle work item
 
@@ -1156,6 +1155,7 @@ class TransferCycleIssueAPIEndpoint(BaseAPIView):
             ),
         },
     )
+    @allow_fine_permission(PermissionKey.PROJECT_CYCLE_EDIT)
     def post(self, request, slug, project_id, cycle_id):
         """Transfer cycle issues
 

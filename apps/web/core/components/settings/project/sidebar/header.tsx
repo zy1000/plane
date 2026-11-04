@@ -9,7 +9,6 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { observer } from "mobx-react";
 // plane imports
-import { ROLE_DETAILS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { IconButton } from "@plane/propel/icon-button";
 import { ProjectIcon } from "@plane/propel/icons";
@@ -37,7 +36,7 @@ export const ProjectSettingsSidebarHeader = observer(function ProjectSettingsSid
   const pathname = usePathname();
   const searchParams = useSearchParams();
   // store hooks
-  const { getProjectRoleByWorkspaceSlugAndProjectId } = useUserPermissions();
+  const { isProjectMember, getProjectPermissionKeysByWorkspaceSlugAndProjectId, projectUserInfo } = useUserPermissions();
   const { currentWorkspace } = useWorkspace();
   const { joinedProjectIds, getPartialProjectById } = useProject();
   // derived values
@@ -49,9 +48,13 @@ export const ProjectSettingsSidebarHeader = observer(function ProjectSettingsSid
     returnTo: searchParams.get(PROJECT_SETTINGS_RETURN_TO_PARAM),
     workspaceSlug,
   });
-  const currentProjectRole = currentWorkspace?.slug
-    ? getProjectRoleByWorkspaceSlugAndProjectId(currentWorkspace.slug, projectId)
-    : undefined;
+  const isMember = workspaceSlug ? isProjectMember(workspaceSlug, projectId) : false;
+  // 项目名下面一行：直通身份显示「全部权限」，其余显示有效权限数
+  const membership = workspaceSlug ? projectUserInfo?.[workspaceSlug]?.[projectId] : undefined;
+  const permissionCount = workspaceSlug
+    ? getProjectPermissionKeysByWorkspaceSlugAndProjectId(workspaceSlug, projectId).length
+    : 0;
+  const accessSummary = membership?.is_passthrough ? "全部权限" : `${permissionCount} 项项目权限`;
   const switcherOptions = useMemo<ICustomSearchSelectOption[]>(
     () =>
       joinedProjectIds
@@ -95,7 +98,7 @@ export const ProjectSettingsSidebarHeader = observer(function ProjectSettingsSid
     [currentWorkspace?.slug, pathname, projectId, router, settingsSearch]
   );
 
-  if (!currentProjectRole || !projectDetails) return null;
+  if (!isMember || !projectDetails) return null;
 
   return (
     <div className="shrink-0">
@@ -117,9 +120,7 @@ export const ProjectSettingsSidebarHeader = observer(function ProjectSettingsSid
           className="w-full rounded"
           customButtonClassName="group flex w-full items-center rounded-sm hover:bg-surface-2 outline-none cursor-pointer"
         />
-        <p className="mt-1 truncate pl-9 text-caption-md-regular">
-          {t(ROLE_DETAILS[currentProjectRole].i18n_title)}
-        </p>
+        <p className="mt-1 truncate pl-9 text-caption-md-regular">{accessSummary}</p>
       </div>
     </div>
   );

@@ -34,7 +34,7 @@ from plane.db.models import (
 )
 from plane.settings.storage import S3Storage
 from plane.utils.network_zone import ZONE_DOWNLOAD_DENIED, ZONE_VIEW_DENIED, asset_restricted, can_download_asset, is_image_asset
-from plane.app.permissions import allow_permission, ROLE
+from plane.app.permissions import allow_workspace_member, allow_project_member
 from plane.utils.cache import invalidate_cache_directly
 from plane.bgtasks.storage_metadata_task import get_asset_object_metadata
 from plane.throttles.asset import AssetRateThrottle
@@ -638,7 +638,7 @@ class WorkspaceFileAssetEndpoint(BaseAPIView):
 
 class WorkspaceBulkAssetEndpoint(BaseAPIView):
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
+    @allow_workspace_member
     def post(self, request, slug, entity_id):
         asset_ids = request.data.get("asset_ids", [])
 
@@ -772,7 +772,7 @@ class StaticFileAssetEndpoint(BaseAPIView):
 class AssetRestoreEndpoint(BaseAPIView):
     """Endpoint to restore a deleted assets."""
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
+    @allow_workspace_member
     def post(self, request, slug, asset_id):
         asset = FileAsset.all_objects.get(id=asset_id, workspace__slug=slug)
         if not _can_access_product_asset(request.user, asset, manage=True):
@@ -880,7 +880,7 @@ class ProjectAssetEndpoint(BaseAPIView):
 
         return {}
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    @allow_project_member
     def post(self, request, slug, project_id):
         name = request.data.get("name")
         type = request.data.get("type", "image/jpeg")
@@ -935,7 +935,7 @@ class ProjectAssetEndpoint(BaseAPIView):
             status=status.HTTP_200_OK,
         )
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    @allow_project_member
     def patch(self, request, slug, project_id, pk):
         # get the asset id
         asset = FileAsset.objects.get(
@@ -953,7 +953,7 @@ class ProjectAssetEndpoint(BaseAPIView):
         asset.save(update_fields=["is_uploaded", "attributes"])
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    @allow_project_member
     def delete(self, request, slug, project_id, pk):
         # Get the asset
         asset = FileAsset.objects.get(
@@ -973,7 +973,7 @@ class ProjectAssetEndpoint(BaseAPIView):
         asset.save(update_fields=["is_deleted", "deleted_at"])
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    @allow_project_member
     def get(self, request, slug, project_id, pk):
         # get the asset id
         asset = FileAsset.objects.get(
@@ -1014,7 +1014,7 @@ class ProjectBulkAssetEndpoint(BaseAPIView):
         project.cover_image_asset_id = asset.id
         project.save()
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    @allow_project_member
     def post(self, request, slug, project_id, entity_id):
         asset_ids = request.data.get("asset_ids", [])
 
@@ -1131,7 +1131,7 @@ class ProjectBulkAssetEndpoint(BaseAPIView):
 class AssetCheckEndpoint(BaseAPIView):
     """Endpoint to check if an asset exists."""
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
+    @allow_workspace_member
     def get(self, request, slug, asset_id):
         asset = FileAsset.all_objects.select_related(
             "product", "product__workspace", "product__workspace__owner"
@@ -1203,7 +1203,7 @@ class DuplicateAssetEndpoint(BaseAPIView):
 
         return {}
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
+    @allow_workspace_member
     def post(self, request, slug, asset_id):
         project_id = request.data.get("project_id", None)
         entity_id = request.data.get("entity_id", None)
@@ -1315,7 +1315,7 @@ class DuplicateAssetEndpoint(BaseAPIView):
 class WorkspaceAssetDownloadEndpoint(BaseAPIView):
     """Endpoint to generate a download link for an asset with content-disposition=attachment."""
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
+    @allow_workspace_member
     def get(self, request, slug, asset_id):
         try:
             asset = FileAsset.objects.select_related(
@@ -1354,7 +1354,7 @@ class WorkspaceAssetDownloadEndpoint(BaseAPIView):
 class ProjectAssetDownloadEndpoint(BaseAPIView):
     """Endpoint to generate a download link for an asset with content-disposition=attachment."""
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="PROJECT")
+    @allow_project_member
     def get(self, request, slug, project_id, asset_id):
         try:
             asset = FileAsset.objects.get(

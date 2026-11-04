@@ -104,7 +104,7 @@ export function ProjectGroupDetailPanel({
                             className={`rounded-md px-3 py-1.5 text-13 font-medium ${activeTab === tab ? "bg-layer-1 text-primary" : "text-secondary hover:bg-layer-1-hover"}`}
                           >
                             {tab === "roles"
-                              ? `项目角色 ${group.grants.length}`
+                              ? `权限组 ${group.grants.length}`
                               : `项目内成员 ${group.project_member_count}`}
                           </button>
                         ))}
@@ -115,9 +115,9 @@ export function ProjectGroupDetailPanel({
                           {group.grants.length === 0 ? (
                             <div className="flex min-h-72 flex-col items-center justify-center px-6 text-center">
                               <ShieldCheck className="mb-3 size-7 text-placeholder" />
-                              <p className="text-13 font-medium text-primary">尚未分配项目角色</p>
+                              <p className="text-13 font-medium text-primary">尚未分配权限组</p>
                               <p className="mt-1 max-w-80 text-13 leading-5 text-secondary">
-                                可在团队列表中分配角色；当前项目内的团队成员会立即继承。
+                                可在团队列表中分配权限组；当前项目内的团队成员会立即继承。
                               </p>
                             </div>
                           ) : (
@@ -132,7 +132,7 @@ export function ProjectGroupDetailPanel({
                                       {grant.role_detail.name}
                                     </p>
                                     <p className="mt-0.5 truncate text-13 text-secondary">
-                                      {grant.role_detail.description?.trim() || "暂无角色描述"}
+                                      {grant.role_detail.description?.trim() || "暂无描述"}
                                     </p>
                                   </div>
                                 </li>
@@ -162,7 +162,7 @@ export function ProjectGroupDetailPanel({
                               <UsersRound className="mb-3 size-7 text-placeholder" />
                               <p className="text-13 font-medium text-primary">暂无项目内团队成员</p>
                               <p className="mt-1 max-w-80 text-13 leading-5 text-secondary">
-                                可在项目成员页从该团队导入成员；未加入项目的团队成员不会继承项目角色。
+                                可在项目成员页从该团队导入成员；未加入项目的团队成员不会继承权限组。
                               </p>
                             </div>
                           ) : (

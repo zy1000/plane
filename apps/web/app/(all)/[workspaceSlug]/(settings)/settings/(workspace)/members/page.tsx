@@ -10,15 +10,13 @@ import { observer } from "mobx-react";
 import { WORKSPACE_MEMBER_INVITE_PERMISSION_KEY, WORKSPACE_MEMBER_VIEW_PERMISSION_KEY } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
-import { SearchIcon } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { IWorkspaceBulkInviteFormData } from "@plane/types";
 import { cn } from "@plane/utils";
 // components
 import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
-import { CountChip } from "@/components/common/count-chip";
 import { PageHead } from "@/components/core/page-title";
-import { MemberListFiltersDropdown } from "@/components/project/dropdowns/filters/member-list";
+import { WorkspaceMembersFilterBar } from "@/components/workspace/settings/members-filter-bar";
 import { WorkspaceMembersList } from "@/components/workspace/settings/members-list";
 // hooks
 import { useMember } from "@/hooks/store/use-member";
@@ -31,6 +29,7 @@ import { SettingsContentWrapper } from "@/components/settings/content-wrapper";
 import type { Route } from "./+types/page";
 import { MembersWorkspaceSettingsHeader } from "./header";
 
+/** 工作区设置 › 成员（效果图「工作区成员」）：搜索 + 角色 / 权限组 / 部门筛选，表格里角色、权限组两列 */
 const WorkspaceMembersSettingsPage = observer(function WorkspaceMembersSettingsPage({ params }: Route.ComponentProps) {
   // states
   const [inviteModal, setInviteModal] = useState(false);
@@ -40,7 +39,7 @@ const WorkspaceMembersSettingsPage = observer(function WorkspaceMembersSettingsP
   // store hooks
   const { workspaceUserInfo, allowWorkspacePermissionKeys } = useUserPermissions();
   const {
-    workspace: { workspaceMemberIds, inviteMembersToWorkspace, filtersStore },
+    workspace: { inviteMembersToWorkspace, getFilteredWorkspaceMemberIds, getSearchedWorkspaceMemberIds },
   } = useMember();
   const { currentWorkspace } = useWorkspace();
   const { t } = useTranslation();
@@ -48,6 +47,9 @@ const WorkspaceMembersSettingsPage = observer(function WorkspaceMembersSettingsP
   // derived values
   const canViewMembers = allowWorkspacePermissionKeys([WORKSPACE_MEMBER_VIEW_PERMISSION_KEY], workspaceSlug);
   const canInviteMembers = allowWorkspacePermissionKeys([WORKSPACE_MEMBER_INVITE_PERMISSION_KEY], workspaceSlug);
+  const resultIds = searchQuery
+    ? getSearchedWorkspaceMemberIds(searchQuery)
+    : getFilteredWorkspaceMemberIds(workspaceSlug);
 
   const handleWorkspaceInvite = async (data: IWorkspaceBulkInviteFormData) => {
     try {
@@ -76,20 +78,8 @@ const WorkspaceMembersSettingsPage = observer(function WorkspaceMembersSettingsP
     }
   };
 
-  // Handler for role filter updates
-  const handleRoleFilterUpdate = (role: string) => {
-    const currentFilters = filtersStore.filters;
-    const currentRoles = currentFilters?.roles || [];
-    const updatedRoles = currentRoles.includes(role) ? currentRoles.filter((r) => r !== role) : [...currentRoles, role];
-
-    filtersStore.updateFilters({
-      roles: updatedRoles.length > 0 ? updatedRoles : undefined,
-    });
-  };
-
   // derived values
-  const pageTitle = currentWorkspace?.name ? `${currentWorkspace.name} - Members` : undefined;
-  const appliedRoleFilters = filtersStore.filters?.roles || [];
+  const pageTitle = currentWorkspace?.name ? `${currentWorkspace.name} - 成员` : undefined;
 
   // if user is not authorized to view this page
   if (workspaceUserInfo && !canViewMembers) {
@@ -97,7 +87,23 @@ const WorkspaceMembersSettingsPage = observer(function WorkspaceMembersSettingsP
   }
 
   return (
-    <SettingsContentWrapper header={<MembersWorkspaceSettingsHeader />} hugging>
+    <SettingsContentWrapper
+      header={
+        <MembersWorkspaceSettingsHeader
+          actions={
+            <>
+              <MembersActivityButton workspaceSlug={workspaceSlug} />
+              {canInviteMembers && (
+                <Button variant="primary" size="lg" onClick={() => setInviteModal(true)}>
+                  {t("workspace_settings.settings.members.add_member")}
+                </Button>
+              )}
+            </>
+          }
+        />
+      }
+      hugging
+    >
       <PageHead title={pageTitle} />
       <SendWorkspaceInvitationModal
         isOpen={inviteModal}
@@ -109,40 +115,13 @@ const WorkspaceMembersSettingsPage = observer(function WorkspaceMembersSettingsP
           "opacity-60": !canViewMembers,
         })}
       >
-        <div className="flex items-center justify-between gap-4 pb-3.5">
-          <h4 className="flex items-center gap-2.5 text-h3-medium">
-            {t("workspace_settings.settings.members.title")}
-            {workspaceMemberIds && workspaceMemberIds.length > 0 && (
-              <CountChip count={workspaceMemberIds.length} className="m-auto h-5" />
-            )}
-          </h4>
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1.5 rounded-md border border-subtle bg-surface-1 px-2.5 py-1.5">
-              <SearchIcon className="h-3.5 w-3.5 text-placeholder" />
-              <input
-                className="w-full max-w-[234px] border-none bg-transparent text-body-xs-regular outline-none placeholder:text-placeholder"
-                placeholder={`${t("search")}...`}
-                value={searchQuery}
-                // eslint-disable-next-line jsx-a11y/no-autofocus
-                autoFocus
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
-            <MemberListFiltersDropdown
-              appliedFilters={appliedRoleFilters}
-              handleUpdate={handleRoleFilterUpdate}
-              memberType="workspace"
-            />
-            <MembersActivityButton workspaceSlug={workspaceSlug} />
-            <Button
-              variant="primary"
-              size="lg"
-              onClick={() => setInviteModal(true)}
-              disabled={!canInviteMembers}
-            >
-              {t("workspace_settings.settings.members.add_member")}
-            </Button>
-          </div>
+        <div className="pb-3.5">
+          <WorkspaceMembersFilterBar
+            workspaceSlug={workspaceSlug}
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            resultCount={resultIds ? resultIds.length : null}
+          />
         </div>
         <WorkspaceMembersList searchQuery={searchQuery} isAdmin={canInviteMembers} />
       </section>

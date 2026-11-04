@@ -2,6 +2,9 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
+from plane.app.permissions import PermissionKey, allow_fine_permission
+from plane.app.permissions.base import resolve_project_grant
+
 # Python imports
 import json
 
@@ -35,7 +38,6 @@ from plane.db.models import (
     ModuleIssue,
     ModuleLink,
     Project,
-    ProjectMember,
     UserFavorite,
 )
 
@@ -71,6 +73,7 @@ from plane.utils.openapi import (
     MODULE_ISSUE_NOT_FOUND_RESPONSE,
     CANNOT_ARCHIVE_RESPONSE,
 )
+from plane.utils.visibility import visible_projects_q
 
 
 class ModuleListCreateAPIEndpoint(BaseAPIView):
@@ -189,6 +192,7 @@ class ModuleListCreateAPIEndpoint(BaseAPIView):
             409: EXTERNAL_ID_EXISTS_RESPONSE,
         },
     )
+    @allow_fine_permission(PermissionKey.PROJECT_MODULE_CREATE)
     def post(self, request, slug, project_id):
         """Create module
 
@@ -399,6 +403,7 @@ class ModuleDetailAPIEndpoint(BaseAPIView):
             409: OpenApiResponse(description="Module with same external ID already exists"),
         },
     )
+    @allow_fine_permission(PermissionKey.PROJECT_MODULE_EDIT)
     def patch(self, request, slug, project_id, pk):
         """Update module
 
@@ -495,13 +500,8 @@ class ModuleDetailAPIEndpoint(BaseAPIView):
         """
         module = Module.objects.get(workspace__slug=slug, project_id=project_id, pk=pk)
         if module.created_by_id != request.user.id and (
-            not ProjectMember.objects.filter(
-                workspace__slug=slug,
-                member=request.user,
-                role=20,
-                project_id=project_id,
-                is_active=True,
-            ).exists()
+            PermissionKey.PROJECT_MODULE_DELETE.value
+            not in resolve_project_grant(request.user, slug, str(project_id)).keys
         ):
             return Response(
                 {"error": "Only admin or creator can delete the module"},
@@ -554,8 +554,7 @@ class ModuleIssueListCreateAPIEndpoint(BaseAPIView):
             .filter(project_id=self.kwargs.get("project_id"))
             .filter(module_id=self.kwargs.get("module_id"))
             .filter(
-                project__project_projectmember__member=self.request.user,
-                project__project_projectmember__is_active=True,
+                visible_projects_q(self.request.user, self.kwargs.get("slug"), "project"),
             )
             .filter(project__archived_at__isnull=True)
             .select_related("project")
@@ -659,6 +658,7 @@ class ModuleIssueListCreateAPIEndpoint(BaseAPIView):
             404: MODULE_NOT_FOUND_RESPONSE,
         },
     )
+    @allow_fine_permission(PermissionKey.PROJECT_MODULE_EDIT)
     def post(self, request, slug, project_id, module_id):
         """Add module work items
 
@@ -760,8 +760,7 @@ class ModuleIssueDetailAPIEndpoint(BaseAPIView):
             .filter(project_id=self.kwargs.get("project_id"))
             .filter(module_id=self.kwargs.get("module_id"))
             .filter(
-                project__project_projectmember__member=self.request.user,
-                project__project_projectmember__is_active=True,
+                visible_projects_q(self.request.user, self.kwargs.get("slug"), "project"),
             )
             .filter(project__archived_at__isnull=True)
             .select_related("project")
@@ -861,6 +860,7 @@ class ModuleIssueDetailAPIEndpoint(BaseAPIView):
             404: MODULE_ISSUE_NOT_FOUND_RESPONSE,
         },
     )
+    @allow_fine_permission(PermissionKey.PROJECT_MODULE_EDIT)
     def delete(self, request, slug, project_id, module_id, issue_id):
         """Remove module work item
 
@@ -1031,6 +1031,7 @@ class ModuleArchiveUnarchiveAPIEndpoint(BaseAPIView):
             404: MODULE_NOT_FOUND_RESPONSE,
         },
     )
+    @allow_fine_permission(PermissionKey.PROJECT_MODULE_ARCHIVE)
     def post(self, request, slug, project_id, pk):
         """Archive module
 
@@ -1065,6 +1066,7 @@ class ModuleArchiveUnarchiveAPIEndpoint(BaseAPIView):
             404: MODULE_NOT_FOUND_RESPONSE,
         },
     )
+    @allow_fine_permission(PermissionKey.PROJECT_MODULE_ARCHIVE)
     def delete(self, request, slug, project_id, pk):
         """Unarchive module
 

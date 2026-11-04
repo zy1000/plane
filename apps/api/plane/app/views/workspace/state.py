@@ -13,6 +13,7 @@ from django.db.models import Q, Subquery
 
 from plane.db.models import DevModeIssueType, State
 from plane.app.permissions import WorkspaceEntityPermission
+from plane.utils.visibility import visible_project_scope
 from collections import defaultdict
 
 
@@ -21,12 +22,15 @@ class WorkspaceStatesEndpoint(BaseAPIView):
     use_read_replica = True
 
     def get(self, request, slug):
-        # 当前用户所在项目用到的方案里的状态。共用方案时同一状态会经多个项目命中，distinct 去重
+        # 当前用户能看到的项目用到的方案里的状态。共用方案时同一状态会经多个项目命中，distinct 去重。
+        # scheme__projects / dev_mode__projects 是反向关系，visible_projects_q 只认 FK 字段名，这里按 id 集合拼
+        scope = visible_project_scope(request.user, slug)
+        visible_q = Q() if scope.all else Q(scheme__projects__in=list(scope.ids))
+        mode_visible_q = Q() if scope.all else Q(dev_mode__projects__in=list(scope.ids))
         states = (
             State.objects.filter(
+                visible_q,
                 workspace__slug=slug,
-                scheme__projects__project_projectmember__member=request.user,
-                scheme__projects__project_projectmember__is_active=True,
                 scheme__projects__archived_at__isnull=True,
                 is_triage=False,
             )
@@ -38,8 +42,7 @@ class WorkspaceStatesEndpoint(BaseAPIView):
                 | Q(
                     issue_type_id__in=Subquery(
                         DevModeIssueType.objects.filter(
-                            dev_mode__projects__project_projectmember__member=request.user,
-                            dev_mode__projects__project_projectmember__is_active=True,
+                            mode_visible_q,
                             dev_mode__projects__issue_scheme__project__isnull=True,
                         ).values("issue_type_id")
                     )

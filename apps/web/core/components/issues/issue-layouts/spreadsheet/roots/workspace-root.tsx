@@ -7,7 +7,7 @@
 import React, { useCallback } from "react";
 import { observer } from "mobx-react";
 // plane constants
-import { ALL_ISSUES, EIssueFilterType, EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import { ALL_ISSUES, EIssueFilterType, PERMISSION_KEYS } from "@plane/constants";
 import type { IIssueDisplayFilterOptions } from "@plane/types";
 import { EIssuesStoreType, EIssueLayoutTypes } from "@plane/types";
 // components
@@ -49,7 +49,7 @@ export const WorkspaceSpreadsheetRoot = observer(function WorkspaceSpreadsheetRo
     issues: { getIssueLoader, getPaginationData, groupedIssueIds },
   } = useIssues(EIssuesStoreType.GLOBAL);
   const { updateIssue, removeIssue, archiveIssue } = useIssuesActions(EIssuesStoreType.GLOBAL);
-  const { allowPermissions } = useUserPermissions();
+  const { allowProjectPermissionKeys } = useUserPermissions();
 
   // Derived values
   const issueFilters = globalViewId ? filters?.[globalViewId.toString()] : undefined;
@@ -58,14 +58,14 @@ export const WorkspaceSpreadsheetRoot = observer(function WorkspaceSpreadsheetRo
   const canEditProperties = useCallback(
     (projectId: string | undefined) => {
       if (!projectId) return false;
-      return allowPermissions(
-        [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-        EUserPermissionsLevel.PROJECT,
+      // 行内改属性：项目里能编辑工作项或缺陷（单条的类型限定以后端为准）
+      return allowProjectPermissionKeys(
+        [PERMISSION_KEYS.PROJECT_ISSUE_EDIT, PERMISSION_KEYS.PROJECT_DEFECT_EDIT],
         workspaceSlug.toString(),
         projectId
       );
     },
-    [allowPermissions, workspaceSlug]
+    [allowProjectPermissionKeys, workspaceSlug]
   );
 
   // Display filters handler

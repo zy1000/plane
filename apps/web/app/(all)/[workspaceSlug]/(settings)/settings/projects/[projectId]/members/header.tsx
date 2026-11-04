@@ -8,13 +8,20 @@ import { observer } from "mobx-react";
 // plane imports
 import { PROJECT_SETTINGS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
+import { Button } from "@plane/propel/button";
 import { Breadcrumbs } from "@plane/ui";
 // components
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { SettingsPageHeader } from "@/components/settings/page-header";
 import { PROJECT_SETTINGS_ICONS } from "@/components/settings/project/sidebar/item-icon";
 
-export const MembersProjectSettingsHeader = observer(function MembersProjectSettingsHeader() {
+type Props = {
+  canAdd?: boolean;
+  onAdd?: () => void;
+};
+
+export const MembersProjectSettingsHeader = observer(function MembersProjectSettingsHeader(props: Props) {
+  const { canAdd = false, onAdd } = props;
   // translation
   const { t } = useTranslation();
   // derived values
@@ -36,6 +43,13 @@ export const MembersProjectSettingsHeader = observer(function MembersProjectSett
             />
           </Breadcrumbs>
         </div>
+      }
+      rightItem={
+        onAdd ? (
+          <Button variant="primary" size="lg" disabled={!canAdd} onClick={onAdd}>
+            添加成员
+          </Button>
+        ) : undefined
       }
     />
   );

@@ -32,14 +32,13 @@ from plane.utils.issue_filters import issue_filters
 from plane.utils.order_queryset import order_issue_queryset
 from plane.utils.paginator import GroupedOffsetPaginator, SubGroupedOffsetPaginator
 from plane.app.permissions import (
-    allow_permission,
-    ROLE,
     allow_fine_permission,
     PermissionKey,
 )
 from plane.utils.host import base_host
 from plane.utils.filters import ComplexFilterBackend
 from plane.utils.filters import IssueFilterSet
+from plane.utils.visibility import visible_projects_q
 
 
 class CycleIssueViewSet(BaseViewSet):
@@ -66,8 +65,7 @@ class CycleIssueViewSet(BaseViewSet):
             .filter(workspace__slug=self.kwargs.get("slug"))
             .filter(project_id=self.kwargs.get("project_id"))
             .filter(
-                project__project_projectmember__member=self.request.user,
-                project__project_projectmember__is_active=True,
+                visible_projects_q(self.request.user, self.kwargs.get("slug"), "project"),
             )
             .filter(project__archived_at__isnull=True)
             .filter(cycle_id=self.kwargs.get("cycle_id"))
@@ -115,7 +113,7 @@ class CycleIssueViewSet(BaseViewSet):
         )
 
     @method_decorator(gzip_page)
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
+    @allow_fine_permission(PermissionKey.PROJECT_CYCLE_VIEW)
     def list(self, request, slug, project_id, cycle_id):
         filters = issue_filters(request.query_params, "GET")
         issue_queryset = (
@@ -237,7 +235,7 @@ class CycleIssueViewSet(BaseViewSet):
                 ),
             )
 
-    @allow_fine_permission(PermissionKey.SPRINTS_ISSUE_MANAGE)
+    @allow_fine_permission(PermissionKey.PROJECT_CYCLE_EDIT)
     def create(self, request, slug, project_id, cycle_id):
         issues = request.data.get("issues", [])
         if not issues:
@@ -345,7 +343,7 @@ class CycleIssueViewSet(BaseViewSet):
                 )
         return Response({"message": "success"}, status=status.HTTP_201_CREATED)
 
-    @allow_fine_permission(PermissionKey.SPRINTS_ISSUE_MANAGE)
+    @allow_fine_permission(PermissionKey.PROJECT_CYCLE_EDIT)
     def destroy(self, request, slug, project_id, cycle_id, issue_id):
         cycle_issue = CycleIssue.objects.filter(
             issue_id=issue_id,

@@ -10,6 +10,9 @@ import type { IProjectBulkAddFormData, TProjectMembership } from "@plane/types";
 // services
 import { APIService } from "@/services/api.service";
 
+/** 成员的权限组（本项目权限组 id）与角色（数据字典 job_role 的值 id） */
+export type TProjectMemberAccess = { custom_role_ids: string[]; job_role_ids: string[] };
+
 export class ProjectMemberService extends APIService {
   constructor() {
     super(API_BASE_URL);
@@ -72,16 +75,17 @@ export class ProjectMemberService extends APIService {
       });
   }
 
-  async updateMemberCustomRoles(
+  /**
+   * 整份替换成员的权限组（custom_role_ids，可给模板 id）和 / 或角色（job_role_ids）；没传的那一项不动。
+   * memberId 是项目成员行 id。
+   */
+  async updateMemberAccess(
     workspaceSlug: string,
     projectId: string,
     memberId: string,
-    customRoleIds: string[]
-  ): Promise<{ custom_role_ids: string[] }> {
-    return this.put(
-      `/api/workspaces/${workspaceSlug}/projects/${projectId}/members/${memberId}/custom-roles/`,
-      { custom_role_ids: customRoleIds }
-    )
+    data: { custom_role_ids?: string[]; job_role_ids?: string[] }
+  ): Promise<TProjectMemberAccess> {
+    return this.put(`/api/workspaces/${workspaceSlug}/projects/${projectId}/members/${memberId}/custom-roles/`, data)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;

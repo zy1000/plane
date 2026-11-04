@@ -77,7 +77,7 @@ class BaseRequirementContainerViewSet(BaseViewSet):
         """关联写入之后的钩子。默认什么也不做；发布子类覆盖做自动推进。"""
         return None
 
-    @allow_fine_permission(PermissionKey.PROJECT_REQUIREMENT_LINK_VIEW)
+    @allow_fine_permission(PermissionKey.PROJECT_REQUIREMENT_VIEW)
     def list(self, request, slug, project_id, container_id):
         container = self._get_container(slug, project_id, container_id)
         if container is None:
@@ -102,7 +102,7 @@ class BaseRequirementContainerViewSet(BaseViewSet):
             max_per_page=MAX_PER_PAGE,
         )
 
-    @allow_fine_permission(PermissionKey.PROJECT_REQUIREMENT_LINK_MANAGE)
+    @allow_fine_permission(PermissionKey.PROJECT_REQUIREMENT_EDIT)
     def create(self, request, slug, project_id, container_id):
         requirement_ids = request.data.get("requirements", [])
         if not requirement_ids:
@@ -176,7 +176,7 @@ class BaseRequirementContainerViewSet(BaseViewSet):
         self._after_link(container, requested)
         return Response({"message": "success"}, status=status.HTTP_201_CREATED)
 
-    @allow_fine_permission(PermissionKey.PROJECT_REQUIREMENT_LINK_MANAGE)
+    @allow_fine_permission(PermissionKey.PROJECT_REQUIREMENT_EDIT)
     def destroy(self, request, slug, project_id, container_id, requirement_id):
         link = self.link_model.objects.filter(
             workspace__slug=slug,

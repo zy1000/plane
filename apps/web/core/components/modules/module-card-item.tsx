@@ -14,9 +14,8 @@ import { Info, SquareUser } from "lucide-react";
 import {
   MODULE_STATUS,
   PROGRESS_STATE_GROUPS_DETAILS,
-  EUserPermissions,
-  EUserPermissionsLevel,
   IS_FAVORITE_MENU_OPEN,
+  PROJECT_MODULES_EDIT_PERMISSION_KEY,
 } from "@plane/constants";
 import { useLocalStorage } from "@plane/hooks";
 import { WorkItemsIcon } from "@plane/propel/icons";
@@ -51,17 +50,16 @@ export const ModuleCardItem = observer(function ModuleCardItem(props: Props) {
   const searchParams = useSearchParams();
   const pathname = usePathname();
   // store hooks
-  const { allowPermissions } = useUserPermissions();
+  const { allowProjectPermissionKeys, isProjectMember } = useUserPermissions();
   const { getModuleById, addModuleToFavorites, removeModuleFromFavorites, updateModuleDetails } = useModule();
   const { getUserDetails } = useMember();
   // local storage
   const { setValue: toggleFavoriteMenu, storedValue } = useLocalStorage<boolean>(IS_FAVORITE_MENU_OPEN, false);
   // derived values
   const moduleDetails = getModuleById(moduleId);
-  const isEditingAllowed = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.PROJECT
-  );
+  const isEditingAllowed = allowProjectPermissionKeys([PROJECT_MODULES_EDIT_PERMISSION_KEY]);
+  // 收藏是个人行为，项目成员就行
+  const canFavorite = isProjectMember();
   const isDisabled = !isEditingAllowed || !!moduleDetails?.archived_at;
   const renderIcon = Boolean(moduleDetails?.start_date) || Boolean(moduleDetails?.target_date);
 
@@ -250,7 +248,7 @@ export const ModuleCardItem = observer(function ModuleCardItem(props: Props) {
         </Card>
       </Link>
       <div className="absolute right-4 bottom-[18px] flex items-center gap-1.5">
-        {isEditingAllowed && (
+        {canFavorite && (
           <FavoriteStar
             onClick={(e) => {
               if (moduleDetails.is_favorite) handleRemoveFromFavorites(e);

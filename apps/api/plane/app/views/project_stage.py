@@ -11,7 +11,6 @@ from rest_framework import status
 from rest_framework.response import Response
 
 from plane.app.permissions import PermissionKey, allow_fine_permission
-from plane.app.permissions.base import ROLE, allow_permission
 from plane.app.serializers.project_stage import (
     ProjectStageBulkUpdateSerializer,
     ProjectStageSerializer,
@@ -36,10 +35,10 @@ from plane.utils.project_stage import (
     update_stage,
 )
 from plane.utils.project_stage_plan import build_plan_data
+from plane.utils.visibility import visible_projects_q
 
 # 列表 / 详情对项目成员开放（不要求 project.stage.view）：迭代 / 工作项的阶段下拉、筛选、分组都要读阶段名，
 # 阶段名不敏感；阶段页本身仍按 project.stage.view 显示入口。
-PROJECT_STAGE_READ_ROLES = [ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST]
 PROJECT_STAGE_MANAGE_KEY = PermissionKey.PROJECT_STAGE_MANAGE
 
 #: 「当前状态不允许」而不是「请求写错了」
@@ -95,8 +94,7 @@ class ProjectStageViewSet(BaseViewSet):
             .filter(workspace__slug=self.kwargs.get("slug"))
             .filter(project_id=self.kwargs.get("project_id"))
             .filter(
-                project__project_projectmember__member=self.request.user,
-                project__project_projectmember__is_active=True,
+                visible_projects_q(self.request.user, self.kwargs.get("slug"), "project"),
                 project__archived_at__isnull=True,
             )
             .select_related("stage_type", "owner", "owner__avatar_asset", "parent")
@@ -147,7 +145,7 @@ class ProjectStageViewSet(BaseViewSet):
             return Response({"error": "Stage not found."}, status=status.HTTP_404_NOT_FOUND)
         return Response(ProjectStageSerializer(stage, context=self._context()).data, status=http_status)
 
-    @allow_permission(PROJECT_STAGE_READ_ROLES)
+    @allow_fine_permission(PermissionKey.PROJECT_STAGE_VIEW)
     def list(self, request, slug, project_id):
         stages = self.get_queryset()
         return Response(
@@ -155,16 +153,16 @@ class ProjectStageViewSet(BaseViewSet):
             status=status.HTTP_200_OK,
         )
 
-    @allow_permission(PROJECT_STAGE_READ_ROLES)
+    @allow_fine_permission(PermissionKey.PROJECT_STAGE_VIEW)
     def retrieve(self, request, slug, project_id, pk):
         return self._detail_response(pk)
 
-    @allow_permission(PROJECT_STAGE_READ_ROLES)
+    @allow_fine_permission(PermissionKey.PROJECT_STAGE_VIEW)
     def plan(self, request, slug, project_id):
         """规划视图要的迭代 + 工作项（阶段走列表接口）。只读，权限同列表。"""
         project = (
             Project.objects.filter(pk=project_id, workspace__slug=slug, archived_at__isnull=True)
-            .only("id", "workspace_id", "timezone", "guest_view_all_features")
+            .only("id", "workspace_id", "timezone")
             .first()
         )
         if project is None:
@@ -236,11 +234,10 @@ class ProjectStageViewSet(BaseViewSet):
                 {
                     stage.id: stage
                     for stage in ProjectStage.objects.filter(
+                        visible_projects_q(request.user, slug, "project"),
                         id__in=stage_ids,
                         project_id=project_id,
                         workspace__slug=slug,
-                        project__project_projectmember__member=request.user,
-                        project__project_projectmember__is_active=True,
                     )
                     .select_for_update(of=("self",))
                     .order_by("id")

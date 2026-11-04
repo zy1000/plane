@@ -9,7 +9,7 @@ import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 
 // plane imports
-import { DEFAULT_GLOBAL_VIEWS_LIST, EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import { DEFAULT_GLOBAL_VIEWS_LIST } from "@plane/constants";
 import { PlusIcon } from "@plane/propel/icons";
 import type { TStaticViewTypes } from "@plane/types";
 import { Header, EHeaderVariant } from "@plane/ui";
@@ -69,7 +69,7 @@ export const GlobalViewsHeader = observer(function GlobalViewsHeader() {
   const { globalViewId } = useParams();
   // store hooks
   const { currentWorkspaceViews } = useGlobalView();
-  const { allowPermissions } = useUserPermissions();
+  const { isWorkspaceMember } = useUserPermissions();
 
   // bring the active view to the centre of the header
   useEffect(() => {
@@ -84,10 +84,8 @@ export const GlobalViewsHeader = observer(function GlobalViewsHeader() {
     }
   }, [globalViewId, currentWorkspaceViews, containerRef]);
 
-  const isAuthorizedUser = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.WORKSPACE
-  );
+  // 新建视图：工作区成员就行（建公开视图要 workspace.view.manage，后端校验）
+  const isAuthorizedUser = isWorkspaceMember();
 
   return (
     <Header variant={EHeaderVariant.SECONDARY} className="z-[12] min-h-[44px] bg-surface-1">

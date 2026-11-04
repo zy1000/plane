@@ -1,9 +1,9 @@
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 import { PackageOpen, Search } from "lucide-react";
+import { PERMISSION_KEYS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
-import { EUserWorkspaceRoles } from "@plane/types";
 import { Breadcrumbs, Header } from "@plane/ui";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { FiltersToggle } from "@/components/rich-filters/filters-toggle";
@@ -13,14 +13,10 @@ import { useProductsContext } from "./context";
 export const ProductsHeader = observer(function ProductsHeader() {
   const { workspaceSlug } = useParams();
   const { t } = useTranslation();
-  const { workspaceInfoBySlug, hasAllWorkspacePermissions } = useUserPermissions();
+  const { allowWorkspacePermissionKeys } = useUserPermissions();
   const { searchQuery, setSearchQuery, filter, openProductModal } = useProductsContext();
   const slug = workspaceSlug?.toString() ?? "";
-  const workspaceInfo = workspaceInfoBySlug(slug);
-  const canCreate =
-    workspaceInfo?.role === EUserWorkspaceRoles.ADMIN ||
-    workspaceInfo?.role === EUserWorkspaceRoles.MEMBER ||
-    hasAllWorkspacePermissions(slug);
+  const canCreate = allowWorkspacePermissionKeys([PERMISSION_KEYS.WORKSPACE_PRODUCT_CREATE], slug);
 
   return (
     <Header>

@@ -43,20 +43,7 @@ class WorkspaceMemberAPIEndpoint(BaseAPIView):
                 description="List of workspace members with their roles",
                 response={
                     "type": "array",
-                    "items": {
-                        "allOf": [
-                            {"$ref": "#/components/schemas/UserLite"},
-                            {
-                                "type": "object",
-                                "properties": {
-                                    "role": {
-                                        "type": "integer",
-                                        "description": "Member role in the workspace",
-                                    }
-                                },
-                            },
-                        ]
-                    },
+                    "items": {"$ref": "#/components/schemas/UserLite"},
                 },
                 examples=[WORKSPACE_MEMBER_EXAMPLE],
             ),
@@ -82,11 +69,9 @@ class WorkspaceMemberAPIEndpoint(BaseAPIView):
 
         workspace_members = WorkspaceMember.objects.filter(workspace__slug=slug).select_related("member")
 
-        # Get all the users with their roles
         users_with_roles = []
         for workspace_member in workspace_members:
             user_data = UserLiteSerializer(workspace_member.member).data
-            user_data["role"] = workspace_member.role
             users_with_roles.append(user_data)
 
         return Response(users_with_roles, status=status.HTTP_200_OK)

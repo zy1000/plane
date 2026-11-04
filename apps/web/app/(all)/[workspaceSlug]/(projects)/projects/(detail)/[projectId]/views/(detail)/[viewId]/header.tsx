@@ -12,8 +12,6 @@ import { useParams } from "next/navigation";
 import {
   EIssueFilterType,
   ISSUE_DISPLAY_FILTERS_BY_PAGE,
-  EUserPermissions,
-  EUserPermissionsLevel,
   WORK_ITEM_TRACKER_ELEMENTS,
 } from "@plane/constants";
 import { Button } from "@plane/propel/button";
@@ -50,7 +48,7 @@ export const ProjectViewIssuesHeader = observer(function ProjectViewIssuesHeader
     issuesFilter: { issueFilters, updateFilters },
   } = useIssues(EIssuesStoreType.PROJECT_VIEW);
   const { toggleCreateIssueModal } = useCommandPalette();
-  const { allowPermissions } = useUserPermissions();
+  const { allowIssuePermission } = useUserPermissions();
 
   const { currentProjectDetails, loader } = useProject();
   const { projectViewIds, getViewById } = useProjectView();
@@ -101,10 +99,7 @@ export const ProjectViewIssuesHeader = observer(function ProjectViewIssuesHeader
 
   const viewDetails = viewId ? getViewById(viewId.toString()) : null;
 
-  const canUserCreateIssue = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.PROJECT
-  );
+  const canUserCreateIssue = allowIssuePermission("create");
 
   if (!viewDetails) return;
 

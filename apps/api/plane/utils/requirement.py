@@ -7,10 +7,8 @@ from django.db.models import Max, Q
 from django.utils import timezone
 from django.utils.html import strip_tags
 
-from plane.app.permissions import ROLE
 from plane.db.models import (
     Product,
-    ProductMember,
     ProjectMember,
     Requirement,
     RequirementChangeItem,
@@ -470,34 +468,46 @@ def get_requirement_eligible_user_ids(
     )
 
     if product_id:
+        # 产品没有成员：负责人 / 审批人取产品负责人、评审人、各活跃关联项目的成员，
+        # 以及工作区 owner 与持 workspace.product.edit 的人（能维护全部产品）。
+        from plane.app.permissions.keys import PermissionKey
+        from plane.db.models import ProductProject, WorkspaceMemberRole, WorkspaceRole
+
         product = Product.objects.filter(id=product_id).only("owner_id").first()
-        product_member_ids = set(
-            ProductMember.objects.filter(
-                product_id=product_id,
+        linked_project_ids = ProductProject.objects.filter(
+            product_id=product_id, deleted_at__isnull=True
+        ).values_list("project_id", flat=True)
+        eligible = set(
+            ProjectMember.objects.filter(
+                project_id__in=linked_project_ids,
                 member_id__in=workspace_member_ids,
-            ).values_list("member_id", flat=True)
-        )
-        privileged_ids = set(
-            WorkspaceMember.objects.filter(
-                workspace_id=workspace_id,
-                member_id__in=workspace_member_ids,
-                role=ROLE.ADMIN.value,
                 is_active=True,
                 deleted_at__isnull=True,
             ).values_list("member_id", flat=True)
         )
-        workspace_owner_id = (
-            Workspace.objects.filter(id=workspace_id)
-            .values_list("owner_id", flat=True)
-            .first()
-        )
+        if product is not None:
+            if product.owner_id in workspace_member_ids:
+                eligible.add(product.owner_id)
+            eligible |= set(
+                product.reviewers.filter(id__in=workspace_member_ids).values_list("id", flat=True)
+            )
+        workspace_owner_id = Workspace.objects.filter(id=workspace_id).values_list("owner_id", flat=True).first()
         if workspace_owner_id in candidate_ids:
-            privileged_ids.add(workspace_owner_id)
-        if product is not None and product.owner_id in candidate_ids:
-            privileged_ids.add(product.owner_id)
-        return workspace_member_ids.intersection(product_member_ids).union(
-            privileged_ids
+            eligible.add(workspace_owner_id)
+        editor_group_ids = [
+            role.id
+            for role in WorkspaceRole.objects.filter(workspace_id=workspace_id)
+            if PermissionKey.WORKSPACE_PRODUCT_EDIT.value in (role.permissions or {}).get("permission_keys", [])
+        ]
+        eligible |= set(
+            WorkspaceMemberRole.objects.filter(
+                workspace_id=workspace_id,
+                role_id__in=editor_group_ids,
+                member__member_id__in=workspace_member_ids,
+                member__is_active=True,
+            ).values_list("member__member_id", flat=True)
         )
+        return eligible
 
     if project_id:
         project_member_ids = set(

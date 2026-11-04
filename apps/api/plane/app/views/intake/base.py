@@ -20,7 +20,7 @@ from rest_framework.response import Response
 
 # Module imports
 from ..base import BaseViewSet
-from plane.app.permissions import PermissionKey, ROLE, allow_fine_permission, allow_permission
+from plane.app.permissions import allow_creator_or, PermissionKey, allow_fine_permission
 from plane.app.permissions.base import _get_user_project_permission_keys
 from plane.db.models import (
     Intake,
@@ -70,25 +70,27 @@ class IntakeViewSet(BaseViewSet):
             .select_related("workspace", "project")
         )
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
-    @allow_fine_permission(PermissionKey.INTAKE_VIEW)
+    @allow_fine_permission(PermissionKey.PROJECT_INTAKE_VIEW)
     def list(self, request, slug, project_id):
         intake = self.get_queryset().first()
         return Response(IntakeSerializer(intake).data, status=status.HTTP_200_OK)
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
-    @allow_fine_permission(PermissionKey.INTAKE_VIEW)
+    @allow_fine_permission(PermissionKey.PROJECT_INTAKE_VIEW)
     def retrieve(self, request, slug, project_id, pk):
         intake = self.get_queryset().filter(pk=pk).first()
         if not intake:
             return Response({"error": "Intake not found"}, status=status.HTTP_404_NOT_FOUND)
         return Response(IntakeSerializer(intake).data, status=status.HTTP_200_OK)
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
+    # 装饰器要挂在 create 上：挂在 perform_create 上时 request 位置收到的是 serializer
+    @allow_fine_permission(PermissionKey.PROJECT_INTAKE_MANAGE)
+    def create(self, request, *args, **kwargs):
+        return super().create(request, *args, **kwargs)
+
     def perform_create(self, serializer):
         serializer.save(project_id=self.kwargs.get("project_id"))
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
+    @allow_fine_permission(PermissionKey.PROJECT_INTAKE_MANAGE)
     def destroy(self, request, slug, project_id, pk):
         intake = Intake.objects.filter(workspace__slug=slug, project_id=project_id, pk=pk).first()
         # Handle default intake delete
@@ -183,8 +185,7 @@ class IntakeIssueViewSet(BaseViewSet):
             )
         ).distinct()
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
-    @allow_fine_permission(PermissionKey.INTAKE_VIEW)
+    @allow_fine_permission(PermissionKey.PROJECT_INTAKE_VIEW)
     def list(self, request, slug, project_id):
         intake = Intake.objects.filter(workspace__slug=slug, project_id=project_id).first()
         if not intake:
@@ -212,24 +213,13 @@ class IntakeIssueViewSet(BaseViewSet):
         if intake_status:
             intake_issue = intake_issue.filter(status__in=intake_status)
 
-        if (
-            ProjectMember.objects.filter(
-                workspace__slug=slug,
-                project_id=project_id,
-                member=request.user,
-                role=ROLE.GUEST.value,
-                is_active=True,
-            ).exists()
-            and not project.guest_view_all_features
-        ):
-            intake_issue = intake_issue.filter(created_by=request.user)
         return self.paginate(
             request=request,
             queryset=(intake_issue),
             on_results=lambda intake_issues: IntakeIssueSerializer(intake_issues, many=True).data,
         )
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    @allow_fine_permission(PermissionKey.PROJECT_INTAKE_VIEW)
     def create(self, request, slug, project_id):
         if not request.data.get("issue", {}).get("name", False):
             return Response({"error": "Name is required"}, status=status.HTTP_400_BAD_REQUEST)
@@ -335,7 +325,7 @@ class IntakeIssueViewSet(BaseViewSet):
         else:
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    @allow_permission(allowed_roles=[ROLE.ADMIN], creator=True, model=Issue)
+    @allow_creator_or(PermissionKey.PROJECT_INTAKE_MANAGE, model=Issue)
     def partial_update(self, request, slug, project_id, pk):
         skip_activity = request.data.pop("skip_activity", False)
         is_description_update = request.data.get("description_html") is not None
@@ -355,7 +345,7 @@ class IntakeIssueViewSet(BaseViewSet):
             is_active=True,
         ).first()
 
-        can_edit_intake = PermissionKey.INTAKE_ISSUE_EDIT.value in (
+        can_edit_intake = PermissionKey.PROJECT_INTAKE_MANAGE.value in (
             _get_user_project_permission_keys(request.user, slug, str(project_id))
         )
 
@@ -366,9 +356,8 @@ class IntakeIssueViewSet(BaseViewSet):
             )
 
         # Only project members admins and created_by users can access this endpoint
-        if ((project_member and project_member.role <= ROLE.GUEST.value) and not can_edit_intake) and str(
-            intake_issue.created_by_id
-        ) != str(request.user.id):
+        # 没有收件箱管理权的人只能改自己投递的
+        if not can_edit_intake and str(intake_issue.created_by_id) != str(request.user.id):
             return Response(
                 {"error": "You cannot edit intake issues"},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -402,7 +391,8 @@ class IntakeIssueViewSet(BaseViewSet):
                 ),
             ).get(pk=intake_issue.issue_id, workspace__slug=slug, project_id=project_id)
 
-            if project_member and project_member.role <= ROLE.GUEST.value:
+            # 没有收件箱管理权（投递人自己改）只能改标题与描述，状态、负责人等字段收窄掉
+            if not can_edit_intake:
                 issue_data = {
                     "name": issue_data.get("name", issue.name),
                     "description_html": issue_data.get("description_html", issue.description_html),
@@ -503,8 +493,7 @@ class IntakeIssueViewSet(BaseViewSet):
         serializer = IntakeIssueDetailSerializer(intake_issue).data
         return Response(serializer, status=status.HTTP_200_OK)
 
-    @allow_permission(allowed_roles=[ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], creator=True, model=Issue)
-    @allow_fine_permission(PermissionKey.INTAKE_VIEW)
+    @allow_creator_or(PermissionKey.PROJECT_INTAKE_VIEW, model=Issue)
     def retrieve(self, request, slug, project_id, pk):
         intake_id = Intake.objects.filter(workspace__slug=slug, project_id=project_id).first()
         project = Project.objects.get(pk=project_id)
@@ -533,25 +522,10 @@ class IntakeIssueViewSet(BaseViewSet):
             )
             .get(intake_id=intake_id.id, issue_id=pk, project_id=project_id)
         )
-        if (
-            ProjectMember.objects.filter(
-                workspace__slug=slug,
-                project_id=project_id,
-                member=request.user,
-                role=ROLE.GUEST.value,
-                is_active=True,
-            ).exists()
-            and not project.guest_view_all_features
-            and not intake_issue.created_by == request.user
-        ):
-            return Response(
-                {"error": "You are not allowed to view this issue"},
-                status=status.HTTP_403_FORBIDDEN,
-            )
         issue = IntakeIssueDetailSerializer(intake_issue).data
         return Response(issue, status=status.HTTP_200_OK)
 
-    @allow_permission(allowed_roles=[ROLE.ADMIN], creator=True, model=Issue)
+    @allow_creator_or(PermissionKey.PROJECT_INTAKE_MANAGE, model=Issue)
     def destroy(self, request, slug, project_id, pk):
         intake_id = Intake.objects.filter(workspace__slug=slug, project_id=project_id).first()
         intake_issue = IntakeIssue.objects.get(
@@ -580,27 +554,10 @@ class IntakeWorkItemDescriptionVersionEndpoint(BaseAPIView):
 
         return paginated_data
 
-    @allow_permission(allowed_roles=[ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
-    @allow_fine_permission(PermissionKey.INTAKE_VIEW)
+    @allow_fine_permission(PermissionKey.PROJECT_INTAKE_VIEW)
     def get(self, request, slug, project_id, work_item_id, pk=None):
         project = Project.objects.get(pk=project_id)
         issue = Issue.objects.get(workspace__slug=slug, project_id=project_id, pk=work_item_id)
-
-        if (
-            ProjectMember.objects.filter(
-                workspace__slug=slug,
-                project_id=project_id,
-                member=request.user,
-                role=ROLE.GUEST.value,
-                is_active=True,
-            ).exists()
-            and not project.guest_view_all_features
-            and not issue.created_by == request.user
-        ):
-            return Response(
-                {"error": "You are not allowed to view this issue"},
-                status=status.HTTP_403_FORBIDDEN,
-            )
 
         if pk:
             issue_description_version = IssueDescriptionVersion.objects.get(

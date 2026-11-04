@@ -7,7 +7,7 @@
 import { observer } from "mobx-react";
 import { Controller, useForm } from "react-hook-form";
 // plane imports
-import { ISSUE_DISPLAY_FILTERS_BY_PAGE } from "@plane/constants";
+import { ISSUE_DISPLAY_FILTERS_BY_PAGE, PERMISSION_KEYS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import type { IIssueDisplayFilterOptions, IIssueDisplayProperties, IWorkspaceView, IIssueFilters } from "@plane/types";
@@ -19,6 +19,7 @@ import { DisplayFiltersSelection, FiltersDropdown } from "@/components/issues/is
 import { WorkspaceLevelWorkItemFiltersHOC } from "@/components/work-item-filters/filters-hoc/workspace-level";
 // plane web imports
 import { WorkItemFiltersRow } from "@/components/work-item-filters/filters-row";
+import { useUserPermissions } from "@/hooks/store/user";
 import { AccessController } from "@/plane-web/components/views/access-controller";
 
 type Props = {
@@ -44,9 +45,13 @@ export const WorkspaceViewForm = observer(function WorkspaceViewForm(props: Prop
   const { handleFormSubmit, handleClose, data, preLoadedData, workspaceSlug } = props;
   // i18n
   const { t } = useTranslation();
+  const { allowWorkspacePermissionKeys } = useUserPermissions();
+  // 这个表单没有可见范围切换：没有公共视图管理权限的人新建时默认建成个人视图，否则后端会拒绝
+  const canPublish = allowWorkspacePermissionKeys([PERMISSION_KEYS.WORKSPACE_VIEW_MANAGE], workspaceSlug);
   // form info
   const defaultValues = {
     ...DEFAULT_VALUES,
+    ...(canPublish ? {} : { access: EViewAccess.PRIVATE }),
     ...preLoadedData,
     ...data,
   };

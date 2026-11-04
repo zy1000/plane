@@ -5,12 +5,17 @@
  */
 
 // Types and utilities for member filtering
-import type { EUserPermissions, TMemberOrderByOptions } from "@plane/constants";
+import type { TMemberOrderByOptions } from "@plane/constants";
 import type { IUserLite, TProjectMembership } from "@plane/types";
 
 export interface IMemberFilters {
   order_by?: TMemberOrderByOptions;
+  /** 项目成员页的旧整数角色筛选（项目侧还在用） */
   roles?: string[];
+  /** 工作区成员页：角色（job_role）/ 权限组 / 部门，各自任一命中即可，三者之间是「且」 */
+  job_role_ids?: string[];
+  permission_group_ids?: string[];
+  departments?: string[];
 }
 
 // Helper function to parse order key and direction
@@ -72,28 +77,39 @@ export const filterProjectMembersByRole = (
   });
 };
 
-export const filterWorkspaceMembersByRole = <T extends { role: string | EUserPermissions; is_active?: boolean }>(
+type TWorkspaceMemberFilterable = {
+  member: string;
+  is_active?: boolean;
+  job_role_ids?: string[];
+  custom_role_ids?: string[];
+  group_role_ids?: string[];
+};
+
+/**
+ * 工作区成员页的三个筛选：角色（job_role）、权限组（直绑 + 团队带来的）、部门。
+ * 部门在 memberMap 上（成员接口带回来的人员扩展信息），不在 membership 里。
+ */
+export const filterWorkspaceMembers = <T extends TWorkspaceMemberFilterable>(
   members: T[],
-  roleFilters: string[]
+  memberDetailsMap: Record<string, IUserLite>,
+  filters?: IMemberFilters
 ): T[] => {
-  if (roleFilters.length === 0) return members;
+  const jobRoleIds = filters?.job_role_ids ?? [];
+  const groupIds = filters?.permission_group_ids ?? [];
+  const departments = filters?.departments ?? [];
+  if (jobRoleIds.length === 0 && groupIds.length === 0 && departments.length === 0) return members;
 
   return members.filter((member) => {
-    const memberRole = String(member.role ?? "");
-    const isSuspended = member.is_active === false;
-
-    // Check if suspended is in the role filters
-    const hasSuspendedFilter = roleFilters.includes("suspended");
-    // Get non-suspended role filters
-    const activeRoleFilters = roleFilters.filter((role) => role !== "suspended");
-
-    // For suspended users, include them only if suspended filter is selected
-    if (isSuspended) {
-      return hasSuspendedFilter;
+    if (jobRoleIds.length > 0 && !(member.job_role_ids ?? []).some((id) => jobRoleIds.includes(id))) return false;
+    if (groupIds.length > 0) {
+      const held = new Set([...(member.custom_role_ids ?? []), ...(member.group_role_ids ?? [])]);
+      if (!groupIds.some((id) => held.has(id))) return false;
     }
-
-    // For active users, include them only if their role matches any active role filter
-    return activeRoleFilters.includes(memberRole);
+    if (departments.length > 0) {
+      const department = (memberDetailsMap[member.member] as { department?: string | null } | undefined)?.department;
+      if (!department || !departments.includes(department)) return false;
+    }
+    return true;
   });
 };
 
@@ -170,14 +186,13 @@ export const sortProjectMembers = (
   );
 };
 
-export const sortWorkspaceMembers = <T extends { role: string | EUserPermissions; is_active?: boolean }>(
+export const sortWorkspaceMembers = <T extends TWorkspaceMemberFilterable>(
   members: T[],
   memberDetailsMap: Record<string, IUserLite>,
   getMemberKey: (member: T) => string,
   filters?: IMemberFilters
 ): T[] => {
-  const filteredMembers =
-    filters?.roles && filters.roles.length > 0 ? filterWorkspaceMembersByRole(members, filters.roles) : members;
+  const filteredMembers = filterWorkspaceMembers(members, memberDetailsMap, filters);
 
   // If no order_by filter, return filtered members
   if (!filters?.order_by) return filteredMembers;
@@ -187,7 +202,7 @@ export const sortWorkspaceMembers = <T extends { role: string | EUserPermissions
     filteredMembers,
     memberDetailsMap,
     getMemberKey,
-    (member) => String(member.role ?? ""),
+    () => "",
     filters.order_by
   );
 };

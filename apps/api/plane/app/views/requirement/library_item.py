@@ -118,21 +118,15 @@ class RequirementLibraryItemViewSet(BaseRequirementRowViewSet):
     def batch_download_attachments(self, request, *args, **kwargs):
         return super().batch_download_attachments(request, *args, **kwargs)
 
-    @allow_fine_permission(
-        PermissionKey.WORKSPACE_REQUIREMENT_LIBRARY_IMPORT_EXPORT, level="WORKSPACE"
-    )
+    @allow_fine_permission(PermissionKey.WORKSPACE_REQUIREMENT_LIBRARY_MANAGE, level="WORKSPACE")
     def export_excel(self, request, *args, **kwargs):
         return super().export_excel(request, *args, **kwargs)
 
-    @allow_fine_permission(
-        PermissionKey.WORKSPACE_REQUIREMENT_LIBRARY_IMPORT_EXPORT, level="WORKSPACE"
-    )
+    @allow_fine_permission(PermissionKey.WORKSPACE_REQUIREMENT_LIBRARY_MANAGE, level="WORKSPACE")
     def validate_excel_import(self, request, *args, **kwargs):
         return super().validate_excel_import(request, *args, **kwargs)
 
-    @allow_fine_permission(
-        PermissionKey.WORKSPACE_REQUIREMENT_LIBRARY_IMPORT_EXPORT, level="WORKSPACE"
-    )
+    @allow_fine_permission(PermissionKey.WORKSPACE_REQUIREMENT_LIBRARY_MANAGE, level="WORKSPACE")
     def import_excel(self, request, *args, **kwargs):
         return super().import_excel(request, *args, **kwargs)
 

@@ -9,8 +9,6 @@ import { observer } from "mobx-react";
 import { MoreHorizontal } from "lucide-react";
 // plane imports
 import {
-  EUserPermissions,
-  EUserPermissionsLevel,
   PROJECT_MODULES_ARCHIVE_PERMISSION_KEY,
   PROJECT_MODULES_DELETE_PERMISSION_KEY,
   PROJECT_MODULES_EDIT_PERMISSION_KEY,
@@ -45,19 +43,15 @@ export const ModuleQuickActions = observer(function ModuleQuickActions(props: Pr
   const [archiveModuleModal, setArchiveModuleModal] = useState(false);
   const [deleteModal, setDeleteModal] = useState(false);
   // store hooks
-  const { allowPermissions, allowProjectPermissionKeys } = useUserPermissions();
+  const { isProjectMember, allowProjectPermissionKeys } = useUserPermissions();
 
   const { getModuleById, restoreModule } = useModule();
 
   // derived values
   const moduleDetails = getModuleById(moduleId);
   // auth
-  const isEditingAllowed = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.PROJECT,
-    workspaceSlug,
-    projectId
-  );
+  // 具体动作看下面的 key，这里只挡非成员
+  const isEditingAllowed = isProjectMember(workspaceSlug, projectId);
   const canArchiveModule = allowProjectPermissionKeys(
     [PROJECT_MODULES_ARCHIVE_PERMISSION_KEY],
     workspaceSlug,

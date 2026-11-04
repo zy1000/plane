@@ -9,7 +9,7 @@ import { useCallback, useEffect } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 // plane imports
-import { ALL_ISSUES, EIssueFilterType, EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import { ALL_ISSUES, EIssueFilterType, PERMISSION_KEYS } from "@plane/constants";
 import type { EIssuesStoreType, IIssueDisplayFilterOptions } from "@plane/types";
 import { EIssueLayoutTypes } from "@plane/types";
 // hooks
@@ -46,7 +46,7 @@ export const BaseSpreadsheetRoot = observer(function BaseSpreadsheetRoot(props: 
   const { projectId } = useParams();
   // store hooks
   const storeType = useIssueStoreType() as SpreadsheetStoreType;
-  const { allowPermissions } = useUserPermissions();
+  const { allowProjectPermissionKeys } = useUserPermissions();
   const { issues, issuesFilter } = useIssues(storeType);
   const {
     fetchIssues,
@@ -62,10 +62,9 @@ export const BaseSpreadsheetRoot = observer(function BaseSpreadsheetRoot(props: 
   // derived values
   const { enableInlineEditing, enableQuickAdd, enableIssueCreation } = issues?.viewFlags || {};
   // user role validation
-  const isEditingAllowed = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.PROJECT
-  );
+  // 拖拽 / 行内改属性：项目里能编辑工作项或缺陷（单条的类型限定以后端为准）
+  const isEditingAllowed = allowProjectPermissionKeys([PERMISSION_KEYS.PROJECT_ISSUE_EDIT, PERMISSION_KEYS.PROJECT_DEFECT_EDIT]);
+  const canCreateIssue = allowProjectPermissionKeys([PERMISSION_KEYS.PROJECT_ISSUE_CREATE, PERMISSION_KEYS.PROJECT_DEFECT_CREATE]);
 
   useEffect(() => {
     fetchIssues("init-loader", { canGroup: false, perPageCount: 100 }, viewId);
@@ -139,7 +138,7 @@ export const BaseSpreadsheetRoot = observer(function BaseSpreadsheetRoot(props: 
         canEditProperties={canEditProperties}
         quickAddCallback={quickAddIssue}
         enableQuickCreateIssue={enableQuickAdd}
-        disableIssueCreation={!enableIssueCreation || !isEditingAllowed || isCompletedCycle}
+        disableIssueCreation={!enableIssueCreation || !canCreateIssue || isCompletedCycle}
         canLoadMoreIssues={!!nextPageResults}
         loadMoreIssues={fetchNextIssues}
         isEpic={isEpic}

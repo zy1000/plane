@@ -17,8 +17,6 @@ import { Settings, Share2, LogOut, MoreHorizontal } from "lucide-react";
 import { Disclosure } from "@headlessui/react";
 // plane imports
 import {
-  EUserPermissions,
-  EUserPermissionsLevel,
   MEMBER_TRACKER_ELEMENTS,
   PROJECT_PUBLISH_CREATE_PERMISSION_KEY,
   PROJECT_PUBLISH_VIEW_PERMISSION_KEY,
@@ -40,7 +38,7 @@ import { buildProjectSettingsPath, getPathWithSearch } from "@/components/settin
 import { useAppTheme } from "@/hooks/store/use-app-theme";
 import { useCommandPalette } from "@/hooks/store/use-command-palette";
 import { useProject } from "@/hooks/store/use-project";
-import { useUserPermissions } from "@/hooks/store/user";
+import { useUser, useUserPermissions } from "@/hooks/store/user";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 // plane web imports
 import { useNavigationItems } from "@/plane-web/components/navigations";
@@ -85,7 +83,8 @@ export const SidebarProjectsListItem = observer(function SidebarProjectsListItem
   const { t } = useTranslation();
   const { getPartialProjectById } = useProject();
   const { isMobile } = usePlatformOS();
-  const { allowPermissions, allowProjectPermissionKeys } = useUserPermissions();
+  const { isProjectMember, isProjectJoined, allowProjectPermissionKeys } = useUserPermissions();
+  const { data: currentUser } = useUser();
   const { getIsProjectListOpen, toggleProjectListOpen } = useCommandPalette();
   const { isExtendedProjectSidebarOpened, toggleExtendedProjectSidebar, toggleAnySidebarDropdown } = useAppTheme();
 
@@ -113,7 +112,6 @@ export const SidebarProjectsListItem = observer(function SidebarProjectsListItem
     workspaceSlug: workspaceSlug.toString(),
     projectId,
     project,
-    allowPermissions,
     allowProjectPermissionKeys,
   });
   const availableTabKeys = navigationItems.map((item) => item.key);
@@ -131,18 +129,11 @@ export const SidebarProjectsListItem = observer(function SidebarProjectsListItem
     [projectId, toggleProjectListOpen]
   );
   // auth
-  const isAdmin = allowPermissions(
-    [EUserPermissions.ADMIN],
-    EUserPermissionsLevel.PROJECT,
-    workspaceSlug.toString(),
-    project?.id
-  );
-  const isAuthorized = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.PROJECT,
-    workspaceSlug.toString(),
-    project?.id
-  );
+  const isAuthorized = isProjectMember(workspaceSlug.toString(), project?.id);
+  // 只有成员表里真有自己才能退出（白名单访客没什么可退的）；项目负责人不能退出（同后端 ProjectMemberViewSet.leave）
+  const projectLeadId = typeof project?.project_lead === "string" ? project.project_lead : project?.project_lead?.id;
+  const canLeaveProject =
+    isProjectJoined(workspaceSlug.toString(), project?.id) && !!currentUser?.id && projectLeadId !== currentUser.id;
   const canPublishProject =
     allowProjectPermissionKeys(
       [PROJECT_PUBLISH_VIEW_PERMISSION_KEY, PROJECT_PUBLISH_CREATE_PERMISSION_KEY],
@@ -448,7 +439,7 @@ export const SidebarProjectsListItem = observer(function SidebarProjectsListItem
                     </div>
                   </CustomMenu.MenuItem>
                   {/* leave project */}
-                  {!isAuthorized && (
+                  {canLeaveProject && (
                     <CustomMenu.MenuItem
                       onClick={handleLeaveProject}
                       data-ph-element={MEMBER_TRACKER_ELEMENTS.SIDEBAR_PROJECT_QUICK_ACTIONS}

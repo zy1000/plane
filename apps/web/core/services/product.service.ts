@@ -7,7 +7,6 @@ const PRODUCT_PATCH_FIELDS = [
   "name",
   "identifier",
   "description_html",
-  "network",
   "owner",
   "reviewers",
   "logo_props",

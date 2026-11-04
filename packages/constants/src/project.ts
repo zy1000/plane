@@ -5,6 +5,8 @@
  */
 
 // plane imports
+import { PROJECT_MEMBER_ACCESS } from "./permission-access";
+import { PERMISSION_KEYS } from "./permission-keys.generated";
 import type {
   TDataDictionaryColorKey,
   TProjectDisplayProperties,
@@ -12,33 +14,6 @@ import type {
   TProjectOrderByOptions,
 } from "@plane/types";
 // local imports
-
-export type TNetworkChoiceIconKey = "Lock" | "Globe2";
-
-export type TNetworkChoice = {
-  key: 0 | 2;
-  labelKey: string;
-  i18n_label: string;
-  description: string;
-  iconKey: TNetworkChoiceIconKey;
-};
-
-export const NETWORK_CHOICES: TNetworkChoice[] = [
-  {
-    key: 0,
-    labelKey: "Private",
-    i18n_label: "workspace_projects.network.private.title",
-    description: "workspace_projects.network.private.description", //"Accessible only by invite",
-    iconKey: "Lock",
-  },
-  {
-    key: 2,
-    labelKey: "Public",
-    i18n_label: "workspace_projects.network.public.title",
-    description: "workspace_projects.network.public.description", //"Anyone in the workspace except Guests can join",
-    iconKey: "Globe2",
-  },
-];
 
 export const GROUP_CHOICES = {
   backlog: {
@@ -222,13 +197,18 @@ export enum EProjectFeatureKey {
 }
 
 /** 邀请项目成员，与后端 PermissionKey.PROJECT_MEMBER_INVITE 一致 */
-export const PROJECT_MEMBER_INVITE_PERMISSION_KEY = "project.member.invite" as const;
+export const PROJECT_MEMBER_INVITE_PERMISSION_KEY = "project.member.manage" as const;
 
-export const PROJECT_GROUP_GRANT_VIEW_PERMISSION_KEY = "project.group_grant.view" as const;
-export const PROJECT_GROUP_GRANT_EDIT_PERMISSION_KEY = "project.group_grant.edit" as const;
+export const PROJECT_GROUP_GRANT_VIEW_PERMISSION_KEY = PROJECT_MEMBER_ACCESS;
+export const PROJECT_GROUP_GRANT_EDIT_PERMISSION_KEY = "project.member.manage" as const;
 
-/** 项目概览页（/projects/:id/overview），底层 key 兼容旧 PermissionKey.PROJECT_ANALYTICS_VIEW */
-export const PROJECT_OVERVIEW_VIEW_PERMISSION_KEY = "project.analytics.view" as const;
+/**
+ * 项目概览页（/projects/:id/overview）：没有自己的 key，持有项目里任一「查看」类 key 即可看；
+ * 与后端 registry.PROJECT_VIEW_KEYS 一致。
+ */
+export const PROJECT_OVERVIEW_VIEW_PERMISSION_KEYS: string[] = Object.values(PERMISSION_KEYS).filter(
+  (key) => key.startsWith("project.") && key.endsWith(".view")
+);
 
 /**
  * 项目工作项 / 缺陷页面查看权限常量，与后端 PermissionKey.PROJECT_*_VIEW 一致。
@@ -237,104 +217,108 @@ export const PROJECT_OVERVIEW_VIEW_PERMISSION_KEY = "project.analytics.view" as 
  * 下线，前端暂无消费方；key 保留 —— 它已写进线上角色配置与后端权限种子，删常量
  * 不省任何东西，反而丢掉这层对应关系的记录。
  */
-export const PROJECT_WORK_ITEMS_VIEW_PERMISSION_KEY = "project.work_items.view" as const;
-export const PROJECT_REQUIREMENTS_VIEW_PERMISSION_KEY = "project.requirements.view" as const;
-export const PROJECT_DEFECTS_VIEW_PERMISSION_KEY = "project.defects.view" as const;
+export const PROJECT_WORK_ITEMS_VIEW_PERMISSION_KEY = "project.issue.view" as const;
+export const PROJECT_REQUIREMENTS_VIEW_PERMISSION_KEY = "project.requirement.view" as const;
+export const PROJECT_DEFECTS_VIEW_PERMISSION_KEY = "project.defect.view" as const;
 
 /**
  * 产品需求进项目（/projects/:id/requirements），与后端
  * PermissionKey.PROJECT_REQUIREMENT_LINK_* / PROJECT_PRODUCT_LINK_MANAGE 一致。
  */
-export const PROJECT_REQUIREMENT_LINK_VIEW_PERMISSION_KEY = "project.requirement_link.view" as const;
-export const PROJECT_REQUIREMENT_LINK_MANAGE_PERMISSION_KEY = "project.requirement_link.manage" as const;
-export const PROJECT_PRODUCT_LINK_MANAGE_PERMISSION_KEY = "project.product_link.manage" as const;
+export const PROJECT_REQUIREMENT_LINK_VIEW_PERMISSION_KEY = "project.requirement.view" as const;
+export const PROJECT_REQUIREMENT_LINK_MANAGE_PERMISSION_KEY = "project.requirement.edit" as const;
+export const PROJECT_PRODUCT_LINK_MANAGE_PERMISSION_KEY = "project.product.manage" as const;
 
 /** 项目收集页权限常量，与后端 PermissionKey.INTAKE_VIEW 一致 */
-export const PROJECT_INTAKE_VIEW_PERMISSION_KEY = "intake.view" as const;
+export const PROJECT_INTAKE_VIEW_PERMISSION_KEY = "project.intake.view" as const;
 
 /** 项目公告权限常量，与后端 PermissionKey.PROJECT_ANNOUNCEMENT_* 一致 */
-export const PROJECT_ANNOUNCEMENT_CREATE_PERMISSION_KEY = "project.announcement.create" as const;
-export const PROJECT_ANNOUNCEMENT_DELETE_PERMISSION_KEY = "project.announcement.delete" as const;
+export const PROJECT_ANNOUNCEMENT_CREATE_PERMISSION_KEY = "project.announcement.manage" as const;
+export const PROJECT_ANNOUNCEMENT_DELETE_PERMISSION_KEY = "project.announcement.manage" as const;
 
-/** 项目文件/资产页权限常量，与后端 PermissionKey.PROJECT_ASSET_* 一致 */
-export const PROJECT_ASSET_VIEW_PERMISSION_KEY = "project.asset.view" as const;
-export const PROJECT_ASSET_UPLOAD_PERMISSION_KEY = "project.asset.upload" as const;
-export const PROJECT_ASSET_EDIT_PERMISSION_KEY = "project.asset.edit" as const;
-export const PROJECT_ASSET_DELETE_PERMISSION_KEY = "project.asset.delete" as const;
-export const PROJECT_ASSET_DOWNLOAD_PERMISSION_KEY = "project.asset.download" as const;
+/** 项目文件库页权限常量，与后端 PermissionKey.PROJECT_FILESTORE_* 一致（浏览下载随 view，上传 / 改名 / 移动随 edit） */
+export const PROJECT_ASSET_VIEW_PERMISSION_KEY = "project.filestore.view" as const;
+export const PROJECT_ASSET_UPLOAD_PERMISSION_KEY = "project.filestore.edit" as const;
+export const PROJECT_ASSET_EDIT_PERMISSION_KEY = "project.filestore.edit" as const;
+export const PROJECT_ASSET_DELETE_PERMISSION_KEY = "project.filestore.delete" as const;
+export const PROJECT_ASSET_DOWNLOAD_PERMISSION_KEY = "project.filestore.view" as const;
 
 /** 迭代权限常量，与后端 PermissionKey.SPRINTS_* 一致 */
-export const PROJECT_SPRINTS_VIEW_PERMISSION_KEY = "sprints.view" as const;
-export const PROJECT_SPRINTS_CREATE_PERMISSION_KEY = "sprints.create" as const;
-export const PROJECT_SPRINTS_EDIT_PERMISSION_KEY = "sprints.edit" as const;
-export const PROJECT_SPRINTS_DELETE_PERMISSION_KEY = "sprints.delete" as const;
-export const PROJECT_SPRINTS_ARCHIVE_PERMISSION_KEY = "sprints.archive" as const;
-export const PROJECT_SPRINTS_ISSUE_MANAGE_PERMISSION_KEY = "sprints.issue.manage" as const;
-export const PROJECT_SPRINTS_PLAN_MANAGE_PERMISSION_KEY = "sprints.plan.manage" as const;
-export const PROJECT_SPRINTS_FILE_UPLOAD_PERMISSION_KEY = "sprints.file.upload" as const;
-export const PROJECT_SPRINTS_FILE_DELETE_PERMISSION_KEY = "sprints.file.delete" as const;
-export const PROJECT_SPRINTS_FILE_DOWNLOAD_PERMISSION_KEY = "sprints.file.download" as const;
-export const PROJECT_SPRINTS_COMMENT_CREATE_PERMISSION_KEY = "sprints.comment.create" as const;
+export const PROJECT_SPRINTS_VIEW_PERMISSION_KEY = "project.cycle.view" as const;
+export const PROJECT_SPRINTS_CREATE_PERMISSION_KEY = "project.cycle.create" as const;
+export const PROJECT_SPRINTS_EDIT_PERMISSION_KEY = "project.cycle.edit" as const;
+export const PROJECT_SPRINTS_DELETE_PERMISSION_KEY = "project.cycle.delete" as const;
+export const PROJECT_SPRINTS_ARCHIVE_PERMISSION_KEY = "project.cycle.archive" as const;
+export const PROJECT_SPRINTS_ISSUE_MANAGE_PERMISSION_KEY = "project.cycle.edit" as const;
+export const PROJECT_SPRINTS_PLAN_MANAGE_PERMISSION_KEY = "project.cycle.edit" as const;
+export const PROJECT_SPRINTS_FILE_UPLOAD_PERMISSION_KEY = "project.cycle.edit" as const;
+export const PROJECT_SPRINTS_FILE_DELETE_PERMISSION_KEY = "project.cycle.edit" as const;
+export const PROJECT_SPRINTS_FILE_DOWNLOAD_PERMISSION_KEY = "project.cycle.view" as const;
+export const PROJECT_SPRINTS_COMMENT_CREATE_PERMISSION_KEY = "project.cycle.view" as const;
 
-/** 项目视图列表/详情页权限，与后端 PermissionKey.VIEW_VIEW 一致 */
-export const PROJECT_VIEWS_VIEW_PERMISSION_KEY = "view.view" as const;
-export const PROJECT_VIEWS_CREATE_PERMISSION_KEY = "view.create" as const;
-export const PROJECT_VIEWS_EDIT_PERMISSION_KEY = "view.edit" as const;
-export const PROJECT_VIEWS_DELETE_PERMISSION_KEY = "view.delete" as const;
+/** 项目视图列表 / 详情页：视图是工作项 / 缺陷 / 需求列表的保存筛选，随这三者任一的查看权限（与后端 IssueViewViewSet 一致） */
+export const PROJECT_VIEWS_VIEW_PERMISSION_KEYS: string[] = [
+  "project.issue.view",
+  "project.defect.view",
+  "project.requirement.view",
+];
+export const PROJECT_VIEWS_CREATE_PERMISSION_KEY = PROJECT_MEMBER_ACCESS;
+export const PROJECT_VIEWS_EDIT_PERMISSION_KEY = PROJECT_MEMBER_ACCESS;
+export const PROJECT_VIEWS_DELETE_PERMISSION_KEY = PROJECT_MEMBER_ACCESS;
 
 /** 项目笔记权限常量，与后端 PermissionKey.NOTE_* 一致 */
-export const PROJECT_NOTES_VIEW_PERMISSION_KEY = "note.view" as const;
-export const PROJECT_NOTES_CREATE_PERMISSION_KEY = "note.create" as const;
-export const PROJECT_NOTES_EDIT_PERMISSION_KEY = "note.edit" as const;
-export const PROJECT_NOTES_DELETE_PERMISSION_KEY = "note.delete" as const;
-export const PROJECT_NOTES_ARCHIVE_PERMISSION_KEY = "note.archive" as const;
-export const PROJECT_NOTES_LOCK_PERMISSION_KEY = "note.lock" as const;
-export const PROJECT_NOTES_ACCESS_MANAGE_PERMISSION_KEY = "note.access.manage" as const;
-export const PROJECT_NOTES_VERSION_VIEW_PERMISSION_KEY = "note.version.view" as const;
+export const PROJECT_NOTES_VIEW_PERMISSION_KEY = "project.page.view" as const;
+export const PROJECT_NOTES_CREATE_PERMISSION_KEY = "project.page.create" as const;
+export const PROJECT_NOTES_EDIT_PERMISSION_KEY = "project.page.edit" as const;
+export const PROJECT_NOTES_DELETE_PERMISSION_KEY = "project.page.delete" as const;
+export const PROJECT_NOTES_ARCHIVE_PERMISSION_KEY = "project.page.edit" as const;
+export const PROJECT_NOTES_LOCK_PERMISSION_KEY = "project.page.edit" as const;
+export const PROJECT_NOTES_ACCESS_MANAGE_PERMISSION_KEY = "project.page.edit" as const;
+export const PROJECT_NOTES_VERSION_VIEW_PERMISSION_KEY = "project.page.view" as const;
 
 /** @deprecated use PROJECT_NOTES_VIEW_PERMISSION_KEY */
 export const PROJECT_PAGES_VIEW_PERMISSION_KEY = PROJECT_NOTES_VIEW_PERMISSION_KEY;
 
 /** 项目模块页权限常量，与后端 PermissionKey.MODULES_VIEW 一致 */
-export const PROJECT_MODULES_VIEW_PERMISSION_KEY = "modules.view" as const;
+export const PROJECT_MODULES_VIEW_PERMISSION_KEY = "project.module.view" as const;
 /** 与后端 PermissionKey.MODULES_CREATE 一致 */
-export const PROJECT_MODULES_CREATE_PERMISSION_KEY = "modules.create" as const;
+export const PROJECT_MODULES_CREATE_PERMISSION_KEY = "project.module.create" as const;
 /** 与后端 PermissionKey.MODULES_EDIT 一致 */
-export const PROJECT_MODULES_EDIT_PERMISSION_KEY = "modules.edit" as const;
+export const PROJECT_MODULES_EDIT_PERMISSION_KEY = "project.module.edit" as const;
 /** 与后端 PermissionKey.MODULES_DELETE 一致 */
-export const PROJECT_MODULES_DELETE_PERMISSION_KEY = "modules.delete" as const;
+export const PROJECT_MODULES_DELETE_PERMISSION_KEY = "project.module.delete" as const;
 /** 与后端 PermissionKey.MODULES_ARCHIVE 一致 */
-export const PROJECT_MODULES_ARCHIVE_PERMISSION_KEY = "modules.archive" as const;
+export const PROJECT_MODULES_ARCHIVE_PERMISSION_KEY = "project.module.archive" as const;
 /** 与后端 PermissionKey.MODULES_ISSUE_MANAGE 一致：模块与工作项的关联管理 */
-export const PROJECT_MODULES_ISSUE_MANAGE_PERMISSION_KEY = "modules.issue.manage" as const;
+export const PROJECT_MODULES_ISSUE_MANAGE_PERMISSION_KEY = "project.module.edit" as const;
 
 /** 项目发布页权限常量，与后端 PermissionKey.RELEASES_VIEW / RELEASES_CREATE 一致 */
-export const PROJECT_RELEASES_VIEW_PERMISSION_KEY = "releases.view" as const;
-export const PROJECT_RELEASES_CREATE_PERMISSION_KEY = "releases.create" as const;
-export const PROJECT_RELEASES_EDIT_PERMISSION_KEY = "releases.edit" as const;
-export const PROJECT_RELEASES_DELETE_PERMISSION_KEY = "releases.delete" as const;
+export const PROJECT_RELEASES_VIEW_PERMISSION_KEY = "project.release.view" as const;
+export const PROJECT_RELEASES_CREATE_PERMISSION_KEY = "project.release.create" as const;
+export const PROJECT_RELEASES_EDIT_PERMISSION_KEY = "project.release.edit" as const;
+export const PROJECT_RELEASES_DELETE_PERMISSION_KEY = "project.release.delete" as const;
 
 /** 发布归档/恢复权限常量，与后端 PermissionKey.RELEASES_ARCHIVE 一致 */
-export const PROJECT_RELEASES_ARCHIVE_PERMISSION_KEY = "releases.archive" as const;
+export const PROJECT_RELEASES_ARCHIVE_PERMISSION_KEY = "project.release.archive" as const;
 /** 与后端 PermissionKey.RELEASES_ISSUE_MANAGE 一致：发布与工作项的关联管理 */
-export const PROJECT_RELEASES_ISSUE_MANAGE_PERMISSION_KEY = "releases.issue.manage" as const;
+export const PROJECT_RELEASES_ISSUE_MANAGE_PERMISSION_KEY = "project.release.edit" as const;
 /** 与后端 PermissionKey.RELEASES_CYCLE_MANAGE 一致：发布与迭代的关联管理 */
-export const PROJECT_RELEASES_CYCLE_MANAGE_PERMISSION_KEY = "releases.cycle.manage" as const;
+export const PROJECT_RELEASES_CYCLE_MANAGE_PERMISSION_KEY = "project.release.edit" as const;
 /** 与后端 PermissionKey.RELEASES_PLAN_MANAGE 一致：发布与测试计划的关联管理 */
-export const PROJECT_RELEASES_PLAN_MANAGE_PERMISSION_KEY = "releases.plan.manage" as const;
+export const PROJECT_RELEASES_PLAN_MANAGE_PERMISSION_KEY = "project.release.edit" as const;
 /** 发布附件权限常量，与后端 PermissionKey.RELEASES_FILE_* 一致 */
-export const PROJECT_RELEASES_FILE_UPLOAD_PERMISSION_KEY = "releases.file.upload" as const;
-export const PROJECT_RELEASES_FILE_DELETE_PERMISSION_KEY = "releases.file.delete" as const;
-export const PROJECT_RELEASES_FILE_DOWNLOAD_PERMISSION_KEY = "releases.file.download" as const;
+export const PROJECT_RELEASES_FILE_UPLOAD_PERMISSION_KEY = "project.release.edit" as const;
+export const PROJECT_RELEASES_FILE_DELETE_PERMISSION_KEY = "project.release.edit" as const;
+export const PROJECT_RELEASES_FILE_DOWNLOAD_PERMISSION_KEY = "project.release.view" as const;
 /** 发布评论权限常量，与后端 PermissionKey.RELEASES_COMMENT_CREATE 一致 */
-export const PROJECT_RELEASES_COMMENT_CREATE_PERMISSION_KEY = "releases.comment.create" as const;
+export const PROJECT_RELEASES_COMMENT_CREATE_PERMISSION_KEY = "project.release.view" as const;
 
 /**
  * 评审裁剪页权限常量，与后端 PermissionKey.PROJECT_REVIEW_TAILORING_* 一致。
  * 没有「签批」key —— 能不能签批由「是不是本轮签批人」判定，见后端 act_on_tailoring。
  */
 export const PROJECT_REVIEW_TAILORING_VIEW_PERMISSION_KEY = "project.review_tailoring.view" as const;
-export const PROJECT_REVIEW_TAILORING_MANAGE_PERMISSION_KEY = "project.review_tailoring.manage" as const;
+export const PROJECT_REVIEW_TAILORING_MANAGE_PERMISSION_KEY = "project.review_tailoring.edit" as const;
 /** 读接受任一：只配了维护的角色不该被读挡住，口径同后端 TAILORING_READ_KEYS */
 export const PROJECT_REVIEW_TAILORING_READ_PERMISSION_KEYS = [
   PROJECT_REVIEW_TAILORING_VIEW_PERMISSION_KEY,
@@ -346,7 +330,7 @@ export const PROJECT_REVIEW_TAILORING_READ_PERMISSION_KEYS = [
  * 与裁剪分开给 key —— 裁剪决定「要做哪些评审」，执行评审的是另一拨人。
  */
 export const PROJECT_STAGE_REVIEW_VIEW_PERMISSION_KEY = "project.stage_review.view" as const;
-export const PROJECT_STAGE_REVIEW_MANAGE_PERMISSION_KEY = "project.stage_review.manage" as const;
+export const PROJECT_STAGE_REVIEW_MANAGE_PERMISSION_KEY = "project.stage_review.edit" as const;
 /** 读接受任一：只配了维护的角色不该被读挡住，口径同后端 STAGE_REVIEW_READ_KEYS */
 export const PROJECT_STAGE_REVIEW_READ_PERMISSION_KEYS = [
   PROJECT_STAGE_REVIEW_VIEW_PERMISSION_KEY,
@@ -365,8 +349,8 @@ export const PROJECT_STAGE_READ_PERMISSION_KEYS = [
 ];
 
 /** 测试管理查看权限常量，与后端 PermissionKey.QA_*_VIEW 一致 */
-export const PROJECT_QA_PLAN_VIEW_PERMISSION_KEY = "qa.plan.view" as const;
-export const PROJECT_QA_REPORT_VIEW_PERMISSION_KEY = "qa.report.view" as const;
+export const PROJECT_QA_PLAN_VIEW_PERMISSION_KEY = "project.test_plan.view" as const;
+export const PROJECT_QA_REPORT_VIEW_PERMISSION_KEY = "project.test_report.view" as const;
 
 /** 项目「测试」页签只剩测试计划 / 测试报告（用例、用例评审 2026-11 挪到产品下） */
 export const PROJECT_QA_VIEW_PERMISSION_KEYS = [
@@ -381,7 +365,7 @@ export const PROJECT_ARCHIVES_VIEW_PERMISSION_KEYS = [
 ] as const;
 
 /** 项目公开发布权限常量，与后端 PermissionKey.PROJECT_PUBLISH_* 一致 */
-export const PROJECT_PUBLISH_VIEW_PERMISSION_KEY = "project.publish.view" as const;
-export const PROJECT_PUBLISH_CREATE_PERMISSION_KEY = "project.publish.create" as const;
+export const PROJECT_PUBLISH_VIEW_PERMISSION_KEY = PROJECT_MEMBER_ACCESS;
+export const PROJECT_PUBLISH_CREATE_PERMISSION_KEY = "project.settings.edit" as const;
 /** 关闭 / 重新开启项目与后端 ProjectCloseReopenEndpoint 同一把 key（改状态属于项目设置） */
 export const PROJECT_SETTINGS_EDIT_PERMISSION_KEY = "project.settings.edit" as const;

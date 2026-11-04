@@ -6,7 +6,6 @@
 
 import { useState } from "react";
 // plane imports
-import { ROLE } from "@plane/constants";
 // types
 import { Button } from "@plane/propel/button";
 import type { IWorkspaceMemberInvitation } from "@plane/types";
@@ -88,7 +87,6 @@ export function Invitations(props: Props) {
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="text-13 font-medium">{truncateText(invitedWorkspace?.name, 30)}</div>
-                  <p className="text-11 text-secondary">{ROLE[invitation.role]}</p>
                 </div>
                 <span className={`flex-shrink-0`}>
                   <Checkbox checked={isSelected} />

@@ -15,7 +15,6 @@ from django.db.models import (
     Exists,
     IntegerField,
     OuterRef,
-    Q,
     Subquery,
     Value,
 )
@@ -29,13 +28,13 @@ from plane.app.views.requirement.mixins import get_scoped_product
 from plane.db.models import (
     Issue,
     ProductProject,
-    ProjectNetwork,
     Release,
     ReleaseOverduePhase,
     ReleaseOverdueRecord,
     RequirementRelease,
 )
 from plane.utils.requirement_project import container_requirement_counts
+from plane.utils.visibility import visible_projects_q
 
 
 def _release_issue_count_subquery(state_group=None):
@@ -142,11 +141,8 @@ class ProductReleaseViewSet(BaseViewSet):
                 {"error": "Product not found."}, status=status.HTTP_404_NOT_FOUND
             )
 
-        # 产品可见 ≠ 它关联的项目也可见。私密项目（network=0）只对自己的成员露面，
-        # 照 ProductProjectViewSet 的同一条判定收窄，否则任何能看见这个产品的工作
-        # 区成员都能从发布单读到私密项目的名称与标识。
-        # 先解出项目 id 集合再查发布单：member join 会放大行数，把 distinct 留在
-        # 这一段，第二段的行天然唯一，注解才能安全共存。
+        # 产品可见 ≠ 它关联的项目也可见：只列当前用户能看到的项目（成员 / 负责 / 白名单）。
+        # 先解出项目 id 集合再查发布单，第二段的行天然唯一，注解才能安全共存。
         project_ids = list(
             ProductProject.objects.filter(
                 workspace__slug=slug,
@@ -155,13 +151,7 @@ class ProductReleaseViewSet(BaseViewSet):
                 # 「项目列表看不到、发布列表却在列」的矛盾态
                 project__archived_at__isnull=True,
             )
-            .filter(
-                Q(
-                    project__project_projectmember__member=request.user,
-                    project__project_projectmember__is_active=True,
-                )
-                | Q(project__network=ProjectNetwork.PUBLIC.value)
-            )
+            .filter(visible_projects_q(request.user, slug, "project"))
             .values_list("project_id", flat=True)
             .distinct()
         )

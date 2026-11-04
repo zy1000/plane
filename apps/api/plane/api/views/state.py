@@ -12,7 +12,7 @@ from drf_spectacular.utils import OpenApiResponse, OpenApiRequest
 
 # Module imports
 from plane.api.serializers import StateSerializer
-from plane.app.permissions import ProjectEntityPermission
+from plane.app.permissions import PermissionKey, ProjectEntityPermission, allow_fine_permission
 from plane.app.views.issue_scheme.scope import IssueSchemeScopeMixin
 from plane.utils.issue_scheme import is_referenced, project_scheme_id, state_references
 from plane.db.models import State
@@ -36,6 +36,7 @@ from plane.utils.openapi import (
     STATE_CANNOT_DELETE_RESPONSE,
     EXTERNAL_ID_EXISTS_RESPONSE,
 )
+from plane.utils.visibility import visible_projects_q
 
 
 class StateListCreateAPIEndpoint(IssueSchemeScopeMixin, BaseAPIView):
@@ -49,11 +50,10 @@ class StateListCreateAPIEndpoint(IssueSchemeScopeMixin, BaseAPIView):
     def get_queryset(self):
         return (
             State.objects.filter(workspace__slug=self.kwargs.get("slug"))
-            # 本项目所用方案里的状态；项目与成员条件写在同一个 filter() 里共用一条 projects join
+            # 本项目所用方案里的状态；项目条件与可见条件写在同一个 filter() 里共用一条 projects join
             .filter(
+                visible_projects_q(self.request.user, self.kwargs.get("slug"), "scheme__projects"),
                 scheme__projects=self.kwargs.get("project_id"),
-                scheme__projects__project_projectmember__member=self.request.user,
-                scheme__projects__project_projectmember__is_active=True,
                 scheme__projects__archived_at__isnull=True,
             )
             .filter(is_triage=False)
@@ -80,6 +80,7 @@ class StateListCreateAPIEndpoint(IssueSchemeScopeMixin, BaseAPIView):
             409: STATE_NAME_EXISTS_RESPONSE,
         },
     )
+    @allow_fine_permission(PermissionKey.PROJECT_STATE_MANAGE)
     def post(self, request, slug, project_id):
         """Create state
 
@@ -173,11 +174,10 @@ class StateDetailAPIEndpoint(IssueSchemeScopeMixin, BaseAPIView):
     def get_queryset(self):
         return (
             State.objects.filter(workspace__slug=self.kwargs.get("slug"))
-            # 本项目所用方案里的状态；项目与成员条件写在同一个 filter() 里共用一条 projects join
+            # 本项目所用方案里的状态；项目条件与可见条件写在同一个 filter() 里共用一条 projects join
             .filter(
+                visible_projects_q(self.request.user, self.kwargs.get("slug"), "scheme__projects"),
                 scheme__projects=self.kwargs.get("project_id"),
-                scheme__projects__project_projectmember__member=self.request.user,
-                scheme__projects__project_projectmember__is_active=True,
                 scheme__projects__archived_at__isnull=True,
             )
             .filter(is_triage=False)
@@ -226,6 +226,7 @@ class StateDetailAPIEndpoint(IssueSchemeScopeMixin, BaseAPIView):
             400: STATE_CANNOT_DELETE_RESPONSE,
         },
     )
+    @allow_fine_permission(PermissionKey.PROJECT_STATE_MANAGE)
     def delete(self, request, slug, project_id, state_id):
         """Delete state
 
@@ -272,6 +273,7 @@ class StateDetailAPIEndpoint(IssueSchemeScopeMixin, BaseAPIView):
             409: EXTERNAL_ID_EXISTS_RESPONSE,
         },
     )
+    @allow_fine_permission(PermissionKey.PROJECT_STATE_MANAGE)
     def patch(self, request, slug, project_id, state_id):
         """Update state
 

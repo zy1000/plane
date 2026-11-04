@@ -82,8 +82,8 @@ export const WorkspaceInvitationsListItem = observer(function WorkspaceInvitatio
         const error = err as { error?: string };
         setToast({
           type: TOAST_TYPE.ERROR,
-          title: "更新角色失败",
-          message: error?.error || "更新邀请角色时出现错误，请重试。",
+          title: "更新权限组失败",
+          message: error?.error || "更新邀请的权限组时出现错误，请重试。",
         });
       }
     );

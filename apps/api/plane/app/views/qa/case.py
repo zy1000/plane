@@ -477,7 +477,7 @@ class CaseAPI(BaseViewSet):
         return list_response(data=result, count=len(result))
 
     @action(detail=False, methods=['post'], url_path='export')
-    @allow_workspace_member_or_template(PermissionKey.WORKSPACE_CASE_TEMPLATE_IMPORT_EXPORT)
+    @allow_workspace_member_or_template(PermissionKey.WORKSPACE_CASE_TEMPLATE_MANAGE)
     def export(self, request, slug):
         fields = request.data.get('fields') or []
         if not isinstance(fields, list) or not fields:
@@ -1548,7 +1548,7 @@ class CaseAPI(BaseViewSet):
     @action(detail=False, methods=['post'], url_path='import-case')
     # 往模板库里导入 = 写模板用例，导入导出与维护两把钥匙都要
     @allow_workspace_member_or_template(
-        PermissionKey.WORKSPACE_CASE_TEMPLATE_IMPORT_EXPORT,
+        PermissionKey.WORKSPACE_CASE_TEMPLATE_MANAGE,
         PermissionKey.WORKSPACE_CASE_TEMPLATE_MANAGE,
         require_all=True,
     )
@@ -1670,7 +1670,7 @@ class CaseAPI(BaseViewSet):
     @action(detail=False, methods=['post'], url_path='validate-import-case')
     # 往模板库里导入 = 写模板用例，导入导出与维护两把钥匙都要
     @allow_workspace_member_or_template(
-        PermissionKey.WORKSPACE_CASE_TEMPLATE_IMPORT_EXPORT,
+        PermissionKey.WORKSPACE_CASE_TEMPLATE_MANAGE,
         PermissionKey.WORKSPACE_CASE_TEMPLATE_MANAGE,
         require_all=True,
     )

@@ -12,8 +12,6 @@ import { useParams, usePathname, useSearchParams } from "next/navigation";
 import { Info, SquareUser } from "lucide-react";
 import {
   PROGRESS_STATE_GROUPS_DETAILS,
-  EUserPermissions,
-  EUserPermissionsLevel,
   IS_FAVORITE_MENU_OPEN,
   PROJECT_RELEASES_EDIT_PERMISSION_KEY,
 } from "@plane/constants";
@@ -50,15 +48,13 @@ export const ReleaseCardItem = observer(function ReleaseCardItem(props: Props) {
   const { workspaceSlug, projectId } = useParams();
   const searchParams = useSearchParams();
   const pathname = usePathname();
-  const { allowPermissions, allowProjectPermissionKeys } = useUserPermissions();
+  const { isProjectMember, allowProjectPermissionKeys } = useUserPermissions();
   const { getReleaseById, addReleaseToFavorites, removeReleaseFromFavorites, updateReleaseDetails } = useRelease();
   const { getUserDetails } = useMember();
   const { setValue: toggleFavoriteMenu, storedValue } = useLocalStorage<boolean>(IS_FAVORITE_MENU_OPEN, false);
   const releaseDetails = getReleaseById(releaseId);
-  const canUseFavorite = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.PROJECT
-  );
+  // 收藏是个人行为，项目成员就行
+  const canUseFavorite = isProjectMember();
   const workspaceSlugValue = workspaceSlug?.toString() ?? "";
   const projectIdValue = projectId?.toString() ?? "";
   const canEditRelease =

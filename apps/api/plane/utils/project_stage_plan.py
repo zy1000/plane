@@ -12,9 +12,8 @@
 import pytz
 from django.db.models import OuterRef, Subquery
 
-from plane.db.models import Cycle, CycleIssue, Issue, IssueAssignee, ProjectMember
+from plane.db.models import Cycle, CycleIssue, Issue, IssueAssignee
 
-GUEST_ROLE = 5
 
 
 def _local_date(value, tz):
@@ -22,13 +21,6 @@ def _local_date(value, tz):
         return None
     return value.astimezone(tz).date().isoformat()
 
-
-def _is_restricted_guest(project, user):
-    if project.guest_view_all_features:
-        return False
-    return ProjectMember.objects.filter(
-        project_id=project.id, member=user, role=GUEST_ROLE, is_active=True
-    ).exists()
 
 
 def build_plan_data(project, user):
@@ -70,8 +62,6 @@ def build_plan_data(project, user):
     issue_queryset = Issue.issue_objects.filter(
         project_id=project.id, workspace_id=project.workspace_id
     )
-    if _is_restricted_guest(project, user):
-        issue_queryset = issue_queryset.filter(created_by=user)
     issue_rows = list(
         issue_queryset.annotate(cycle_id=Subquery(active_cycle))
         .order_by("sequence_id")

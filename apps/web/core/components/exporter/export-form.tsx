@@ -10,9 +10,8 @@ import { observer } from "mobx-react";
 import { Controller, useForm } from "react-hook-form";
 // import { Info } from "lucide-react";
 import {
-  EUserPermissions,
-  EUserPermissionsLevel,
   EXPORTERS_LIST,
+  PERMISSION_KEYS,
   // ISSUE_DISPLAY_FILTERS_BY_PAGE,
 } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
@@ -61,7 +60,7 @@ export const ExportForm = observer(function ExportForm(props: Props) {
   const [exportLoading, setExportLoading] = useState(false);
 
   // store hooks
-  const { allowPermissions } = useUserPermissions();
+  const { allowWorkspacePermissionKeys } = useUserPermissions();
   const { data: user, canPerformAnyCreateAction, projectsWithCreatePermissions } = useUser();
   const { workspaceProjectIds, getProjectById } = useProject();
   const { t } = useTranslation();
@@ -77,7 +76,8 @@ export const ExportForm = observer(function ExportForm(props: Props) {
 
   // derived values
   const hasProjects = workspaceProjectIds && workspaceProjectIds.length > 0;
-  const isMember = allowPermissions([EUserPermissions.ADMIN, EUserPermissions.MEMBER], EUserPermissionsLevel.WORKSPACE);
+  // 与导出接口同一把 key；没有它就只能导出自己能进的项目
+  const isMember = allowWorkspacePermissionKeys([PERMISSION_KEYS.WORKSPACE_EXPORT_MANAGE]);
   const wsProjectIdsWithCreatePermisisons = projectsWithCreatePermissions
     ? intersection(workspaceProjectIds, Object.keys(projectsWithCreatePermissions))
     : [];

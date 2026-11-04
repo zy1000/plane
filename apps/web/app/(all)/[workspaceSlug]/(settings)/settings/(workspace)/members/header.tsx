@@ -4,6 +4,7 @@
  * See the LICENSE file for details.
  */
 
+import type { ReactNode } from "react";
 import { observer } from "mobx-react";
 // plane imports
 import { WORKSPACE_SETTINGS } from "@plane/constants";
@@ -14,7 +15,10 @@ import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { SettingsPageHeader } from "@/components/settings/page-header";
 import { WORKSPACE_SETTINGS_ICONS } from "@/components/settings/workspace/sidebar/item-icon";
 
-export const MembersWorkspaceSettingsHeader = observer(function MembersWorkspaceSettingsHeader() {
+export const MembersWorkspaceSettingsHeader = observer(function MembersWorkspaceSettingsHeader(props: {
+  /** 页头右侧：成员动态、添加成员 */
+  actions?: ReactNode;
+}) {
   // plane hooks
   const { t } = useTranslation();
   // derived values
@@ -37,6 +41,7 @@ export const MembersWorkspaceSettingsHeader = observer(function MembersWorkspace
           </Breadcrumbs>
         </div>
       }
+      rightItem={props.actions ? <div className="flex items-center gap-2">{props.actions}</div> : undefined}
     />
   );
 });

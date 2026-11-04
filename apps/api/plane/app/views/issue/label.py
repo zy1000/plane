@@ -15,9 +15,10 @@ from rest_framework import status
 # Module imports
 from .. import BaseViewSet, BaseAPIView
 from plane.app.serializers import LabelSerializer
-from plane.app.permissions import allow_permission, ProjectBasePermission, ROLE, allow_fine_permission, PermissionKey
+from plane.app.permissions import allow_project_member, ProjectBasePermission, allow_fine_permission, PermissionKey
 from plane.db.models import Project, Label
 from plane.utils.cache import invalidate_cache
+from plane.utils.visibility import visible_projects_q
 
 
 class LabelViewSet(BaseViewSet):
@@ -31,7 +32,7 @@ class LabelViewSet(BaseViewSet):
             .get_queryset()
             .filter(workspace__slug=self.kwargs.get("slug"))
             .filter(project_id=self.kwargs.get("project_id"))
-            .filter(project__project_projectmember__member=self.request.user)
+            .filter(visible_projects_q(self.request.user, self.kwargs.get("slug"), "project"))
             .select_related("project")
             .select_related("workspace")
             .select_related("parent")
@@ -40,13 +41,12 @@ class LabelViewSet(BaseViewSet):
         )
 
 
-    @allow_fine_permission(PermissionKey.LABEL_VIEW, PermissionKey.PROJECT_SETTINGS_VIEW)
+    @allow_project_member
     def list(self, request, *args, **kwargs):
         return super().list(request, *args, **kwargs)
 
     @invalidate_cache(path="/api/workspaces/:slug/labels/", url_params=True, user=False, multiple=True)
-    @allow_permission([ROLE.ADMIN])
-    @allow_fine_permission(PermissionKey.LABEL_CREATE)
+    @allow_fine_permission(PermissionKey.PROJECT_LABEL_MANAGE)
     def create(self, request, slug, project_id):
         try:
             serializer = LabelSerializer(data=request.data, context={"project_id": project_id})
@@ -61,8 +61,7 @@ class LabelViewSet(BaseViewSet):
             )
 
     @invalidate_cache(path="/api/workspaces/:slug/labels/", url_params=True, user=False)
-    @allow_permission([ROLE.ADMIN])
-    @allow_fine_permission(PermissionKey.LABEL_EDIT)
+    @allow_fine_permission(PermissionKey.PROJECT_LABEL_MANAGE)
     def partial_update(self, request, *args, **kwargs):
         # Check if the label name is unique within the project
         if (
@@ -89,14 +88,13 @@ class LabelViewSet(BaseViewSet):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     @invalidate_cache(path="/api/workspaces/:slug/labels/", url_params=True, user=False)
-    @allow_permission([ROLE.ADMIN])
-    @allow_fine_permission(PermissionKey.LABEL_DELETE)
+    @allow_fine_permission(PermissionKey.PROJECT_LABEL_MANAGE)
     def destroy(self, request, *args, **kwargs):
         return super().destroy(request, *args, **kwargs)
 
 
 class BulkCreateIssueLabelsEndpoint(BaseAPIView):
-    @allow_permission([ROLE.ADMIN])
+    @allow_fine_permission(PermissionKey.PROJECT_LABEL_MANAGE)
     def post(self, request, slug, project_id):
         label_data = request.data.get("label_data", [])
 

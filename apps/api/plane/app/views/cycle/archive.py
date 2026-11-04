@@ -29,10 +29,11 @@ from django.utils import timezone
 # Third party imports
 from rest_framework import status
 from rest_framework.response import Response
-from plane.app.permissions import allow_permission, ROLE, allow_fine_permission, PermissionKey
+from plane.app.permissions import allow_fine_permission, PermissionKey
 from plane.db.models import Cycle, UserFavorite, Issue, Label, User, Project, RequirementCycle
 from plane.utils.requirement_project import container_requirement_counts
 from plane.utils.analytics_plot import burndown_plot
+from plane.utils.visibility import visible_projects_q
 
 # Module imports
 from .. import BaseAPIView
@@ -117,8 +118,7 @@ class CycleArchiveUnarchiveEndpoint(BaseAPIView):
             .filter(project_id=self.kwargs.get("project_id"))
             .filter(archived_at__isnull=False)
             .filter(
-                project__project_projectmember__member=self.request.user,
-                project__project_projectmember__is_active=True,
+                visible_projects_q(self.request.user, self.kwargs.get("slug"), "project"),
             )
             .filter(project__archived_at__isnull=True)
             .select_related("project", "workspace", "owned_by")
@@ -286,7 +286,7 @@ class CycleArchiveUnarchiveEndpoint(BaseAPIView):
             .distinct()
         )
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
+    @allow_fine_permission(PermissionKey.PROJECT_CYCLE_VIEW)
     def get(self, request, slug, project_id, pk=None):
         if pk is None:
             queryset = (
@@ -608,7 +608,7 @@ class CycleArchiveUnarchiveEndpoint(BaseAPIView):
 
             return Response(data, status=status.HTTP_200_OK)
 
-    @allow_fine_permission(PermissionKey.SPRINTS_ARCHIVE)
+    @allow_fine_permission(PermissionKey.PROJECT_CYCLE_ARCHIVE)
     def post(self, request, slug, project_id, cycle_id):
         cycle = Cycle.objects.get(pk=cycle_id, project_id=project_id, workspace__slug=slug)
 
@@ -628,7 +628,7 @@ class CycleArchiveUnarchiveEndpoint(BaseAPIView):
         ).delete()
         return Response({"archived_at": str(cycle.archived_at)}, status=status.HTTP_200_OK)
 
-    @allow_fine_permission(PermissionKey.SPRINTS_ARCHIVE)
+    @allow_fine_permission(PermissionKey.PROJECT_CYCLE_ARCHIVE)
     def delete(self, request, slug, project_id, cycle_id):
         cycle = Cycle.objects.get(pk=cycle_id, project_id=project_id, workspace__slug=slug)
         cycle.archived_at = None

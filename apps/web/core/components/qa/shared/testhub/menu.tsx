@@ -22,8 +22,8 @@ import {
 } from "./route-helpers";
 import { useTestHub } from "./testhub-context";
 
-const PROJECT_QA_PLAN_CREATE_PERMISSION_KEY = "qa.plan.create" as const;
-const PROJECT_QA_REPORT_CREATE_PERMISSION_KEY = "qa.report.create" as const;
+const PROJECT_QA_PLAN_CREATE_PERMISSION_KEY = "project.test_plan.create" as const;
+const PROJECT_QA_REPORT_CREATE_PERMISSION_KEY = "project.test_report.create" as const;
 
 type TMenuItem = {
   key: string;

@@ -8,7 +8,7 @@ import { useEffect, useState } from "react";
 import { observer } from "mobx-react";
 import useSWR from "swr";
 // plane imports
-import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import { PERMISSION_KEYS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 // components
@@ -35,11 +35,11 @@ function WebhooksListPage({ params }: Route.ComponentProps) {
   // plane hooks
   const { t } = useTranslation();
   // mobx store
-  const { workspaceUserInfo, allowPermissions } = useUserPermissions();
+  const { workspaceUserInfo, allowWorkspacePermissionKeys } = useUserPermissions();
   const { fetchWebhooks, webhooks, clearSecretKey, webhookSecretKey, createWebhook } = useWebhook();
   const { currentWorkspace } = useWorkspace();
   // derived values
-  const canPerformWorkspaceAdminActions = allowPermissions([EUserPermissions.ADMIN], EUserPermissionsLevel.WORKSPACE);
+  const canPerformWorkspaceAdminActions = allowWorkspacePermissionKeys([PERMISSION_KEYS.WORKSPACE_WEBHOOK_MANAGE], workspaceSlug);
 
   useSWR(
     canPerformWorkspaceAdminActions ? `WEBHOOKS_LIST_${workspaceSlug}` : null,

@@ -12,6 +12,8 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 
 from plane.app.serializers.timesheet import TimeSheetReportListSerializer
+from plane.app.permissions import allow_workspace_member
+from plane.app.views.timesheet.base import can_view_all_timesheets
 from plane.app.views import BaseViewSet
 from plane.db.models import TimeSheet
 
@@ -68,8 +70,12 @@ class TimeSheetReportViewSet(BaseViewSet):
         params = request.query_params
         query = self.get_queryset()
 
-        if not params.get("all_workspace"):
+        # 没有「查看全员工时」只看自己的；跨工作区汇总（all_workspace）也要这把 key
+        view_all = can_view_all_timesheets(request.user, slug)
+        if not params.get("all_workspace") or not view_all:
             query = query.filter(project__workspace__slug=slug)
+        if not view_all:
+            query = query.filter(member=request.user)
 
         if project_ids := _parse_ids(params.get("project_id", "")):
             query = query.filter(project_id__in=project_ids)
@@ -119,6 +125,7 @@ class TimeSheetReportViewSet(BaseViewSet):
         ]
         return ", ".join(module_names)
 
+    @allow_workspace_member
     def list(self, request, slug):
         queryset = self._apply_filters(request, slug)
         return self.paginate(
@@ -218,6 +225,7 @@ class TimeSheetReportViewSet(BaseViewSet):
         return response
 
     @action(detail=False, methods=["get"], url_path="export")
+    @allow_workspace_member
     def export_xlsx(self, request, slug):
         """导出 xlsx。若提供 ids 则仅导出勾选项，否则导出当前过滤全量。"""
         queryset = self._apply_filters(request, slug)

@@ -8,8 +8,7 @@ import { useEffect, useState } from "react";
 // types
 import {
   PROJECT_ERROR_MESSAGES,
-  EUserPermissions,
-  EUserPermissionsLevel,
+  PROJECT_SETTINGS_EDIT_PERMISSION_KEY,
   isWorkItemDeletePermissionError,
 } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
@@ -36,12 +35,9 @@ export function WorkspaceDraftIssueDeleteIssueModal(props: Props) {
   const [isDeleting, setIsDeleting] = useState(false);
   // store hooks
   const { issueMap } = useIssues();
-  const { allowPermissions } = useUserPermissions();
+  const { allowProjectPermissionKeys } = useUserPermissions();
   const { t } = useTranslation();
   const { data: currentUser } = useUser();
-
-  // derived values
-  const canPerformProjectAdminActions = allowPermissions([EUserPermissions.ADMIN], EUserPermissionsLevel.PROJECT);
 
   useEffect(() => {
     setIsDeleting(false);
@@ -52,6 +48,12 @@ export function WorkspaceDraftIssueDeleteIssueModal(props: Props) {
   // derived values
   const issue = data ? data : issueMap[dataId!];
   const isIssueCreator = issue?.created_by === currentUser?.id;
+  // 草稿是个人的：创建人本人，或草稿所在项目的管理员（能改项目设置）
+  const canPerformProjectAdminActions = allowProjectPermissionKeys(
+    [PROJECT_SETTINGS_EDIT_PERMISSION_KEY],
+    undefined,
+    issue?.project_id ?? undefined
+  );
   const authorized = isIssueCreator || canPerformProjectAdminActions;
 
   const onClose = () => {

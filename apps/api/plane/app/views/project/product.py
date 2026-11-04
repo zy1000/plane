@@ -8,7 +8,6 @@
 候选池的第一道过滤就是它，见 utils/requirement_project.linkable_requirements_queryset。
 """
 
-from django.db.models import Q
 from rest_framework import status
 from rest_framework.response import Response
 
@@ -16,7 +15,8 @@ from plane.app.permissions import PermissionKey, allow_fine_permission
 from plane.app.serializers.product_project import ProductProjectSerializer
 from plane.app.views.base import BaseViewSet
 from plane.app.views.requirement.mixins import get_scoped_product
-from plane.db.models import ProductProject, Project, ProjectNetwork
+from plane.db.models import ProductProject, Project
+from plane.utils.visibility import visible_projects_q
 from plane.utils.product import has_product_permission
 from plane.utils.requirement_project import (
     RequirementLinkError,
@@ -58,11 +58,10 @@ class ProjectProductViewSet(BaseViewSet):
         )
 
     @allow_fine_permission(
-        PermissionKey.PROJECT_REQUIREMENT_LINK_VIEW,
-        PermissionKey.PROJECT_PRODUCT_LINK_MANAGE,
-        # 用例归产品后，计划里选用例要先列出项目已关联的产品（2026-11）
-        PermissionKey.QA_PLAN_VIEW,
-        PermissionKey.QA_PLAN_EDIT,
+        PermissionKey.PROJECT_REQUIREMENT_VIEW,
+        PermissionKey.PROJECT_PRODUCT_MANAGE,
+        PermissionKey.PROJECT_TEST_PLAN_VIEW,
+        PermissionKey.PROJECT_TEST_PLAN_EDIT,
     )
     def list(self, request, slug, project_id):
         rows = list(self.get_queryset())
@@ -80,7 +79,7 @@ class ProjectProductViewSet(BaseViewSet):
             status=status.HTTP_200_OK,
         )
 
-    @allow_fine_permission(PermissionKey.PROJECT_PRODUCT_LINK_MANAGE)
+    @allow_fine_permission(PermissionKey.PROJECT_PRODUCT_MANAGE)
     def create(self, request, slug, project_id):
         """一次调用同时增删，照 views/module/issue.py::create_issue_modules 的范式。"""
         products = request.data.get("products", [])
@@ -146,9 +145,7 @@ class ProductProjectViewSet(BaseViewSet):
                 {"error": "Product not found."}, status=status.HTTP_404_NOT_FOUND
             )
 
-        # 产品可见 ≠ 它关联的项目也可见。私密项目（network=0）只对自己的成员露面，
-        # 照 views/project/base.py::list_detail 的同一条判定收窄，否则任何能看见这个
-        # 产品的工作区成员都能从这里读到私密项目的名称与标识。
+        # 产品可见 ≠ 它关联的项目也可见：只列当前用户能看到的项目（成员 / 负责 / 白名单）
         queryset = (
             ProductProject.objects.filter(
                 workspace__slug=slug,
@@ -158,13 +155,7 @@ class ProductProjectViewSet(BaseViewSet):
                 # 永远显示未选中的选项。
                 project__archived_at__isnull=True,
             )
-            .filter(
-                Q(
-                    project__project_projectmember__member=request.user,
-                    project__project_projectmember__is_active=True,
-                )
-                | Q(project__network=ProjectNetwork.PUBLIC.value)
-            )
+            .filter(visible_projects_q(request.user, slug, "project"))
             .select_related(
                 "product",
                 "product__stage__dictionary",
@@ -195,7 +186,7 @@ class ProductProjectViewSet(BaseViewSet):
                 {"error": "Product not found."}, status=status.HTTP_404_NOT_FOUND
             )
         if not has_product_permission(
-            request.user, product, PermissionKey.PRODUCT_PROJECT_LINK_MANAGE
+            request.user, product, PermissionKey.WORKSPACE_PRODUCT_EDIT
         ):
             return Response(
                 {"error": "You do not have permission to update this product."},

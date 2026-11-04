@@ -36,11 +36,8 @@ export const GROUPED_WORKSPACE_SETTINGS = {
     WORKSPACE_SETTINGS["roles"],
     WORKSPACE_SETTINGS["export"],
   ],
-  // 「模板」分区：工作项模板角色 + 需求类型
-  [WORKSPACE_SETTINGS_CATEGORY.TEMPLATE]: [
-    WORKSPACE_SETTINGS["templates"],
-    WORKSPACE_SETTINGS["requirement-types"],
-  ],
+  // 「模板」分区：需求类型（项目权限组模板已并进「管理 › 权限组」的第二个页签）
+  [WORKSPACE_SETTINGS_CATEGORY.TEMPLATE]: [WORKSPACE_SETTINGS["requirement-types"]],
   // 「项目」分区：工作项类别 + 数据字典（产品阶段/类别/状态等下拉值）+ 阶段类型（评审模板树的骨架）
   [WORKSPACE_SETTINGS_CATEGORY.PROJECT]: [
     WORKSPACE_SETTINGS["issue-type-categories"],

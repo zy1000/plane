@@ -11,7 +11,7 @@ from plane.app.serializers import WorkspaceRecentVisitSerializer
 
 # Modules imports
 from ..base import BaseViewSet
-from plane.app.permissions import allow_permission, ROLE
+from plane.app.permissions import allow_workspace_member
 
 
 class UserRecentVisitViewSet(BaseViewSet):
@@ -21,7 +21,7 @@ class UserRecentVisitViewSet(BaseViewSet):
     def get_serializer_class(self):
         return WorkspaceRecentVisitSerializer
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
+    @allow_workspace_member
     def list(self, request, slug):
         user_recent_visits = UserRecentVisit.objects.filter(
             workspace__slug=slug, user=request.user

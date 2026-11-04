@@ -40,6 +40,13 @@ from plane.db.models import (
     ProjectPage,
     WorkspaceMember,
 )
+from plane.utils.visibility import visible_project_scope, visible_projects_q
+
+
+def _visible_pages_q(user, slug):
+    """页面挂在多个项目上（M2M ``projects``），visible_projects_q 只认到项目的 FK 字段名，这里按 id 集合拼。"""
+    scope = visible_project_scope(user, slug)
+    return Q() if scope.all else Q(projects__in=list(scope.ids))
 
 
 class GlobalSearchEndpoint(BaseAPIView):
@@ -69,8 +76,7 @@ class GlobalSearchEndpoint(BaseAPIView):
         return (
             Project.objects.filter(
                 q,
-                project_projectmember__member=self.request.user,
-                project_projectmember__is_active=True,
+                visible_projects_q(self.request.user, slug, None),
                 archived_at__isnull=True,
                 workspace__slug=slug,
             )
@@ -94,8 +100,7 @@ class GlobalSearchEndpoint(BaseAPIView):
 
         issues = Issue.issue_objects.filter(
             q,
-            project__project_projectmember__member=self.request.user,
-            project__project_projectmember__is_active=True,
+            visible_projects_q(self.request.user, slug, "project"),
             project__archived_at__isnull=True,
             workspace__slug=slug,
         )
@@ -121,8 +126,7 @@ class GlobalSearchEndpoint(BaseAPIView):
 
         cycles = Cycle.objects.filter(
             q,
-            project__project_projectmember__member=self.request.user,
-            project__project_projectmember__is_active=True,
+            visible_projects_q(self.request.user, slug, "project"),
             project__archived_at__isnull=True,
             workspace__slug=slug,
         )
@@ -145,8 +149,7 @@ class GlobalSearchEndpoint(BaseAPIView):
 
         modules = Module.objects.filter(
             q,
-            project__project_projectmember__member=self.request.user,
-            project__project_projectmember__is_active=True,
+            visible_projects_q(self.request.user, slug, "project"),
             project__archived_at__isnull=True,
             workspace__slug=slug,
         )
@@ -170,8 +173,7 @@ class GlobalSearchEndpoint(BaseAPIView):
         pages = (
             Page.objects.filter(
                 q,
-                projects__project_projectmember__member=self.request.user,
-                projects__project_projectmember__is_active=True,
+                _visible_pages_q(self.request.user, slug),
                 projects__archived_at__isnull=True,
                 workspace__slug=slug,
             )
@@ -216,9 +218,8 @@ class GlobalSearchEndpoint(BaseAPIView):
         # 搜索结果跳的是 /views/<id> 详情页，只有工作项视图有那一页；缺陷 / 需求页的视图不进搜索
         issue_views = IssueView.objects.filter(
             q,
+            visible_projects_q(self.request.user, slug, "project"),
             scope="issues",
-            project__project_projectmember__member=self.request.user,
-            project__project_projectmember__is_active=True,
             project__archived_at__isnull=True,
             workspace__slug=slug,
         )
@@ -247,8 +248,7 @@ class GlobalSearchEndpoint(BaseAPIView):
 
         issues = Issue.objects.filter(
             q,
-            project__project_projectmember__member=self.request.user,
-            project__project_projectmember__is_active=True,
+            visible_projects_q(self.request.user, slug, "project"),
             project__archived_at__isnull=True,
             workspace__slug=slug,
         ).filter(models.Q(issue_intake__status=0) | models.Q(issue_intake__status=-2))
@@ -374,7 +374,7 @@ class SearchEndpoint(BaseAPIView):
                     projects = (
                         Project.objects.filter(
                             q,
-                            Q(project_projectmember__member=self.request.user) | Q(network=2),
+                            visible_projects_q(self.request.user, slug, None),
                             workspace__slug=slug,
                         )
                         .order_by("-created_at")
@@ -399,8 +399,7 @@ class SearchEndpoint(BaseAPIView):
                     issues = (
                         Issue.issue_objects.filter(
                             q,
-                            project__project_projectmember__member=self.request.user,
-                            project__project_projectmember__is_active=True,
+                            visible_projects_q(self.request.user, slug, "project"),
                             workspace__slug=slug,
                             project_id=project_id,
                         )
@@ -430,8 +429,7 @@ class SearchEndpoint(BaseAPIView):
                     cycles = (
                         Cycle.objects.filter(
                             q,
-                            project__project_projectmember__member=self.request.user,
-                            project__project_projectmember__is_active=True,
+                            visible_projects_q(self.request.user, slug, "project"),
                             workspace__slug=slug,
                             project_id=project_id,
                         )
@@ -478,8 +476,7 @@ class SearchEndpoint(BaseAPIView):
                     modules = (
                         Module.objects.filter(
                             q,
-                            project__project_projectmember__member=self.request.user,
-                            project__project_projectmember__is_active=True,
+                            visible_projects_q(self.request.user, slug, "project"),
                             workspace__slug=slug,
                             project_id=project_id,
                         )
@@ -507,8 +504,7 @@ class SearchEndpoint(BaseAPIView):
                     pages = (
                         Page.objects.filter(
                             q,
-                            projects__project_projectmember__member=self.request.user,
-                            projects__project_projectmember__is_active=True,
+                            _visible_pages_q(self.request.user, slug),
                             projects__id=project_id,
                             workspace__slug=slug,
                             access=0,
@@ -579,7 +575,7 @@ class SearchEndpoint(BaseAPIView):
                     projects = (
                         Project.objects.filter(
                             q,
-                            Q(project_projectmember__member=self.request.user) | Q(network=2),
+                            visible_projects_q(self.request.user, slug, None),
                             workspace__slug=slug,
                         )
                         .order_by("-created_at")
@@ -604,8 +600,7 @@ class SearchEndpoint(BaseAPIView):
                     issues = (
                         Issue.issue_objects.filter(
                             q,
-                            project__project_projectmember__member=self.request.user,
-                            project__project_projectmember__is_active=True,
+                            visible_projects_q(self.request.user, slug, "project"),
                             workspace__slug=slug,
                         )
                         .order_by("-created_at")
@@ -634,8 +629,7 @@ class SearchEndpoint(BaseAPIView):
                     cycles = (
                         Cycle.objects.filter(
                             q,
-                            project__project_projectmember__member=self.request.user,
-                            project__project_projectmember__is_active=True,
+                            visible_projects_q(self.request.user, slug, "project"),
                             workspace__slug=slug,
                         )
                         .annotate(
@@ -681,8 +675,7 @@ class SearchEndpoint(BaseAPIView):
                     modules = (
                         Module.objects.filter(
                             q,
-                            project__project_projectmember__member=self.request.user,
-                            project__project_projectmember__is_active=True,
+                            visible_projects_q(self.request.user, slug, "project"),
                             workspace__slug=slug,
                         )
                         .order_by("-created_at")
@@ -709,8 +702,7 @@ class SearchEndpoint(BaseAPIView):
                     pages = (
                         Page.objects.filter(
                             q,
-                            projects__project_projectmember__member=self.request.user,
-                            projects__project_projectmember__is_active=True,
+                            _visible_pages_q(self.request.user, slug),
                             workspace__slug=slug,
                             access=0,
                             is_global=True,

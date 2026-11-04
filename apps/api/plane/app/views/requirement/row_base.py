@@ -171,11 +171,11 @@ class BaseRequirementRowViewSet(RequirementExcelMixin, BaseViewSet):
         """批量保存 / Excel 导入是建、改、删混在一起的，按实际出现的操作分别查 key。"""
         required = []
         if creates:
-            required.append(PermissionKey.PRODUCT_REQUIREMENT_CREATE)
+            required.append(PermissionKey.PROJECT_REQUIREMENT_CREATE)
         if updates:
-            required.append(PermissionKey.PRODUCT_REQUIREMENT_EDIT)
+            required.append(PermissionKey.PROJECT_REQUIREMENT_EDIT)
         if deletes:
-            required.append(PermissionKey.PRODUCT_REQUIREMENT_DELETE)
+            required.append(PermissionKey.PROJECT_REQUIREMENT_DELETE)
         for key in required:
             if not self.can_write(owner, key):
                 return Response(
@@ -440,7 +440,7 @@ class BaseRequirementRowViewSet(RequirementExcelMixin, BaseViewSet):
             with transaction.atomic():
                 owner, error = self._owner_or_error(
                     for_update=True,
-                    permission_key=PermissionKey.PRODUCT_REQUIREMENT_CREATE,
+                    permission_key=PermissionKey.PROJECT_REQUIREMENT_CREATE,
                 )
                 if error is not None:
                     return error
@@ -667,7 +667,7 @@ class BaseRequirementRowViewSet(RequirementExcelMixin, BaseViewSet):
 
     def destroy(self, request, *args, pk=None, **kwargs):
         owner, error = self._owner_or_error(
-            permission_key=PermissionKey.PRODUCT_REQUIREMENT_DELETE
+            permission_key=PermissionKey.PROJECT_REQUIREMENT_DELETE
         )
         if error is not None:
             return error
@@ -686,7 +686,7 @@ class BaseRequirementRowViewSet(RequirementExcelMixin, BaseViewSet):
 
     def bulk_destroy(self, request, *args, **kwargs):
         owner, error = self._owner_or_error(
-            permission_key=PermissionKey.PRODUCT_REQUIREMENT_DELETE
+            permission_key=PermissionKey.PROJECT_REQUIREMENT_DELETE
         )
         if error is not None:
             return error
@@ -911,7 +911,7 @@ class BaseRequirementRowViewSet(RequirementExcelMixin, BaseViewSet):
         with transaction.atomic():
             owner, error = self._owner_or_error(
                     for_update=True,
-                    permission_key=PermissionKey.PRODUCT_REQUIREMENT_CREATE,
+                    permission_key=PermissionKey.PROJECT_REQUIREMENT_CREATE,
                 )
             if error is not None:
                 return error

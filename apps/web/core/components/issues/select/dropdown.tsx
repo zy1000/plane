@@ -7,9 +7,8 @@
 import React from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
-import { EUserPermissionsLevel } from "@plane/constants";
+import { PERMISSION_KEYS } from "@plane/constants";
 import type { IIssueLabel } from "@plane/types";
-import { EUserPermissions } from "@plane/types";
 // hooks
 import { useLabel } from "@/hooks/store/use-label";
 import { useUserPermissions } from "@/hooks/store/user";
@@ -26,14 +25,14 @@ export const IssueLabelSelect = observer(function IssueLabelSelect(props: TWorkI
   // router
   const { workspaceSlug } = useParams();
   // store hooks
-  const { allowPermissions } = useUserPermissions();
+  const { allowProjectPermissionKeys } = useUserPermissions();
   const { getProjectLabelIds, getLabelById, fetchProjectLabels, createLabel } = useLabel();
   // derived values
   const projectLabelIds = getProjectLabelIds(projectId);
 
   const canCreateLabel =
     projectId &&
-    allowPermissions([EUserPermissions.ADMIN], EUserPermissionsLevel.PROJECT, workspaceSlug?.toString(), projectId);
+    allowProjectPermissionKeys([PERMISSION_KEYS.PROJECT_LABEL_MANAGE], workspaceSlug?.toString(), projectId);
 
   const onDropdownOpen = () => {
     if (projectLabelIds === undefined && workspaceSlug && projectId)

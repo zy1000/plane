@@ -32,7 +32,6 @@ def process_workspace_project_invitations(user):
             WorkspaceMember(
                 workspace_id=workspace_member_invite.workspace_id,
                 member=user,
-                role=workspace_member_invite.role,
             )
             for workspace_member_invite in workspace_member_invites
         ],
@@ -43,7 +42,6 @@ def process_workspace_project_invitations(user):
             workspace_id=workspace_member_invite.workspace_id,
             member=user,
         ).update(
-            role=workspace_member_invite.role,
             is_active=True,
             deleted_at=None,
         )
@@ -63,7 +61,6 @@ def process_workspace_project_invitations(user):
                 "user_id": user.id,
                 "workspace_id": workspace_member_invite.workspace.id,
                 "workspace_slug": workspace_member_invite.workspace.slug,
-                "role": workspace_member_invite.role,
                 "joined_at": str(timezone.now().isoformat()),
             },
         )
@@ -78,7 +75,6 @@ def process_workspace_project_invitations(user):
         [
             WorkspaceMember(
                 workspace_id=project_member_invite.workspace_id,
-                role=(project_member_invite.role if project_member_invite.role in [5, 15] else 15),
                 member=user,
                 created_by_id=project_member_invite.created_by_id,
             )
@@ -92,7 +88,7 @@ def process_workspace_project_invitations(user):
         [
             ProjectMember(
                 workspace_id=project_member_invite.workspace_id,
-                role=(project_member_invite.role if project_member_invite.role in [5, 15] else 15),
+                project_id=project_member_invite.project_id,
                 member=user,
                 created_by_id=project_member_invite.created_by_id,
             )
@@ -123,7 +119,6 @@ def process_workspace_project_invitations(user):
     ]
     WorkspaceMemberRole.objects.filter(
         member_id__in=invited_workspace_member_ids,
-        role__legacy_role__isnull=True,
     ).delete(soft=False)
     custom_role_links = []
     for invitation in workspace_member_invites:
@@ -133,8 +128,6 @@ def process_workspace_project_invitations(user):
         roles = WorkspaceRole.objects.filter(
             id__in=invitation.custom_role_ids,
             workspace_id=invitation.workspace_id,
-            type=WorkspaceRole.RoleType.WORKSPACE,
-            legacy_role__isnull=True,
             deleted_at__isnull=True,
         )
         custom_role_links.extend(

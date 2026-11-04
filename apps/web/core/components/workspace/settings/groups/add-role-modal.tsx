@@ -27,11 +27,9 @@ type Props = {
   }>;
 };
 
-const getPermissionCount = (role: IWorkspaceRole) => {
-  if (!role.permissions || typeof role.permissions !== "object") return 0;
-  const permissionKeys = role.permissions.permission_keys;
-  return Array.isArray(permissionKeys) ? permissionKeys.filter((key) => typeof key === "string").length : 0;
-};
+/** 列表接口带统计（权限组 = IPermissionGroup） */
+const getPermissionCount = (role: IWorkspaceRole) =>
+  (role as { permission_keys_count?: number }).permission_keys_count ?? 0;
 
 export function AddRoleModal({
   isOpen,
@@ -85,8 +83,8 @@ export function AddRoleModal({
       if (result.failures.length === 0) {
         setToast({
           type: TOAST_TYPE.SUCCESS,
-          title: "角色已添加",
-          message: `已为团队分配 ${result.succeededIds.length} 个角色`,
+          title: "权限组已添加",
+          message: `已为团队分配 ${result.succeededIds.length} 个权限组`,
         });
         onClose();
         return;
@@ -95,7 +93,7 @@ export function AddRoleModal({
       setSelectedIds(new Set(result.failures.map((failure) => failure.targetId)));
       setToast({
         type: result.succeededIds.length > 0 ? TOAST_TYPE.WARNING : TOAST_TYPE.ERROR,
-        title: result.succeededIds.length > 0 ? "部分角色添加成功" : "添加角色失败",
+        title: result.succeededIds.length > 0 ? "部分权限组添加成功" : "添加权限组失败",
         message:
           result.succeededIds.length > 0
             ? `已添加 ${result.succeededIds.length} 个，${result.failures.length} 个添加失败，请重试`
@@ -116,8 +114,8 @@ export function AddRoleModal({
       <div className="flex flex-col">
         <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-4">
           <div>
-            <h3 className="text-body-lg-medium text-primary">添加团队角色</h3>
-            <p className="mt-1 text-13 leading-5 text-secondary">所选角色的权限将自动授予团队中的全部成员。</p>
+            <h3 className="text-body-lg-medium text-primary">添加团队权限组</h3>
+            <p className="mt-1 text-13 leading-5 text-secondary">所选权限组的权限将自动授予团队中的全部成员。</p>
           </div>
           <button
             type="button"
@@ -137,7 +135,7 @@ export function AddRoleModal({
               ref={searchInputRef}
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder="搜索角色名称或描述"
+              placeholder="搜索权限组名称或描述"
               className="min-w-0 flex-1 bg-transparent text-13 text-primary outline-none placeholder:text-placeholder"
             />
             {searchQuery && (
@@ -145,7 +143,7 @@ export function AddRoleModal({
                 type="button"
                 onClick={() => setSearchQuery("")}
                 className="flex size-5 items-center justify-center rounded text-placeholder hover:bg-layer-1-hover hover:text-primary"
-                aria-label="清除角色搜索"
+                aria-label="清除权限组搜索"
               >
                 <XIcon className="size-3" />
               </button>
@@ -170,7 +168,7 @@ export function AddRoleModal({
           ) : error ? (
             <div className="flex min-h-64 flex-col items-center justify-center text-center">
               <RotateCcw className="mb-3 size-5 text-danger-primary" />
-              <p className="text-13 font-medium text-primary">可用角色加载失败</p>
+              <p className="text-13 font-medium text-primary">可用权限组加载失败</p>
               <p className="mt-1 max-w-72 text-13 text-secondary">{error}</p>
               <Button variant="secondary" className="mt-4" prependIcon={<RotateCcw />} onClick={onRetry}>
                 重新加载
@@ -180,10 +178,10 @@ export function AddRoleModal({
             <div className="flex min-h-64 flex-col items-center justify-center text-center">
               <ShieldCheck className="mb-3 size-6 text-placeholder" />
               <p className="text-13 font-medium text-primary">
-                {searchQuery ? "没有匹配的角色" : availableRoles.length === 0 ? "暂无可用角色" : "所有角色均已分配"}
+                {searchQuery ? "没有匹配的权限组" : availableRoles.length === 0 ? "暂无可用权限组" : "所有权限组均已分配"}
               </p>
               <p className="mt-1 text-13 text-secondary">
-                {searchQuery ? "尝试更换搜索关键词。" : "可以前往权限设置创建新的工作区角色。"}
+                {searchQuery ? "尝试更换搜索关键词。" : "可以前往权限设置创建新的工作区权限组。"}
               </p>
             </div>
           ) : (
@@ -210,13 +208,10 @@ export function AddRoleModal({
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
                           <p className="truncate text-13 font-medium text-primary">{role.name}</p>
-                          {role.is_system && (
-                            <span className="rounded-md bg-layer-1 px-1.5 py-0.5 text-11 text-secondary">系统角色</span>
-                          )}
                           <span className="text-11 text-tertiary tabular-nums">{getPermissionCount(role)} 项权限</span>
                         </div>
                         <p className="mt-0.5 truncate text-13 text-secondary">
-                          {role.description?.trim() || "暂无角色描述"}
+                          {role.description?.trim() || "暂无权限组描述"}
                         </p>
                       </div>
                     </label>
@@ -229,7 +224,7 @@ export function AddRoleModal({
 
         <div className="flex items-center justify-between gap-3 px-5 py-4">
           <p className="text-13 text-secondary">
-            {selectedIds.size > 0 ? `已选择 ${selectedIds.size} 个角色` : "请选择要分配的角色"}
+            {selectedIds.size > 0 ? `已选择 ${selectedIds.size} 个权限组` : "请选择要分配的权限组"}
           </p>
           <div className="flex items-center gap-2">
             <Button variant="secondary" onClick={onClose} disabled={isAdding}>
@@ -241,7 +236,7 @@ export function AddRoleModal({
               loading={isAdding}
               disabled={selectedIds.size === 0 || isAdding}
             >
-              添加{selectedIds.size > 0 ? ` ${selectedIds.size} 个角色` : ""}
+              添加{selectedIds.size > 0 ? ` ${selectedIds.size} 个权限组` : ""}
             </Button>
           </div>
         </div>

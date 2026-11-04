@@ -24,6 +24,7 @@ from plane.utils.asset_path import build_export_key
 from plane.utils.exception_logger import log_exception
 from plane.utils.porters.exporter import DataExporter
 from plane.utils.porters.serializers.issue import IssueExportSerializer
+from plane.utils.visibility import visible_projects_q
 
 
 def create_zip_file(files: List[tuple[str, str | bytes]]) -> io.BytesIO:
@@ -153,10 +154,10 @@ def issue_export_task(
         # Build base queryset for issues
         workspace_issues = (
             Issue.objects.filter(
+                # 发起人能看到的项目（成员 / 负责 / 白名单）才导出
+                visible_projects_q(exporter_instance.initiated_by, slug, "project"),
                 workspace__id=workspace_id,
                 project_id__in=project_ids,
-                project__project_projectmember__member=exporter_instance.initiated_by_id,
-                project__project_projectmember__is_active=True,
                 project__archived_at__isnull=True,
             )
             .select_related(

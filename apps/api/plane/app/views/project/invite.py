@@ -20,7 +20,7 @@ from rest_framework.permissions import AllowAny
 # Module imports
 from .base import BaseViewSet, BaseAPIView
 from plane.app.serializers import ProjectMemberInviteSerializer
-from plane.app.permissions import allow_permission, allow_workspace_member, ROLE
+from plane.app.permissions import allow_fine_permission, PermissionKey, allow_workspace_member
 from plane.app.permissions.base import _is_instance_admin
 from plane.db.models import (
     ProjectMember,
@@ -31,7 +31,6 @@ from plane.db.models import (
     Project,
     ProjectUserProperty,
 )
-from plane.db.models.project import ProjectNetwork
 from plane.utils.host import base_host
 
 
@@ -51,7 +50,7 @@ class ProjectInvitationsViewset(BaseViewSet):
             .select_related("workspace", "workspace__owner")
         )
 
-    @allow_permission([ROLE.ADMIN])
+    @allow_fine_permission(PermissionKey.PROJECT_MEMBER_MANAGE)
     def create(self, request, slug, project_id):
         emails = request.data.get("emails", [])
 
@@ -75,7 +74,6 @@ class ProjectInvitationsViewset(BaseViewSet):
                             settings.SECRET_KEY,
                             algorithm="HS256",
                         ),
-                        role=email.get("role", ROLE.MEMBER.value),
                         created_by=request.user,
                     )
                 )
@@ -125,11 +123,11 @@ class UserProjectInvitationsViewset(BaseViewSet):
         # Get the workspace user role
         workspace_member = WorkspaceMember.objects.get(member=request.user, workspace__slug=slug, is_active=True)
 
-        # Get all the projects
-        projects = Project.objects.filter(id__in=project_ids, workspace__slug=slug).only("id", "network")
-        # Check if user has permission to join each project
+        # 没有「公开项目随便加」了：只有收到邮件邀请的人（或 owner / 实例管理员）能把自己加进项目，
+        # 其他人由项目经理在成员页添加
+        projects = Project.objects.filter(id__in=project_ids, workspace__slug=slug).only("id")
         for project in projects:
-            has_private_project_access = (
+            has_invitation = (
                 workspace_member.workspace.owner_id == request.user.id
                 or _is_instance_admin(request.user)
                 or ProjectMemberInvite.objects.filter(
@@ -138,9 +136,9 @@ class UserProjectInvitationsViewset(BaseViewSet):
                     deleted_at__isnull=True,
                 ).exists()
             )
-            if project.network == ProjectNetwork.SECRET.value and not has_private_project_access:
+            if not has_invitation:
                 return Response(
-                    {"error": "A project invitation is required to join a private project."},
+                    {"error": "A project invitation is required to join this project."},
                     status=status.HTTP_403_FORBIDDEN,
                 )
 
@@ -149,7 +147,6 @@ class UserProjectInvitationsViewset(BaseViewSet):
         # If the user was already part of workspace
         _ = ProjectMember.objects.filter(workspace__slug=slug, project_id__in=project_ids, member=request.user).update(
             is_active=True,
-            role=ROLE.MEMBER.value,
         )
 
         ProjectMember.objects.bulk_create(
@@ -157,7 +154,6 @@ class UserProjectInvitationsViewset(BaseViewSet):
                 ProjectMember(
                     project_id=project_id,
                     member=request.user,
-                    role=ROLE.MEMBER.value,
                     workspace=workspace,
                     created_by=request.user,
                 )
@@ -212,7 +208,6 @@ class ProjectJoinEndpoint(BaseAPIView):
                     _ = WorkspaceMember.objects.create(
                         workspace_id=project_invite.workspace_id,
                         member=user,
-                        role=(15 if project_invite.role >= 15 else project_invite.role),
                     )
                 else:
                     # Else make him active
@@ -228,11 +223,9 @@ class ProjectJoinEndpoint(BaseAPIView):
                     _ = ProjectMember.objects.create(
                         project_id=project_id,
                         member=user,
-                        role=project_invite.role,
                     )
                 else:
                     project_member.is_active = True
-                    project_member.role = project_member.role
                     project_member.save()
 
                 return Response(

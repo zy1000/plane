@@ -86,7 +86,7 @@ def create_project_and_member(workspace: Workspace, bot_user: User) -> Dict[int,
     project_identifier = "".join(ch for ch in workspace.name if ch.isalnum())[:5]
 
     # Create members
-    workspace_members = WorkspaceMember.objects.filter(workspace=workspace).values("member_id", "role")
+    workspace_members = WorkspaceMember.objects.filter(workspace=workspace).values("member_id")
 
     projects_map: Dict[int, uuid.UUID] = {}
 
@@ -122,7 +122,6 @@ def create_project_and_member(workspace: Workspace, bot_user: User) -> Dict[int,
                 ProjectMember(
                     project=project,
                     member_id=workspace_member["member_id"],
-                    role=workspace_member["role"],
                     workspace_id=workspace.id,
                     created_by_id=bot_user.id,
                 )
@@ -541,7 +540,6 @@ def workspace_seed(workspace_id: uuid.UUID) -> None:
         WorkspaceMember.objects.create(
             workspace=workspace,
             member=bot_user,
-            role=20,
             company_role="",
         )
 

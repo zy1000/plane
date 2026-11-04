@@ -28,7 +28,7 @@ function EstimatesSettingsPage({ params }: Route.ComponentProps) {
   const pageTitle = currentProjectDetails?.name ? `${currentProjectDetails?.name} - Estimates` : undefined;
   const canView = allowProjectPermissionKeys(PROJECT_SETTINGS.estimates.permissionKeys ?? [], workspaceSlug, projectId);
   const canEdit = allowProjectPermissionKeys(
-    ["estimate.create", "estimate.edit", "estimate.delete"],
+    ["project.estimate.manage", "project.estimate.manage", "project.estimate.manage"],
     workspaceSlug,
     projectId
   );

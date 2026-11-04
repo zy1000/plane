@@ -15,7 +15,7 @@ from plane.db.models import (
     IssueTransitionRecord,
     PlanCase,
     Product,
-    ProjectMember,
+    Project,
     Release,
     ReleaseStatus,
     Requirement,
@@ -29,7 +29,8 @@ from plane.db.models import (
     TransitionRecordStatus,
     Workspace,
 )
-from plane.utils.product import can_manage_workspace_products
+from plane.utils.product import filter_visible_products
+from plane.utils.visibility import visible_projects_q
 
 
 CLOSED_ISSUE_STATE_GROUPS = ("completed", "cancelled")
@@ -103,14 +104,12 @@ PRODUCT_GROUPED_METRICS = PRODUCT_SCOPED_METRICS | {"pending_review_cases"}
 
 
 def _accessible_project_ids(slug, viewer):
-    return ProjectMember.objects.filter(
-        workspace__slug=slug,
-        member=viewer,
-        is_active=True,
-        deleted_at__isnull=True,
-        project__archived_at__isnull=True,
-        project__deleted_at__isnull=True,
-    ).values("project_id")
+    """查看者能看到的、未归档的项目（成员 / 负责 / 白名单，utils/visibility.py）。"""
+    return (
+        Project.objects.filter(workspace__slug=slug, archived_at__isnull=True)
+        .filter(visible_projects_q(viewer, slug, None))
+        .values("id")
+    )
 
 
 def _base_issue_queryset(slug, viewer):
@@ -125,23 +124,13 @@ def _open_issue_queryset(queryset):
 
 
 def accessible_product_ids(slug, viewer):
-    """查看者能看到的产品，口径与 views/product/base.py::get_queryset 一致：
-    工作区管理员全量，其余人是公开产品 + 自己 owner / 评审人 / 私有产品成员。
+    """查看者能看到的产品，口径与产品列表一致（utils/product.py::filter_visible_products）。
     与工作项按「查看者所在项目」过滤同理 —— 看别人 profile 不能漏出自己看不到的产品。"""
     products = Product.objects.filter(workspace__slug=slug)
     workspace = Workspace.objects.filter(slug=slug).first()
-    if workspace is not None and can_manage_workspace_products(viewer, workspace):
-        return products.values("id")
-    return (
-        products.filter(
-            Q(network=2)
-            | Q(owner=viewer)
-            | Q(reviewers=viewer)
-            | Q(network=0, member_product__member=viewer)
-        )
-        .values("id")
-        .distinct()
-    )
+    if workspace is None:
+        return products.none().values("id")
+    return filter_visible_products(products, viewer, workspace).values("id")
 
 
 def _assigned_requirement_queryset(slug, user_id, viewer):

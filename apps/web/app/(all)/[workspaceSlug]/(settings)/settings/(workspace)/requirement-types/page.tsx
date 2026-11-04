@@ -6,7 +6,7 @@
 
 import { observer } from "mobx-react";
 // plane imports
-import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import { PERMISSION_KEYS } from "@plane/constants";
 // components
 import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
 import { PageHead } from "@/components/core/page-title";
@@ -23,11 +23,12 @@ import { RequirementTypesWorkspaceSettingsHeader } from "./header";
 const WorkspaceRequirementTypesPage = observer(function WorkspaceRequirementTypesPage({ params }: Route.ComponentProps) {
   const { workspaceSlug } = params;
 
-  const { workspaceUserInfo, allowPermissions } = useUserPermissions();
+  const { workspaceUserInfo, isWorkspaceMember, allowWorkspacePermissionKeys } = useUserPermissions();
   const { currentWorkspace } = useWorkspace();
 
-  // 后端只要求登录，模板管理入口今天也允许任何成员维护 —— 这里保持同一口径
-  const canView = allowPermissions([EUserPermissions.ADMIN, EUserPermissions.MEMBER], EUserPermissionsLevel.WORKSPACE);
+  // 读 = 工作区成员；增删改与后端同一把 key（workspace.requirement_type.manage）
+  const canView = isWorkspaceMember(workspaceSlug);
+  const canEdit = allowWorkspacePermissionKeys([PERMISSION_KEYS.WORKSPACE_REQUIREMENT_TYPE_MANAGE], workspaceSlug);
 
   const {
     requirementTypes,
@@ -49,7 +50,7 @@ const WorkspaceRequirementTypesPage = observer(function WorkspaceRequirementType
       <PageHead title={currentWorkspace?.name ? `${currentWorkspace.name} - 需求类型` : undefined} />
       <RequirementTypesList
         workspaceSlug={workspaceSlug}
-        canEdit={canView}
+        canEdit={canEdit}
         requirementTypes={requirementTypes}
         isLoading={isLoading}
         isMutating={isMutating}

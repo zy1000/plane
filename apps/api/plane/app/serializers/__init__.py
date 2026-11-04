@@ -58,7 +58,6 @@ from .project import (
     ProjectGroupMemberOptionSerializer,
     ProjectRolePermissionBindingSerializer,
     ProjectPmsInfo,
-    ImportProjectRoleSerializer,
 )
 from .state import StateSerializer, StateLiteSerializer
 from .view import IssueViewSerializer, ViewIssueListSerializer

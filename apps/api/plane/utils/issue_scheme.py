@@ -21,7 +21,6 @@ from plane.db.models import (
     IssueType,
     IssueView,
     Project,
-    ProjectRole,
     ProjectUserProperty,
     State,
     TypeExtraField,
@@ -370,8 +369,6 @@ def copy_scheme(source, target, actor_id=None, type_ids=None):
     ``type_ids`` 给了就只拷这些类型及其字段、状态、工作流（跟随项目脱离时只拷所属模式关联的类型），
     triage 状态照拷。字段行的 ``library_field`` 原样带过去：拷出来的类型仍绑定同一个库字段。
     """
-    from plane.db.models.issue_type import sync_issue_type_permissions
-
     id_map = {}
     types = IssueType.all_objects.filter(scheme=source)
     by_type = Q()
@@ -380,10 +377,16 @@ def copy_scheme(source, target, actor_id=None, type_ids=None):
         types = types.filter(id__in=type_ids)
         by_type = Q(issue_type_id__in=type_ids)
     type_pairs = _clone_rows(IssueType, types, target, id_map, actor_id=actor_id)
-    for _, new_type in type_pairs:
-        # bulk_create 不发 post_save，类型衍生的 5 条权限手动同步
-        if new_type.deleted_at is None:
-            sync_issue_type_permissions(new_type)
+    # 副本指回类型库里的原类型：从库拷就是源类型本身，从项目方案拷就沿用源类型已有的指向。
+    # 权限组按类型排除时存的是库类型 id，靠它对上（permissions/base.py::issue_type_permission_info）
+    linked = []
+    for old_type, new_type in type_pairs:
+        library_type_id = old_type.library_type_id or (old_type.id if source.project_id is None else None)
+        if library_type_id and new_type.library_type_id != library_type_id:
+            new_type.library_type_id = library_type_id
+            linked.append(new_type)
+    if linked:
+        IssueType.all_objects.bulk_update(linked, ["library_type"], batch_size=500)
     _clone_rows(TypeExtraField, TypeExtraField.all_objects.filter(by_type, scheme=source), target, id_map,
                 fk_fields=("issue_type",), actor_id=actor_id)
     _clone_rows(State, State.all_state_objects.filter(by_type | Q(issue_type__isnull=True), scheme=source), target,
@@ -397,8 +400,8 @@ def copy_scheme(source, target, actor_id=None, type_ids=None):
     for p in WorkflowTransitionPrincipal.all_objects.filter(transition_id__in=list(id_map)):
         principals.append(WorkflowTransitionPrincipal(
             transition_id=id_map[p.transition_id], dimension=p.dimension, kind=p.kind,
-            member_id=p.member_id, role_id=p.role_id, workspace_role_id=p.workspace_role_id,
-            dynamic_target=p.dynamic_target, deleted_at=p.deleted_at,
+            member_id=p.member_id,
+            job_role_id=p.job_role_id, dynamic_target=p.dynamic_target, deleted_at=p.deleted_at,
         ))
     WorkflowTransitionPrincipal.objects.bulk_create(principals, batch_size=500)
 
@@ -437,12 +440,7 @@ def remap_project_refs(project_id, id_map):
         TypeExtraFieldValue.all_objects.filter(project_id=project_id, extra_field_id=old).update(extra_field_id=new)
         Project.all_objects.filter(pk=project_id, default_state_id=old).update(default_state_id=new)
 
-    # 角色里的类型派生权限 key：project.issue_type.<旧 hex>.<动作> → 新 hex
-    hex_map = {f"project.issue_type.{old.hex}.": f"project.issue_type.{new.hex}." for old, new in id_map.items()}
-    for role in ProjectRole.all_objects.filter(project_id=project_id):
-        perms, changed = _replace_ids_in_json(role.permissions, hex_map)
-        if changed:
-            ProjectRole.all_objects.filter(pk=role.pk).update(permissions=perms)
+    # 权限组的类型排除清单存库类型 id，副本靠 library_type 对上，这里不用改写
 
     # 项目内的保存筛选条件：旧 id 整体替换。工作区级的（无项目的视图、WorkspaceUserProperties）不动
     str_map = {str(old): str(new) for old, new in id_map.items()}

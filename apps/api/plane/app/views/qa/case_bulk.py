@@ -132,7 +132,7 @@ class TemplateCaseBulkUpdateAPIView(BaseAPIView):
 class CaseBulkUpdateAPIView(BaseAPIView):
     """产品用例批量改属性。"""
 
-    @allow_product_scope
+    @allow_product_scope(PermissionKey.PROJECT_TEST_CASE_EDIT)
     def post(self, request, slug, product_id):
         queryset = TestCase.objects.filter(
             repository__workspace__slug=slug, repository__product_id=product_id

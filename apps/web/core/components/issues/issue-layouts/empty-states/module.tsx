@@ -9,7 +9,6 @@ import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 // plane imports
 import {
-  EUserPermissionsLevel,
   PROJECT_ERROR_MESSAGES,
   PROJECT_MODULES_ISSUE_MANAGE_PERMISSION_KEY,
   isProjectPermissionError,
@@ -18,7 +17,7 @@ import { useTranslation } from "@plane/i18n";
 import { EmptyStateDetailed } from "@plane/propel/empty-state";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { ISearchIssueResponse } from "@plane/types";
-import { EIssuesStoreType, EUserProjectRoles } from "@plane/types";
+import { EIssuesStoreType } from "@plane/types";
 // components
 import { AddWorkItemsModal } from "@/components/core/modals/add-work-items-modal";
 // hooks
@@ -40,19 +39,19 @@ export const ModuleEmptyState = observer(function ModuleEmptyState() {
   // store hooks
   const { issues } = useIssues(EIssuesStoreType.MODULE);
   const { toggleCreateIssueModal } = useCommandPalette();
-  const { allowPermissions, allowProjectPermissionKeys } = useUserPermissions();
+  const { isProjectMember, allowIssuePermission, allowProjectPermissionKeys } = useUserPermissions();
   // derived values
   const moduleWorkItemFilter = useWorkItemFilterInstance(EIssuesStoreType.MODULE, moduleId);
-  const canPerformEmptyStateActions = allowPermissions(
-    [EUserProjectRoles.ADMIN, EUserProjectRoles.MEMBER],
-    EUserPermissionsLevel.PROJECT
-  );
+  const canPerformEmptyStateActions = isProjectMember(workspaceSlug, projectId);
+  const canCreateIssue = allowIssuePermission("create", undefined, workspaceSlug, projectId);
   const canManageModuleIssues = allowProjectPermissionKeys(
     [PROJECT_MODULES_ISSUE_MANAGE_PERMISSION_KEY],
     workspaceSlug,
     projectId
   );
-  const areWorkItemActionsDisabled = !canPerformEmptyStateActions || !canManageModuleIssues;
+  // 新建：要能建工作项且能改模块关联；加已有工作项：只要能改模块关联
+  const isCreateWorkItemDisabled = !canCreateIssue || !canManageModuleIssues;
+  const isAddExistingDisabled = !canManageModuleIssues;
 
   const handleAddIssuesToModule = async (data: ISearchIssueResponse[]) => {
     if (!workspaceSlug || !projectId || !moduleId) return;
@@ -123,13 +122,13 @@ export const ModuleEmptyState = observer(function ModuleEmptyState() {
                 onClick: () => {
                   toggleCreateIssueModal(true, EIssuesStoreType.MODULE);
                 },
-                disabled: areWorkItemActionsDisabled,
+                disabled: isCreateWorkItemDisabled,
                 variant: "primary",
               },
               {
                 label: t("project_empty_state.module_work_items.cta_secondary"),
                 onClick: () => setModuleIssuesListModal(true),
-                disabled: areWorkItemActionsDisabled,
+                disabled: isAddExistingDisabled,
                 variant: "secondary",
               },
             ]}

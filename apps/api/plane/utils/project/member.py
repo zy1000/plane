@@ -1,7 +1,6 @@
 from django.db.models import Min
 
 from plane.db.models import User, Project, ProjectUserProperty, ProjectMember
-from plane.db.models.project import ROLE
 from plane.bgtasks.project_add_user_email_task import project_add_user_email
 from plane.utils.host import base_host
 
@@ -28,7 +27,6 @@ def add_user_to_project(users: list[User], project: Project | str):
         bulk_project_members.append(
             ProjectMember(
                 member=user,
-                role=ROLE.MEMBER.value,
                 project=project,
                 workspace_id=project.workspace_id,
             )
@@ -51,3 +49,45 @@ def add_user_to_project(users: list[User], project: Project | str):
     _ = ProjectUserProperty.objects.bulk_create(
         bulk_issue_props, batch_size=10, ignore_conflicts=True
     )
+    copy_workspace_job_roles(project, [user.id for user in users])
+
+
+def copy_workspace_job_roles(project, user_ids):
+    """新加进项目的人默认带上他在工作区的角色（之后在项目成员页可以改）。"""
+    from plane.db.models import ProjectMemberJobRole, WorkspaceMemberJobRole
+
+    members = {
+        pm.member_id: pm
+        for pm in ProjectMember.objects.filter(project=project, member_id__in=list(user_ids), deleted_at__isnull=True)
+    }
+    if not members:
+        return
+    existing = set(
+        ProjectMemberJobRole.objects.filter(member__in=list(members.values())).values_list("member_id", "job_role_id")
+    )
+    rows = []
+    for user_id, job_role_id in WorkspaceMemberJobRole.objects.filter(
+        workspace_id=project.workspace_id, member__member_id__in=list(members)
+    ).values_list("member__member_id", "job_role_id"):
+        member = members[user_id]
+        if (member.id, job_role_id) not in existing:
+            rows.append(
+                ProjectMemberJobRole(
+                    project=project, workspace_id=project.workspace_id, member=member, job_role_id=job_role_id
+                )
+            )
+            existing.add((member.id, job_role_id))
+    ProjectMemberJobRole.objects.bulk_create(rows)
+
+
+def add_project_admins(project, user_ids):
+    """建项目时把创建人与负责人加进项目（已在项目里的重新激活）。
+
+    不绑任何权限组：没有系统组，默认也不给成员加组。负责人（为空时创建人）靠直通拿全部权限，
+    其余人要什么权限由项目管理员在权限组页配置。"""
+    for user_id in user_ids:
+        member, created = ProjectMember.objects.get_or_create(project=project, member_id=user_id)
+        if not created and not member.is_active:
+            member.is_active = True
+            member.save(update_fields=["is_active"])
+    copy_workspace_job_roles(project, user_ids)

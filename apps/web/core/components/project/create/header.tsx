@@ -12,7 +12,7 @@ import { useTranslation } from "@plane/i18n";
 import { cn, getTabIndex, projectIdentifierSanitizer } from "@plane/utils";
 // components
 import { ModalInlineError } from "@/components/common/form-modal";
-import { ProjectLogoField, ProjectNetworkSegmented } from "@/components/project/form-fields";
+import { ProjectLogoField } from "@/components/project/form-fields";
 // plane web imports
 import type { TProject } from "@/plane-web/types/projects";
 
@@ -152,12 +152,6 @@ function ProjectCreateHeader(props: Props) {
                   />
                 </label>
               )}
-            />
-            <ProjectNetworkSegmented
-              control={control}
-              className="ml-auto"
-              tabIndex={getIndex("network")}
-              isMobile={isMobile}
             />
           </div>
           {errors.identifier?.message ? <ModalInlineError message={errors.identifier.message} /> : null}

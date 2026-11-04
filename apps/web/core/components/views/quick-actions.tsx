@@ -9,8 +9,7 @@ import { observer } from "mobx-react";
 import { MoreHorizontal } from "lucide-react";
 // types
 import {
-  EUserPermissions,
-  EUserPermissionsLevel,
+  PERMISSION_KEYS,
   PROJECT_VIEWS_DELETE_PERMISSION_KEY,
   PROJECT_VIEWS_EDIT_PERMISSION_KEY,
 } from "@plane/constants";
@@ -45,10 +44,11 @@ export const ViewQuickActions = observer(function ViewQuickActions(props: Props)
   const [deleteViewModal, setDeleteViewModal] = useState(false);
   // store hooks
   const { data } = useUser();
-  const { allowPermissions, allowProjectPermissionKeys } = useUserPermissions();
+  const { allowProjectPermissionKeys } = useUserPermissions();
   // auth
   const isOwner = view?.owned_by === data?.id;
-  const isAdmin = allowPermissions([EUserPermissions.ADMIN], EUserPermissionsLevel.PROJECT, workspaceSlug, projectId);
+  // 管理别人建的公共视图：project.view.manage（同后端 IssueViewViewSet._is_project_admin）
+  const isAdmin = allowProjectPermissionKeys([PERMISSION_KEYS.PROJECT_VIEW_MANAGE], workspaceSlug, projectId);
   const canEditView = allowProjectPermissionKeys([PROJECT_VIEWS_EDIT_PERMISSION_KEY], workspaceSlug, projectId);
   const canDeleteView = allowProjectPermissionKeys([PROJECT_VIEWS_DELETE_PERMISSION_KEY], workspaceSlug, projectId);
 

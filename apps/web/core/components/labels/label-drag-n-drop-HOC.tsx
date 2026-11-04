@@ -66,7 +66,7 @@ export const LabelDndHOC = observer(function LabelDndHOC(props: Props) {
   const dragHandleRef = useRef<HTMLButtonElement | null>(null);
 
   const { allowProjectPermissionKeys } = useUserPermissions();
-  const isEditable = allowProjectPermissionKeys(["label.edit"]);
+  const isEditable = allowProjectPermissionKeys(["project.label.manage"]);
 
   useEffect(() => {
     const element = labelRef.current;

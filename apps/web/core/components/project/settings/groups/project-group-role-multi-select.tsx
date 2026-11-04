@@ -7,21 +7,24 @@
 import { useMemo, useState } from "react";
 import { Check, ChevronDown, ShieldCheck } from "lucide-react";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import type { IProjectGroup, IProjectRole } from "@plane/types";
+import type { IProjectGroup } from "@plane/types";
 import { MultiSelectDropdown } from "@plane/ui";
 import { cn } from "@plane/utils";
 import type { TProjectGroupRoleMutationResult } from "@/hooks/store/use-project-groups";
 
+/** 可授予团队的本项目权限组（只要 id / 名称） */
+export type TProjectGroupGrantOption = { id: string; name: string };
+
 type TProjectGroupRoleOption = {
   value: string;
-  data: IProjectRole;
+  data: TProjectGroupGrantOption;
   disabled: boolean;
   className: () => string;
 };
 
 type Props = {
   group: IProjectGroup;
-  roles: IProjectRole[];
+  roles: TProjectGroupGrantOption[];
   isRolesLoading: boolean;
   canEdit: boolean;
   className?: string;
@@ -31,7 +34,7 @@ type Props = {
 };
 
 function RoleSummary({ group }: { group: IProjectGroup }) {
-  if (group.grants.length === 0) return <span className="text-13 text-tertiary">未分配项目角色</span>;
+  if (group.grants.length === 0) return <span className="text-13 text-tertiary">未分配权限组</span>;
 
   return (
     <div className="flex min-w-0 items-center gap-1.5">
@@ -57,9 +60,9 @@ export function ProjectGroupRoleMultiSelect({
   const selectedRoleIdSet = useMemo(() => new Set(selectedRoleIds), [selectedRoleIds]);
 
   const availableRoles = useMemo(() => {
-    const rolesById = new Map(roles.map((role) => [role.id, role]));
+    const rolesById = new Map<string, TProjectGroupGrantOption>(roles.map((role) => [role.id, role]));
     group.grants.forEach((grant) => {
-      if (!rolesById.has(grant.role)) rolesById.set(grant.role, grant.role_detail);
+      if (!rolesById.has(grant.role)) rolesById.set(grant.role, { id: grant.role, name: grant.role_detail.name });
     });
     return [...rolesById.values()];
   }, [group.grants, roles]);
@@ -79,7 +82,7 @@ export function ProjectGroupRoleMultiSelect({
 
   const buttonLabel = useMemo(() => {
     if (isRolesLoading && canEdit) return <span className="text-placeholder">加载中...</span>;
-    if (group.grants.length === 0) return <span className="text-placeholder">未分配项目角色</span>;
+    if (group.grants.length === 0) return <span className="text-placeholder">未分配权限组</span>;
     if (group.grants.length === 1) return <span className="truncate">{group.grants[0].role_detail.name}</span>;
     return (
       <span className="truncate">
@@ -100,7 +103,7 @@ export function ProjectGroupRoleMultiSelect({
         if (result.failures.length > 0) {
           setToast({
             type: TOAST_TYPE.ERROR,
-            title: "添加角色失败",
+            title: "添加权限组失败",
             message: result.failures[0].message,
           });
           return;
@@ -110,8 +113,8 @@ export function ProjectGroupRoleMultiSelect({
         await onPermissionsChanged().catch(() => undefined);
         setToast({
           type: TOAST_TYPE.SUCCESS,
-          title: "角色已添加",
-          message: roleName ? `已为团队分配「${roleName}」。` : "已为团队分配项目角色。",
+          title: "权限组已添加",
+          message: roleName ? `已为团队分配「${roleName}」。` : "已为团队分配权限组。",
         });
         return;
       }
@@ -123,15 +126,15 @@ export function ProjectGroupRoleMultiSelect({
         await onPermissionsChanged().catch(() => undefined);
         setToast({
           type: TOAST_TYPE.SUCCESS,
-          title: "角色已移除",
+          title: "权限组已移除",
           message: `已从团队移除「${grant.role_detail.name}」。`,
         });
       }
     } catch {
       setToast({
         type: TOAST_TYPE.ERROR,
-        title: removedRoleId ? "移除角色失败" : "添加角色失败",
-        message: "更新团队角色时出现错误，请重试。",
+        title: removedRoleId ? "移除权限组失败" : "添加权限组失败",
+        message: "更新团队权限组时出现错误，请重试。",
       });
     } finally {
       setIsSubmitting(false);
@@ -157,7 +160,7 @@ export function ProjectGroupRoleMultiSelect({
         disableSorting
         keyExtractor={(option) => option.data.id}
         queryArray={["name"]}
-        inputPlaceholder="搜索角色..."
+        inputPlaceholder="搜索权限组..."
         buttonContent={() => (
           <div
             className={cn(

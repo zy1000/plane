@@ -35,9 +35,9 @@ import UnauthorizedImg from "@/app/assets/auth/unauthorized.svg?url";
 import { useTranslation } from "@plane/i18n";
 import { qaCaseSetToastError } from "@/utils/qa-case-error";
 
-const QA_PLAN_CREATE_PERMISSION_KEY = "qa.plan.create" as const;
-const QA_PLAN_EDIT_PERMISSION_KEY = "qa.plan.edit" as const;
-const QA_PLAN_DELETE_PERMISSION_KEY = "qa.plan.delete" as const;
+const QA_PLAN_CREATE_PERMISSION_KEY = "project.test_plan.create" as const;
+const QA_PLAN_EDIT_PERMISSION_KEY = "project.test_plan.edit" as const;
+const QA_PLAN_DELETE_PERMISSION_KEY = "project.test_plan.delete" as const;
 
 export default function TestPlanDetailPage() {
   const { t } = useTranslation();
@@ -96,7 +96,7 @@ export default function TestPlanDetailPage() {
   useEffect(() => {
     if (!workspaceSlug || !projectId) return;
     if (!permissionsFetched) return;
-    if (!hasPermission("qa.plan.view")) return;
+    if (!hasPermission("project.test_plan.view")) return;
     try {
       if (repositoryIdFromUrl) {
         sessionStorage.setItem("selectedRepositoryId", repositoryIdFromUrl);
@@ -461,7 +461,7 @@ export default function TestPlanDetailPage() {
         ? findModuleById(modules, selectedModuleId)?.name
         : undefined;
 
-  const canViewPlans = permissionsFetched && hasPermission("qa.plan.view");
+  const canViewPlans = permissionsFetched && hasPermission("project.test_plan.view");
 
   return (
     <>

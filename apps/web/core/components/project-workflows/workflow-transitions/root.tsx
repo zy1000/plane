@@ -19,7 +19,7 @@ import { StateTransitionCard } from "./state-transition-card";
 import { TransitionEditModal } from "./transition-edit-modal";
 import { WorkflowViewPanel, type TViewBox } from "./workflow-view-panel";
 
-const WORKFLOW_CONFIG_PERMISSION_KEY = "workflow.config";
+const WORKFLOW_CONFIG_PERMISSION_KEY = "project.workflow.manage";
 const PROJECT_PERMISSION_DENIED_ERROR = { error: "You don't have the required permissions." };
 
 type TWorkflowTransitionsRootProps = {

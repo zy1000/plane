@@ -10,8 +10,6 @@ import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 import {
   ARCHIVABLE_STATE_GROUPS,
-  EUserPermissions,
-  EUserPermissionsLevel,
   PROJECT_RELEASES_ISSUE_MANAGE_PERMISSION_KEY,
 } from "@plane/constants";
 import type { TIssue } from "@plane/types";
@@ -25,6 +23,7 @@ import { useUserPermissions } from "@/hooks/store/user";
 import { DuplicateWorkItemModal } from "@/plane-web/components/issues/issue-layouts/quick-action-dropdowns/duplicate-modal";
 import { ArchiveIssueModal } from "../../archive-issue-modal";
 import { DeleteIssueModal } from "../../delete-issue-modal";
+import { useIssuePermission } from "../../issue-permission";
 import { CreateUpdateIssueModal } from "../../issue-modal/modal";
 import type { IQuickActionProps } from "../list/list-view-types";
 import type { MenuItemFactoryProps } from "./helper";
@@ -50,16 +49,16 @@ export const ReleaseIssueQuickActions = observer(function ReleaseIssueQuickActio
   const [duplicateWorkItemModal, setDuplicateWorkItemModal] = useState(false);
   const { workspaceSlug, projectId, releaseId } = useParams();
   const { issuesFilter } = useIssues(EIssuesStoreType.RELEASE);
-  const { allowPermissions, allowProjectPermissionKeys } = useUserPermissions();
+  const { allowProjectPermissionKeys } = useUserPermissions();
+  const allowIssueAction = useIssuePermission();
   const { getStateById } = useProjectState();
   const { getProjectIdentifierById } = useProject();
   const stateDetails = getStateById(issue.state_id);
   const projectIdentifier = getProjectIdentifierById(issue?.project_id);
-  const isEditingAllowed =
-    allowPermissions([EUserPermissions.ADMIN, EUserPermissions.MEMBER], EUserPermissionsLevel.PROJECT) && !readOnly;
-  const isArchivingAllowed = handleArchive && isEditingAllowed;
+  const isEditingAllowed = allowIssueAction("edit", issue, workspaceSlug?.toString()) && !readOnly;
+  const isArchivingAllowed = handleArchive && allowIssueAction("archive", issue, workspaceSlug?.toString()) && !readOnly;
   const isInArchivableGroup = !!stateDetails && ARCHIVABLE_STATE_GROUPS.includes(stateDetails?.group);
-  const isDeletingAllowed = isEditingAllowed;
+  const isDeletingAllowed = allowIssueAction("delete", issue, workspaceSlug?.toString()) && !readOnly;
   const canManageReleaseIssues =
     !!workspaceSlug &&
     !!projectId &&

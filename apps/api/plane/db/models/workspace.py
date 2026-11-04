@@ -16,8 +16,6 @@ from .base import BaseModel
 from plane.utils.constants import RESTRICTED_WORKSPACE_SLUGS
 from plane.utils.color import get_random_color
 
-ROLE_CHOICES = ((20, "Admin"), (15, "Member"), (5, "Guest"))
-
 
 def get_default_props():
     return {
@@ -203,7 +201,6 @@ class WorkspaceMember(BaseModel):
         on_delete=models.CASCADE,
         related_name="member_workspace",
     )
-    role = models.PositiveSmallIntegerField(choices=ROLE_CHOICES, default=5)
     company_role = models.TextField(null=True, blank=True)
     view_props = models.JSONField(default=get_default_props)
     default_props = models.JSONField(default=get_default_props)
@@ -217,6 +214,13 @@ class WorkspaceMember(BaseModel):
         through="WorkspaceMemberRole",
         blank=True,
         related_name="role_members",
+    )
+    # 角色（「他是干什么的」，取自数据字典 job_role），与权限组无关
+    job_roles = models.ManyToManyField(
+        "db.DataDictionaryItem",
+        through="WorkspaceMemberJobRole",
+        blank=True,
+        related_name="workspace_members",
     )
 
     class Meta:
@@ -245,7 +249,6 @@ class WorkspaceMemberInvite(BaseModel):
     token = models.CharField(max_length=255)
     message = models.TextField(null=True)
     responded_at = models.DateTimeField(null=True)
-    role = models.PositiveSmallIntegerField(choices=ROLE_CHOICES, default=5)
     custom_role_ids = models.JSONField(default=list)
 
     class Meta:
@@ -464,15 +467,18 @@ class WorkspaceUserPreference(BaseModel):
         ordering = ("-created_at",)
 
 
-class WorkspaceRole(BaseModel):
-    """Workspace 级角色，分两类：
-    - type=workspace：管理工作区权限（只能绑定 workspace scope 权限）
-    - type=project_template：项目角色模板（只能绑定 project scope 权限），可导入到 ProjectRole
-    """
+def default_data_scope():
+    return {"projects": {"mode": "all"}, "products": {"mode": "all"}}
 
-    class RoleType(models.TextChoices):
-        WORKSPACE = "workspace", "工作区角色"
-        PROJECT_TEMPLATE = "project_template", "项目角色模板"
+
+class WorkspaceRole(BaseModel):
+    """工作区权限组（docs/permission-refactor/data-permission-plan.md）。
+
+    一个组 = 工作区权限 + 项目权限（``permissions`` JSON）+ 数据权限（``data_scope``）+ 模板开关。
+    - ``data_scope``：项目 / 产品白名单，各自 ``{"mode": "all" | "selected" | "filter", "ids": [...], "filter": {...}}``；
+      组的项目权限只在白名单里的项目生效，白名单并集决定成员能看到哪些项目 / 产品。
+    - ``is_template``：勾上后白名单里的项目自动引用这个组（减去 ``project_exclusions``），项目里只能绑人不能改。
+    """
 
     workspace = models.ForeignKey(
         "db.Workspace",
@@ -482,23 +488,8 @@ class WorkspaceRole(BaseModel):
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True, null=True)
     permissions = models.JSONField(default=dict)
-    type = models.CharField(
-        max_length=20,
-        choices=RoleType.choices,
-        default=RoleType.WORKSPACE,
-        db_index=True,
-    )
-    legacy_role = models.PositiveSmallIntegerField(
-        choices=ROLE_CHOICES,
-        null=True,
-        blank=True,
-        db_index=True,
-    )
-
-    def clean(self):
-        super().clean()
-        if self.legacy_role is not None and self.type != self.RoleType.WORKSPACE:
-            raise ValidationError("System roles must be workspace roles.")
+    data_scope = models.JSONField(default=default_data_scope, verbose_name="数据权限")
+    is_template = models.BooleanField(default=False, verbose_name="作为项目权限组模板")
 
     class Meta:
         unique_together = ["workspace", "name", "deleted_at"]
@@ -508,19 +499,6 @@ class WorkspaceRole(BaseModel):
                 condition=models.Q(deleted_at__isnull=True),
                 name="workspace_role_unique_workspace_name_when_deleted_at_null",
             ),
-            models.UniqueConstraint(
-                fields=["workspace", "legacy_role"],
-                condition=models.Q(
-                    deleted_at__isnull=True,
-                    legacy_role__isnull=False,
-                ),
-                name="workspace_role_unique_legacy_role_when_active",
-            ),
-            models.CheckConstraint(
-                check=models.Q(legacy_role__isnull=True)
-                | models.Q(legacy_role__in=[5, 15, 20]),
-                name="workspace_role_valid_legacy_role",
-            ),
         ]
         verbose_name = "Workspace Role"
         verbose_name_plural = "Workspace Roles"
@@ -529,6 +507,29 @@ class WorkspaceRole(BaseModel):
 
     def __str__(self):
         return f"{self.name} <{self.workspace.name}>"
+
+
+class WorkspaceRoleProjectExclusion(BaseModel):
+    """模板组的「引用排除」：这个项目不再引用这个模板（项目里删除引用 / 组的引用项目页移除）。纯连接行，硬删。"""
+
+    role = models.ForeignKey(WorkspaceRole, on_delete=models.CASCADE, related_name="project_exclusions")
+    project = models.ForeignKey("db.Project", on_delete=models.CASCADE, related_name="template_exclusions")
+
+    class Meta:
+        db_table = "workspace_role_project_exclusions"
+        ordering = ("-created_at",)
+        verbose_name = "Workspace Role Project Exclusion"
+        verbose_name_plural = "Workspace Role Project Exclusions"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["role", "project"],
+                condition=models.Q(deleted_at__isnull=True),
+                name="workspace_role_project_exclusion_unique_active",
+            ),
+        ]
+
+    def delete(self, using=None, soft=False, *args, **kwargs):
+        return super().delete(using=using, soft=False, *args, **kwargs)
 
 
 class WorkspaceMemberRole(BaseModel):
@@ -557,8 +558,6 @@ class WorkspaceMemberRole(BaseModel):
         if self.role_id:
             if self.workspace_id != self.role.workspace_id:
                 raise ValidationError("The role does not belong to this workspace.")
-            if self.role.type != WorkspaceRole.RoleType.WORKSPACE:
-                raise ValidationError("Only workspace roles can be assigned to members.")
 
     def save(self, *args, **kwargs):
         if self.member_id:
@@ -661,8 +660,6 @@ class WorkspaceGroupRole(BaseModel):
         if self.group_id and self.role_id:
             if self.group.workspace_id != self.role.workspace_id:
                 raise ValidationError("The role does not belong to this workspace.")
-            if self.role.type != WorkspaceRole.RoleType.WORKSPACE:
-                raise ValidationError("Only workspace roles can be assigned to groups.")
 
     def save(self, *args, **kwargs):
         self.full_clean(exclude=["created_by", "updated_by"])
@@ -684,3 +681,42 @@ class WorkspaceGroupRole(BaseModel):
 
     def __str__(self):
         return f"{self.group.name} -> {self.role.name}"
+
+
+class WorkspaceMemberJobRole(BaseModel):
+    """工作区成员挂的角色（数据字典 job_role 的值）。纯连接行，硬删。"""
+
+    workspace = models.ForeignKey(
+        "db.Workspace",
+        on_delete=models.CASCADE,
+        related_name="workspace_member_job_roles",
+    )
+    member = models.ForeignKey(
+        WorkspaceMember,
+        on_delete=models.CASCADE,
+        related_name="job_role_links",
+    )
+    job_role = models.ForeignKey(
+        "db.DataDictionaryItem",
+        on_delete=models.PROTECT,
+        related_name="workspace_member_links",
+    )
+
+    class Meta:
+        db_table = "workspace_member_job_roles"
+        ordering = ("created_at",)
+        constraints = [
+            models.UniqueConstraint(
+                fields=["member", "job_role"],
+                condition=models.Q(deleted_at__isnull=True),
+                name="workspace_member_job_role_unique_active",
+            ),
+        ]
+
+    def save(self, *args, **kwargs):
+        if self.member_id and not self.workspace_id:
+            self.workspace_id = self.member.workspace_id
+        super().save(*args, **kwargs)
+
+    def delete(self, using=None, soft=False, *args, **kwargs):
+        return super().delete(using=using, soft=False, *args, **kwargs)

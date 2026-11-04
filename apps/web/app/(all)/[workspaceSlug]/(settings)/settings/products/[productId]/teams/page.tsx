@@ -1,5 +1,5 @@
-import { ProductSettingsPlaceholder } from "@/components/products/settings/placeholder";
+import { ProductTeamSettings } from "@/components/products/settings/team";
 
 export default function ProductTeamsSettingsPage() {
-  return <ProductSettingsPlaceholder settingsKey="teams" />;
+  return <ProductTeamSettings />;
 }

@@ -11,7 +11,7 @@ import { dropTargetForElements } from "@atlaskit/pragmatic-drag-and-drop/element
 import { autoScrollForElements } from "@atlaskit/pragmatic-drag-and-drop-auto-scroll/element";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
-import { EIssueFilterType, EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import { EIssueFilterType, PERMISSION_KEYS } from "@plane/constants";
 import { EIssueServiceType, EIssueLayoutTypes, EIssuesStoreType } from "@plane/types";
 //hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
@@ -68,7 +68,7 @@ export const BaseKanBanRoot = observer(function BaseKanBanRoot(props: IBaseKanBa
   // store hooks
   const storeType = useIssueStoreType() as KanbanStoreType;
   const hideColumnHeaderAddButton = storeType === EIssuesStoreType.CYCLE;
-  const { allowPermissions } = useUserPermissions();
+  const { allowProjectPermissionKeys } = useUserPermissions();
   const { issueMap, issuesFilter, issues } = useIssues(storeType);
   const {
     issue: { getIssueById },
@@ -124,10 +124,9 @@ export const BaseKanBanRoot = observer(function BaseKanBanRoot(props: IBaseKanBa
   const [draggedIssueId, setDraggedIssueId] = useState<string | undefined>(undefined);
   const [deleteIssueModal, setDeleteIssueModal] = useState(false);
 
-  const isEditingAllowed = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.PROJECT
-  );
+  // 拖拽 / 行内改属性：项目里能编辑工作项或缺陷（单条的类型限定以后端为准）
+  const isEditingAllowed = allowProjectPermissionKeys([PERMISSION_KEYS.PROJECT_ISSUE_EDIT, PERMISSION_KEYS.PROJECT_DEFECT_EDIT]);
+  const canCreateIssue = allowProjectPermissionKeys([PERMISSION_KEYS.PROJECT_ISSUE_CREATE, PERMISSION_KEYS.PROJECT_DEFECT_CREATE]);
 
   const { handleOnDrop, pendingDrop, confirmStateSelection, cancelStateSelection, assigneeModalProps } =
     useGroupIssuesDragNDrop(storeType, orderBy, group_by, sub_group_by);
@@ -304,7 +303,7 @@ export const BaseKanBanRoot = observer(function BaseKanBanRoot(props: IBaseKanBa
                 handleCollapsedGroups={handleCollapsedGroups}
                 collapsedGroups={collapsedGroups}
                 showEmptyGroup={userDisplayFilters?.show_empty_groups ?? true}
-                disableIssueCreation={!enableIssueCreation || !isEditingAllowed || isCompletedCycle}
+                disableIssueCreation={!enableIssueCreation || !canCreateIssue || isCompletedCycle}
                 canEditProperties={canEditProperties}
                 hideColumnHeaderAddButton={hideColumnHeaderAddButton}
                 addIssuesToView={addIssuesToView}

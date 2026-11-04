@@ -1,9 +1,6 @@
 import type { TLogoProps } from "./common";
 import type { TDataDictionaryItemLite } from "./data-dictionary";
 import type { IUserLite } from "./users";
-import type { IPermission } from "./workspace";
-
-export type TProductNetwork = 0 | 2;
 
 export type TProduct = {
   id: string;
@@ -13,7 +10,6 @@ export type TProduct = {
   /** 产品代号（如 Cedar28B-032501-水）。工作区内唯一。 */
   code: string;
   description_html: string | null;
-  network: TProductNetwork;
   workspace: string;
   owner: string;
   reviewers: string[];
@@ -55,7 +51,6 @@ export type TCreateProductPayload = {
   identifier: string;
   code: string;
   description_html?: string | null;
-  network: TProductNetwork;
   owner: string;
   reviewers?: string[];
   stage: string;
@@ -97,46 +92,3 @@ export type TProductExtendedFieldKey =
 
 export type TProductExtendedPayload = Pick<TCreateProductPayload, TProductExtendedFieldKey>;
 
-export type TProductRole = {
-  id: number;
-  product: string;
-  name: string;
-  description: string | null;
-  permissions: { permission_keys?: string[] };
-  created_at: string;
-  updated_at: string;
-};
-
-/** GET/PATCH .../products/{pid}/roles/{id}/permissions/ 的响应，与项目侧同构 */
-export type TProductRolePermissionData = {
-  role: TProductRole;
-  permission_keys: string[];
-  permissions: IPermission[];
-};
-
-export type TCreateProductRolePayload = {
-  name: string;
-  description?: string | null;
-};
-
-export type TUpdateProductRolePayload = Partial<TCreateProductRolePayload>;
-
-export type TProductMember = {
-  id: number;
-  product: string;
-  member: string;
-  custom_role_ids: number[];
-  member_detail: IUserLite;
-  role_details: TProductRole[];
-  created_at: string;
-  updated_at: string;
-};
-
-export type TCreateProductMemberPayload = {
-  member: string;
-  custom_role_ids?: number[];
-};
-
-export type TUpdateProductMemberRolesPayload = {
-  custom_role_ids: number[];
-};

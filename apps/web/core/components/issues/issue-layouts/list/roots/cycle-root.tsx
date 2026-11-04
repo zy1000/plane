@@ -8,7 +8,7 @@ import React, { useCallback } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 // plane imports
-import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import { PERMISSION_KEYS } from "@plane/constants";
 import { EIssuesStoreType } from "@plane/types";
 // hooks
 import { useCycle } from "@/hooks/store/use-cycle";
@@ -23,14 +23,12 @@ export const CycleListLayout = observer(function CycleListLayout() {
   // store
   const { issues } = useIssues(EIssuesStoreType.CYCLE);
   const { currentProjectCompletedCycleIds } = useCycle(); // mobx store
-  const { allowPermissions } = useUserPermissions();
+  const { allowProjectPermissionKeys } = useUserPermissions();
 
   const isCompletedCycle =
     cycleId && currentProjectCompletedCycleIds ? currentProjectCompletedCycleIds.includes(cycleId.toString()) : false;
-  const isEditingAllowed = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.PROJECT
-  );
+  // 拖拽 / 行内改属性：项目里能编辑工作项或缺陷（单条的类型限定以后端为准）
+  const isEditingAllowed = allowProjectPermissionKeys([PERMISSION_KEYS.PROJECT_ISSUE_EDIT, PERMISSION_KEYS.PROJECT_DEFECT_EDIT]);
 
   const canEditIssueProperties = useCallback(() => isEditingAllowed, [isEditingAllowed]);
 

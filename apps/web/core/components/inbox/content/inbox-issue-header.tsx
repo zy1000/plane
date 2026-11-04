@@ -9,7 +9,7 @@ import { useCallback, useEffect, useState } from "react";
 import { observer } from "mobx-react";
 import { CircleCheck, CircleX, Clock, FileStack, MoveRight } from "lucide-react";
 // plane imports
-import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import { PERMISSION_KEYS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { LinkIcon, CopyIcon, NewTabIcon, TrashIcon, ChevronDownIcon, ChevronUpIcon } from "@plane/propel/icons";
@@ -67,7 +67,7 @@ export const InboxIssueActionsHeader = observer(function InboxIssueActionsHeader
   // store
   const { currentTab, deleteInboxIssue, filteredInboxIssueIds } = useProjectInbox();
   const { data: currentUser } = useUser();
-  const { allowPermissions } = useUserPermissions();
+  const { isProjectMember, allowProjectPermissionKeys } = useUserPermissions();
   const { currentProjectDetails } = useProject();
   const { t } = useTranslation();
 
@@ -76,25 +76,14 @@ export const InboxIssueActionsHeader = observer(function InboxIssueActionsHeader
 
   const issue = inboxIssue?.issue;
   // derived values
-  const isAllowed = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.PROJECT,
-    workspaceSlug,
-    projectId
-  );
+  const isAllowed = isProjectMember(workspaceSlug, projectId);
+  // 接受 / 拒绝 / 标重复 / 删除别人投递的：与后端 IntakeIssueViewSet 同一把 key
+  const isProjectAdmin = allowProjectPermissionKeys([PERMISSION_KEYS.PROJECT_INTAKE_MANAGE], workspaceSlug, projectId);
   const canMarkAsDuplicate = isAllowed && (inboxIssue?.status === 0 || inboxIssue?.status === -2);
   const canMarkAsAccepted = isAllowed && (inboxIssue?.status === 0 || inboxIssue?.status === -2);
   const canMarkAsDeclined = isAllowed && (inboxIssue?.status === 0 || inboxIssue?.status === -2);
-  // can delete only if admin or is creator of the issue
-  const canDelete =
-    allowPermissions([EUserPermissions.ADMIN], EUserPermissionsLevel.PROJECT, workspaceSlug, projectId) ||
-    issue?.created_by === currentUser?.id;
-  const isProjectAdmin = allowPermissions(
-    [EUserPermissions.ADMIN],
-    EUserPermissionsLevel.PROJECT,
-    workspaceSlug,
-    projectId
-  );
+  // 有收件箱管理权，或者是自己投递的
+  const canDelete = isProjectAdmin || issue?.created_by === currentUser?.id;
   const isAcceptedOrDeclined = inboxIssue?.status ? [-1, 1, 2].includes(inboxIssue.status) : undefined;
   // days left for snooze
   const numberOfDaysLeft = findHowManyDaysLeft(inboxIssue?.snoozed_till);

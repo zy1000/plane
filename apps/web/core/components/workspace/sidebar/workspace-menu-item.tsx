@@ -8,9 +8,7 @@ import { observer } from "mobx-react";
 import Link from "next/link";
 import { useParams, usePathname } from "next/navigation";
 // plane imports
-import { EUserPermissionsLevel } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
-import type { EUserWorkspaceRoles } from "@plane/types";
 import { cn } from "@plane/utils";
 // components
 import { SidebarNavItem } from "@/components/sidebar/sidebar-navigation";
@@ -26,7 +24,8 @@ export type SidebarWorkspaceMenuItemProps = {
     key: string;
     href: string;
     Icon: any;
-    access: EUserWorkspaceRoles[];
+    /** 任一满足即显示；不填 = 工作区成员即可 */
+    permissionKeys?: string[];
   };
 };
 
@@ -39,7 +38,7 @@ export const SidebarWorkspaceMenuItem = observer(function SidebarWorkspaceMenuIt
   // nextjs hooks
   const pathname = usePathname();
   const { workspaceSlug } = useParams();
-  const { allowPermissions } = useUserPermissions();
+  const { allowWorkspacePermissionKeys, isWorkspaceMember } = useUserPermissions();
   // store hooks
   const { toggleSidebar } = useAppTheme();
 
@@ -49,9 +48,10 @@ export const SidebarWorkspaceMenuItem = observer(function SidebarWorkspaceMenuIt
     }
   };
 
-  if (!allowPermissions(item.access as any, EUserPermissionsLevel.WORKSPACE, workspaceSlug.toString())) {
-    return null;
-  }
+  const hasAccess = item.permissionKeys?.length
+    ? allowWorkspacePermissionKeys(item.permissionKeys, workspaceSlug.toString())
+    : isWorkspaceMember(workspaceSlug.toString());
+  if (!hasAccess) return null;
 
   const isActive =
     item.key === "timesheets"

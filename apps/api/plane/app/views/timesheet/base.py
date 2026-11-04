@@ -11,9 +11,24 @@ from plane.app.serializers.timesheet import (
     TimeSheetSerializer,
     TimesheetCategorySerializer,
 )
+from plane.app.permissions import PermissionKey, allow_project_member, allow_workspace_member
+from plane.app.permissions.base import workspace_context
 from plane.app.views import BaseViewSet
 from plane.app.views.base import BaseAPIView
 from plane.db.models import TimeSheet, TimesheetCategory
+
+
+def can_manage_others_timesheets(user, slug):
+    """改 / 删别人的工时：workspace.timesheet.manage。"""
+    return PermissionKey.WORKSPACE_TIMESHEET_MANAGE.value in workspace_context(user, slug).keys
+
+
+def can_view_all_timesheets(user, slug):
+    keys = workspace_context(user, slug).keys
+    return bool(
+        keys
+        & {PermissionKey.WORKSPACE_TIMESHEET_VIEW_ALL.value, PermissionKey.WORKSPACE_TIMESHEET_MANAGE.value}
+    )
 
 
 class TimeSheetViewSet(BaseViewSet):
@@ -52,11 +67,22 @@ class TimeSheetViewSet(BaseViewSet):
 
         return qs.order_by("-date", "-start_time")
 
+    def _own_or_manageable(self, request, slug, instance):
+        if instance.member_id == request.user.id or can_manage_others_timesheets(request.user, slug):
+            return None
+        return Response({"error": "只能修改自己的工时。"}, status=status.HTTP_403_FORBIDDEN)
+
+    @allow_project_member
     def list(self, request, slug, project_id=None):
         queryset = self.filter_queryset(self.get_queryset())
         serializer = TimeSheetSerializer(queryset, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
+    @allow_project_member
+    def retrieve(self, request, slug, project_id, pk):
+        return Response(TimeSheetSerializer(self.get_object()).data, status=status.HTTP_200_OK)
+
+    @allow_project_member
     def create(self, request, slug, project_id):
         serializer = TimeSheetSerializer(
             data={
@@ -80,8 +106,12 @@ class TimeSheetViewSet(BaseViewSet):
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+    @allow_project_member
     def partial_update(self, request, slug, project_id, pk):
         instance = self.get_object()
+        denied = self._own_or_manageable(request, slug, instance)
+        if denied:
+            return denied
         serializer = TimeSheetSerializer(instance, data=request.data, partial=True)
         if serializer.is_valid():
             try:
@@ -98,8 +128,12 @@ class TimeSheetViewSet(BaseViewSet):
             return Response(serializer.data, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+    @allow_project_member
     def destroy(self, request, slug, project_id, pk):
         instance = self.get_object()
+        denied = self._own_or_manageable(request, slug, instance)
+        if denied:
+            return denied
         instance.delete(soft=False)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -155,6 +189,7 @@ class TimeSheetViewSet(BaseViewSet):
         }
 
     @action(detail=False, methods=["post"], url_path="copy-previous-week")
+    @allow_project_member
     def copy_previous_week(self, request, slug, project_id=None):
         serializer = TimeSheetCopyPreviousWeekSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -166,13 +201,17 @@ class TimeSheetViewSet(BaseViewSet):
         return Response(payload, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=["get"], url_path="workspace-list")
+    @allow_workspace_member
     def workspace_list(self, request, slug, project_id=None):
-        """工作区级别工时列表，不限定 project_id（供工作区级工时页面使用）"""
+        """工作区级别工时列表，不限定 project_id（供工作区级工时页面使用）。没有「查看全员工时」只看自己的。"""
         queryset = self.filter_queryset(self.get_queryset())
+        if not can_view_all_timesheets(request.user, slug):
+            queryset = queryset.filter(member=request.user)
         serializer = TimeSheetSerializer(queryset, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=["post"], url_path="workspace-copy-previous-week")
+    @allow_workspace_member
     def workspace_copy_previous_week(self, request, slug, project_id=None):
         """工作区级别复制上一周工时，不限定 project_id"""
         serializer = TimeSheetCopyPreviousWeekSerializer(data=request.data)

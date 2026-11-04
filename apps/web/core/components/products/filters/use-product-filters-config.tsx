@@ -9,11 +9,9 @@ import {
   Code,
   Cpu,
   FlaskConical,
-  Globe2,
   Hash,
   History,
   Layers,
-  Lock,
   Shapes,
   Tag,
   UserCheck,
@@ -308,20 +306,6 @@ export const useProductFiltersConfig = ({
         isEnabled: true,
         supportedOperatorConfigsMap: multiSelect(
           peopleOptions((product) => product.reviewer_details ?? [], true),
-          params,
-          isLabel
-        ),
-      }),
-      createFilterConfig<TProductFilterProperty>({
-        id: "network",
-        label: t(`${I18N}.fields.visibility`),
-        icon: Lock,
-        isEnabled: true,
-        supportedOperatorConfigsMap: multiSelect(
-          [
-            { id: "0", value: "0", label: t(`${I18N}.visibility.private`), icon: <Lock className="size-3.5" /> },
-            { id: "2", value: "2", label: t(`${I18N}.visibility.public`), icon: <Globe2 className="size-3.5" /> },
-          ],
           params,
           isLabel
         ),

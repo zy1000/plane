@@ -7,10 +7,10 @@
 import { observer } from "mobx-react";
 import { useParams, usePathname, useSearchParams } from "next/navigation";
 // plane imports
-import { EUserPermissionsLevel } from "@plane/constants";
+import { PROJECT_SETTINGS_EDIT_PERMISSION_KEY } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { EmptyStateDetailed } from "@plane/propel/empty-state";
-import { EIssuesStoreType, EUserProjectRoles } from "@plane/types";
+import { EIssuesStoreType } from "@plane/types";
 // hooks
 import { useUserPermissions } from "@/hooks/store/user";
 import { useWorkItemFilterInstance } from "@/hooks/store/work-item-filters/use-work-item-filter-instance";
@@ -28,14 +28,13 @@ export const ProjectArchivedEmptyState = observer(function ProjectArchivedEmptyS
   // plane hooks
   const { t } = useTranslation();
   // store hooks
-  const { allowPermissions } = useUserPermissions();
+  const { isProjectMember, allowProjectPermissionKeys } = useUserPermissions();
   // derived values
   const archivedWorkItemFilter = useWorkItemFilterInstance(EIssuesStoreType.ARCHIVED, projectId);
   const currentPath = getPathWithSearch(pathname, searchParams);
-  const canPerformEmptyStateActions = allowPermissions(
-    [EUserProjectRoles.ADMIN, EUserProjectRoles.MEMBER],
-    EUserPermissionsLevel.PROJECT
-  );
+  const canClearFilters = isProjectMember(workspaceSlug, projectId);
+  // 主按钮去项目设置的「自动化」页配置自动归档
+  const canConfigureAutomation = allowProjectPermissionKeys([PROJECT_SETTINGS_EDIT_PERMISSION_KEY], workspaceSlug, projectId);
 
   return (
     <div className="relative h-full w-full overflow-y-auto">
@@ -48,7 +47,7 @@ export const ProjectArchivedEmptyState = observer(function ProjectArchivedEmptyS
             {
               label: "Clear filters",
               onClick: archivedWorkItemFilter?.clearFilters,
-              disabled: !canPerformEmptyStateActions || !archivedWorkItemFilter,
+              disabled: !canClearFilters || !archivedWorkItemFilter,
               variant: "secondary",
             },
           ]}
@@ -73,7 +72,7 @@ export const ProjectArchivedEmptyState = observer(function ProjectArchivedEmptyS
                   })
                 );
               },
-              disabled: !canPerformEmptyStateActions,
+              disabled: !canConfigureAutomation,
               variant: "primary",
             },
           ]}

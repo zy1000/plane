@@ -137,9 +137,9 @@ export const useWorkspaceGroups = (workspaceSlug: string | undefined) => {
     setAvailableRolesError(null);
     try {
       const roles = await workspaceService.fetchWorkspaceRoles(workspaceSlug);
-      setAvailableRoles(roles.filter((role) => role.type === "workspace"));
+      setAvailableRoles(roles);
     } catch (error) {
-      setAvailableRolesError(getErrorMessage(error, "获取可用角色失败"));
+      setAvailableRolesError(getErrorMessage(error, "获取可用权限组失败"));
     } finally {
       setIsAvailableRolesLoading(false);
     }
@@ -297,7 +297,7 @@ export const useWorkspaceGroups = (workspaceSlug: string | undefined) => {
         } else {
           result.failures.push({
             targetId,
-            message: getErrorMessage(settledResult.reason, "添加角色失败"),
+            message: getErrorMessage(settledResult.reason, "添加权限组失败"),
           });
         }
       });

@@ -11,7 +11,7 @@ from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 
-from plane.app.permissions import allow_workspace_member
+from plane.app.permissions import PermissionKey, allow_workspace_member
 from plane.app.serializers.qa import ReviewModuleCreateUpdateSerializer, ReviewModuleDetailSerializer, \
     ReviewModuleListSerializer, ReviewListSerializer, ReviewCreateUpdateSerializer, \
     ReviewCaseRecordsSerializer, ReviewSerializer
@@ -119,7 +119,7 @@ class CaseReviewAPIView(BaseAPIView):
             return Response({"error": "cases belong to another product"}, status=status.HTTP_400_BAD_REQUEST)
         return None
 
-    @allow_product_scope
+    @allow_product_scope(PermissionKey.PROJECT_CASE_REVIEW_CREATE)
     def post(self, request, slug, product_id):
         # 产品由 URL 决定（唯一约束校验需要它出现在载荷里）
         data = request.data.copy()
@@ -134,7 +134,7 @@ class CaseReviewAPIView(BaseAPIView):
         serializer = self.serializer_class(instance=test_plan)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-    @allow_product_scope
+    @allow_product_scope(PermissionKey.PROJECT_CASE_REVIEW_VIEW)
     def get(self, request, slug, product_id):
         cases = self.filter_queryset(self.product_queryset(slug, product_id))
         paginator = self.pagination_class()
@@ -142,7 +142,7 @@ class CaseReviewAPIView(BaseAPIView):
         serializer = self.serializer_class(instance=paginated_queryset, many=True)
         return list_response(data=serializer.data, count=cases.count())
 
-    @allow_product_scope
+    @allow_product_scope(PermissionKey.PROJECT_CASE_REVIEW_EDIT)
     def put(self, request, slug, product_id):
         review_id = request.data.pop('id')
         request.data.pop('project', None)
@@ -157,7 +157,7 @@ class CaseReviewAPIView(BaseAPIView):
         serializer = self.serializer_class(instance=review)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    @allow_product_scope
+    @allow_product_scope(PermissionKey.PROJECT_CASE_REVIEW_DELETE)
     def delete(self, request, slug, product_id):
         ids = request.data.pop('ids')
         self.product_queryset(slug, product_id).filter(id__in=ids).delete()

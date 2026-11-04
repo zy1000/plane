@@ -17,7 +17,7 @@ from django.views.decorators.gzip import gzip_page
 from rest_framework import status
 from rest_framework.response import Response
 
-from plane.app.permissions import ProjectEntityPermission, allow_fine_permission, PermissionKey, has_project_issue_permission
+from plane.app.permissions import allow_project_member, ProjectEntityPermission, allow_fine_permission, PermissionKey, has_project_issue_permission
 from plane.app.serializers import (
     IssueFlatSerializer,
     IssueSerializer,
@@ -40,7 +40,6 @@ from plane.utils.grouper import (
 from plane.utils.issue_filters import issue_filters
 from plane.utils.order_queryset import order_issue_queryset
 from plane.utils.paginator import GroupedOffsetPaginator, SubGroupedOffsetPaginator
-from plane.app.permissions import allow_permission, ROLE
 from plane.utils.error_codes import ERROR_CODES
 from plane.utils.host import base_host
 
@@ -103,7 +102,7 @@ class IssueArchiveViewSet(BaseViewSet):
         )
 
     @method_decorator(gzip_page)
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
+    @allow_project_member
     def list(self, request, slug, project_id):
         filters = issue_filters(request.query_params, "GET")
         show_sub_issues = request.GET.get("show_sub_issues", "true")
@@ -217,7 +216,7 @@ class IssueArchiveViewSet(BaseViewSet):
                 on_results=lambda issues: issue_on_results(group_by=group_by, issues=issues, sub_group_by=sub_group_by),
             )
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
+    @allow_project_member
     def retrieve(self, request, slug, project_id, pk=None):
         issue = (
             self.get_queryset()
@@ -253,7 +252,7 @@ class IssueArchiveViewSet(BaseViewSet):
         serializer = IssueDetailSerializer(issue, expand=self.expand)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
+    @allow_project_member
     def archive(self, request, slug, project_id, pk=None):
         issue = Issue.issue_objects.select_related("type").get(workspace__slug=slug, project_id=project_id, pk=pk)
 
@@ -290,7 +289,7 @@ class IssueArchiveViewSet(BaseViewSet):
 
         return Response({"archived_at": str(issue.archived_at)}, status=status.HTTP_200_OK)
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
+    @allow_project_member
     def unarchive(self, request, slug, project_id, pk=None):
         issue = Issue.objects.select_related("type").get(
             workspace__slug=slug,
@@ -331,7 +330,7 @@ class IssueArchiveViewSet(BaseViewSet):
 class BulkArchiveIssuesEndpoint(BaseAPIView):
     permission_classes = [ProjectEntityPermission]
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
+    @allow_project_member
     def post(self, request, slug, project_id):
         issue_ids = request.data.get("issue_ids", [])
 

@@ -19,6 +19,7 @@ from plane.app.views.base import BaseViewSet
 from plane.app.views.requirement.mixins import get_scoped_product
 from plane.db.models import Project, ProductProject, StageReview, StageReviewStatus
 from plane.utils.review_tailoring import project_stages
+from plane.utils.visibility import visible_projects_q
 
 from .review import (
     _attachment_count_annotation,
@@ -29,24 +30,23 @@ from .review import (
 #: 与项目侧 STAGE_REVIEW_READ_KEYS 同一口径：查看或维护任一即可
 READ_KEYS = {
     PermissionKey.PROJECT_STAGE_REVIEW_VIEW.value,
-    PermissionKey.PROJECT_STAGE_REVIEW_MANAGE.value,
+    PermissionKey.PROJECT_STAGE_REVIEW_EDIT.value,
 }
 
 
 def _readable_project_ids(user, slug, product):
     """关联了这个产品、且当前用户能看阶段评审的项目。
 
-    成员资格口径同项目侧列表（活跃成员 + 未归档）：公开项目的非成员在项目页本来就看不到
-    阶段评审，产品页不能反而给他开一扇窗。再按项目算权限 key —— 产品关联的项目是个位数
+    可见口径同项目侧列表（能进的项目 + 未归档，见 utils/visibility.py）：在项目页看不到
+    阶段评审的人，产品页不能反而给他开一扇窗。再按项目算权限 key —— 产品关联的项目是个位数
     量级，逐项目一次查询可以接受（先例见 utils/requirement_test_case.py）。
     """
     candidate_ids = list(
         ProductProject.objects.filter(
+            visible_projects_q(user, slug, "project"),
             workspace__slug=slug,
             product_id=product.id,
             project__archived_at__isnull=True,
-            project__project_projectmember__member=user,
-            project__project_projectmember__is_active=True,
         )
         .values_list("project_id", flat=True)
         .distinct()

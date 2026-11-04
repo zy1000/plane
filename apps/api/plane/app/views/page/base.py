@@ -30,7 +30,7 @@ from rest_framework import status
 from rest_framework.response import Response
 
 # Module imports
-from plane.app.permissions import allow_permission, ROLE
+from plane.app.permissions import allow_project_member
 from plane.app.serializers import (
     PageSerializer,
     PageDetailSerializer,
@@ -40,7 +40,6 @@ from plane.db.models import (
     Page,
     PageLog,
     UserFavorite,
-    ProjectMember,
     ProjectPage,
     Project,
     UserRecentVisit,
@@ -54,6 +53,7 @@ from plane.bgtasks.page_version_task import track_page_version
 from plane.bgtasks.recent_visited_task import recent_visited_task
 from plane.bgtasks.copy_s3_object import copy_s3_objects_of_description_and_assets
 from plane.app.permissions import ProjectPagePermission
+from plane.utils.visibility import visible_project_scope
 
 
 def unarchive_archive_page_and_descendants(page_id, archived_at):
@@ -71,6 +71,13 @@ def unarchive_archive_page_and_descendants(page_id, archived_at):
     with connection.cursor() as cursor:
         cursor.execute(sql, [page_id, archived_at])
 
+
+
+def _visible_pages_q(user, slug):
+    """页面挂在多个项目上（M2M ``projects``）：能看到其中任一项目就能看到页面。
+    visible_projects_q 只认到项目的 FK 字段名，这里按 id 集合拼。"""
+    scope = visible_project_scope(user, slug)
+    return Q() if scope.all else Q(projects__in=list(scope.ids))
 
 class PageViewSet(BaseViewSet):
     serializer_class = PageSerializer
@@ -90,8 +97,7 @@ class PageViewSet(BaseViewSet):
             .get_queryset()
             .filter(workspace__slug=self.kwargs.get("slug"))
             .filter(
-                projects__project_projectmember__member=self.request.user,
-                projects__project_projectmember__is_active=True,
+                _visible_pages_q(self.request.user, self.kwargs.get("slug")),
                 projects__archived_at__isnull=True,
             )
             .filter(parent__isnull=True)
@@ -197,27 +203,6 @@ class PageViewSet(BaseViewSet):
         project = Project.objects.get(pk=project_id)
         track_visit = request.query_params.get("track_visit", "true").lower() == "true"
 
-        """
-        if the role is guest and guest_view_all_features is false and owned by is not
-        the requesting user then dont show the page
-        """
-
-        if (
-            ProjectMember.objects.filter(
-                workspace__slug=slug,
-                project_id=project_id,
-                member=request.user,
-                role=5,
-                is_active=True,
-            ).exists()
-            and not project.guest_view_all_features
-            and not page.owned_by == request.user
-        ):
-            return Response(
-                {"error": "You are not allowed to view this page"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
         if page is None:
             return Response({"error": "Page not found"}, status=status.HTTP_404_NOT_FOUND)
         else:
@@ -277,17 +262,6 @@ class PageViewSet(BaseViewSet):
     def list(self, request, slug, project_id):
         queryset = self.get_queryset()
         project = Project.objects.get(pk=project_id)
-        if (
-            ProjectMember.objects.filter(
-                workspace__slug=slug,
-                project_id=project_id,
-                member=request.user,
-                role=5,
-                is_active=True,
-            ).exists()
-            and not project.guest_view_all_features
-        ):
-            queryset = queryset.filter(owned_by=request.user)
         pages = PageSerializer(queryset, many=True).data
         return Response(pages, status=status.HTTP_200_OK)
 
@@ -370,8 +344,7 @@ class PageViewSet(BaseViewSet):
         queryset = (
             Page.objects.filter(workspace__slug=slug)
             .filter(
-                projects__project_projectmember__member=self.request.user,
-                projects__project_projectmember__is_active=True,
+                _visible_pages_q(self.request.user, self.kwargs.get("slug")),
                 projects__archived_at__isnull=True,
             )
             .filter(parent__isnull=True)
@@ -386,18 +359,6 @@ class PageViewSet(BaseViewSet):
         )
 
         project = Project.objects.get(pk=project_id)
-        if (
-            ProjectMember.objects.filter(
-                workspace__slug=slug,
-                project_id=project_id,
-                member=request.user,
-                role=ROLE.GUEST.value,
-                is_active=True,
-            ).exists()
-            and not project.guest_view_all_features
-        ):
-            queryset = queryset.filter(owned_by=request.user)
-
         stats = queryset.aggregate(
             public_pages=Count(
                 Case(
@@ -420,7 +381,7 @@ class PageViewSet(BaseViewSet):
 class PageFavoriteViewSet(BaseViewSet):
     model = UserFavorite
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
+    @allow_project_member
     def create(self, request, slug, project_id, page_id):
         _ = UserFavorite.objects.create(
             project_id=project_id,
@@ -430,7 +391,7 @@ class PageFavoriteViewSet(BaseViewSet):
         )
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
+    @allow_project_member
     def destroy(self, request, slug, project_id, page_id):
         page_favorite = UserFavorite.objects.get(
             project=project_id,

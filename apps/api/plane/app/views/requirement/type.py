@@ -22,6 +22,8 @@ from plane.utils.requirement import (
     serialize_requirement_type_field_tree,
 )
 
+from plane.app.permissions import PermissionKey, has_workspace_permission  # noqa: E402
+
 
 def is_workspace_member(user, slug):
     """需求类型是工作区级的字段定义源，改它会立刻影响这个工作区所有产品的所有需求。
@@ -100,7 +102,7 @@ class RequirementTypeViewSet(BaseViewSet):
         )
 
     def create(self, request, slug):
-        if not is_workspace_member(request.user, slug):
+        if not has_workspace_permission(request.user, slug, PermissionKey.WORKSPACE_REQUIREMENT_TYPE_MANAGE):
             return self._forbidden()
         workspace = self.get_serializer_context().get("workspace")
         if workspace is None:
@@ -117,7 +119,7 @@ class RequirementTypeViewSet(BaseViewSet):
         )
 
     def _update(self, request, pk, partial):
-        if not is_workspace_member(request.user, self.workspace_slug):
+        if not has_workspace_permission(request.user, self.workspace_slug, PermissionKey.WORKSPACE_REQUIREMENT_TYPE_MANAGE):
             return self._forbidden()
         requirement_type = self._get_requirement_type(pk)
         if requirement_type is None:
@@ -144,7 +146,7 @@ class RequirementTypeViewSet(BaseViewSet):
         return self._update(request, pk, partial=True)
 
     def destroy(self, request, slug, pk):
-        if not is_workspace_member(request.user, slug):
+        if not has_workspace_permission(request.user, slug, PermissionKey.WORKSPACE_REQUIREMENT_TYPE_MANAGE):
             return self._forbidden()
         requirement_type = self._get_requirement_type(pk)
         if requirement_type is None:
@@ -209,7 +211,7 @@ class RequirementTypeConfigurationAPIView(BaseAPIView):
         )
 
     def put(self, request, slug, pk):
-        if not is_workspace_member(request.user, slug):
+        if not has_workspace_permission(request.user, slug, PermissionKey.WORKSPACE_REQUIREMENT_TYPE_MANAGE):
             return Response(
                 {"error": "You do not have permission to maintain requirement types."},
                 status=status.HTTP_403_FORBIDDEN,

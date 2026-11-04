@@ -103,6 +103,7 @@ export const MyAccessRoot = observer(function MyAccessRoot({ data, error, isLoad
   })();
 
   const displayName = currentUser?.display_name || currentUser?.email || "—";
+  const jobRoles = data.job_roles ?? [];
   const totalPermissions = data.permissions.length;
   const grantedPermissions = data.permissions.filter((permission) => permission.is_granted).length;
 
@@ -139,7 +140,7 @@ export const MyAccessRoot = observer(function MyAccessRoot({ data, error, isLoad
             <p className="mt-0.5 truncate text-caption-md-regular text-secondary">{currentUser?.email}</p>
           </div>
         </div>
-        <dl className="grid border-t border-subtle md:grid-cols-3 md:divide-x md:divide-subtle">
+        <dl className="grid border-t border-subtle md:grid-cols-4 md:divide-x md:divide-subtle">
           <div className="border-b border-subtle px-5 py-4 md:border-b-0">
             <dt className="text-caption-sm-medium text-tertiary">
               {t("workspace_settings.settings.my_access.identity.workspace")}
@@ -155,6 +156,23 @@ export const MyAccessRoot = observer(function MyAccessRoot({ data, error, isLoad
                 granted: grantedPermissions,
                 total: totalPermissions,
               })}
+            </dd>
+          </div>
+          <div className="border-b border-subtle px-5 py-4 md:border-b-0">
+            <dt className="text-caption-sm-medium text-tertiary">
+              {t("workspace_settings.settings.my_access.identity.job_roles")}
+            </dt>
+            <dd className="mt-1 flex flex-wrap gap-1 text-body-sm-medium text-primary">
+              {jobRoles.length > 0
+                ? jobRoles.map((jobRole) => (
+                    <span
+                      key={jobRole.id}
+                      className="rounded border border-subtle bg-layer-1 px-1.5 text-caption-sm-medium text-secondary"
+                    >
+                      {jobRole.label}
+                    </span>
+                  ))
+                : t("workspace_settings.settings.my_access.identity.no_job_roles")}
             </dd>
           </div>
           <div className="px-5 py-4">

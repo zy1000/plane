@@ -32,12 +32,13 @@ from rest_framework.response import Response
 
 # Module imports
 from plane.app.permissions import (
+    allow_workspace_member,
+    allow_project_member,
     ProjectMemberPermission,
-    allow_permission,
     allow_fine_permission,
     PermissionKey,
 )
-from plane.app.permissions.base import _is_instance_admin
+from plane.app.permissions.base import bulk_project_permission_keys
 from plane.app.serializers import (
     DeployBoardSerializer,
     ProjectListSerializer,
@@ -51,7 +52,6 @@ from plane.bgtasks.recent_visited_task import recent_visited_task
 from plane.bgtasks.webhook_task import model_activity, webhook_activity
 from plane.db.models import (
     DataDictionaryItem,
-    DevModeIssueType,
     UserFavorite,
     DeployBoard,
     Intake,
@@ -59,16 +59,11 @@ from plane.db.models import (
     Cycle,
     ProjectIdentifier,
     ProjectMember,
-    ProjectMemberRole,
-    ProjectGroupRole,
-    ProjectNetwork,
-    ProjectRole,
     ProjectUserProperty,
     Workspace,
     WorkspaceMember,
     IssueActivity,
     Issue,
-    IssueType,
     Module,
     Release,
     ReleaseIssue,
@@ -82,10 +77,6 @@ from plane.db.models import (
     IssueAssignee,
 )
 from plane.db.models.intake import IntakeIssueStatus
-from plane.db.models.issue_type import (
-    ISSUE_TYPE_PERMISSION_ACTIONS,
-    build_issue_type_permission_key,
-)
 from plane.utils.data_dictionary import (
     PROJECT_CLOSED_STATUS_LABELS,
     PROJECT_DICTIONARY_FIELD_KEYS,
@@ -98,6 +89,7 @@ from plane.utils.qa import project_case_repository_ids, project_product_ids
 from plane.utils.requirement_project import linked_products_by_project
 from plane.utils.project.defaults import setup_new_project
 from plane.utils.response import list_response
+from plane.utils.visibility import can_access_project, visible_project_ids, visible_projects_q
 
 
 # 项目列表接口只回列表 UI 用得到的 key，不把整份 ACL 塞进每一行
@@ -106,10 +98,29 @@ from plane.utils.response import list_response
 # 列表页要新增权限判断时往这里加 key，前端不用改。
 PROJECT_LIST_PERMISSION_KEYS = frozenset(
     {
-        PermissionKey.PROJECT_PUBLISH_VIEW.value,
-        PermissionKey.PROJECT_PUBLISH_CREATE.value,
-        # 列表行操作「关闭 / 重新开启」与 ProjectCloseReopenEndpoint 同一把 key
         PermissionKey.PROJECT_SETTINGS_EDIT.value,
+        # 列表行操作「关闭 / 重新开启」与 ProjectCloseReopenEndpoint 同一把 key
+        PermissionKey.PROJECT_SETTINGS_ARCHIVE.value,
+        PermissionKey.PROJECT_SETTINGS_DELETE.value,
+        PermissionKey.PROJECT_MEMBER_MANAGE.value,
+        # 侧栏项目项、跨项目的快捷创建（工作项 / 页面 / 迭代 / 模块）在没进项目前就要判断
+        PermissionKey.PROJECT_ISSUE_VIEW.value,
+        PermissionKey.PROJECT_ISSUE_CREATE.value,
+        # 个人工作项 / 全局视图跨项目行内编辑、删除、归档
+        PermissionKey.PROJECT_ISSUE_EDIT.value,
+        PermissionKey.PROJECT_ISSUE_DELETE.value,
+        PermissionKey.PROJECT_ISSUE_ARCHIVE.value,
+        PermissionKey.PROJECT_DEFECT_VIEW.value,
+        PermissionKey.PROJECT_DEFECT_CREATE.value,
+        PermissionKey.PROJECT_DEFECT_EDIT.value,
+        PermissionKey.PROJECT_DEFECT_DELETE.value,
+        PermissionKey.PROJECT_PAGE_VIEW.value,
+        PermissionKey.PROJECT_PAGE_CREATE.value,
+        PermissionKey.PROJECT_CYCLE_VIEW.value,
+        PermissionKey.PROJECT_CYCLE_CREATE.value,
+        PermissionKey.PROJECT_MODULE_VIEW.value,
+        PermissionKey.PROJECT_MODULE_CREATE.value,
+        PermissionKey.PROJECT_INTAKE_VIEW.value,
     }
 )
 
@@ -164,11 +175,13 @@ class ProjectViewSet(BaseViewSet):
                 )
             )
             .annotate(
-                member_role=ProjectMember.objects.filter(
-                    project_id=OuterRef("pk"),
-                    member_id=self.request.user.id,
-                    is_active=True,
-                ).values("role")
+                is_member=Exists(
+                    ProjectMember.objects.filter(
+                        project_id=OuterRef("pk"),
+                        member_id=self.request.user.id,
+                        is_active=True,
+                    )
+                )
             )
             .annotate(
                 anchor=DeployBoard.objects.filter(
@@ -216,157 +229,15 @@ class ProjectViewSet(BaseViewSet):
         return str(value) if value is not None else None
 
     def _get_permission_keys_by_project(self, slug, project_rows):
-        if not project_rows:
-            return {}
-
         project_ids = [
-            self._get_project_row_value(row, "id")
-            for row in project_rows
-            if self._get_project_row_value(row, "id")
+            self._get_project_row_value(row, "id") for row in project_rows if self._get_project_row_value(row, "id")
         ]
-        permission_keys_by_project = {project_id: set() for project_id in project_ids}
-        user_id = str(self.request.user.id)
-
-        is_instance_admin = _is_instance_admin(self.request.user)
-        if is_instance_admin:
-            privileged_project_ids = set(project_ids)
-        else:
-            privileged_project_ids = {
-                self._get_project_row_value(row, "id")
-                for row in project_rows
-                if self._get_project_row_value(row, "id")
-                and (
-                    self._get_project_row_value(row, "project_lead") == user_id
-                    or self._get_project_row_value(row, "created_by") == user_id
-                )
-            }
-
-        if privileged_project_ids:
-            issue_type_permission_keys = {}
-            # 类型归方案：先取项目 → 方案，再按方案取类型（共用方案的多个项目得到同一组 key）
-            # 跟随项目（指向类型库）只算所属研发模式关联的类型
-            project_ids_by_scheme = {}
-            following_mode_by_project = {}
-            for project_id, scheme_id, dev_mode_id, scheme_project_id in Project.all_objects.filter(
-                pk__in=privileged_project_ids
-            ).values_list("id", "issue_scheme_id", "dev_mode_id", "issue_scheme__project_id"):
-                project_ids_by_scheme.setdefault(scheme_id, []).append(str(project_id))
-                if scheme_project_id is None:
-                    following_mode_by_project[str(project_id)] = dev_mode_id
-            mode_type_ids = {}
-            for dev_mode_id, issue_type_id in DevModeIssueType.objects.filter(
-                dev_mode_id__in=set(following_mode_by_project.values())
-            ).values_list("dev_mode_id", "issue_type_id"):
-                mode_type_ids.setdefault(dev_mode_id, set()).add(issue_type_id)
-            issue_type_rows = IssueType.objects.filter(
-                scheme_id__in=list(project_ids_by_scheme), deleted_at__isnull=True
-            ).values_list("scheme_id", "id")
-
-            for scheme_id, issue_type_id in issue_type_rows:
-                type_keys = {
-                    build_issue_type_permission_key(issue_type_id, action)
-                    for action, _ in ISSUE_TYPE_PERMISSION_ACTIONS
-                }
-                for project_id in project_ids_by_scheme.get(scheme_id, []):
-                    if project_id in following_mode_by_project and issue_type_id not in mode_type_ids.get(
-                        following_mode_by_project[project_id], set()
-                    ):
-                        continue
-                    issue_type_permission_keys.setdefault(project_id, set()).update(type_keys)
-
-            static_permission_keys = set(PermissionKey.values())
-            for project_id in privileged_project_ids:
-                permission_keys_by_project[project_id] = (
-                        static_permission_keys
-                        | issue_type_permission_keys.get(project_id, set())
-                )
-
-        member_scoped_project_ids = [
-            project_id
-            for project_id in project_ids
-            if project_id not in privileged_project_ids
-        ]
-        if not member_scoped_project_ids:
-            return permission_keys_by_project
-
-        project_members = list(
-            ProjectMember.objects.filter(
-                member_id=user_id,
-                workspace__slug=slug,
-                project_id__in=member_scoped_project_ids,
-                is_active=True,
-            ).values("id", "project_id")
+        return bulk_project_permission_keys(
+            self.request.user,
+            Workspace.objects.filter(slug=slug).first(),
+            project_ids,
+            PROJECT_LIST_PERMISSION_KEYS,
         )
-        if not project_members:
-            return permission_keys_by_project
-
-        member_project_map = {
-            member["id"]: str(member["project_id"]) for member in project_members
-        }
-
-        direct_role_rows = list(
-            ProjectMemberRole.objects.filter(
-                member_id__in=member_project_map.keys(),
-                deleted_at__isnull=True,
-                role__deleted_at__isnull=True,
-            ).values_list("member_id", "role_id")
-        )
-        project_role_rows = [
-            (member_project_map[member_id], role_id)
-            for member_id, role_id in direct_role_rows
-        ]
-        project_role_rows.extend(
-            (str(project_id), role_id)
-            for project_id, role_id in ProjectGroupRole.objects.filter(
-                project_id__in=member_scoped_project_ids,
-                deleted_at__isnull=True,
-                role__deleted_at__isnull=True,
-                group__deleted_at__isnull=True,
-                group__workspace__slug=slug,
-                group__group_members__deleted_at__isnull=True,
-                group__group_members__member__deleted_at__isnull=True,
-                group__group_members__member__is_active=True,
-                group__group_members__member__member_id=user_id,
-            )
-            .values_list("project_id", "role_id")
-            .distinct()
-        )
-        if not project_role_rows:
-            return permission_keys_by_project
-
-        role_ids = {role_id for _, role_id in project_role_rows}
-        role_permissions = {
-            role["id"]: role["permissions"]
-            for role in ProjectRole.objects.filter(
-                pk__in=role_ids,
-                deleted_at__isnull=True,
-            ).values("id", "permissions")
-        }
-
-        project_permission_keys = {}
-        for scoped_project_id, role_id in project_role_rows:
-            permissions = role_permissions.get(role_id)
-            if not isinstance(permissions, dict):
-                continue
-
-            valid_keys = [
-                key
-                for key in permissions.get("permission_keys", [])
-                if isinstance(key, str)
-            ]
-            if not valid_keys:
-                continue
-
-            if scoped_project_id not in project_permission_keys:
-                project_permission_keys[scoped_project_id] = set()
-            project_permission_keys[scoped_project_id].update(valid_keys)
-
-        for scoped_project_id in member_project_map.values():
-            permission_keys_by_project[scoped_project_id] = project_permission_keys.get(
-                scoped_project_id, set()
-            )
-
-        return permission_keys_by_project
 
     def _serialize_projects_with_permission_keys(self, slug, projects, fields=None):
         project_rows = list(projects)
@@ -468,12 +339,14 @@ class ProjectViewSet(BaseViewSet):
 
         return stats_by_project
 
-    @allow_fine_permission(PermissionKey.WORKSPACE_PROJECT_VIEW, level="WORKSPACE")
+    @allow_workspace_member
     def list_detail(self, request, slug):
         fields = [field for field in request.GET.get("fields", "").split(",") if field]
-        # 项目列表对工作区全员可见（含私有项目，非成员的 member_role 为 null）；
-        # 私有项目能否加入由 invite.py 的加入接口控制。
-        projects = self.get_queryset().order_by("sort_order", "name")
+        # 只返回当前用户能看到的项目（成员 / 负责 / 直通 / 白名单，见 utils/visibility.py）；
+        # is_member 注解仍标记「是不是成员表里的人」。get_queryset 不收窄，retrieve / 创建后回读等仍按 id 取。
+        projects = (
+            self.get_queryset().filter(visible_projects_q(request.user, slug, None)).order_by("sort_order", "name")
+        )
 
         if request.GET.get("per_page", False) and request.GET.get("cursor", False):
             return self.paginate(
@@ -490,7 +363,7 @@ class ProjectViewSet(BaseViewSet):
         )
         return Response(projects, status=status.HTTP_200_OK)
 
-    @allow_fine_permission(PermissionKey.WORKSPACE_PROJECT_VIEW, level="WORKSPACE")
+    @allow_workspace_member
     def list(self, request, slug):
         sort_order = ProjectUserProperty.objects.filter(
             user=self.request.user,
@@ -500,6 +373,7 @@ class ProjectViewSet(BaseViewSet):
 
         projects = (
             Project.objects.filter(workspace__slug=self.kwargs.get("slug"))
+            .filter(visible_projects_q(request.user, slug, None))
             .select_related(
                 "workspace",
                 "workspace__owner",
@@ -508,11 +382,13 @@ class ProjectViewSet(BaseViewSet):
                 "cover_image_asset",
             )
             .annotate(
-                member_role=ProjectMember.objects.filter(
-                    project_id=OuterRef("pk"),
-                    member_id=self.request.user.id,
-                    is_active=True,
-                ).values("role")
+                is_member=Exists(
+                    ProjectMember.objects.filter(
+                        project_id=OuterRef("pk"),
+                        member_id=self.request.user.id,
+                        is_active=True,
+                    )
+                )
             )
             .annotate(
                 intake_count=Count(
@@ -555,7 +431,7 @@ class ProjectViewSet(BaseViewSet):
             "identifier",
             "sort_order",
             "logo_props",
-            "member_role",
+            "is_member",
             "intake_count",
             "archived_at",
             "workspace",
@@ -564,9 +440,7 @@ class ProjectViewSet(BaseViewSet):
             "module_view",
             "page_view",
             "inbox_view",
-            "guest_view_all_features",
             "project_lead",
-            "network",
             "code",
             "business_unit",
             "status",
@@ -584,7 +458,7 @@ class ProjectViewSet(BaseViewSet):
             "updated_by",
         )
 
-        # 同 list_detail：不按成员 / network 收窄，工作区全员可见
+        # 同 list_detail：只有当前用户能看到的项目
         project_rows = list(projects)
         stats_by_project = self._get_project_list_stats(
             [row["id"] for row in project_rows]
@@ -631,7 +505,7 @@ class ProjectViewSet(BaseViewSet):
             )
         return Response(project_rows, status=status.HTTP_200_OK)
 
-    @allow_fine_permission(PermissionKey.WORKSPACE_PROJECT_VIEW, level="WORKSPACE")
+    @allow_workspace_member
     def retrieve(self, request, slug, pk):
         project = (
             self.get_queryset().filter(archived_at__isnull=True).filter(pk=pk).first()
@@ -642,21 +516,9 @@ class ProjectViewSet(BaseViewSet):
                 {"error": "Project does not exist"}, status=status.HTTP_404_NOT_FOUND
             )
 
-        member_ids = [
-            str(project_member.member_id) for project_member in project.members_list
-        ]
-
-        if str(request.user.id) not in member_ids:
-            if project.network == ProjectNetwork.SECRET.value:
-                return Response(
-                    {"error": "You do not have permission"},
-                    status=status.HTTP_403_FORBIDDEN,
-                )
-            else:
-                return Response(
-                    {"error": "You are not a member of this project"},
-                    status=status.HTTP_409_CONFLICT,
-                )
+        # 能进 = 成员 / 负责人 / 直通 / 白名单（utils/visibility.py）；看不见的项目一律 403
+        if not can_access_project(request.user, slug, project.id):
+            return Response({"error": "You do not have permission"}, status=status.HTTP_403_FORBIDDEN)
 
         recent_visited_task.delay(
             slug=slug,
@@ -781,7 +643,7 @@ class ProjectViewSet(BaseViewSet):
             return Response(serializer.data, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    @allow_fine_permission(PermissionKey.PROJECT_DELETE)
+    @allow_fine_permission(PermissionKey.PROJECT_SETTINGS_DELETE)
     def destroy(self, request, slug, pk):
         project = Project.objects.get(pk=pk, workspace__slug=slug)
         # 项目下的需求关联行随级联软删,但级联是异步的;这里同步软删关联行,
@@ -818,7 +680,7 @@ class ProjectViewSet(BaseViewSet):
 
 class ProjectArchiveUnarchiveEndpoint(BaseAPIView):
 
-    @allow_fine_permission(PermissionKey.PROJECT_ARCHIVE)
+    @allow_fine_permission(PermissionKey.PROJECT_SETTINGS_ARCHIVE)
     def post(self, request, slug, project_id):
         project = Project.objects.get(pk=project_id, workspace__slug=slug)
         project.archived_at = timezone.now()
@@ -828,7 +690,7 @@ class ProjectArchiveUnarchiveEndpoint(BaseAPIView):
             {"archived_at": str(project.archived_at)}, status=status.HTTP_200_OK
         )
 
-    @allow_fine_permission(PermissionKey.PROJECT_UNARCHIVE)
+    @allow_fine_permission(PermissionKey.PROJECT_SETTINGS_ARCHIVE)
     def delete(self, request, slug, project_id):
         project = Project.objects.get(pk=project_id, workspace__slug=slug)
         project.archived_at = None
@@ -1029,7 +891,7 @@ class DeployBoardViewSet(BaseViewSet):
         serializer = DeployBoardSerializer(project_deploy_board)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    @allow_fine_permission(PermissionKey.PROJECT_PUBLISH_CREATE)
+    @allow_fine_permission(PermissionKey.PROJECT_SETTINGS_EDIT)
     def create(self, request, slug, project_id):
         comments = request.data.get("is_comments_enabled", False)
         reactions = request.data.get("is_reactions_enabled", False)
@@ -1060,11 +922,11 @@ class DeployBoardViewSet(BaseViewSet):
         serializer = DeployBoardSerializer(project_deploy_board)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    @allow_fine_permission(PermissionKey.PROJECT_PUBLISH_DELETE)
+    @allow_fine_permission(PermissionKey.PROJECT_SETTINGS_EDIT)
     def destroy(self, request, slug, project_id, pk):
         return super().destroy(request, slug, project_id)
 
-    @allow_fine_permission(PermissionKey.PROJECT_PUBLISH_EDIT)
+    @allow_fine_permission(PermissionKey.PROJECT_SETTINGS_EDIT)
     def partial_update(self, request, slug, project_id, pk):
         return super().partial_update(request, slug, project_id)
 
@@ -1095,13 +957,8 @@ class ProjectAPI(BaseViewSet):
             )
         return project_id, None
 
-    def _has_statistic_project_access(self, slug, project_id, user_id):
-        return ProjectMember.objects.filter(
-            workspace__slug=slug,
-            project_id=project_id,
-            member_id=user_id,
-            is_active=True,
-        ).exists()
+    def _has_statistic_project_access(self, slug, project_id, user):
+        return can_access_project(user, slug, project_id)
 
     def _parse_statistic_date_range(self, request):
         start_date_param = request.query_params.get("start_date")
@@ -1251,11 +1108,10 @@ class ProjectAPI(BaseViewSet):
 
         cycles_queryset = (
             Cycle.objects.filter(
+                visible_projects_q(request.user, self.kwargs.get("slug"), "project"),
                 workspace__slug=slug,
                 project_id=project_id,
                 archived_at__isnull=True,
-                project__project_projectmember__member=request.user,
-                project__project_projectmember__is_active=True,
             )
             .select_related("owned_by")
             .annotate(
@@ -1592,13 +1448,8 @@ class ProjectAPI(BaseViewSet):
 
     @action(detail=False, methods=["get"], url_path="user-project")
     def get_user_project(self, request, slug):
-        project_id = ProjectMember.objects.filter(
-            workspace__slug=slug,
-            member_id=request.user.id,
-            is_active=True,
-            member__member_workspace__workspace__slug=slug,
-            member__member_workspace__is_active=True,
-        ).values_list("project_id", flat=True)
+        # 自己能进的项目（成员 / 负责 / 直通 / 白名单）
+        project_id = visible_project_ids(request.user, slug)
 
         query = Project.objects.filter(pk__in=project_id).select_related(
             "business_unit",
@@ -1633,13 +1484,13 @@ class ProjectAPI(BaseViewSet):
         )
 
     @action(detail=False, methods=["get"], url_path="statistic")
-    @allow_fine_permission(PermissionKey.PROJECT_OVERVIEW_VIEW)
+    @allow_project_member
     def get_statistic(self, request, slug):
         project_id, error_response = self._get_statistic_project_id(request)
         if error_response:
             return error_response
 
-        if not self._has_statistic_project_access(slug, project_id, request.user.id):
+        if not self._has_statistic_project_access(slug, project_id, request.user):
             return Response({"error": "forbidden"}, status=status.HTTP_403_FORBIDDEN)
 
         start_date, end_date, error_response = self._parse_statistic_date_range(request)
@@ -1898,13 +1749,13 @@ class ProjectAPI(BaseViewSet):
         )
 
     @action(detail=False, methods=["get"], url_path="overview-statistic")
-    @allow_fine_permission(PermissionKey.PROJECT_OVERVIEW_VIEW)
+    @allow_project_member
     def get_overview_statistic(self, request, slug):
         project_id, error_response = self._get_statistic_project_id(request)
         if error_response:
             return error_response
 
-        if not self._has_statistic_project_access(slug, project_id, request.user.id):
+        if not self._has_statistic_project_access(slug, project_id, request.user):
             return Response({"error": "forbidden"}, status=status.HTTP_403_FORBIDDEN)
 
         statistic_table_page_size = self._parse_statistic_page_size(request)
@@ -1930,13 +1781,13 @@ class ProjectAPI(BaseViewSet):
         return Response(overview_statistic_payload, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=["get"], url_path="overview-work-items")
-    @allow_fine_permission(PermissionKey.PROJECT_OVERVIEW_VIEW)
+    @allow_project_member
     def get_overview_work_items(self, request, slug):
         project_id, error_response = self._get_statistic_project_id(request)
         if error_response:
             return error_response
 
-        if not self._has_statistic_project_access(slug, project_id, request.user.id):
+        if not self._has_statistic_project_access(slug, project_id, request.user):
             return Response({"error": "forbidden"}, status=status.HTTP_403_FORBIDDEN)
 
         metric = request.query_params.get("metric")

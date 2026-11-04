@@ -262,47 +262,18 @@ class UserEndpoint(BaseViewSet):
         projects_to_deactivate = []
         workspaces_to_deactivate = []
 
-        projects = ProjectMember.objects.filter(member=request.user, is_active=True).annotate(
-            other_admin_exists=Count(
-                Case(
-                    When(Q(role=20, is_active=True) & ~Q(member=request.user), then=1),
-                    default=0,
-                    output_field=IntegerField(),
-                )
-            ),
-            total_members=Count("id"),
-        )
-
-        for project in projects:
-            if project.other_admin_exists > 0 or (project.total_members == 1):
-                project.is_active = False
-                projects_to_deactivate.append(project)
-            else:
-                return Response(
-                    {"error": "You cannot deactivate account as you are the only admin in some projects."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-        workspaces = WorkspaceMember.objects.filter(member=request.user, is_active=True).annotate(
-            other_admin_exists=Count(
-                Case(
-                    When(Q(role=20, is_active=True) & ~Q(member=request.user), then=1),
-                    default=0,
-                    output_field=IntegerField(),
-                )
-            ),
-            total_members=Count("id"),
-        )
-
-        for workspace in workspaces:
-            if workspace.other_admin_exists > 0 or (workspace.total_members == 1):
-                workspace.is_active = False
-                workspaces_to_deactivate.append(workspace)
-            else:
-                return Response(
-                    {"error": "You cannot deactivate account as you are the only admin in some workspaces."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
+        # 工作区 owner 不能停用账号（owner 直通全部权限，停用后工作区没人兜底）
+        if WorkspaceMember.objects.filter(member=request.user, is_active=True, workspace__owner=request.user).exists():
+            return Response(
+                {"error": "You cannot deactivate account as you are the owner of some workspaces."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        for project in ProjectMember.objects.filter(member=request.user, is_active=True):
+            project.is_active = False
+            projects_to_deactivate.append(project)
+        for workspace in WorkspaceMember.objects.filter(member=request.user, is_active=True):
+            workspace.is_active = False
+            workspaces_to_deactivate.append(workspace)
 
         ProjectMember.objects.bulk_update(projects_to_deactivate, ["is_active"], batch_size=100)
 

@@ -8,15 +8,14 @@ import { useState } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 // ui
-import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 import { EIssuesStoreType } from "@plane/types";
 import { ContextMenu, CustomMenu } from "@plane/ui";
 import { cn } from "@plane/utils";
 // hooks
 import { useIssues } from "@/hooks/store/use-issues";
-import { useUserPermissions } from "@/hooks/store/user";
 // local imports
 import { DeleteIssueModal } from "../../delete-issue-modal";
+import { useIssuePermission } from "../../issue-permission";
 import type { IQuickActionProps } from "../list/list-view-types";
 import type { MenuItemFactoryProps } from "./helper";
 import { useArchivedIssueMenuItems } from "./helper";
@@ -37,16 +36,16 @@ export const ArchivedIssueQuickActions = observer(function ArchivedIssueQuickAct
   // router
   const { workspaceSlug } = useParams();
   // store hooks
-  const { allowPermissions } = useUserPermissions();
+  const allowIssueAction = useIssuePermission();
 
   const { issuesFilter } = useIssues(EIssuesStoreType.ARCHIVED);
   // derived values
   const activeLayout = `${issuesFilter.issueFilters?.displayFilters?.layout} layout`;
   // auth
-  const isEditingAllowed =
-    allowPermissions([EUserPermissions.ADMIN, EUserPermissions.MEMBER], EUserPermissionsLevel.PROJECT) && !readOnly;
-  const isRestoringAllowed =
-    handleRestore && allowPermissions([EUserPermissions.ADMIN, EUserPermissions.MEMBER], EUserPermissionsLevel.PROJECT);
+  const isEditingAllowed = allowIssueAction("edit", issue, workspaceSlug?.toString()) && !readOnly;
+  const isDeletingAllowed = allowIssueAction("delete", issue, workspaceSlug?.toString()) && !readOnly;
+  // 恢复归档与归档同一把 key
+  const isRestoringAllowed = handleRestore && allowIssueAction("archive", issue, workspaceSlug?.toString());
 
   // Menu items and modals using helper
   const menuItemProps: MenuItemFactoryProps = {
@@ -54,7 +53,7 @@ export const ArchivedIssueQuickActions = observer(function ArchivedIssueQuickAct
     workspaceSlug: workspaceSlug?.toString(),
     activeLayout,
     isEditingAllowed,
-    isDeletingAllowed: isEditingAllowed,
+    isDeletingAllowed,
     isRestoringAllowed: !!isRestoringAllowed,
     setIssueToEdit: () => {},
     setCreateUpdateIssueModal: () => {},

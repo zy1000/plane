@@ -148,9 +148,9 @@ export function WorkspaceGroupsList({
     },
     {
       key: "Roles",
-      content: "角色与权限",
+      content: "权限组",
       tdRender: (group: IWorkspaceGroup) => (
-        <div className="w-32">{group.role_count > 0 ? `${group.role_count} 个角色` : "未分配角色"}</div>
+        <div className="w-32">{group.role_count > 0 ? `${group.role_count} 个权限组` : "未分配权限组"}</div>
       ),
     },
     {

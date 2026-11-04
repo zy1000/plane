@@ -4,8 +4,9 @@
  * See the LICENSE file for details.
  */
 
+import { WORKSPACE_MEMBER_ACCESS, WORKSPACE_OWNER_ACCESS } from "./permission-access";
+import { PERMISSION_KEYS } from "./permission-keys.generated";
 import type { TStaticViewTypes, IWorkspaceSearchResults } from "@plane/types";
-import { EUserWorkspaceRoles } from "@plane/types";
 
 export const ORGANIZATION_SIZE: string[] = ["Just myself", "2-10", "11-50", "51-200", "201-500", "500+"];
 
@@ -76,40 +77,40 @@ export const RESTRICTED_URLS: string[] = [
   "instance",
 ];
 
-export const WORKSPACE_SETTINGS_VIEW_PERMISSION_KEY = "workspace.settings.view" as const;
+export const WORKSPACE_SETTINGS_VIEW_PERMISSION_KEY = WORKSPACE_MEMBER_ACCESS;
 export const WORKSPACE_SETTINGS_EDIT_PERMISSION_KEY = "workspace.settings.edit" as const;
-export const WORKSPACE_SETTINGS_DELETE_PERMISSION_KEY = "workspace.settings.delete" as const;
+export const WORKSPACE_SETTINGS_DELETE_PERMISSION_KEY = WORKSPACE_OWNER_ACCESS;
 export const WORKSPACE_MEMBER_VIEW_PERMISSION_KEY = "workspace.member.view" as const;
-export const WORKSPACE_MEMBER_INVITE_PERMISSION_KEY = "workspace.member.invite" as const;
-export const WORKSPACE_MEMBER_EDIT_PERMISSION_KEY = "workspace.member.edit" as const;
-export const WORKSPACE_MEMBER_REMOVE_PERMISSION_KEY = "workspace.member.remove" as const;
-export const WORKSPACE_MEMBER_LEAVE_PERMISSION_KEY = "workspace.member.leave" as const;
-export const WORKSPACE_ROLE_VIEW_PERMISSION_KEY = "workspace.role.view" as const;
-export const WORKSPACE_ROLE_CREATE_PERMISSION_KEY = "workspace.role.create" as const;
-export const WORKSPACE_ROLE_EDIT_PERMISSION_KEY = "workspace.role.edit" as const;
-export const WORKSPACE_ROLE_DELETE_PERMISSION_KEY = "workspace.role.delete" as const;
-export const WORKSPACE_GROUP_VIEW_PERMISSION_KEY = "workspace.group.view" as const;
-export const WORKSPACE_GROUP_CREATE_PERMISSION_KEY = "workspace.group.create" as const;
-export const WORKSPACE_GROUP_EDIT_PERMISSION_KEY = "workspace.group.edit" as const;
-export const WORKSPACE_GROUP_DELETE_PERMISSION_KEY = "workspace.group.delete" as const;
-export const WORKSPACE_GROUP_MANAGE_MEMBER_PERMISSION_KEY = "workspace.group.manage_member" as const;
-export const WORKSPACE_GROUP_MANAGE_ROLE_PERMISSION_KEY = "workspace.group.manage_role" as const;
-export const WORKSPACE_PROJECT_VIEW_PERMISSION_KEY = "workspace.project.view" as const;
+export const WORKSPACE_MEMBER_INVITE_PERMISSION_KEY = "workspace.member.manage" as const;
+export const WORKSPACE_MEMBER_EDIT_PERMISSION_KEY = "workspace.member.manage" as const;
+export const WORKSPACE_MEMBER_REMOVE_PERMISSION_KEY = "workspace.member.manage" as const;
+export const WORKSPACE_MEMBER_LEAVE_PERMISSION_KEY = WORKSPACE_MEMBER_ACCESS;
+export const WORKSPACE_ROLE_VIEW_PERMISSION_KEY = "workspace.permission_group.view" as const;
+export const WORKSPACE_ROLE_CREATE_PERMISSION_KEY = "workspace.permission_group.manage" as const;
+export const WORKSPACE_ROLE_EDIT_PERMISSION_KEY = "workspace.permission_group.manage" as const;
+export const WORKSPACE_ROLE_DELETE_PERMISSION_KEY = "workspace.permission_group.manage" as const;
+export const WORKSPACE_GROUP_VIEW_PERMISSION_KEY = WORKSPACE_MEMBER_ACCESS;
+export const WORKSPACE_GROUP_CREATE_PERMISSION_KEY = "workspace.team.manage" as const;
+export const WORKSPACE_GROUP_EDIT_PERMISSION_KEY = "workspace.team.manage" as const;
+export const WORKSPACE_GROUP_DELETE_PERMISSION_KEY = "workspace.team.manage" as const;
+export const WORKSPACE_GROUP_MANAGE_MEMBER_PERMISSION_KEY = "workspace.team.manage" as const;
+export const WORKSPACE_GROUP_MANAGE_ROLE_PERMISSION_KEY = "workspace.permission_group.manage" as const;
+export const WORKSPACE_PROJECT_VIEW_PERMISSION_KEY = WORKSPACE_MEMBER_ACCESS;
 export const WORKSPACE_PROJECT_CREATE_PERMISSION_KEY = "workspace.project.create" as const;
-export const WORKSPACE_USER_PROFILE_VIEW_PERMISSION_KEY = "workspace.user_profile.view" as const;
-export const WORKSPACE_USER_PROFILE_EXPORT_PERMISSION_KEY = "workspace.user_profile.export" as const;
+export const WORKSPACE_USER_PROFILE_VIEW_PERMISSION_KEY = "workspace.member.view" as const;
+export const WORKSPACE_USER_PROFILE_EXPORT_PERMISSION_KEY = "workspace.member.view" as const;
 export const WORKSPACE_ANALYTICS_VIEW_PERMISSION_KEY = "workspace.analytics.view" as const;
-export const WORKSPACE_ANALYTICS_MANAGE_SAVED_VIEW_PERMISSION_KEY = "workspace.analytics.manage_saved_view" as const;
-export const WORKSPACE_ANALYTICS_EXPORT_PERMISSION_KEY = "workspace.analytics.export" as const;
+export const WORKSPACE_ANALYTICS_MANAGE_SAVED_VIEW_PERMISSION_KEY = "workspace.analytics.view" as const;
+export const WORKSPACE_ANALYTICS_EXPORT_PERMISSION_KEY = "workspace.analytics.view" as const;
 // 模板中心：需求标准库 + 用例模板库 + 评审模板库（与后端 plane/app/permissions/keys.py 的同名段一致）
 export const WORKSPACE_REQUIREMENT_LIBRARY_VIEW_PERMISSION_KEY = "workspace.requirement_library.view" as const;
 export const WORKSPACE_REQUIREMENT_LIBRARY_MANAGE_PERMISSION_KEY = "workspace.requirement_library.manage" as const;
 export const WORKSPACE_REQUIREMENT_LIBRARY_IMPORT_EXPORT_PERMISSION_KEY =
-  "workspace.requirement_library.import_export" as const;
+  "workspace.requirement_library.manage" as const;
 export const WORKSPACE_CASE_TEMPLATE_VIEW_PERMISSION_KEY = "workspace.case_template.view" as const;
 export const WORKSPACE_CASE_TEMPLATE_MANAGE_PERMISSION_KEY = "workspace.case_template.manage" as const;
 export const WORKSPACE_CASE_TEMPLATE_IMPORT_EXPORT_PERMISSION_KEY =
-  "workspace.case_template.import_export" as const;
+  "workspace.case_template.manage" as const;
 export const WORKSPACE_REVIEW_TEMPLATE_VIEW_PERMISSION_KEY = "workspace.review_template.view" as const;
 export const WORKSPACE_REVIEW_TEMPLATE_MANAGE_PERMISSION_KEY = "workspace.review_template.manage" as const;
 export const WORKSPACE_DEV_MODE_VIEW_PERMISSION_KEY = "workspace.dev_mode.view" as const;
@@ -152,7 +153,6 @@ export const WORKSPACE_SETTINGS = {
     key: "my-access",
     i18n_label: "workspace_settings.settings.my_access.title",
     href: `/settings/my-access`,
-    access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER, EUserWorkspaceRoles.GUEST],
     requiresMembership: true,
     highlight: (pathname: string, baseUrl: string) => pathname === `${baseUrl}/settings/my-access/`,
   },
@@ -160,7 +160,6 @@ export const WORKSPACE_SETTINGS = {
     key: "general",
     i18n_label: "workspace_settings.settings.general.title",
     href: `/settings`,
-    access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER],
     permissionKeys: [WORKSPACE_SETTINGS_VIEW_PERMISSION_KEY],
     highlight: (pathname: string, baseUrl: string) => pathname === `${baseUrl}/settings/`,
   },
@@ -168,7 +167,6 @@ export const WORKSPACE_SETTINGS = {
     key: "members",
     i18n_label: "workspace_settings.settings.members.title",
     href: `/settings/members`,
-    access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER],
     permissionKeys: [WORKSPACE_MEMBER_VIEW_PERMISSION_KEY],
     highlight: (pathname: string, baseUrl: string) => pathname === `${baseUrl}/settings/members/`,
   },
@@ -176,7 +174,6 @@ export const WORKSPACE_SETTINGS = {
     key: "groups",
     i18n_label: "workspace_settings.settings.groups.title",
     href: `/settings/groups`,
-    access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER, EUserWorkspaceRoles.GUEST],
     permissionKeys: [WORKSPACE_GROUP_VIEW_PERMISSION_KEY],
     highlight: (pathname: string, baseUrl: string) => pathname === `${baseUrl}/settings/groups/`,
   },
@@ -184,23 +181,22 @@ export const WORKSPACE_SETTINGS = {
     key: "roles",
     i18n_label: "workspace_settings.settings.roles.title",
     href: `/settings/roles`,
-    access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER, EUserWorkspaceRoles.GUEST],
-    permissionKeys: [WORKSPACE_ROLE_VIEW_PERMISSION_KEY],
-    highlight: (pathname: string, baseUrl: string) => pathname === `${baseUrl}/settings/roles/`,
+    // 权限组列表与详情（/settings/roles/<id>/）；成员管理员要给人分配权限组，也能看
+    permissionKeys: [WORKSPACE_ROLE_VIEW_PERMISSION_KEY, WORKSPACE_ROLE_EDIT_PERMISSION_KEY, WORKSPACE_MEMBER_EDIT_PERMISSION_KEY],
+    highlight: (pathname: string, baseUrl: string) => pathname.startsWith(`${baseUrl}/settings/roles/`),
   },
+  // 旧地址：项目权限组模板已并进「权限组」页的第二个页签，不再出现在侧栏，只为旧链接保留鉴权
   templates: {
     key: "templates",
     i18n_label: "workspace_settings.settings.templates.title",
     href: `/settings/templates`,
-    access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER, EUserWorkspaceRoles.GUEST],
-    permissionKeys: [WORKSPACE_ROLE_VIEW_PERMISSION_KEY],
+    permissionKeys: [WORKSPACE_ROLE_VIEW_PERMISSION_KEY, WORKSPACE_ROLE_EDIT_PERMISSION_KEY, WORKSPACE_MEMBER_EDIT_PERMISSION_KEY],
     highlight: (pathname: string, baseUrl: string) => pathname === `${baseUrl}/settings/templates/`,
   },
   export: {
     key: "export",
     i18n_label: "workspace_settings.settings.exports.title",
     href: `/settings/exports`,
-    access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER],
     requiresMembership: true,
     highlight: (pathname: string, baseUrl: string) => pathname === `${baseUrl}/settings/exports/`,
   },
@@ -208,15 +204,14 @@ export const WORKSPACE_SETTINGS = {
     key: "webhooks",
     i18n_label: "workspace_settings.settings.webhooks.title",
     href: `/settings/webhooks`,
-    access: [EUserWorkspaceRoles.ADMIN],
-    requiresMembership: true,
+    // 原来只给整数管理员看，现在按 key：与后端 webhook 接口同一把
+    permissionKeys: [PERMISSION_KEYS.WORKSPACE_WEBHOOK_MANAGE],
     highlight: (pathname: string, baseUrl: string) => pathname === `${baseUrl}/settings/webhooks/`,
   },
   departments: {
     key: "departments",
     i18n_label: "workspace_settings.settings.departments.title",
     href: `/settings/departments`,
-    access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER],
     // 与后端 GET departments 的权限 key 一致；「立即同步」另看 WORKSPACE_SETTINGS_EDIT
     permissionKeys: [WORKSPACE_SETTINGS_VIEW_PERMISSION_KEY],
     highlight: (pathname: string, baseUrl: string) => pathname.startsWith(`${baseUrl}/settings/departments`),
@@ -225,7 +220,6 @@ export const WORKSPACE_SETTINGS = {
     key: "integrations",
     i18n_label: "workspace_settings.settings.integrations.title",
     href: `/settings/integrations`,
-    access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER],
     // 与后端 GET external-integrations 的权限 key 一致；「立即同步」另看 WORKSPACE_SETTINGS_EDIT
     permissionKeys: [WORKSPACE_SETTINGS_VIEW_PERMISSION_KEY],
     highlight: (pathname: string, baseUrl: string) => pathname.startsWith(`${baseUrl}/settings/integrations`),
@@ -234,7 +228,6 @@ export const WORKSPACE_SETTINGS = {
     key: "issue-type-categories",
     i18n_label: "workspace_settings.settings.issue_type_categories.title",
     href: `/settings/issue-type-categories`,
-    access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER],
     requiresMembership: true,
     highlight: (pathname: string, baseUrl: string) => pathname.startsWith(`${baseUrl}/settings/issue-type-categories`),
   },
@@ -242,7 +235,6 @@ export const WORKSPACE_SETTINGS = {
     key: "requirement-types",
     i18n_label: "workspace_settings.settings.requirement_types.title",
     href: `/settings/requirement-types`,
-    access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER],
     requiresMembership: true,
     highlight: (pathname: string, baseUrl: string) => pathname.startsWith(`${baseUrl}/settings/requirement-types`),
   },
@@ -250,7 +242,6 @@ export const WORKSPACE_SETTINGS = {
     key: "data-dictionaries",
     i18n_label: "workspace_settings.settings.data_dictionaries.title",
     href: `/settings/data-dictionaries`,
-    access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER],
     requiresMembership: true,
     highlight: (pathname: string, baseUrl: string) => pathname.startsWith(`${baseUrl}/settings/data-dictionaries`),
   },
@@ -258,7 +249,6 @@ export const WORKSPACE_SETTINGS = {
     key: "stage-types",
     i18n_label: "workspace_settings.settings.stage_types.title",
     href: `/settings/stage-types`,
-    access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER],
     requiresMembership: true,
     highlight: (pathname: string, baseUrl: string) => pathname.startsWith(`${baseUrl}/settings/stage-types`),
   },
@@ -266,53 +256,8 @@ export const WORKSPACE_SETTINGS = {
     key: "changelog",
     i18n_label: "更新日志管理",
     href: `/settings/changelog`,
-    access: [EUserWorkspaceRoles.ADMIN],
     requiresMembership: true,
     highlight: (pathname: string, baseUrl: string) => pathname === `${baseUrl}/settings/changelog/`,
-  },
-};
-
-export const WORKSPACE_SETTINGS_ACCESS = Object.fromEntries(
-  Object.entries(WORKSPACE_SETTINGS).map(([_, { href, access }]) => [href, access])
-);
-
-export const WORKSPACE_SETTINGS_LINKS: {
-  key: string;
-  i18n_label: string;
-  href: string;
-  access: EUserWorkspaceRoles[];
-  permissionKeys?: string[];
-  requiresMembership?: boolean;
-  highlight: (pathname: string, baseUrl: string) => boolean;
-}[] = [
-  WORKSPACE_SETTINGS["my-access"],
-  WORKSPACE_SETTINGS["general"],
-  WORKSPACE_SETTINGS["members"],
-  WORKSPACE_SETTINGS["groups"],
-  WORKSPACE_SETTINGS["roles"],
-  WORKSPACE_SETTINGS["export"],
-  WORKSPACE_SETTINGS["webhooks"],
-  WORKSPACE_SETTINGS["changelog"],
-];
-
-export const ROLE = {
-  [EUserWorkspaceRoles.GUEST]: "Guest",
-  [EUserWorkspaceRoles.MEMBER]: "Member",
-  [EUserWorkspaceRoles.ADMIN]: "Admin",
-};
-
-export const ROLE_DETAILS = {
-  [EUserWorkspaceRoles.GUEST]: {
-    i18n_title: "role_details.guest.title",
-    i18n_description: "role_details.guest.description",
-  },
-  [EUserWorkspaceRoles.MEMBER]: {
-    i18n_title: "role_details.member.title",
-    i18n_description: "role_details.member.description",
-  },
-  [EUserWorkspaceRoles.ADMIN]: {
-    i18n_title: "role_details.admin.title",
-    i18n_description: "role_details.admin.description",
   },
 };
 
@@ -412,7 +357,6 @@ export interface IWorkspaceSidebarNavigationItem {
   key: string;
   labelTranslationKey: string;
   href: string;
-  access: EUserWorkspaceRoles[];
   permissionKeys?: string[];
   highlight: (pathname: string, url: string) => boolean;
 }
@@ -422,14 +366,12 @@ export const WORKSPACE_SIDEBAR_DYNAMIC_NAVIGATION_ITEMS: Record<string, IWorkspa
     key: "views",
     labelTranslationKey: "views",
     href: `/workspace-views/all-issues/`,
-    access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER, EUserWorkspaceRoles.GUEST],
     highlight: (pathname: string, url: string) => pathname.includes(url),
   },
   analytics: {
     key: "analytics",
     labelTranslationKey: "analytics",
     href: `/analytics/`,
-    access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER],
     permissionKeys: [WORKSPACE_ANALYTICS_VIEW_PERMISSION_KEY],
     highlight: (pathname: string, url: string) => pathname.includes(url),
   },
@@ -437,7 +379,6 @@ export const WORKSPACE_SIDEBAR_DYNAMIC_NAVIGATION_ITEMS: Record<string, IWorkspa
     key: "archives",
     labelTranslationKey: "archives",
     href: `/projects/archives/`,
-    access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER],
     permissionKeys: [WORKSPACE_PROJECT_VIEW_PERMISSION_KEY],
     highlight: (pathname: string, url: string) => pathname.includes(url),
   },
@@ -454,42 +395,36 @@ export const WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS: Record<string, IWorkspac
     key: "home",
     labelTranslationKey: "home.title",
     href: `/`,
-    access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER, EUserWorkspaceRoles.GUEST],
     highlight: (pathname: string, url: string) => pathname === url,
   },
   inbox: {
     key: "inbox",
     labelTranslationKey: "notification.label",
     href: `/notifications/`,
-    access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER, EUserWorkspaceRoles.GUEST],
     highlight: (pathname: string, url: string) => pathname.includes(url),
   },
   "your-work": {
     key: "your_work",
     labelTranslationKey: "your_work",
     href: `/profile/`,
-    access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER],
     highlight: (pathname: string, url: string) => pathname.includes(url),
   },
   stickies: {
     key: "stickies",
     labelTranslationKey: "sidebar.stickies",
     href: `/stickies/`,
-    access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER, EUserWorkspaceRoles.GUEST],
     highlight: (pathname: string, url: string) => pathname.includes(url),
   },
   drafts: {
     key: "drafts",
     labelTranslationKey: "drafts",
     href: `/drafts/`,
-    access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER],
     highlight: (pathname: string, url: string) => pathname.includes(url),
   },
   projects: {
     key: "projects",
     labelTranslationKey: "projects",
     href: `/projects/`,
-    access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER, EUserWorkspaceRoles.GUEST],
     permissionKeys: [WORKSPACE_PROJECT_VIEW_PERMISSION_KEY],
     highlight: (pathname: string, url: string) => {
       const normalizedPathname = pathname.endsWith("/") ? pathname : `${pathname}/`;
@@ -502,7 +437,6 @@ export const WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS: Record<string, IWorkspac
     key: "products",
     labelTranslationKey: "products",
     href: `/products/`,
-    access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER, EUserWorkspaceRoles.GUEST],
     highlight: (pathname: string, url: string) => {
       const normalizedPathname = pathname.endsWith("/") ? pathname : `${pathname}/`;
       const normalizedUrl = url.endsWith("/") ? url : `${url}/`;
@@ -514,7 +448,6 @@ export const WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS: Record<string, IWorkspac
     labelTranslationKey: "templates",
     /** 点进来的落地页；改这里不影响下面的高亮范围 */
     href: `/templates/libraries/`,
-    access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER, EUserWorkspaceRoles.GUEST],
     permissionKeys: WORKSPACE_TEMPLATE_CENTER_PERMISSION_KEYS,
     highlight: (pathname: string, url: string) => {
       const normalizedPathname = pathname.endsWith("/") ? pathname : `${pathname}/`;

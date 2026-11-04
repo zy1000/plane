@@ -8,14 +8,13 @@ import React, { useRef, useState } from "react";
 import { observer } from "mobx-react";
 import Link from "next/link";
 import { useParams, usePathname, useSearchParams } from "next/navigation";
-import { ArchiveRestoreIcon, Settings, UserPlus } from "lucide-react";
+import { ArchiveRestoreIcon, Settings } from "lucide-react";
 // plane imports
-import { EUserPermissions, IS_FAVORITE_MENU_OPEN } from "@plane/constants";
+import { IS_FAVORITE_MENU_OPEN, PERMISSION_KEYS } from "@plane/constants";
 import { useLocalStorage } from "@plane/hooks";
 import { useTranslation } from "@plane/i18n";
-import { Button } from "@plane/propel/button";
 import { Logo } from "@plane/propel/emoji-icon-picker";
-import { LinkIcon, LockIcon, NewTabIcon, TrashIcon, CheckIcon } from "@plane/propel/icons";
+import { LinkIcon, NewTabIcon, TrashIcon } from "@plane/propel/icons";
 import { setPromiseToast, setToast, TOAST_TYPE } from "@plane/propel/toast";
 import { Tooltip } from "@plane/propel/tooltip";
 import type { IProject } from "@plane/types";
@@ -26,12 +25,12 @@ import { copyUrlToClipboard, cn, getFileURL, renderFormattedDate } from "@plane/
 // hooks
 import { useMember } from "@/hooks/store/use-member";
 import { useProject } from "@/hooks/store/use-project";
+import { useUserPermissions } from "@/hooks/store/user";
 import { useAppRouter } from "@/hooks/use-app-router";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 // local imports
 import { buildProjectSettingsPath, getPathWithSearch } from "@/components/settings/project/navigation";
 import { DeleteProjectModal } from "./delete-project-modal";
-import { JoinProjectModal } from "./join-project-modal";
 import { ArchiveRestoreProjectModal } from "./archive-restore-modal";
 
 type Props = {
@@ -42,7 +41,6 @@ export const ProjectCard = observer(function ProjectCard(props: Props) {
   const { project } = props;
   // states
   const [deleteProjectModalOpen, setDeleteProjectModal] = useState(false);
-  const [joinProjectModalOpen, setJoinProjectModal] = useState(false);
   const [restoreProject, setRestoreProject] = useState(false);
   // refs
   const projectCardRef = useRef(null);
@@ -54,17 +52,25 @@ export const ProjectCard = observer(function ProjectCard(props: Props) {
   // store hooks
   const { getUserDetails } = useMember();
   const { addProjectToFavorites, removeProjectFromFavorites } = useProject();
+  const { isProjectMember, allowProjectPermissionKeys } = useUserPermissions();
   // hooks
   const { t } = useTranslation();
   const { isMobile } = usePlatformOS();
   // derived values
   const projectMembersIds = project.members;
-  // auth
-  const isMemberOfProject = !!project.member_role;
-  const hasAdminRole = project.member_role === EUserPermissions.ADMIN;
-  const hasMemberRole = project.member_role === EUserPermissions.MEMBER;
-  // 私有项目非成员：可见但不能自助加入
-  const isInviteOnly = project.network === 0 && !isMemberOfProject;
+  // auth：能进 = 成员 / 负责人 / 白名单访客（列表接口只返回能看见的项目，所以这里基本都是 true）
+  const isMemberOfProject = !!project.is_member || isProjectMember(workspaceSlug?.toString(), project.id);
+  // 归档项目的恢复 / 删除：与后端 ProjectArchiveUnarchiveEndpoint / ProjectViewSet.destroy 同一把 key
+  const canRestoreProject = allowProjectPermissionKeys(
+    [PERMISSION_KEYS.PROJECT_SETTINGS_ARCHIVE],
+    workspaceSlug?.toString(),
+    project.id
+  );
+  const canDeleteProject = allowProjectPermissionKeys(
+    [PERMISSION_KEYS.PROJECT_SETTINGS_DELETE],
+    workspaceSlug?.toString(),
+    project.id
+  );
   // archive
   const isArchived = !!project.archived_at;
   const workspaceSlugString = workspaceSlug?.toString();
@@ -135,21 +141,14 @@ export const ProjectCard = observer(function ProjectCard(props: Props) {
       },
       title: "Settings",
       icon: Settings,
-      shouldRender: !isArchived && (hasAdminRole || hasMemberRole),
-    },
-    {
-      key: "join",
-      action: () => setJoinProjectModal(true),
-      title: "Join",
-      icon: UserPlus,
-      shouldRender: !isMemberOfProject && !isArchived && !isInviteOnly,
+      shouldRender: !isArchived && isMemberOfProject,
     },
     {
       key: "open-new-tab",
       action: handleOpenInNewTab,
       title: "Open in new tab",
       icon: NewTabIcon,
-      shouldRender: !isMemberOfProject && !isArchived && !isInviteOnly,
+      shouldRender: !isArchived,
     },
     {
       key: "copy-link",
@@ -163,14 +162,14 @@ export const ProjectCard = observer(function ProjectCard(props: Props) {
       action: () => setRestoreProject(true),
       title: "Restore",
       icon: ArchiveRestoreIcon,
-      shouldRender: isArchived && hasAdminRole,
+      shouldRender: isArchived && canRestoreProject,
     },
     {
       key: "delete",
       action: () => setDeleteProjectModal(true),
       title: "Delete",
       icon: TrashIcon,
-      shouldRender: isArchived && hasAdminRole,
+      shouldRender: isArchived && canDeleteProject,
     },
   ];
 
@@ -182,15 +181,6 @@ export const ProjectCard = observer(function ProjectCard(props: Props) {
         isOpen={deleteProjectModalOpen}
         onClose={() => setDeleteProjectModal(false)}
       />
-      {/* Join Project Modal */}
-      {workspaceSlug && (
-        <JoinProjectModal
-          workspaceSlug={workspaceSlug.toString()}
-          project={project}
-          isOpen={joinProjectModalOpen}
-          handleClose={() => setJoinProjectModal(false)}
-        />
-      )}
       {/* Restore project modal */}
       {workspaceSlug && project && (
         <ArchiveRestoreProjectModal
@@ -208,7 +198,6 @@ export const ProjectCard = observer(function ProjectCard(props: Props) {
           if (!isMemberOfProject || isArchived) {
             e.preventDefault();
             e.stopPropagation();
-            if (!isArchived && !isInviteOnly) setJoinProjectModal(true);
           }
         }}
         data-prevent-progress={!isMemberOfProject || isArchived}
@@ -227,7 +216,6 @@ export const ProjectCard = observer(function ProjectCard(props: Props) {
               <h3 className="truncate text-14 font-semibold text-primary">{project.name}</h3>
               <span className="flex items-center gap-1.5">
                 <p className="text-11 font-medium text-tertiary">{project.identifier} </p>
-                {project.network === 0 && <LockIcon className="h-2.5 w-2.5 text-tertiary" />}
               </span>
             </div>
           </div>
@@ -300,72 +288,49 @@ export const ProjectCard = observer(function ProjectCard(props: Props) {
               )}
             </div>
             {isArchived ? (
-              hasAdminRole && (
+              (canRestoreProject || canDeleteProject) && (
                 <div className="flex items-center justify-center gap-2">
-                  <div
-                    className="flex items-center justify-center text-11 font-medium text-placeholder hover:text-secondary"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setRestoreProject(true);
-                    }}
-                  >
-                    <div className="flex items-center gap-1.5">
-                      <ArchiveRestoreIcon className="h-3.5 w-3.5" />
-                      Restore
+                  {canRestoreProject && (
+                    <div
+                      className="flex items-center justify-center text-11 font-medium text-placeholder hover:text-secondary"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setRestoreProject(true);
+                      }}
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <ArchiveRestoreIcon className="h-3.5 w-3.5" />
+                        Restore
+                      </div>
                     </div>
-                  </div>
-                  <div
-                    className="flex items-center justify-center text-11 font-medium text-placeholder hover:text-secondary"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setDeleteProjectModal(true);
-                    }}
-                  >
-                    <TrashIcon className="h-3.5 w-3.5" />
-                  </div>
+                  )}
+                  {canDeleteProject && (
+                    <div
+                      className="flex items-center justify-center text-11 font-medium text-placeholder hover:text-secondary"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setDeleteProjectModal(true);
+                      }}
+                    >
+                      <TrashIcon className="h-3.5 w-3.5" />
+                    </div>
+                  )}
                 </div>
               )
             ) : (
               <>
-                {isMemberOfProject &&
-                  (hasAdminRole || hasMemberRole ? (
-                    <Link
-                      className="flex items-center justify-center rounded-sm p-1 text-placeholder hover:bg-layer-1 hover:text-secondary"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                      }}
-                      href={projectSettingsPath}
-                    >
-                      <Settings className="h-3.5 w-3.5" />
-                    </Link>
-                  ) : (
-                    <span className="flex items-center gap-1 text-13 text-placeholder">
-                      <CheckIcon className="h-3.5 w-3.5" />
-                      Joined
-                    </span>
-                  ))}
-                {isInviteOnly && (
-                  <span className="flex items-center gap-1 text-13 text-placeholder">
-                    <LockIcon className="h-3.5 w-3.5" />
-                    {t("workspace_projects.network.private.description")}
-                  </span>
-                )}
-                {!isMemberOfProject && !isInviteOnly && (
-                  <div className="flex items-center">
-                    <Button
-                      variant="link"
-                      className="!p-0 font-semibold"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setJoinProjectModal(true);
-                      }}
-                    >
-                      Join
-                    </Button>
-                  </div>
+                {isMemberOfProject && (
+                  <Link
+                    className="flex items-center justify-center rounded-sm p-1 text-placeholder hover:bg-layer-1 hover:text-secondary"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                    }}
+                    href={projectSettingsPath}
+                  >
+                    <Settings className="h-3.5 w-3.5" />
+                  </Link>
                 )}
               </>
             )}

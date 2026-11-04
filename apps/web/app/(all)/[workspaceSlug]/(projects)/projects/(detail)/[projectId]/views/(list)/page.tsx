@@ -9,10 +9,9 @@ import { observer } from "mobx-react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useTheme } from "next-themes";
 // plane imports
-import { EUserPermissionsLevel, PROJECT_VIEWS_VIEW_PERMISSION_KEY } from "@plane/constants";
+import { PROJECT_SETTINGS_EDIT_PERMISSION_KEY, PROJECT_VIEWS_VIEW_PERMISSION_KEYS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import type { EViewAccess, TViewFilterProps } from "@plane/types";
-import { EUserProjectRoles } from "@plane/types";
 import { Header, EHeaderVariant } from "@plane/ui";
 import { calculateTotalFilters } from "@plane/utils";
 // assets
@@ -45,14 +44,15 @@ function ProjectViewsPage({ params }: Route.ComponentProps) {
   // store
   const { getProjectById, currentProjectDetails } = useProject();
   const { filters, updateFilters, clearAllFilters, getProjectViews, fetchedMap } = useProjectView();
-  const { allowPermissions, allowProjectPermissionKeys, workspaceUserInfo } = useUserPermissions();
+  const { allowProjectPermissionKeys, workspaceUserInfo } = useUserPermissions();
   // derived values
   const project = getProjectById(projectId);
   const projectViews = getProjectViews(projectId);
   const isViewsFetched = !!fetchedMap[projectId];
   const hasExistingViews = (projectViews?.length ?? 0) > 0;
   const pageTitle = project?.name ? `${project?.name} - Views` : undefined;
-  const canPerformEmptyStateActions = allowPermissions([EUserProjectRoles.ADMIN], EUserPermissionsLevel.PROJECT);
+  // 空状态的动作是去项目设置里开功能
+  const canPerformEmptyStateActions = allowProjectPermissionKeys([PROJECT_SETTINGS_EDIT_PERMISSION_KEY]);
   const resolvedPath = resolvedTheme === "light" ? lightViewsAsset : darkViewsAsset;
   const currentPath = getPathWithSearch(pathname, searchParams);
 
@@ -76,7 +76,7 @@ function ProjectViewsPage({ params }: Route.ComponentProps) {
   const isFiltersApplied = calculateTotalFilters(filters?.filters ?? {}) !== 0;
 
   const canViewViews = allowProjectPermissionKeys(
-    [PROJECT_VIEWS_VIEW_PERMISSION_KEY],
+    PROJECT_VIEWS_VIEW_PERMISSION_KEYS,
     workspaceSlug,
     projectId
   );

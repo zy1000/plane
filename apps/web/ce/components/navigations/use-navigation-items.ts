@@ -7,15 +7,15 @@
 import { useMemo, useCallback } from "react";
 // plane imports
 import {
-  EUserPermissions,
-  EUserPermissionsLevel,
+  PERMISSION_KEYS,
   PROJECT_ARCHIVES_VIEW_PERMISSION_KEYS,
   PROJECT_ASSET_VIEW_PERMISSION_KEY,
   PROJECT_DEFECTS_VIEW_PERMISSION_KEY,
   PROJECT_INTAKE_VIEW_PERMISSION_KEY,
+  PROJECT_MEMBER_ACCESS,
   PROJECT_STAGE_VIEW_PERMISSION_KEY,
   PROJECT_MODULES_VIEW_PERMISSION_KEY,
-  PROJECT_OVERVIEW_VIEW_PERMISSION_KEY,
+  PROJECT_OVERVIEW_VIEW_PERMISSION_KEYS,
   PROJECT_NOTES_VIEW_PERMISSION_KEY,
   PROJECT_PRODUCT_LINK_MANAGE_PERMISSION_KEY,
   PROJECT_QA_VIEW_PERMISSION_KEYS,
@@ -24,7 +24,7 @@ import {
   PROJECT_REVIEW_TAILORING_READ_PERMISSION_KEYS,
   PROJECT_STAGE_REVIEW_READ_PERMISSION_KEYS,
   PROJECT_SPRINTS_VIEW_PERMISSION_KEY,
-  PROJECT_VIEWS_VIEW_PERMISSION_KEY,
+  PROJECT_VIEWS_VIEW_PERMISSION_KEYS,
   PROJECT_WORK_ITEMS_VIEW_PERMISSION_KEY,
 } from "@plane/constants";
 import {
@@ -37,7 +37,7 @@ import {
   ViewsIcon,
   WorkItemsIcon,
 } from "@plane/propel/icons";
-import type { EUserProjectRoles, IPartialProject } from "@plane/types";
+import type { IPartialProject } from "@plane/types";
 import { isProjectFeatureEnabled } from "@plane/utils";
 import type { TNavigationItem } from "@/components/navigation/tab-navigation-root";
 import {
@@ -57,12 +57,6 @@ type UseNavigationItemsProps = {
   workspaceSlug: string;
   projectId: string;
   project?: IPartialProject;
-  allowPermissions: (
-    access: EUserPermissions[] | EUserProjectRoles[],
-    level: EUserPermissionsLevel,
-    workspaceSlug: string,
-    projectId: string
-  ) => boolean;
   allowProjectPermissionKeys: (permissionKeys: string[], workspaceSlug: string, projectId: string) => boolean;
 };
 
@@ -70,7 +64,6 @@ export const useNavigationItems = ({
   workspaceSlug,
   projectId,
   project,
-  allowPermissions,
   allowProjectPermissionKeys,
 }: UseNavigationItemsProps): TNavigationItem[] => {
   // Base navigation items
@@ -82,8 +75,7 @@ export const useNavigationItems = ({
         name: "Overview",
         href: `/${workspaceSlug}/projects/${projectId}/overview`,
         icon: Rss,
-        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
-        permissionKeys: [PROJECT_OVERVIEW_VIEW_PERMISSION_KEY],
+        permissionKeys: [...PROJECT_OVERVIEW_VIEW_PERMISSION_KEYS],
         shouldRender: true,
         sortOrder: 0,
       },
@@ -94,7 +86,6 @@ export const useNavigationItems = ({
         name: "产品",
         href: `/${workspaceSlug}/projects/${projectId}/products`,
         icon: Package,
-        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
         // 与后端 ProjectProductViewSet.list 同一组 key：能看需求页或能管产品关联的都能进
         permissionKeys: [PROJECT_REQUIREMENT_LINK_VIEW_PERMISSION_KEY, PROJECT_PRODUCT_LINK_MANAGE_PERMISSION_KEY],
         shouldRender: true,
@@ -106,7 +97,6 @@ export const useNavigationItems = ({
         name: "Work items",
         href: `/${workspaceSlug}/projects/${projectId}/issues`,
         icon: WorkItemsIcon,
-        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
         permissionKeys: [PROJECT_WORK_ITEMS_VIEW_PERMISSION_KEY],
         shouldRender: true,
         sortOrder: 1,
@@ -117,7 +107,6 @@ export const useNavigationItems = ({
         name: "需求",
         href: `/${workspaceSlug}/projects/${projectId}/requirements`,
         icon: RequirementIcon,
-        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
         permissionKeys: [PROJECT_REQUIREMENT_LINK_VIEW_PERMISSION_KEY],
         shouldRender: true,
         sortOrder: 1.2,
@@ -128,7 +117,6 @@ export const useNavigationItems = ({
         name: "缺陷",
         href: `/${workspaceSlug}/projects/${projectId}/defects`,
         icon: Bug,
-        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
         permissionKeys: [PROJECT_DEFECTS_VIEW_PERMISSION_KEY],
         shouldRender: true,
         sortOrder: 1.6,
@@ -139,7 +127,6 @@ export const useNavigationItems = ({
         name: "Sprints",
         href: `/${workspaceSlug}/projects/${projectId}/cycles`,
         icon: CycleIcon,
-        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
         permissionKeys: [PROJECT_SPRINTS_VIEW_PERMISSION_KEY],
         shouldRender: isProjectFeatureEnabled(project, "cycle_view"),
         sortOrder: 3,
@@ -150,7 +137,6 @@ export const useNavigationItems = ({
         name: "Modules",
         href: `/${workspaceSlug}/projects/${projectId}/modules`,
         icon: ModuleIcon,
-        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
         permissionKeys: [PROJECT_MODULES_VIEW_PERMISSION_KEY],
         shouldRender: isProjectFeatureEnabled(project, "module_view"),
         sortOrder: 2,
@@ -161,7 +147,6 @@ export const useNavigationItems = ({
         name: "Releases",
         href: `/${workspaceSlug}/projects/${projectId}/releases`,
         icon: Rocket,
-        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
         permissionKeys: [PROJECT_RELEASES_VIEW_PERMISSION_KEY],
         // 0387 起发布有了自己的功能位，不再跟着模块走
         shouldRender: isProjectFeatureEnabled(project, "release_view"),
@@ -176,7 +161,6 @@ export const useNavigationItems = ({
         name: "评审",
         href: `/${workspaceSlug}/projects/${projectId}/reviews`,
         icon: ClipboardList,
-        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
         // 读接受任一：只配了裁剪或只配了阶段评审的角色都该看到这个标签，
         // 具体能进哪个子页由子页页签自己再过滤一次
         permissionKeys: [
@@ -188,13 +172,13 @@ export const useNavigationItems = ({
         sortOrder: 3.7,
       },
       {
-        // 风险：项目成员可读写、访客只读，没有细粒度 key 也没有功能开关，菜单常驻
+        // 风险：没有功能开关，按 project.risk.view 显示
         i18n_key: "sidebar.risks",
         key: "risks",
         name: "风险",
         href: `/${workspaceSlug}/projects/${projectId}/risks`,
         icon: ShieldAlert,
-        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
+        permissionKeys: [PERMISSION_KEYS.PROJECT_RISK_VIEW],
         shouldRender: true,
         sortOrder: 3.8,
       },
@@ -205,7 +189,6 @@ export const useNavigationItems = ({
         name: "阶段",
         href: `/${workspaceSlug}/projects/${projectId}/stages`,
         icon: Layers,
-        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
         permissionKeys: [PROJECT_STAGE_VIEW_PERMISSION_KEY],
         shouldRender: true,
         sortOrder: 4,
@@ -217,7 +200,6 @@ export const useNavigationItems = ({
         name: "规划",
         href: `/${workspaceSlug}/projects/${projectId}/plan`,
         icon: ChartGantt,
-        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
         permissionKeys: [PROJECT_STAGE_VIEW_PERMISSION_KEY],
         shouldRender: true,
         sortOrder: 4.5,
@@ -228,7 +210,6 @@ export const useNavigationItems = ({
         name: "测试",
         href: `/${workspaceSlug}/projects/${projectId}/testhub`,
         icon: TestManagementIcon,
-        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
         permissionKeys: [...PROJECT_QA_VIEW_PERMISSION_KEYS],
         shouldRender: true,
         sortOrder: 5,
@@ -239,8 +220,7 @@ export const useNavigationItems = ({
         name: "Views",
         href: `/${workspaceSlug}/projects/${projectId}/views`,
         icon: ViewsIcon,
-        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
-        permissionKeys: [PROJECT_VIEWS_VIEW_PERMISSION_KEY],
+        permissionKeys: [...PROJECT_VIEWS_VIEW_PERMISSION_KEYS],
         // 此前恒显示，功能页那个「视图」开关其实关不掉它；接模式后统一按「模式位 AND 项目位」
         shouldRender: isProjectFeatureEnabled(project, "issue_views_view"),
         sortOrder: 6,
@@ -251,7 +231,6 @@ export const useNavigationItems = ({
         name: "Pages",
         href: `/${workspaceSlug}/projects/${projectId}/pages`,
         icon: PageIcon,
-        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
         permissionKeys: [PROJECT_NOTES_VIEW_PERMISSION_KEY],
         shouldRender: isProjectFeatureEnabled(project, "page_view"),
         sortOrder: 7,
@@ -262,7 +241,6 @@ export const useNavigationItems = ({
         name: "Intake",
         href: `/${workspaceSlug}/projects/${projectId}/intake`,
         icon: IntakeIcon,
-        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
         permissionKeys: [PROJECT_INTAKE_VIEW_PERMISSION_KEY],
         shouldRender: isProjectFeatureEnabled(project, "intake_view"),
         sortOrder: 8,
@@ -273,7 +251,6 @@ export const useNavigationItems = ({
         name: "文件",
         href: `/${workspaceSlug}/projects/${projectId}/filestore`,
         icon: Folder,
-        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
         permissionKeys: [PROJECT_ASSET_VIEW_PERMISSION_KEY],
         shouldRender: true,
         sortOrder: 9,
@@ -284,7 +261,6 @@ export const useNavigationItems = ({
         name: "归档",
         href: `/${workspaceSlug}/projects/${projectId}/archives/issues`,
         icon: ArchiveIcon,
-        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
         permissionKeys: [...PROJECT_ARCHIVES_VIEW_PERMISSION_KEYS],
         shouldRender: true,
         sortOrder: 9.5,
@@ -299,12 +275,9 @@ export const useNavigationItems = ({
   const filteredItems = baseNavigation(workspaceSlug, projectId)
     .filter((item) => {
       if (!item.shouldRender) return false;
-      const hasAccess = allowPermissions(item.access, EUserPermissionsLevel.PROJECT, workspaceSlug, project?.id ?? "");
-      if (!hasAccess) return false;
-      if (item.permissionKeys?.length) {
-        return allowProjectPermissionKeys(item.permissionKeys, workspaceSlug, project?.id ?? "");
-      }
-      return true;
+      // 没写 permissionKeys 的项：项目成员即可
+      const permissionKeys = item.permissionKeys?.length ? item.permissionKeys : [PROJECT_MEMBER_ACCESS];
+      return allowProjectPermissionKeys(permissionKeys, workspaceSlug, project?.id ?? "");
     })
     .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
 

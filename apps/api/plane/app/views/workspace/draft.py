@@ -21,7 +21,7 @@ from rest_framework import status
 from rest_framework.response import Response
 
 # Module imports
-from plane.app.permissions import allow_permission, ROLE
+from plane.app.permissions import allow_workspace_member, allow_creator_or
 from plane.app.serializers import (
     IssueCreateSerializer,
     DraftIssueCreateSerializer,
@@ -95,7 +95,7 @@ class WorkspaceDraftIssueViewSet(BaseViewSet):
         ).distinct()
 
     @method_decorator(gzip_page)
-    @allow_permission(allowed_roles=[ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
+    @allow_workspace_member
     def list(self, request, slug):
         filters = issue_filters(request.query_params, "GET")
         issues = self.get_queryset().filter(created_by=request.user).order_by("-created_at")
@@ -108,7 +108,7 @@ class WorkspaceDraftIssueViewSet(BaseViewSet):
             on_results=lambda issues: DraftIssueSerializer(issues, many=True).data,
         )
 
-    @allow_permission(allowed_roles=[ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
+    @allow_workspace_member
     def create(self, request, slug):
         workspace = Workspace.objects.get(slug=slug)
 
@@ -153,12 +153,7 @@ class WorkspaceDraftIssueViewSet(BaseViewSet):
             return Response(issue, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    @allow_permission(
-        allowed_roles=[ROLE.ADMIN, ROLE.MEMBER],
-        creator=True,
-        model=Issue,
-        level="WORKSPACE",
-    )
+    @allow_creator_or(model=Issue, level="WORKSPACE")
     def partial_update(self, request, slug, pk):
         issue = self.get_queryset().filter(pk=pk, created_by=request.user).first()
 
@@ -183,7 +178,7 @@ class WorkspaceDraftIssueViewSet(BaseViewSet):
             return Response(status=status.HTTP_204_NO_CONTENT)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    @allow_permission(allowed_roles=[ROLE.ADMIN], creator=True, model=Issue, level="WORKSPACE")
+    @allow_creator_or(model=Issue, level="WORKSPACE")
     def retrieve(self, request, slug, pk=None):
         issue = self.get_queryset().filter(pk=pk, created_by=request.user).first()
 
@@ -196,13 +191,13 @@ class WorkspaceDraftIssueViewSet(BaseViewSet):
         serializer = DraftIssueDetailSerializer(issue)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    @allow_permission(allowed_roles=[ROLE.ADMIN], creator=True, model=DraftIssue, level="WORKSPACE")
+    @allow_creator_or(model=DraftIssue, level="WORKSPACE")
     def destroy(self, request, slug, pk=None):
         draft_issue = DraftIssue.objects.get(workspace__slug=slug, pk=pk)
         draft_issue.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-    @allow_permission(allowed_roles=[ROLE.ADMIN, ROLE.MEMBER], level="WORKSPACE")
+    @allow_workspace_member
     def create_draft_to_issue(self, request, slug, draft_id):
         draft_issue = self.get_queryset().filter(pk=draft_id).first()
 

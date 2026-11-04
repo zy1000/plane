@@ -1,23 +1,20 @@
-import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import { PERMISSION_KEYS } from "@plane/constants";
 import { useUserPermissions } from "@/hooks/store/user";
 
 /**
- * 风险没有细粒度权限 key（2026-10-12 拍板）：项目成员（管理员 / 成员）可读写，访客只读 ——
- * 与后端 views/risk 的 READ_ROLES / WRITE_ROLES 同一口径。
+ * 风险的增删改查各一把 key（project.risk.*），与后端 views/risk 的装饰器同一口径。
  *
- * 不做 useMemo：allowPermissions 读的是 observable。
+ * 不做 useMemo：权限读的是 observable。
  */
 export const useRiskPermissions = (workspaceSlug: string | undefined, projectId: string | undefined) => {
-  const { allowPermissions } = useUserPermissions();
+  const { allowProjectPermissionKeys } = useUserPermissions();
   const slug = workspaceSlug ?? "";
   const project = projectId ?? "";
+  const can = (permissionKey: string) => allowProjectPermissionKeys([permissionKey], slug, project);
   return {
-    canView: allowPermissions(
-      [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
-      EUserPermissionsLevel.PROJECT,
-      slug,
-      project
-    ),
-    canEdit: allowPermissions([EUserPermissions.ADMIN, EUserPermissions.MEMBER], EUserPermissionsLevel.PROJECT, slug, project),
+    canView: can(PERMISSION_KEYS.PROJECT_RISK_VIEW),
+    canCreate: can(PERMISSION_KEYS.PROJECT_RISK_CREATE),
+    canEdit: can(PERMISSION_KEYS.PROJECT_RISK_EDIT),
+    canDelete: can(PERMISSION_KEYS.PROJECT_RISK_DELETE),
   };
 };

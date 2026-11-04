@@ -23,7 +23,7 @@ class Command(BaseCommand):
         # Positional argument
         parser.add_argument("--project_id", type=str, nargs="?", help="Project ID")
         parser.add_argument("--user_email", type=str, nargs="?", help="User Email")
-        parser.add_argument("--role", type=int, nargs="?", help="Role of the user in the project")
+        parser.add_argument("--admin", action="store_true", help="同时绑定「项目管理员」权限组")
 
     def handle(self, *args: Any, **options: Any):
         try:
@@ -34,10 +34,6 @@ class Command(BaseCommand):
 
             project_id = options["project_id"]
             user_email = options["user_email"]
-            role = options.get("role", 20)
-
-            print(f"Role: {role}")
-
             user = User.objects.filter(email=user_email).first()
             if not user:
                 raise CommandError("User not found")
@@ -52,14 +48,16 @@ class Command(BaseCommand):
                 raise CommandError("User not member in workspace")
 
 
-            if ProjectMember.objects.filter(project=project, member=user).exists():
+            if options.get("admin"):
+                from plane.utils.project.member import add_project_admins
+
+                add_project_admins(project, [user.id])
+            elif ProjectMember.objects.filter(project=project, member=user).exists():
                 # Update the project member
-                ProjectMember.objects.filter(project=project, member=user).update(
-                    is_active=True, role=role
-                )
+                ProjectMember.objects.filter(project=project, member=user).update(is_active=True)
             else:
                 # Create the project member
-                ProjectMember.objects.create(project=project, member=user, role=role)
+                ProjectMember.objects.create(project=project, member=user)
 
             # Issue Property
             ProjectUserProperty.objects.get_or_create(user=user, project=project)

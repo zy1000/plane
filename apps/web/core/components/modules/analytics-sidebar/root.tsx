@@ -10,7 +10,7 @@ import { useParams } from "next/navigation";
 import { Controller, useForm } from "react-hook-form";
 import { Info, SquareUser } from "lucide-react";
 import { Disclosure, Transition } from "@headlessui/react";
-import { MODULE_STATUS, EUserPermissions, EUserPermissionsLevel, EEstimateSystem } from "@plane/constants";
+import { MODULE_STATUS, EEstimateSystem, PROJECT_MODULES_EDIT_PERMISSION_KEY } from "@plane/constants";
 // plane types
 import { useTranslation } from "@plane/i18n";
 import {
@@ -62,7 +62,7 @@ export const ModuleAnalyticsSidebar = observer(function ModuleAnalyticsSidebar(p
 
   // store hooks
   const { t } = useTranslation();
-  const { allowPermissions } = useUserPermissions();
+  const { allowProjectPermissionKeys } = useUserPermissions();
 
   const { getModuleById, updateModuleDetails, createModuleLink, updateModuleLink, deleteModuleLink } = useModule();
   const { areEstimateEnabledByProjectId, currentActiveEstimateId, estimateById } = useProjectEstimates();
@@ -163,10 +163,7 @@ export const ModuleAnalyticsSidebar = observer(function ModuleAnalyticsSidebar(p
       ? "0 work items"
       : `${moduleDetails.completed_estimate_points}/${moduleDetails.total_estimate_points}`;
 
-  const isEditingAllowed = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.PROJECT
-  );
+  const isEditingAllowed = allowProjectPermissionKeys([PROJECT_MODULES_EDIT_PERMISSION_KEY]);
 
   return (
     <div className="relative">

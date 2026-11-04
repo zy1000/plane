@@ -18,7 +18,7 @@ from rest_framework import status
 # Module imports
 from .. import BaseViewSet, BaseAPIView
 from plane.app.serializers import StateSerializer
-from plane.app.permissions import ROLE, allow_permission, allow_fine_permission, PermissionKey
+from plane.app.permissions import allow_project_member, allow_fine_permission, PermissionKey
 from plane.app.views.issue_scheme.scope import IssueSchemeScopeMixin
 from plane.db.models import State
 from plane.utils.cache import invalidate_cache
@@ -29,6 +29,7 @@ from plane.utils.issue_scheme import (
     state_references,
 )
 from plane.utils.scheme_views import prune_mode_view_references
+from plane.utils.visibility import visible_projects_q
 
 
 class StateViewSet(IssueSchemeScopeMixin, BaseViewSet):
@@ -42,12 +43,11 @@ class StateViewSet(IssueSchemeScopeMixin, BaseViewSet):
         if self.is_scheme_route:
             queryset = queryset.filter(scheme_id=self.get_scheme_id())
         else:
-            # 本项目所用方案里的状态。项目条件与成员条件必须写在同一个 filter() 里，
+            # 本项目所用方案里的状态。项目条件与可见条件必须写在同一个 filter() 里，
             # 才会共用同一条 projects join：分开写的话，共用方案时另一个项目的成员也能看到
             queryset = queryset.filter(
+                visible_projects_q(self.request.user, self.kwargs.get("slug"), "scheme__projects"),
                 scheme__projects=self.kwargs.get("project_id"),
-                scheme__projects__project_projectmember__member=self.request.user,
-                scheme__projects__project_projectmember__is_active=True,
                 scheme__projects__archived_at__isnull=True,
             )
             # 跟随项目只看得到所属研发模式关联的类型的状态（triage 没有类型，照常可见）
@@ -57,12 +57,12 @@ class StateViewSet(IssueSchemeScopeMixin, BaseViewSet):
             )
         return self.filter_queryset(queryset.select_related("scheme", "workspace").distinct())
 
-    @allow_fine_permission(PermissionKey.STATE_VIEW, PermissionKey.PROJECT_SETTINGS_VIEW)
+    @allow_project_member
     def retrieve(self, request, *args, **kwargs):
         return super().retrieve(request, *args, **kwargs)
 
     @invalidate_cache(path="workspaces/:slug/states/", url_params=True, user=False)
-    @allow_fine_permission(PermissionKey.STATE_CREATE)
+    @allow_fine_permission(PermissionKey.PROJECT_STATE_MANAGE)
     def create(self, request, slug, project_id=None, issue_scheme_id=None):
         try:
             serializer = StateSerializer(data=request.data, context=self.serializer_scope_context())
@@ -77,7 +77,7 @@ class StateViewSet(IssueSchemeScopeMixin, BaseViewSet):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-    @allow_fine_permission(PermissionKey.STATE_EDIT)
+    @allow_fine_permission(PermissionKey.PROJECT_STATE_MANAGE)
     def partial_update(self, request, slug, pk, project_id=None, issue_scheme_id=None):
         try:
             state = State.objects.get(pk=pk, scheme_id=self.get_scheme_id(), workspace__slug=slug)
@@ -95,7 +95,7 @@ class StateViewSet(IssueSchemeScopeMixin, BaseViewSet):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-    @allow_fine_permission(PermissionKey.STATE_VIEW, PermissionKey.PROJECT_SETTINGS_VIEW)
+    @allow_project_member
     def list(self, request, slug, project_id=None, issue_scheme_id=None):
         issue_type_id = request.GET.get("issue_type_id", None)
         query = self.get_queryset().filter(issue_type_id=issue_type_id)
@@ -126,7 +126,7 @@ class StateViewSet(IssueSchemeScopeMixin, BaseViewSet):
         return Response(states, status=status.HTTP_200_OK)
 
     @invalidate_cache(path="workspaces/:slug/states/", url_params=True, user=False)
-    @allow_fine_permission(PermissionKey.STATE_MARK_DEFAULT)
+    @allow_fine_permission(PermissionKey.PROJECT_STATE_MANAGE)
     def mark_as_default(self, request, slug, pk, project_id=None, issue_scheme_id=None):
         # Select all the states which are marked as default
         issue_type_id = request.data['issue_type_id']
@@ -137,7 +137,7 @@ class StateViewSet(IssueSchemeScopeMixin, BaseViewSet):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @invalidate_cache(path="workspaces/:slug/states/", url_params=True, user=False)
-    @allow_fine_permission(PermissionKey.STATE_DELETE)
+    @allow_fine_permission(PermissionKey.PROJECT_STATE_MANAGE)
     def destroy(self, request, slug, pk, project_id=None, issue_scheme_id=None):
         state = State.objects.get(is_triage=False, pk=pk, scheme_id=self.get_scheme_id(), workspace__slug=slug)
 
@@ -163,7 +163,7 @@ class StateViewSet(IssueSchemeScopeMixin, BaseViewSet):
 
 
 class IntakeStateEndpoint(BaseAPIView):
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    @allow_project_member
     def get(self, request, slug, project_id):
         state = State.triage_objects.filter(workspace__slug=slug, scheme__projects=project_id).first()
         if not state:

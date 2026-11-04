@@ -1,16 +1,11 @@
 from django.conf import settings
-from django.core.exceptions import ValidationError
 from django.db import models
-
-from plane.db.mixins import TimeAuditModel
 
 from .base import BaseModel
 from .project import ProjectBaseModel
 
 
 class Product(BaseModel):
-    NETWORK_CHOICES = ((0, "Secret"), (2, "Public"))
-
     name = models.CharField(max_length=255)
     identifier = models.CharField(
         max_length=12, db_index=True, verbose_name="产品标识（需求编号前缀）"
@@ -103,8 +98,6 @@ class Product(BaseModel):
     description_html = models.TextField(
         verbose_name="Product Description HTML", blank=True, null=True
     )
-    network = models.PositiveSmallIntegerField(default=2, choices=NETWORK_CHOICES)
-
     workspace = models.ForeignKey(
         "db.WorkSpace", on_delete=models.CASCADE, related_name="products"
     )
@@ -166,102 +159,6 @@ class Product(BaseModel):
         ]
 
 
-class ProductMember(TimeAuditModel):
-    id = models.AutoField(primary_key=True)
-    product = models.ForeignKey(
-        "db.Product", on_delete=models.CASCADE, related_name="member_product"
-    )
-    member = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name="member_product",
-    )
-    custom_roles = models.ManyToManyField(
-        "db.ProductRole",
-        through="ProductMemberRole",
-        blank=True,
-        related_name="role_members",
-    )
-
-    class Meta:
-        db_table = "product_members"
-        constraints = [
-            models.UniqueConstraint(
-                fields=["product", "member"],
-                name="product_member_unique",
-            )
-        ]
-        ordering = ("-created_at",)
-
-    def __str__(self):
-        """Return members of the project"""
-        return f"{self.member.email} <{self.product.name}>"
-
-class ProductRole(TimeAuditModel):
-    id = models.AutoField(primary_key=True)
-    product = models.ForeignKey(
-        "db.Product", on_delete=models.CASCADE, related_name="roles"
-    )
-    name = models.CharField(max_length=255)
-    description = models.TextField(blank=True, null=True)
-    permissions = models.JSONField(default=dict)
-
-    class Meta:
-        db_table = "product_roles"
-        ordering = ("-created_at",)
-        constraints = [
-            models.UniqueConstraint(
-                fields=["product", "name"],
-                name="product_role_unique_name_product",
-            )
-        ]
-
-
-class ProductMemberRole(TimeAuditModel):
-    """ProductMember ↔ ProductRole M2M through model."""
-
-    id = models.AutoField(primary_key=True)
-    member = models.ForeignKey(
-        ProductMember,
-        on_delete=models.CASCADE,
-        related_name="member_roles",
-    )
-    role = models.ForeignKey(
-        ProductRole,
-        on_delete=models.CASCADE,
-        related_name="role_member_entries",
-    )
-
-    def clean(self):
-        if (
-            self.member_id
-            and self.role_id
-            and self.member.product_id != self.role.product_id
-        ):
-            raise ValidationError(
-                {"role": "Role must belong to the same product as the member."}
-            )
-
-    def save(self, *args, **kwargs):
-        self.full_clean()
-        return super().save(*args, **kwargs)
-
-    class Meta:
-        db_table = "product_member_roles"
-        ordering = ("-created_at",)
-        constraints = [
-            models.UniqueConstraint(
-                fields=["member", "role"],
-                name="product_member_role_unique_member_role",
-            )
-        ]
-
-    def __str__(self):
-        return f"{self.member} -> {self.role.name}"
-
-
 class ProductProject(ProjectBaseModel):
     """产品与项目的关联。项目通过它确定自己能引用哪些产品的需求。
 
@@ -298,3 +195,50 @@ class ProductProject(ProjectBaseModel):
 
     def __str__(self):
         return f"{self.product.name} <-> {self.project.name}"
+
+
+class ProductTeamAssignment(ProjectBaseModel):
+    """产品研发矩阵：这个项目里，谁负责这个产品的什么角色。
+
+    只回答「找谁」（阶段评审负责人 / 审核人候选、审批人按角色找人时先按产品找），
+    **任何鉴权都不读它**。一格可以有多个人。纯连接行，硬删。
+    写入口校验 (project, product) 是活跃关联、member 是该项目活跃成员。
+    """
+
+    product = models.ForeignKey(
+        "db.Product",
+        on_delete=models.CASCADE,
+        related_name="team_assignments",
+        verbose_name="所属产品",
+    )
+    job_role = models.ForeignKey(
+        "db.DataDictionaryItem",
+        on_delete=models.PROTECT,
+        related_name="product_team_assignments",
+        verbose_name="角色",
+    )
+    member = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="product_team_assignments",
+        verbose_name="成员",
+    )
+
+    class Meta:
+        db_table = "product_team_assignments"
+        ordering = ("created_at",)
+        verbose_name = "Product Team Assignment"
+        verbose_name_plural = "Product Team Assignments"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["project", "product", "job_role", "member"],
+                condition=models.Q(deleted_at__isnull=True),
+                name="product_team_assignment_unique_active",
+            ),
+        ]
+
+    def delete(self, using=None, soft=False, *args, **kwargs):
+        return super().delete(using=using, soft=False, *args, **kwargs)
+
+    def __str__(self):
+        return f"{self.project_id}/{self.product_id}/{self.job_role_id} -> {self.member_id}"

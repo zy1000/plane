@@ -9,11 +9,12 @@ import { observer } from "mobx-react";
 // plane imports
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import type { IWorkspaceMember } from "@plane/types";
+import type { IPermissionGroup, IWorkspaceMember } from "@plane/types";
 // components
 import { MembersLayoutLoader } from "@/components/ui/loader/layouts/members-layout-loader";
 import { ConfirmWorkspaceMemberRemove } from "@/components/workspace/confirm-workspace-member-remove";
 import type { RowData } from "@/components/workspace/settings/member-columns";
+import { MemberAccessModal } from "@/components/workspace/settings/member-access-modal";
 import { MembersVirtualTable } from "@/components/workspace/settings/members-virtual-table";
 // hooks
 import { useMember } from "@/hooks/store/use-member";
@@ -29,15 +30,25 @@ type Props = {
 
 export const WorkspaceMembersListItem = observer(function WorkspaceMembersListItem(props: Props) {
   const { memberDetails } = props;
-  const { columns, workspaceSlug, removeMemberModal, setRemoveMemberModal } = useMemberColumns();
+  const {
+    columns,
+    workspaceSlug,
+    removeMemberModal,
+    setRemoveMemberModal,
+    editingMember,
+    setEditingMember,
+    jobRoles,
+    groups,
+    groupMap,
+  } = useMemberColumns();
   // router
   const router = useAppRouter();
   // store hooks
   const { data: currentUser } = useUser();
   const {
-    workspace: { removeMemberFromWorkspace },
+    workspace: { removeMemberFromWorkspace, updateMemberAccess },
   } = useMember();
-  const { leaveWorkspace } = useUserPermissions();
+  const { leaveWorkspace, fetchWorkspacePermissionKeys } = useUserPermissions();
   const { getWorkspaceRedirectionUrl } = useWorkspace();
   const { fetchCurrentUserSettings } = useUserSettings();
   const { t } = useTranslation();
@@ -90,8 +101,31 @@ export const WorkspaceMembersListItem = observer(function WorkspaceMembersListIt
 
   if (isEmpty(columns)) return <MembersLayoutLoader />;
 
+  const teamGroupNames = editingMember
+    ? (editingMember.group_role_ids ?? [])
+        .filter((id) => !(editingMember.custom_role_ids ?? []).includes(id))
+        .map((id) => groupMap.get(id))
+        .filter((group): group is IPermissionGroup => !!group)
+        .map((group) => group.name)
+    : [];
+
   return (
     <div className="grid border-t border-subtle">
+      <MemberAccessModal
+        member={editingMember}
+        jobRoles={jobRoles}
+        groups={groups}
+        teamGroupNames={teamGroupNames}
+        onClose={() => setEditingMember(null)}
+        onSubmit={async (value) => {
+          if (!editingMember) return;
+          await updateMemberAccess(workspaceSlug, editingMember.member.id, value);
+          // 改的是自己：权限可能变了，刷新自己的 key
+          if (editingMember.member.id === currentUser?.id) await fetchWorkspacePermissionKeys(workspaceSlug);
+          setToast({ type: TOAST_TYPE.SUCCESS, title: "已保存", message: "成员的角色与权限组已更新" });
+          setEditingMember(null);
+        }}
+      />
       {removeMemberModal && (
         <ConfirmWorkspaceMemberRemove
           isOpen={removeMemberModal.member.id.length > 0}

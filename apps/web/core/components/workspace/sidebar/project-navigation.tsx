@@ -9,21 +9,20 @@ import { observer } from "mobx-react";
 import Link from "next/link";
 import { useParams, usePathname } from "next/navigation";
 import {
-  EUserPermissionsLevel,
-  EUserPermissions,
+  PERMISSION_KEYS,
   PROJECT_ASSET_VIEW_PERMISSION_KEY,
   PROJECT_DEFECTS_VIEW_PERMISSION_KEY,
   PROJECT_INTAKE_VIEW_PERMISSION_KEY,
   PROJECT_STAGE_VIEW_PERMISSION_KEY,
   PROJECT_MODULES_VIEW_PERMISSION_KEY,
-  PROJECT_OVERVIEW_VIEW_PERMISSION_KEY,
+  PROJECT_OVERVIEW_VIEW_PERMISSION_KEYS,
   PROJECT_NOTES_VIEW_PERMISSION_KEY,
   PROJECT_PRODUCT_LINK_MANAGE_PERMISSION_KEY,
   PROJECT_QA_VIEW_PERMISSION_KEYS,
   PROJECT_RELEASES_VIEW_PERMISSION_KEY,
   PROJECT_REQUIREMENT_LINK_VIEW_PERMISSION_KEY,
   PROJECT_SPRINTS_VIEW_PERMISSION_KEY,
-  PROJECT_VIEWS_VIEW_PERMISSION_KEY,
+  PROJECT_VIEWS_VIEW_PERMISSION_KEYS,
   PROJECT_WORK_ITEMS_VIEW_PERMISSION_KEY,
 } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
@@ -39,7 +38,6 @@ import {
   RequirementIcon,
 } from "@plane/propel/icons";
 import { Bug, Clock, ShieldAlert } from "lucide-react";
-import type { EUserProjectRoles } from "@plane/types";
 // plane ui
 // components
 import { SidebarNavItem } from "@/components/sidebar/sidebar-navigation";
@@ -54,7 +52,7 @@ export type TNavigationItem = {
   name: string;
   href: string;
   icon: React.ElementType;
-  access: EUserPermissions[] | EUserProjectRoles[];
+  /** 任一满足即显示（key 或 PROJECT_MEMBER_ACCESS 等访问条件）；不填 = 项目成员即可 */
   permissionKeys?: string[];
   shouldRender: boolean;
   sortOrder: number;
@@ -75,7 +73,7 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
   const { t } = useTranslation();
   const { isExtendedProjectSidebarOpened, toggleExtendedProjectSidebar, toggleSidebar } = useAppTheme();
   const { getPartialProjectById } = useProject();
-  const { allowPermissions, allowProjectPermissionKeys } = useUserPermissions();
+  const { allowProjectPermissionKeys, isProjectMember } = useUserPermissions();
   const {
     issue: { getIssueIdByIdentifier, getIssueById },
   } = useIssueDetail();
@@ -106,8 +104,7 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
         name: "Overview",
         href: `/${workspaceSlug}/projects/${projectId}/overview`,
         icon: Rss,
-        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
-        permissionKeys: [PROJECT_OVERVIEW_VIEW_PERMISSION_KEY],
+        permissionKeys: [...PROJECT_OVERVIEW_VIEW_PERMISSION_KEYS],
         shouldRender: true,
         sortOrder: 0,
       },
@@ -117,7 +114,6 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
         name: "工时",
         href: `/${workspaceSlug}/projects/${projectId}/timesheets`,
         icon: Clock,
-        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
         shouldRender: true,
         sortOrder: 0.75,
       },
@@ -128,7 +124,6 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
         name: "产品",
         href: `/${workspaceSlug}/projects/${projectId}/products`,
         icon: Package,
-        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
         // 与后端 ProjectProductViewSet.list 同一组 key：能看需求页或能管产品关联的都能进
         permissionKeys: [PROJECT_REQUIREMENT_LINK_VIEW_PERMISSION_KEY, PROJECT_PRODUCT_LINK_MANAGE_PERMISSION_KEY],
         shouldRender: true,
@@ -140,7 +135,6 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
         name: "Work items",
         href: `/${workspaceSlug}/projects/${projectId}/issues`,
         icon: WorkItemsIcon,
-        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
         permissionKeys: [PROJECT_WORK_ITEMS_VIEW_PERMISSION_KEY],
         shouldRender: true,
         sortOrder: 1,
@@ -151,7 +145,6 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
         name: "需求",
         href: `/${workspaceSlug}/projects/${projectId}/requirements`,
         icon: RequirementIcon,
-        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
         permissionKeys: [PROJECT_REQUIREMENT_LINK_VIEW_PERMISSION_KEY],
         shouldRender: true,
         sortOrder: 1.2,
@@ -162,7 +155,6 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
         name: "缺陷",
         href: `/${workspaceSlug}/projects/${projectId}/defects`,
         icon: Bug,
-        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
         permissionKeys: [PROJECT_DEFECTS_VIEW_PERMISSION_KEY],
         shouldRender: true,
         sortOrder: 1.6,
@@ -173,7 +165,6 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
         name: "Cycles",
         href: `/${workspaceSlug}/projects/${projectId}/cycles`,
         icon: CycleIcon,
-        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
         permissionKeys: [PROJECT_SPRINTS_VIEW_PERMISSION_KEY],
         shouldRender: project?.cycle_view ?? false,
         sortOrder: 3,
@@ -184,7 +175,6 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
         name: "Modules",
         href: `/${workspaceSlug}/projects/${projectId}/modules`,
         icon: ModuleIcon,
-        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
         permissionKeys: [PROJECT_MODULES_VIEW_PERMISSION_KEY],
         shouldRender: project?.module_view ?? false,
         sortOrder: 2,
@@ -195,7 +185,6 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
         name: "Releases",
         href: `/${workspaceSlug}/projects/${projectId}/releases`,
         icon: Rocket,
-        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
         permissionKeys: [PROJECT_RELEASES_VIEW_PERMISSION_KEY],
         shouldRender: project?.module_view ?? false,
         sortOrder: 3.5,
@@ -206,7 +195,6 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
         name: "测试",
         href: `/${workspaceSlug}/projects/${projectId}/testhub`,
         icon: TestManagementIcon,
-        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
         permissionKeys: [...PROJECT_QA_VIEW_PERMISSION_KEYS],
         shouldRender: true,
         sortOrder: 4,
@@ -217,8 +205,7 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
         name: "Views",
         href: `/${workspaceSlug}/projects/${projectId}/views`,
         icon: ViewsIcon,
-        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
-        permissionKeys: [PROJECT_VIEWS_VIEW_PERMISSION_KEY],
+        permissionKeys: [...PROJECT_VIEWS_VIEW_PERMISSION_KEYS],
         shouldRender: true,
         sortOrder: 5,
       },
@@ -228,7 +215,6 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
         name: "Pages",
         href: `/${workspaceSlug}/projects/${projectId}/pages`,
         icon: PageIcon,
-        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
         permissionKeys: [PROJECT_NOTES_VIEW_PERMISSION_KEY],
         shouldRender: project?.page_view ?? false,
         sortOrder: 6,
@@ -239,7 +225,6 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
         name: "Intake",
         href: `/${workspaceSlug}/projects/${projectId}/intake`,
         icon: IntakeIcon,
-        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
         permissionKeys: [PROJECT_INTAKE_VIEW_PERMISSION_KEY],
         shouldRender: project?.inbox_view ?? false,
         sortOrder: 7,
@@ -250,7 +235,7 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
         name: "风险",
         href: `/${workspaceSlug}/projects/${projectId}/risks`,
         icon: ShieldAlert,
-        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
+        permissionKeys: [PERMISSION_KEYS.PROJECT_RISK_VIEW],
         shouldRender: true,
         sortOrder: 7.8,
       },
@@ -260,7 +245,6 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
         name: "阶段",
         href: `/${workspaceSlug}/projects/${projectId}/stages`,
         icon: Layers,
-        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
         permissionKeys: [PROJECT_STAGE_VIEW_PERMISSION_KEY],
         shouldRender: true,
         sortOrder: 8,
@@ -271,7 +255,6 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
         name: "规划",
         href: `/${workspaceSlug}/projects/${projectId}/plan`,
         icon: ChartGantt,
-        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
         permissionKeys: [PROJECT_STAGE_VIEW_PERMISSION_KEY],
         shouldRender: true,
         sortOrder: 8.5,
@@ -282,7 +265,6 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
         name: "文件",
         href: `/${workspaceSlug}/projects/${projectId}/filestore`,
         icon: Folder,
-        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
         permissionKeys: [PROJECT_ASSET_VIEW_PERMISSION_KEY],
         shouldRender: true,
         sortOrder: 9,
@@ -335,8 +317,7 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
       {navigationItemsMemo.map((item) => {
         if (!item.shouldRender) return;
 
-        const hasAccess = allowPermissions(item.access, EUserPermissionsLevel.PROJECT, workspaceSlug, project.id);
-        if (!hasAccess) return null;
+        if (!isProjectMember(workspaceSlug, project.id)) return null;
         const hasPermissionKeys =
           !item.permissionKeys?.length ||
           allowProjectPermissionKeys(item.permissionKeys, workspaceSlug, project.id);

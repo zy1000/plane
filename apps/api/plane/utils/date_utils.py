@@ -7,6 +7,7 @@ from django.utils import timezone
 from typing import Dict, Optional, List, Union, Tuple, Any
 
 from plane.db.models import User
+from plane.utils.visibility import visible_project_ids
 
 
 def get_analytics_date_range(
@@ -150,11 +151,17 @@ def get_analytics_filters(
     if project_ids and isinstance(project_ids, str):
         project_ids = [str(project_id) for project_id in project_ids.split(",")]
 
+    # 可见项目（成员 / 负责 / 白名单，utils/visibility.py）；调用方拿去 **kwargs，所以给 id 集合而不是 Q
+    visible = visible_project_ids(user, slug)
+    if project_ids:
+        visible = [str(project_id) for project_id in project_ids if str(project_id) in visible]
+    else:
+        visible = list(visible)
+
     # Base filters for workspace and user
     base_filters = {
         "workspace__slug": slug,
-        "project__project_projectmember__member": user,
-        "project__project_projectmember__is_active": True,
+        "project_id__in": visible,
         "project__deleted_at__isnull": True,
         "project__archived_at__isnull": True,
     }
@@ -162,16 +169,10 @@ def get_analytics_filters(
     # Project filters
     project_filters = {
         "workspace__slug": slug,
-        "project_projectmember__member": user,
-        "project_projectmember__is_active": True,
+        "id__in": visible,
         "deleted_at__isnull": True,
         "archived_at__isnull": True,
     }
-
-    # Add project IDs to filters if provided
-    if project_ids:
-        base_filters["project_id__in"] = project_ids
-        project_filters["id__in"] = project_ids
 
     # Initialize date range variables
     analytics_date_range = None

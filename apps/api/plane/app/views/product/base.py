@@ -1,4 +1,3 @@
-from django.db.models import Q
 from rest_framework import status
 from rest_framework.response import Response
 
@@ -8,15 +7,12 @@ from plane.app.permissions import (
     allow_workspace_member,
 )
 from plane.app.serializers.product import ProductSerializer
-from plane.app.views.base import BaseViewSet
-from plane.db.models import PlanCase, Product, ProductMember, Workspace
+from plane.app.permissions.base import _get_user_product_permission_keys
+from plane.app.views.base import BaseAPIView, BaseViewSet
+from plane.db.models import PlanCase, Product, Workspace
 from plane.utils.product import (
     can_create_product,
-    can_manage_workspace_products,
-)
-from plane.utils.product_roles import (
-    bind_product_member_role,
-    ensure_product_default_roles,
+    filter_visible_products,
 )
 
 
@@ -25,7 +21,6 @@ class ProductViewSet(BaseViewSet):
     serializer_class = ProductSerializer
     search_fields = ["name", "identifier", "code"]
     filterset_fields = {
-        "network": ["exact"],
         "owner_id": ["exact"],
         "reviewers": ["exact"],
         "stage_id": ["exact"],
@@ -67,16 +62,7 @@ class ProductViewSet(BaseViewSet):
         if workspace is None:
             return queryset.none()
 
-        if can_manage_workspace_products(self.request.user, workspace):
-            return self.filter_queryset(queryset)
-
-        queryset = queryset.filter(
-            Q(network=2)
-            | Q(owner=self.request.user)
-            | Q(reviewers=self.request.user)
-            | Q(network=0, member_product__member=self.request.user)
-        )
-        return self.filter_queryset(queryset.distinct())
+        return self.filter_queryset(filter_visible_products(queryset, self.request.user, workspace))
 
     def get_serializer_context(self):
         context = super().get_serializer_context()
@@ -125,16 +111,8 @@ class ProductViewSet(BaseViewSet):
         product = serializer.save(
             workspace=workspace,
             owner=serializer.validated_data.get("owner", request.user),
-            network=serializer.validated_data.get("network", 2),
             created_by=request.user,
         )
-        # 负责人同时是首个产品成员：之后改负责人只能从成员里选（见 validate_owner），
-        # 这里是成员表的起点，缺了它产品建完就没有任何成员。
-        owner_member, _ = ProductMember.objects.get_or_create(
-            product=product, member_id=product.owner_id
-        )
-        admin_role, _ = ensure_product_default_roles(product)
-        bind_product_member_role(owner_member, admin_role)
         return Response(
             self.get_serializer(product).data,
             status=status.HTTP_201_CREATED,
@@ -155,32 +133,23 @@ class ProductViewSet(BaseViewSet):
             partial=partial,
         )
         serializer.is_valid(raise_exception=True)
-        previous_owner_id = product.owner_id
         serializer.save(
             workspace=product.workspace,
             created_by=product.created_by,
             deleted_at=product.deleted_at,
             updated_by=request.user,
         )
-        # 换负责人：新负责人补绑产品管理员（validate_owner 已保证他是产品成员）。
-        # 旧负责人的角色不动，转让不等于降权。
-        if product.owner_id != previous_owner_id:
-            owner_member = ProductMember.objects.get(
-                product=product, member_id=product.owner_id
-            )
-            admin_role, _ = ensure_product_default_roles(product)
-            bind_product_member_role(owner_member, admin_role)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    @allow_fine_permission(PermissionKey.PRODUCT_SETTINGS_EDIT, level="PRODUCT")
+    @allow_fine_permission(PermissionKey.WORKSPACE_PRODUCT_EDIT, level="PRODUCT")
     def update(self, request, slug, pk):
         return self._update(request, pk, partial=False)
 
-    @allow_fine_permission(PermissionKey.PRODUCT_SETTINGS_EDIT, level="PRODUCT")
+    @allow_fine_permission(PermissionKey.WORKSPACE_PRODUCT_EDIT, level="PRODUCT")
     def partial_update(self, request, slug, pk):
         return self._update(request, pk, partial=True)
 
-    @allow_fine_permission(PermissionKey.PRODUCT_SETTINGS_DELETE, level="PRODUCT")
+    @allow_fine_permission(PermissionKey.WORKSPACE_PRODUCT_DELETE, level="PRODUCT")
     def destroy(self, request, slug, pk):
         product = self._get_product(pk)
         if product is None:
@@ -206,3 +175,15 @@ class ProductViewSet(BaseViewSet):
 
         product.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class ProductMyPermissionKeysAPIView(BaseAPIView):
+    """当前用户在产品上生效的 key：project.* 来自关联项目，workspace.* 来自工作区。"""
+
+    @allow_workspace_member
+    def get(self, request, slug, product_id):
+        product = Product.objects.filter(pk=product_id, workspace__slug=slug).select_related("workspace").first()
+        if product is None:
+            return Response({"error": "Product not found."}, status=status.HTTP_404_NOT_FOUND)
+        keys = _get_user_product_permission_keys(request.user, product)
+        return Response({"permission_keys": sorted(keys)}, status=status.HTTP_200_OK)

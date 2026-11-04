@@ -8,10 +8,9 @@ import { observer } from "mobx-react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useTheme } from "next-themes";
 // plane imports
-import { EUserPermissionsLevel, PROJECT_NOTES_VIEW_PERMISSION_KEY } from "@plane/constants";
+import { PROJECT_NOTES_VIEW_PERMISSION_KEY, PROJECT_SETTINGS_EDIT_PERMISSION_KEY } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import type { TPageNavigationTabs } from "@plane/types";
-import { EUserProjectRoles } from "@plane/types";
 // assets
 import darkPagesAsset from "@/app/assets/empty-state/disabled-feature/pages-dark.webp?url";
 import lightPagesAsset from "@/app/assets/empty-state/disabled-feature/pages-light.webp?url";
@@ -49,11 +48,12 @@ function ProjectPagesPage({ params }: Route.ComponentProps) {
   const { t } = useTranslation();
   // store hooks
   const { getProjectById, currentProjectDetails } = useProject();
-  const { allowPermissions, allowProjectPermissionKeys, workspaceUserInfo } = useUserPermissions();
+  const { allowProjectPermissionKeys, workspaceUserInfo } = useUserPermissions();
   // derived values
   const project = getProjectById(projectId);
   const pageTitle = project?.name ? `${project?.name} - 笔记` : undefined;
-  const canPerformEmptyStateActions = allowPermissions([EUserProjectRoles.ADMIN], EUserPermissionsLevel.PROJECT);
+  // 空状态的动作是去项目设置里开功能
+  const canPerformEmptyStateActions = allowProjectPermissionKeys([PROJECT_SETTINGS_EDIT_PERMISSION_KEY]);
   const canViewPages = allowProjectPermissionKeys([PROJECT_NOTES_VIEW_PERMISSION_KEY], workspaceSlug, projectId);
   const resolvedPath = resolvedTheme === "light" ? lightPagesAsset : darkPagesAsset;
   const pageType = getPageType(type);

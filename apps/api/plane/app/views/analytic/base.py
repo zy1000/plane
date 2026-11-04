@@ -20,6 +20,7 @@ from rest_framework.response import Response
 
 # Module imports
 from plane.app.permissions import (
+    allow_project_member,
     PermissionKey,
     allow_fine_permission,
     allow_workspace_member,
@@ -40,6 +41,7 @@ from plane.db.models import (
 from plane.utils.analytics_plot import build_graph_plot
 from plane.utils.issue_filters import issue_filters
 from plane.utils.qa import project_case_repository_ids, project_product_ids
+from plane.utils.visibility import visible_projects_q
 
 
 class AnalyticsEndpoint(BaseAPIView):
@@ -217,24 +219,15 @@ class AnalyticViewViewset(BaseViewSet):
     def retrieve(self, request, slug, pk):
         return super().retrieve(request, slug, pk)
 
-    @allow_fine_permission(
-        PermissionKey.WORKSPACE_ANALYTICS_MANAGE_SAVED_VIEW,
-        level="WORKSPACE",
-    )
+    @allow_fine_permission(PermissionKey.WORKSPACE_ANALYTICS_VIEW, level="WORKSPACE")
     def create(self, request, slug):
         return super().create(request, slug)
 
-    @allow_fine_permission(
-        PermissionKey.WORKSPACE_ANALYTICS_MANAGE_SAVED_VIEW,
-        level="WORKSPACE",
-    )
+    @allow_fine_permission(PermissionKey.WORKSPACE_ANALYTICS_VIEW, level="WORKSPACE")
     def partial_update(self, request, slug, pk):
         return super().partial_update(request, slug, pk)
 
-    @allow_fine_permission(
-        PermissionKey.WORKSPACE_ANALYTICS_MANAGE_SAVED_VIEW,
-        level="WORKSPACE",
-    )
+    @allow_fine_permission(PermissionKey.WORKSPACE_ANALYTICS_VIEW, level="WORKSPACE")
     def destroy(self, request, slug, pk):
         return super().destroy(request, slug, pk)
 
@@ -266,7 +259,7 @@ class SavedAnalyticEndpoint(BaseAPIView):
 
 
 class ExportAnalyticsEndpoint(BaseAPIView):
-    @allow_fine_permission(PermissionKey.WORKSPACE_ANALYTICS_EXPORT, level="WORKSPACE")
+    @allow_fine_permission(PermissionKey.WORKSPACE_ANALYTICS_VIEW, level="WORKSPACE")
     def post(self, request, slug):
         x_axis = request.data.get("x_axis", False)
         y_axis = request.data.get("y_axis", False)
@@ -519,7 +512,7 @@ class ProjectStatsEndpoint(BaseAPIView):
 
 
 class ProjectStatisticsEndpoint(BaseAPIView):
-    @allow_fine_permission(PermissionKey.PROJECT_OVERVIEW_VIEW)
+    @allow_project_member
     def get(self, request, slug, project_id):
         from plane.db.models.page import ProjectPage
         from plane.db.models.view import IssueView
@@ -536,7 +529,7 @@ class ProjectStatisticsEndpoint(BaseAPIView):
 
         project = (
             Project.objects.filter(workspace__slug=slug, id=project_id, archived_at__isnull=True)
-            .filter(Q(project_projectmember__member=self.request.user, project_projectmember__is_active=True) | Q(network=2))
+            .filter(visible_projects_q(self.request.user, slug, None))
             .first()
         )
         if not project:

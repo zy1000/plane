@@ -15,6 +15,7 @@ from plane.app.permissions import (
 from plane.app.serializers import ReleaseCommentSerializer
 from plane.bgtasks.release_activities_task import release_activity as release_activity_task
 from plane.db.models import ReleaseComment
+from plane.utils.visibility import visible_projects_q
 
 
 class ReleaseCommentViewSet(BaseViewSet):
@@ -31,15 +32,14 @@ class ReleaseCommentViewSet(BaseViewSet):
             .filter(project_id=self.kwargs.get("project_id"))
             .filter(release_id=self.kwargs.get("release_id"))
             .filter(
-                project__project_projectmember__member=self.request.user,
-                project__project_projectmember__is_active=True,
+                visible_projects_q(self.request.user, self.kwargs.get("slug"), "project"),
                 project__archived_at__isnull=True,
             )
             .select_related("project", "workspace", "release", "actor")
             .distinct()
         )
 
-    @allow_fine_permission(PermissionKey.RELEASES_COMMENT_CREATE)
+    @allow_fine_permission(PermissionKey.PROJECT_RELEASE_VIEW)
     def create(self, request, slug, project_id, release_id):
         serializer = ReleaseCommentSerializer(data=request.data)
         if serializer.is_valid():

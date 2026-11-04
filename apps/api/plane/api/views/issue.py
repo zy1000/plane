@@ -54,13 +54,17 @@ from plane.api.serializers import (
     LabelCreateUpdateSerializer,
 )
 from plane.app.permissions import (
+    PermissionKey,
+    allow_creator_or,
+    allow_fine_permission,
+    has_project_issue_permission,
     ProjectEntityPermission,
     ProjectLitePermission,
-    ProjectMemberPermission,
 )
 from plane.bgtasks.issue_activities_task import issue_activity
 from plane.db.models import (
     Issue,
+    IssueAssignee,
     IssueActivity,
     FileAsset,
     IssueComment,
@@ -68,6 +72,7 @@ from plane.db.models import (
     Label,
     Project,
     ProjectMember,
+    User,
     RequirementIssue,
     CycleIssue,
     Workspace,
@@ -79,7 +84,6 @@ from plane.utils.asset_upload import presigned_post_for_asset
 from .base import BaseAPIView
 from plane.utils.host import base_host
 from plane.bgtasks.webhook_task import model_activity
-from plane.app.permissions import ROLE
 from plane.utils.openapi import (
     work_item_docs,
     label_docs,
@@ -147,22 +151,45 @@ from plane.utils.openapi import (
     WORKSPACE_NOT_FOUND_RESPONSE,
 )
 from plane.bgtasks.work_item_link_task import crawl_work_item_link_title
+from plane.utils.visibility import can_access_project, visible_projects_q
 
 
 def user_has_issue_permission(user_id, project_id, issue=None, allowed_roles=None, allow_creator=True):
     if allow_creator and issue is not None and user_id == issue.created_by_id:
         return True
 
-    qs = ProjectMember.objects.filter(
-        project_id=project_id,
-        member_id=user_id,
-        is_active=True,
-    )
-    if allowed_roles is not None:
-        qs = qs.filter(role__in=allowed_roles)
+    # 整数角色已退役，allowed_roles 不再区分；能进项目（成员 / 负责 / 直通 / 白名单）即可（参数保留给旧调用方）
+    project = Project.objects.filter(pk=project_id).select_related("workspace").first()
+    user = User.objects.filter(pk=user_id).first()
+    return bool(project and user) and can_access_project(user, project.workspace, project.id)
 
-    return qs.exists()
 
+
+def _issue_permission_denied(request, slug, project_id, action, issue=None):
+    """公开 API 的工作项写操作，口径同 app 侧（views/issue/base.py）：按类型选 project.issue / project.defect，
+    看权限组的类型限定；改自己负责的工作项不看 key。有权限返回 None，否则返回 403。"""
+    from plane.utils.issue_scheme import project_default_issue_type
+
+    assignee_ids = None
+    if issue is not None:
+        type_id = issue.type_id
+        if action == "edit":
+            assignee_ids = list(IssueAssignee.objects.filter(issue_id=issue.id).values_list("assignee_id", flat=True))
+    else:
+        type_id = request.data.get("type_id")
+        if not type_id:
+            default_type = project_default_issue_type(project_id)
+            type_id = default_type.id if default_type else None
+    if has_project_issue_permission(
+        user=request.user,
+        workspace_slug=slug,
+        project_id=str(project_id),
+        action=action,
+        issue_type_id=str(type_id) if type_id else None,
+        issue_assignee_ids=assignee_ids,
+    ):
+        return None
+    return Response({"error": "您没有所需的项目权限。"}, status=status.HTTP_403_FORBIDDEN)
 
 class WorkspaceIssueAPIEndpoint(BaseAPIView):
     """
@@ -419,6 +446,9 @@ class IssueListCreateAPIEndpoint(BaseAPIView):
         Create a new work item in the specified project with the provided details.
         Supports external ID tracking for integration purposes.
         """
+        denied = _issue_permission_denied(request, slug, project_id, "create")
+        if denied:
+            return denied
         project = Project.objects.get(pk=project_id)
 
         serializer = IssueSerializer(
@@ -601,6 +631,9 @@ class IssueDetailAPIEndpoint(BaseAPIView):
                     external_id=external_id,
                     external_source=external_source,
                 )
+                denied = _issue_permission_denied(request, slug, project_id, "edit", issue=issue)
+                if denied:
+                    return denied
 
                 # Get the current instance of the issue in order to track
                 # changes and dispatch the issue activity
@@ -639,6 +672,9 @@ class IssueDetailAPIEndpoint(BaseAPIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
             except Issue.DoesNotExist:
+                denied = _issue_permission_denied(request, slug, project_id, "create")
+                if denied:
+                    return denied
                 # If the issue does not exist, a new record needs to be created
                 # for the requested data.
                 # Serialize the data with the context of the project and
@@ -716,6 +752,9 @@ class IssueDetailAPIEndpoint(BaseAPIView):
         Supports external ID validation to prevent conflicts.
         """
         issue = Issue.objects.get(workspace__slug=slug, project_id=project_id, pk=pk)
+        denied = _issue_permission_denied(request, slug, project_id, "edit", issue=issue)
+        if denied:
+            return denied
         project = Project.objects.get(pk=project_id)
         current_instance = json.dumps(IssueSerializer(issue).data, cls=DjangoJSONEncoder)
         requested_data = json.dumps(self.request.data, cls=DjangoJSONEncoder)
@@ -777,17 +816,11 @@ class IssueDetailAPIEndpoint(BaseAPIView):
         Only admins or the item creator can perform this action.
         """
         issue = Issue.objects.get(workspace__slug=slug, project_id=project_id, pk=pk)
-        if issue.created_by_id != request.user.id and (
-            not ProjectMember.objects.filter(
-                workspace__slug=slug,
-                member=request.user,
-                role=20,
-                project_id=project_id,
-                is_active=True,
-            ).exists()
+        if issue.created_by_id != request.user.id and not has_project_issue_permission(
+            request.user, slug, str(project_id), "delete", issue_type_id=issue.type_id
         ):
             return Response(
-                {"error": "Only admin or creator can delete the work item"},
+                {"error": "Only users with delete permission or the creator can delete the work item"},
                 status=status.HTTP_403_FORBIDDEN,
             )
         current_instance = json.dumps(IssueSerializer(issue).data, cls=DjangoJSONEncoder)
@@ -811,7 +844,8 @@ class LabelListCreateAPIEndpoint(BaseAPIView):
 
     serializer_class = LabelSerializer
     model = Label
-    permission_classes = [ProjectMemberPermission]
+    # 写操作看 project.label.manage（方法上的装饰器）
+    permission_classes = [ProjectEntityPermission]
     use_read_replica = True
 
     def get_queryset(self):
@@ -819,8 +853,7 @@ class LabelListCreateAPIEndpoint(BaseAPIView):
             Label.objects.filter(workspace__slug=self.kwargs.get("slug"))
             .filter(project_id=self.kwargs.get("project_id"))
             .filter(
-                project__project_projectmember__member=self.request.user,
-                project__project_projectmember__is_active=True,
+                visible_projects_q(self.request.user, self.kwargs.get("slug"), "project"),
             )
             .filter(project__archived_at__isnull=True)
             .select_related("project")
@@ -847,6 +880,7 @@ class LabelListCreateAPIEndpoint(BaseAPIView):
             409: LABEL_NAME_EXISTS_RESPONSE,
         },
     )
+    @allow_fine_permission(PermissionKey.PROJECT_LABEL_MANAGE)
     def post(self, request, slug, project_id):
         """Create label
 
@@ -937,7 +971,8 @@ class LabelDetailAPIEndpoint(LabelListCreateAPIEndpoint):
 
     serializer_class = LabelSerializer
     model = Label
-    permission_classes = [ProjectMemberPermission]
+    # 写操作看 project.label.manage（方法上的装饰器）
+    permission_classes = [ProjectEntityPermission]
     use_read_replica = True
 
     @label_docs(
@@ -985,6 +1020,7 @@ class LabelDetailAPIEndpoint(LabelListCreateAPIEndpoint):
             409: EXTERNAL_ID_EXISTS_RESPONSE,
         },
     )
+    @allow_fine_permission(PermissionKey.PROJECT_LABEL_MANAGE)
     def patch(self, request, slug, project_id, pk):
         """Update label
 
@@ -1030,6 +1066,7 @@ class LabelDetailAPIEndpoint(LabelListCreateAPIEndpoint):
             404: LABEL_NOT_FOUND_RESPONSE,
         },
     )
+    @allow_fine_permission(PermissionKey.PROJECT_LABEL_MANAGE)
     def delete(self, request, slug, project_id, pk):
         """Delete label
 
@@ -1055,8 +1092,7 @@ class IssueLinkListCreateAPIEndpoint(BaseAPIView):
             .filter(project_id=self.kwargs.get("project_id"))
             .filter(issue_id=self.kwargs.get("issue_id"))
             .filter(
-                project__project_projectmember__member=self.request.user,
-                project__project_projectmember__is_active=True,
+                visible_projects_q(self.request.user, self.kwargs.get("slug"), "project"),
             )
             .filter(project__archived_at__isnull=True)
             .order_by(self.kwargs.get("order_by", "-created_at"))
@@ -1118,6 +1154,7 @@ class IssueLinkListCreateAPIEndpoint(BaseAPIView):
             404: ISSUE_NOT_FOUND_RESPONSE,
         },
     )
+    @allow_fine_permission(PermissionKey.PROJECT_ISSUE_EDIT, PermissionKey.PROJECT_DEFECT_EDIT)
     def post(self, request, slug, project_id, issue_id):
         """Create issue link
 
@@ -1160,8 +1197,7 @@ class IssueLinkDetailAPIEndpoint(BaseAPIView):
             .filter(project_id=self.kwargs.get("project_id"))
             .filter(issue_id=self.kwargs.get("issue_id"))
             .filter(
-                project__project_projectmember__member=self.request.user,
-                project__project_projectmember__is_active=True,
+                visible_projects_q(self.request.user, self.kwargs.get("slug"), "project"),
             )
             .filter(project__archived_at__isnull=True)
             .order_by(self.kwargs.get("order_by", "-created_at"))
@@ -1229,6 +1265,7 @@ class IssueLinkDetailAPIEndpoint(BaseAPIView):
             404: LINK_NOT_FOUND_RESPONSE,
         },
     )
+    @allow_fine_permission(PermissionKey.PROJECT_ISSUE_EDIT, PermissionKey.PROJECT_DEFECT_EDIT)
     def patch(self, request, slug, project_id, issue_id, pk):
         """Update issue link
 
@@ -1267,6 +1304,7 @@ class IssueLinkDetailAPIEndpoint(BaseAPIView):
             404: OpenApiResponse(description="Work item link not found"),
         },
     )
+    @allow_fine_permission(PermissionKey.PROJECT_ISSUE_EDIT, PermissionKey.PROJECT_DEFECT_EDIT)
     def delete(self, request, slug, project_id, issue_id, pk):
         """Delete work item link
 
@@ -1303,8 +1341,7 @@ class IssueCommentListCreateAPIEndpoint(BaseAPIView):
             .filter(project_id=self.kwargs.get("project_id"))
             .filter(issue_id=self.kwargs.get("issue_id"))
             .filter(
-                project__project_projectmember__member=self.request.user,
-                project__project_projectmember__is_active=True,
+                visible_projects_q(self.request.user, self.kwargs.get("slug"), "project"),
             )
             .filter(project__archived_at__isnull=True)
             .select_related("workspace", "project", "issue", "actor")
@@ -1377,6 +1414,7 @@ class IssueCommentListCreateAPIEndpoint(BaseAPIView):
             409: EXTERNAL_ID_EXISTS_RESPONSE,
         },
     )
+    @allow_fine_permission(PermissionKey.PROJECT_ISSUE_VIEW, PermissionKey.PROJECT_DEFECT_VIEW)
     def post(self, request, slug, project_id, issue_id):
         """Create work item comment
 
@@ -1459,8 +1497,7 @@ class IssueCommentDetailAPIEndpoint(BaseAPIView):
             .filter(project_id=self.kwargs.get("project_id"))
             .filter(issue_id=self.kwargs.get("issue_id"))
             .filter(
-                project__project_projectmember__member=self.request.user,
-                project__project_projectmember__is_active=True,
+                visible_projects_q(self.request.user, self.kwargs.get("slug"), "project"),
             )
             .filter(project__archived_at__isnull=True)
             .select_related("workspace", "project", "issue", "actor")
@@ -1526,6 +1563,8 @@ class IssueCommentDetailAPIEndpoint(BaseAPIView):
             409: EXTERNAL_ID_EXISTS_RESPONSE,
         },
     )
+    @allow_creator_or(PermissionKey.PROJECT_SETTINGS_EDIT, model=IssueComment)
+    @allow_fine_permission(PermissionKey.PROJECT_ISSUE_VIEW, PermissionKey.PROJECT_DEFECT_VIEW)
     def patch(self, request, slug, project_id, issue_id, pk):
         """Update work item comment
 
@@ -1595,6 +1634,8 @@ class IssueCommentDetailAPIEndpoint(BaseAPIView):
             404: COMMENT_NOT_FOUND_RESPONSE,
         },
     )
+    @allow_creator_or(PermissionKey.PROJECT_SETTINGS_EDIT, model=IssueComment)
+    @allow_fine_permission(PermissionKey.PROJECT_ISSUE_VIEW, PermissionKey.PROJECT_DEFECT_VIEW)
     def delete(self, request, slug, project_id, issue_id, pk):
         """Delete issue comment
 
@@ -1651,9 +1692,8 @@ class IssueActivityListAPIEndpoint(BaseAPIView):
         issue_activities = (
             IssueActivity.objects.filter(issue_id=issue_id, workspace__slug=slug, project_id=project_id)
             .filter(
+                visible_projects_q(self.request.user, slug, "project"),
                 ~Q(field__in=["comment", "vote", "reaction", "draft"]),
-                project__project_projectmember__member=self.request.user,
-                project__project_projectmember__is_active=True,
             )
             .filter(project__archived_at__isnull=True)
             .select_related("actor", "workspace", "issue", "project")
@@ -1707,9 +1747,8 @@ class IssueActivityDetailAPIEndpoint(BaseAPIView):
             (
                 IssueActivity.objects.filter(issue_id=issue_id, workspace__slug=slug, project_id=project_id, id=pk)
                 .filter(
+                    visible_projects_q(self.request.user, slug, "project"),
                     ~Q(field__in=["comment", "vote", "reaction", "draft"]),
-                    project__project_projectmember__member=self.request.user,
-                    project__project_projectmember__is_active=True,
                 )
                 .filter(project__archived_at__isnull=True)
                 .select_related("actor", "workspace", "issue", "project")
@@ -1804,6 +1843,7 @@ class IssueAttachmentListCreateAPIEndpoint(BaseAPIView):
             ),
         },
     )
+    @allow_fine_permission(PermissionKey.PROJECT_ISSUE_EDIT, PermissionKey.PROJECT_DEFECT_EDIT)
     def post(self, request, slug, project_id, issue_id):
         """Create work item attachment
 
@@ -1816,7 +1856,6 @@ class IssueAttachmentListCreateAPIEndpoint(BaseAPIView):
             request.user.id,
             project_id=project_id,
             issue=issue,
-            allowed_roles=[ROLE.ADMIN.value, ROLE.MEMBER.value, ROLE.GUEST.value],
             allow_creator=True,
         ):
             return Response(
@@ -1917,6 +1956,7 @@ class IssueAttachmentListCreateAPIEndpoint(BaseAPIView):
             404: ATTACHMENT_NOT_FOUND_RESPONSE,
         },
     )
+    @allow_fine_permission(PermissionKey.PROJECT_ISSUE_VIEW, PermissionKey.PROJECT_DEFECT_VIEW)
     def get(self, request, slug, project_id, issue_id):
         """List issue attachments
 
@@ -1953,6 +1993,7 @@ class IssueAttachmentDetailAPIEndpoint(BaseAPIView):
             404: ATTACHMENT_NOT_FOUND_RESPONSE,
         },
     )
+    @allow_fine_permission(PermissionKey.PROJECT_ISSUE_EDIT, PermissionKey.PROJECT_DEFECT_EDIT)
     def delete(self, request, slug, project_id, issue_id, pk):
         """Delete work item attachment
 
@@ -1965,7 +2006,6 @@ class IssueAttachmentDetailAPIEndpoint(BaseAPIView):
             request.user.id,
             project_id=project_id,
             issue=issue,
-            allowed_roles=[ROLE.ADMIN.value, ROLE.MEMBER.value, ROLE.GUEST.value],
             allow_creator=True,
         ):
             return Response(
@@ -2028,6 +2068,7 @@ class IssueAttachmentDetailAPIEndpoint(BaseAPIView):
             404: ATTACHMENT_NOT_FOUND_RESPONSE,
         },
     )
+    @allow_fine_permission(PermissionKey.PROJECT_ISSUE_VIEW, PermissionKey.PROJECT_DEFECT_VIEW)
     def get(self, request, slug, project_id, issue_id, pk):
         """Retrieve work item attachment
 
@@ -2095,6 +2136,7 @@ class IssueAttachmentDetailAPIEndpoint(BaseAPIView):
             404: ATTACHMENT_NOT_FOUND_RESPONSE,
         },
     )
+    @allow_fine_permission(PermissionKey.PROJECT_ISSUE_EDIT, PermissionKey.PROJECT_DEFECT_EDIT)
     def patch(self, request, slug, project_id, issue_id, pk):
         """Confirm attachment upload
 
@@ -2108,7 +2150,6 @@ class IssueAttachmentDetailAPIEndpoint(BaseAPIView):
             request.user.id,
             project_id=project_id,
             issue=issue,
-            allowed_roles=[ROLE.ADMIN.value, ROLE.MEMBER.value, ROLE.GUEST.value],
             allow_creator=True,
         ):
             return Response(
@@ -2200,9 +2241,8 @@ class IssueSearchEndpoint(BaseAPIView):
 
         # Filter issues
         issues = Issue.issue_objects.filter(
+            visible_projects_q(self.request.user, slug, "project"),
             q,
-            project__project_projectmember__member=self.request.user,
-            project__project_projectmember__is_active=True,
             project__archived_at__isnull=True,
             workspace__slug=slug,
         )

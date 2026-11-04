@@ -242,7 +242,7 @@ class ProjectRequirementViewSet(BaseViewSet):
 
     # --- 读 -------------------------------------------------------------
 
-    @allow_fine_permission(PermissionKey.PROJECT_REQUIREMENT_LINK_VIEW)
+    @allow_fine_permission(PermissionKey.PROJECT_REQUIREMENT_VIEW)
     def list(self, request, slug, project_id):
         _, specs, by_requirement_type = self._requirement_type_specs(project_id)
         queryset = linked_requirements_queryset(slug=slug, project_id=project_id)
@@ -315,7 +315,7 @@ class ProjectRequirementViewSet(BaseViewSet):
             max_per_page=MAX_PER_PAGE,
         )
 
-    @allow_fine_permission(PermissionKey.PROJECT_REQUIREMENT_LINK_MANAGE)
+    @allow_fine_permission(PermissionKey.PROJECT_REQUIREMENT_EDIT)
     def linkable(self, request, slug, project_id):
         """候选池：可以关联进本项目的需求（当前用户看得见的全部产品，已关联的产品在前）。
 
@@ -365,7 +365,7 @@ class ProjectRequirementViewSet(BaseViewSet):
             max_per_page=MAX_PER_PAGE,
         )
 
-    @allow_fine_permission(PermissionKey.PROJECT_REQUIREMENT_LINK_VIEW)
+    @allow_fine_permission(PermissionKey.PROJECT_REQUIREMENT_VIEW)
     def configuration(self, request, slug, project_id):
         """网格渲染自定义列所需的需求类型与字段。
 
@@ -413,7 +413,7 @@ class ProjectRequirementViewSet(BaseViewSet):
 
     # --- 写：关联关系与阶段 ----------------------------------------------
 
-    @allow_fine_permission(PermissionKey.PROJECT_REQUIREMENT_LINK_MANAGE)
+    @allow_fine_permission(PermissionKey.PROJECT_REQUIREMENT_EDIT)
     def create(self, request, slug, project_id):
         """把一批需求关联进本项目；所属产品还没关联本项目的，一并关联进来。"""
         requirements = request.data.get("requirements", [])
@@ -460,7 +460,7 @@ class ProjectRequirementViewSet(BaseViewSet):
             status=status.HTTP_201_CREATED,
         )
 
-    @allow_fine_permission(PermissionKey.PROJECT_REQUIREMENT_LINK_VIEW)
+    @allow_fine_permission(PermissionKey.PROJECT_REQUIREMENT_VIEW)
     def create_requirement(self, request, slug, project_id):
         """在项目里提研发需求：建在所选产品下，再把产品、需求一并关联进本项目。
 
@@ -535,7 +535,7 @@ class ProjectRequirementViewSet(BaseViewSet):
             status=status.HTTP_201_CREATED,
         )
 
-    @allow_fine_permission(PermissionKey.PROJECT_REQUIREMENT_LINK_MANAGE)
+    @allow_fine_permission(PermissionKey.PROJECT_REQUIREMENT_EDIT)
     def partial_update(self, request, slug, project_id, requirement_id):
         """改本项目内的排序，以及需求级交付状态。项目对需求唯一的行级写入口。
 
@@ -577,7 +577,7 @@ class ProjectRequirementViewSet(BaseViewSet):
         )
         return Response(self._serialize_rows([row])[0], status=status.HTTP_200_OK)
 
-    @allow_fine_permission(PermissionKey.PROJECT_REQUIREMENT_LINK_MANAGE)
+    @allow_fine_permission(PermissionKey.PROJECT_REQUIREMENT_EDIT)
     def destroy(self, request, slug, project_id, requirement_id):
         """解除关联。软删关联行 —— 需求本体、版本、审批历史一律不动。
 
@@ -607,7 +607,7 @@ class ProjectRequirementViewSet(BaseViewSet):
 
     # --- 写：提变更单 ----------------------------------------------------
 
-    @allow_fine_permission(PermissionKey.PROJECT_REQUIREMENT_LINK_VIEW)
+    @allow_fine_permission(PermissionKey.PROJECT_REQUIREMENT_VIEW)
     def submit_change(self, request, slug, project_id, requirement_id):
         """项目侧发起变更单。
 
@@ -680,7 +680,7 @@ class RequirementProjectsViewSet(BaseViewSet):
                 {"error": "Product not found."}, status=status.HTTP_404_NOT_FOUND
             )
         if not has_product_permission(
-            request.user, product, PermissionKey.PRODUCT_PROJECT_LINK_MANAGE
+            request.user, product, PermissionKey.WORKSPACE_PRODUCT_EDIT
         ):
             return Response(
                 {"error": "You do not have permission to maintain product requirements."},

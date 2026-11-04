@@ -7,12 +7,7 @@
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 // plane imports
-import {
-  EUserPermissions,
-  EUserPermissionsLevel,
-  MODULE_TRACKER_ELEMENTS,
-  PROJECT_MODULES_CREATE_PERMISSION_KEY,
-} from "@plane/constants";
+import { MODULE_TRACKER_ELEMENTS, PROJECT_MODULES_CREATE_PERMISSION_KEY } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 // ui
 import { Button } from "@plane/propel/button";
@@ -35,23 +30,19 @@ export const ModulesListHeader = observer(function ModulesListHeader() {
   const { workspaceSlug, projectId } = useParams();
   // store hooks
   const { toggleCreateModuleModal } = useCommandPalette();
-  const { allowPermissions, allowProjectPermissionKeys } = useUserPermissions();
+  const { allowProjectPermissionKeys } = useUserPermissions();
 
   const { loader } = useProject();
 
   const { t } = useTranslation();
 
   // auth
-  const canUserCreateModule = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.PROJECT
-  );
   const canCreateModule = allowProjectPermissionKeys(
     [PROJECT_MODULES_CREATE_PERMISSION_KEY],
     workspaceSlug?.toString(),
     projectId?.toString()
   );
-  const isCreateModuleDisabled = !canUserCreateModule || !canCreateModule;
+  const isCreateModuleDisabled = !canCreateModule;
 
   return (
     <Header>

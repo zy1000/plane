@@ -9,7 +9,7 @@ import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 import { RefreshCcw } from "lucide-react";
 // ui
-import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import { PROJECT_INTAKE_VIEW_PERMISSION_KEY } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { Breadcrumbs, Header } from "@plane/ui";
@@ -30,17 +30,15 @@ export const ProjectInboxHeader = observer(function ProjectInboxHeader() {
   // router
   const { workspaceSlug, projectId } = useParams();
   // store hooks
-  const { allowPermissions } = useUserPermissions();
+  const { allowProjectPermissionKeys } = useUserPermissions();
   const { t } = useTranslation();
 
   const { currentProjectDetails, loader: currentProjectDetailsLoader } = useProject();
   const { loader } = useProjectInbox();
 
   // derived value
-  const isAuthorized = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
-    EUserPermissionsLevel.PROJECT
-  );
+  // 往收件箱提交工作项与后端 IntakeIssueViewSet.create 同一把 key
+  const isAuthorized = allowProjectPermissionKeys([PROJECT_INTAKE_VIEW_PERMISSION_KEY]);
 
   return (
     <Header>

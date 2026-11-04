@@ -12,7 +12,8 @@ from rest_framework.response import Response
 from plane.app.permissions import PermissionKey, allow_fine_permission
 from plane.app.serializers import IssueViewSerializer
 from plane.app.views.base import BaseAPIView
-from plane.db.models import IssueView, ProjectMember
+from plane.db.models import IssueView, Project
+from plane.utils.visibility import visible_projects_q
 
 
 #: 读研发模式：查看或维护任一即可
@@ -27,18 +28,17 @@ class DevModeViewListEndpoint(BaseAPIView):
     @allow_fine_permission(*DEV_MODE_READ_KEYS, level="WORKSPACE")
     def get(self, request, slug, dev_mode_id):
         views = list(_mode_views(slug, dev_mode_id).select_related("source_project").order_by("sort_order", "name"))
-        # 「在项目中打开」：优先回到存上来的那个项目，自己不在里面就换一个自己参与的跟随项目
+        # 「在项目中打开」：优先回到存上来的那个项目，自己进不去就换一个自己能进的跟随项目
         member_project_ids = list(
-            ProjectMember.objects.filter(
+            Project.objects.filter(
+                visible_projects_q(request.user, slug, None),
                 workspace__slug=slug,
-                member=request.user,
-                is_active=True,
-                project__dev_mode_id=dev_mode_id,
-                project__issue_scheme__project__isnull=True,
-                project__archived_at__isnull=True,
+                dev_mode_id=dev_mode_id,
+                issue_scheme__project__isnull=True,
+                archived_at__isnull=True,
             )
-            .order_by("project__name")
-            .values_list("project_id", flat=True)
+            .order_by("name")
+            .values_list("id", flat=True)
         )
         member_project_set = set(member_project_ids)
         fallback_project_id = member_project_ids[0] if member_project_ids else None

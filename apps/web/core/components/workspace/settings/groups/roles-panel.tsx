@@ -32,11 +32,9 @@ type Props = {
   onPermissionsChanged: () => Promise<void>;
 };
 
-const getPermissionCount = (role: IWorkspaceRole | undefined) => {
-  if (!role?.permissions || typeof role.permissions !== "object") return 0;
-  const permissionKeys = role.permissions.permission_keys;
-  return Array.isArray(permissionKeys) ? permissionKeys.filter((key) => typeof key === "string").length : 0;
-};
+/** 列表接口带统计（权限组 = IPermissionGroup）；老数据没有就算 0 */
+const getPermissionCount = (role: IWorkspaceRole | undefined) =>
+  (role as { permission_keys_count?: number } | undefined)?.permission_keys_count ?? 0;
 
 export function RolesPanel({
   group,
@@ -67,7 +65,7 @@ export function RolesPanel({
     try {
       await onRemoveRole(group.id, pendingRemove.groupRoleId);
       await onPermissionsChanged().catch(() => undefined);
-      setToast({ type: TOAST_TYPE.SUCCESS, title: "已移除", message: "角色已从团队中移除" });
+      setToast({ type: TOAST_TYPE.SUCCESS, title: "已移除", message: "权限组已从团队中移除" });
       setPendingRemove(null);
     } catch {
       setToast({ type: TOAST_TYPE.ERROR, title: "移除失败", message: "请稍后重试" });
@@ -80,12 +78,12 @@ export function RolesPanel({
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex items-center justify-between gap-3 border-b border-subtle px-5 py-3">
         <div>
-          <p className="text-13 font-medium text-primary">已分配角色</p>
-          <p className="mt-0.5 text-11 text-tertiary">角色权限会立即应用到团队成员</p>
+          <p className="text-13 font-medium text-primary">已分配权限组</p>
+          <p className="mt-0.5 text-11 text-tertiary">团队绑定的权限组会立即对团队成员生效</p>
         </div>
         {canManage && (
           <Button variant="primary" prependIcon={<PlusIcon />} onClick={() => setShowAddModal(true)}>
-            添加角色
+            添加权限组
           </Button>
         )}
       </div>
@@ -108,9 +106,9 @@ export function RolesPanel({
             <div className="mb-4 flex size-11 items-center justify-center rounded-lg border border-subtle bg-layer-1">
               <ShieldCheck className="size-5 text-secondary" />
             </div>
-            <p className="text-13 font-medium text-primary">尚未分配团队角色</p>
+            <p className="text-13 font-medium text-primary">尚未分配团队权限组</p>
             <p className="mt-1 max-w-80 text-13 leading-5 text-secondary">
-              当前没有通过这个团队授予权限。团队成员仍可能拥有直接角色或其他团队角色。
+              当前没有通过这个团队授予权限。团队成员仍可能拥有直绑权限组或其他团队权限组。
             </p>
             {canManage && (
               <Button
@@ -119,7 +117,7 @@ export function RolesPanel({
                 prependIcon={<PlusIcon />}
                 onClick={() => setShowAddModal(true)}
               >
-                添加角色
+                添加权限组
               </Button>
             )}
           </div>
@@ -127,7 +125,7 @@ export function RolesPanel({
           <ul className="divide-y divide-subtle">
             {roles.map((item) => {
               const role = item.role_detail;
-              const roleName = role?.name ?? "未知角色";
+              const roleName = role?.name ?? "未知权限组";
               const permissionCount = getPermissionCount(role);
               return (
                 <li
@@ -141,13 +139,10 @@ export function RolesPanel({
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <p className="truncate text-13 font-medium text-primary">{roleName}</p>
-                        {role?.is_system && (
-                          <span className="rounded-md bg-layer-1 px-1.5 py-0.5 text-11 text-secondary">系统角色</span>
-                        )}
                         <span className="text-11 text-tertiary tabular-nums">{permissionCount} 项权限</span>
                       </div>
                       <p className="mt-0.5 truncate text-13 text-secondary">
-                        {role?.description?.trim() || "暂无角色描述"}
+                        {role?.description?.trim() || "暂无权限组描述"}
                       </p>
                     </div>
                   </div>
@@ -159,7 +154,7 @@ export function RolesPanel({
                         "flex size-7 shrink-0 items-center justify-center rounded-md text-placeholder opacity-0 transition-colors hover:bg-danger-subtle hover:text-danger-primary",
                         "group-focus-within:opacity-100 group-hover:opacity-100 focus:opacity-100"
                       )}
-                      aria-label={`从团队中移除角色 ${roleName}`}
+                      aria-label={`从团队中移除权限组 ${roleName}`}
                     >
                       <Trash2Icon className="size-3.5" />
                     </button>
@@ -186,18 +181,18 @@ export function RolesPanel({
         handleClose={() => setPendingRemove(null)}
         handleSubmit={handleConfirmRemove}
         isSubmitting={isRemoveSubmitting}
-        title="从团队中移除此角色？"
+        title="从团队中移除此权限组？"
         content={
           pendingRemove ? (
             <>
               「{group.name}」的 {group.member_count} 位成员将不再通过该团队获得
               <span className="font-medium text-primary"> {pendingRemove.roleName}</span>{" "}
-              的权限；由其他角色授予的权限不会受影响。
+              的权限；由其他权限组授予的权限不会受影响。
             </>
           ) : null
         }
         secondaryButtonText="取消"
-        primaryButtonText={{ default: "移除角色", loading: "移除中…" }}
+        primaryButtonText={{ default: "移除权限组", loading: "移除中…" }}
       />
     </div>
   );

@@ -7,13 +7,14 @@
 import { FileText, FolderPlus, Layers, SquarePlus } from "lucide-react";
 // plane imports
 import {
-  EUserPermissionsLevel,
+  PROJECT_MEMBER_ACCESS,
+  PROJECT_MODULES_CREATE_PERMISSION_KEY,
   PROJECT_NOTES_CREATE_PERMISSION_KEY,
+  PROJECT_SPRINTS_CREATE_PERMISSION_KEY,
   WORKSPACE_PROJECT_CREATE_PERMISSION_KEY,
 } from "@plane/constants";
 import { ContrastIcon, DiceIcon, LayersIcon } from "@plane/propel/icons";
 // components
-import { EUserProjectRoles } from "@plane/types";
 import type { TPowerKCommandConfig, TPowerKContext } from "@/components/power-k/core/types";
 // hooks
 import { useCommandPalette } from "@/hooks/store/use-command-palette";
@@ -38,7 +39,7 @@ export const usePowerKCreationCommandsRecord = (): Record<TPowerKCreationCommand
   const { config } = useInstance();
   const {
     canPerformAnyCreateAction,
-    permission: { allowPermissions, allowProjectPermissionKeys, allowWorkspacePermissionKeys },
+    permission: { allowProjectPermissionKeys, allowWorkspacePermissionKeys },
   } = useUser();
   const { workspaceProjectIds, getPartialProjectById } = useProject();
   const {
@@ -52,19 +53,13 @@ export const usePowerKCreationCommandsRecord = (): Record<TPowerKCreationCommand
   // derived values
   const canCreateWorkItem = canPerformAnyCreateAction && workspaceProjectIds && workspaceProjectIds.length > 0;
   const canCreateProject = allowWorkspacePermissionKeys([WORKSPACE_PROJECT_CREATE_PERMISSION_KEY]);
-  const hasProjectMemberLevelPermissions = (ctx: TPowerKContext) =>
-    allowPermissions(
-      [EUserProjectRoles.ADMIN, EUserProjectRoles.MEMBER],
-      EUserPermissionsLevel.PROJECT,
-      ctx.params.workspaceSlug?.toString(),
-      ctx.params.projectId?.toString()
-    );
-  const canCreatePage = (ctx: TPowerKContext) =>
-    allowProjectPermissionKeys(
-      [PROJECT_NOTES_CREATE_PERMISSION_KEY],
-      ctx.params.workspaceSlug?.toString(),
-      ctx.params.projectId?.toString()
-    );
+  const hasProjectPermission = (ctx: TPowerKContext, permissionKey: string) =>
+    allowProjectPermissionKeys([permissionKey], ctx.params.workspaceSlug?.toString(), ctx.params.projectId?.toString());
+  const canCreatePage = (ctx: TPowerKContext) => hasProjectPermission(ctx, PROJECT_NOTES_CREATE_PERMISSION_KEY);
+  // 新建的是个人视图，项目成员就行（公开要 project.view.manage，在弹窗里再选）
+  const canCreateView = (ctx: TPowerKContext) => hasProjectPermission(ctx, PROJECT_MEMBER_ACCESS);
+  const canCreateCycle = (ctx: TPowerKContext) => hasProjectPermission(ctx, PROJECT_SPRINTS_CREATE_PERMISSION_KEY);
+  const canCreateModule = (ctx: TPowerKContext) => hasProjectPermission(ctx, PROJECT_MODULES_CREATE_PERMISSION_KEY);
   const isWorkspaceCreationDisabled = config?.is_workspace_creation_disabled ?? false;
 
   const getProjectDetails = (ctx: TPowerKContext) =>
@@ -103,11 +98,8 @@ export const usePowerKCreationCommandsRecord = (): Record<TPowerKCreationCommand
       icon: Layers,
       keySequence: "nv",
       action: () => toggleCreateViewModal(true),
-      isEnabled: (ctx) => Boolean(getProjectDetails(ctx)?.issue_views_view && hasProjectMemberLevelPermissions(ctx)),
-      isVisible: (ctx) =>
-        Boolean(
-          ctx.params.projectId && getProjectDetails(ctx)?.issue_views_view && hasProjectMemberLevelPermissions(ctx)
-        ),
+      isEnabled: (ctx) => Boolean(getProjectDetails(ctx)?.issue_views_view && canCreateView(ctx)),
+      isVisible: (ctx) => Boolean(ctx.params.projectId && getProjectDetails(ctx)?.issue_views_view && canCreateView(ctx)),
       closeOnSelect: true,
     },
     create_cycle: {
@@ -118,9 +110,8 @@ export const usePowerKCreationCommandsRecord = (): Record<TPowerKCreationCommand
       icon: ContrastIcon,
       keySequence: "nc",
       action: () => toggleCreateCycleModal(true),
-      isEnabled: (ctx) => Boolean(getProjectDetails(ctx)?.cycle_view && hasProjectMemberLevelPermissions(ctx)),
-      isVisible: (ctx) =>
-        Boolean(ctx.params.projectId && getProjectDetails(ctx)?.cycle_view && hasProjectMemberLevelPermissions(ctx)),
+      isEnabled: (ctx) => Boolean(getProjectDetails(ctx)?.cycle_view && canCreateCycle(ctx)),
+      isVisible: (ctx) => Boolean(ctx.params.projectId && getProjectDetails(ctx)?.cycle_view && canCreateCycle(ctx)),
       closeOnSelect: true,
     },
     create_module: {
@@ -131,9 +122,8 @@ export const usePowerKCreationCommandsRecord = (): Record<TPowerKCreationCommand
       icon: DiceIcon,
       keySequence: "nm",
       action: () => toggleCreateModuleModal(true),
-      isEnabled: (ctx) => Boolean(getProjectDetails(ctx)?.module_view && hasProjectMemberLevelPermissions(ctx)),
-      isVisible: (ctx) =>
-        Boolean(ctx.params.projectId && getProjectDetails(ctx)?.module_view && hasProjectMemberLevelPermissions(ctx)),
+      isEnabled: (ctx) => Boolean(getProjectDetails(ctx)?.module_view && canCreateModule(ctx)),
+      isVisible: (ctx) => Boolean(ctx.params.projectId && getProjectDetails(ctx)?.module_view && canCreateModule(ctx)),
       closeOnSelect: true,
     },
     create_project: {

@@ -6,18 +6,19 @@
 
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
+import { PROJECT_RELEASES_EDIT_PERMISSION_KEY } from "@plane/constants";
 import { GANTT_TIMELINE_TYPE } from "@plane/types";
 import type { IBlockUpdateData, IBlockUpdateDependencyData, IRelease } from "@plane/types";
 import { GanttChartRoot, ReleaseGanttSidebar } from "@/components/gantt-chart";
 import { TimeLineTypeContext } from "@/components/gantt-chart/contexts";
 import { ReleaseGanttBlock } from "@/components/releases/gantt-chart/blocks";
-import { useProject } from "@/hooks/store/use-project";
 import { useRelease } from "@/hooks/store/use-release";
 import { useReleaseFilter } from "@/hooks/store/use-release-filter";
+import { useUserPermissions } from "@/hooks/store/user";
 
 export const ReleasesListGanttChartView = observer(function ReleasesListGanttChartView() {
   const { workspaceSlug, projectId } = useParams();
-  const { currentProjectDetails } = useProject();
+  const { allowProjectPermissionKeys } = useUserPermissions();
   const { getFilteredReleaseIds, updateReleaseDetails } = useRelease();
   const { currentProjectDisplayFilters: displayFilters } = useReleaseFilter();
 
@@ -50,7 +51,8 @@ export const ReleasesListGanttChartView = observer(function ReleasesListGanttCha
     await updateReleaseDetails(workspaceSlug.toString(), projectId.toString(), blockUpdate.id, payload);
   };
 
-  const isAllowed = currentProjectDetails?.member_role === 20 || currentProjectDetails?.member_role === 15;
+  // 拖动改日期 / 排序 / 加块都是改发布
+  const isAllowed = allowProjectPermissionKeys([PROJECT_RELEASES_EDIT_PERMISSION_KEY]);
 
   if (!filteredReleaseIds) return null;
 

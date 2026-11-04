@@ -8,7 +8,6 @@ import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 import { Link } from "react-router";
 // plane imports
-import { ROLE } from "@plane/constants";
 import { Popover } from "@plane/propel/popover";
 import { Avatar } from "@plane/ui";
 import { cn, getFileURL } from "@plane/utils";
@@ -22,19 +21,13 @@ type Props = {
 
 export const EditorUserMention = observer(function EditorUserMention(props: Props) {
   const { id } = props;
-  // router
-  const { projectId } = useParams();
   // params
   const { workspaceSlug } = useParams();
   // store hooks
   const { data: currentUser } = useUser();
-  const {
-    getUserDetails,
-    project: { getProjectMemberDetails },
-  } = useMember();
+  const { getUserDetails } = useMember();
   // derived values
   const userDetails = getUserDetails(id);
-  const roleDetails = projectId ? getProjectMemberDetails(id, projectId.toString())?.role : null;
   const profileLink = `/${workspaceSlug}/profile/${id}`;
 
   if (!userDetails) {
@@ -74,7 +67,6 @@ export const EditorUserMention = observer(function EditorUserMention(props: Prop
                 <Link to={profileLink} className="not-prose text-13 font-medium text-primary hover:underline">
                   {userDetails?.first_name} {userDetails?.last_name}
                 </Link>
-                {roleDetails && <p className="text-11 text-secondary">{ROLE[roleDetails]}</p>}
               </div>
             </div>
           </div>

@@ -8,7 +8,7 @@ import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { observer } from "mobx-react";
 // plane package imports
-import { E_SORT_ORDER, EActivityTab, EUserPermissions } from "@plane/constants";
+import { E_SORT_ORDER, EActivityTab, PROJECT_SETTINGS_EDIT_PERMISSION_KEY } from "@plane/constants";
 import { useLocalStorage } from "@plane/hooks";
 import { useTranslation } from "@plane/i18n";
 //types
@@ -70,7 +70,7 @@ export const IssueActivity = observer(function IssueActivity(props: TIssueActivi
   const [selectedOperatorIds, setSelectedOperatorIds] = useState<string[]>([]);
   const [timesheetOperatorIds, setTimesheetOperatorIds] = useState<string[]>([]);
 
-  const { getProjectRoleByWorkspaceSlugAndProjectId } = useUserPermissions();
+  const { allowProjectPermissionKeys } = useUserPermissions();
   const { getProjectById } = useProject();
   const { data: currentUser } = useUser();
   // derived values
@@ -78,11 +78,10 @@ export const IssueActivity = observer(function IssueActivity(props: TIssueActivi
     storedActiveTab && TAB_VALUES.includes(storedActiveTab) ? (storedActiveTab as EActivityTab) : EActivityTab.ALL;
   const resolvedSortOrder = sortOrder === E_SORT_ORDER.DESC ? E_SORT_ORDER.DESC : E_SORT_ORDER.ASC;
   const issue = issueId ? getIssueById(issueId) : undefined;
-  const currentUserProjectRole = getProjectRoleByWorkspaceSlugAndProjectId(workspaceSlug, projectId);
-  const isAdmin = currentUserProjectRole === EUserPermissions.ADMIN;
-  const isGuest = currentUserProjectRole === EUserPermissions.GUEST;
+  // 登记工时：项目管理员（能改项目设置的人）随时可记，其他人只能记自己负责的工作项
+  const isAdmin = allowProjectPermissionKeys([PROJECT_SETTINGS_EDIT_PERMISSION_KEY], workspaceSlug, projectId);
   const isAssigned = issue?.assignee_ids && currentUser?.id ? issue?.assignee_ids.includes(currentUser?.id) : false;
-  const isWorklogButtonEnabled = !isIntakeIssue && !isGuest && (isAdmin || isAssigned);
+  const isWorklogButtonEnabled = !isIntakeIssue && (isAdmin || isAssigned);
   const showCommentComposer = !disabled && (activeTab === EActivityTab.ALL || activeTab === EActivityTab.COMMENT);
   const isTimesheetTab = activeTab === EActivityTab.TIMESHEET;
 

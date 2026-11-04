@@ -25,7 +25,8 @@ from plane.api.serializers import (
     IntakeIssueCreateSerializer,
     IntakeIssueUpdateSerializer,
 )
-from plane.app.permissions import ProjectLitePermission
+from plane.app.permissions import PermissionKey, ProjectLitePermission, allow_fine_permission
+from plane.app.permissions.base import resolve_project_grant
 from plane.bgtasks.issue_activities_task import issue_activity
 from plane.db.models import Intake, IntakeIssue, Issue, Project, ProjectMember, State, StateGroup
 from plane.utils.host import base_host
@@ -139,6 +140,7 @@ class IntakeIssueListCreateAPIEndpoint(BaseAPIView):
             400: INVALID_REQUEST_RESPONSE,
         },
     )
+    @allow_fine_permission(PermissionKey.PROJECT_INTAKE_VIEW)
     def post(self, request, slug, project_id):
         """Create intake work item
 
@@ -325,16 +327,11 @@ class IntakeIssueDetailAPIEndpoint(BaseAPIView):
             intake_id=intake.id,
         )
 
-        # Get the project member
-        project_member = ProjectMember.objects.get(
-            workspace__slug=slug,
-            project_id=project_id,
-            member=request.user,
-            is_active=True,
-        )
-
-        # Only project members admins and created_by users can access this endpoint
-        if project_member.role <= 5 and str(intake_issue.created_by_id) != str(request.user.id):
+        # 收件箱管理权（接受 / 拒绝 / 改属性）；没有的人只能改自己投递的标题与描述
+        can_manage_intake = PermissionKey.PROJECT_INTAKE_MANAGE.value in resolve_project_grant(
+            request.user, slug, str(project_id)
+        ).keys
+        if not can_manage_intake and str(intake_issue.created_by_id) != str(request.user.id):
             return Response(
                 {"error": "You cannot edit intake work items"},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -370,8 +367,8 @@ class IntakeIssueDetailAPIEndpoint(BaseAPIView):
                 ),
             ).get(pk=issue_id, workspace__slug=slug, project_id=project_id)
 
-            # Only allow guests to edit name and description
-            if project_member.role <= 5:
+            # 没有收件箱管理权只能改标题与描述
+            if not can_manage_intake:
                 description_json = issue_data.get("description") or issue_data.get("description_json") or {}
                 issue_data = {
                     "name": issue_data.get("name", issue.name),
@@ -384,8 +381,8 @@ class IntakeIssueDetailAPIEndpoint(BaseAPIView):
             if not issue_serializer.is_valid():
                 return Response(issue_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-        # Only project admins and members can edit intake issue attributes
-        if project_member.role > 15:
+        # 收件箱属性（状态、重复等）只有管理者能改
+        if can_manage_intake:
             intake_serializer = IntakeIssueUpdateSerializer(intake_issue, data=request.data, partial=True)
 
             if not intake_serializer.is_valid():
@@ -476,13 +473,8 @@ class IntakeIssueDetailAPIEndpoint(BaseAPIView):
             # Delete the issue also
             issue = Issue.objects.filter(workspace__slug=slug, project_id=project_id, pk=issue_id).first()
             if issue.created_by_id != request.user.id and (
-                not ProjectMember.objects.filter(
-                    workspace__slug=slug,
-                    member=request.user,
-                    role=20,
-                    project_id=project_id,
-                    is_active=True,
-                ).exists()
+                PermissionKey.PROJECT_INTAKE_MANAGE.value
+                not in resolve_project_grant(request.user, slug, str(project_id)).keys
             ):
                 return Response(
                     {"error": "Only admin or creator can delete the work item"},

@@ -14,17 +14,13 @@ from plane.db.models import (
     WorkspaceGroupRole,
     WorkspaceMember,
     WorkspaceMemberRole,
-    WorkspaceRole,
 )
+from plane.utils.job_role import job_role_items
+from plane.utils.permission_groups import effective_payload
 
 
 def _role_permission_keys(role):
-    permissions = role.permissions if isinstance(role.permissions, dict) else {}
-    return [
-        key
-        for key in permissions.get("permission_keys", [])
-        if isinstance(key, str)
-    ]
+    return effective_payload(role)["permission_keys"]
 
 
 def _role_payload(role):
@@ -65,8 +61,6 @@ def build_workspace_my_access(workspace, user):
                 deleted_at__isnull=True,
                 role__workspace=workspace,
                 role__deleted_at__isnull=True,
-                role__legacy_role__isnull=True,
-                role__type=WorkspaceRole.RoleType.WORKSPACE,
             )
             .select_related("role")
             .order_by("role__name", "role_id")
@@ -90,12 +84,18 @@ def build_workspace_my_access(workspace, user):
                 deleted_at__isnull=True,
                 role__workspace=workspace,
                 role__deleted_at__isnull=True,
-                role__legacy_role__isnull=True,
-                role__type=WorkspaceRole.RoleType.WORKSPACE,
             )
             .select_related("group", "role")
             .order_by("group__name", "role__name", "group_id", "role_id")
         )
+
+    job_role_ids = (
+        set(workspace_member.job_role_links.values_list("job_role_id", flat=True)) if workspace_member else set()
+    )
+    job_roles = [
+        {"id": item.id, "label": item.label, "color": item.color}
+        for item in job_role_items(workspace.id).filter(id__in=job_role_ids)
+    ]
 
     granted_keys = _get_user_workspace_permission_keys(user, workspace.slug)
     sources_by_key = defaultdict(list)
@@ -154,14 +154,12 @@ def build_workspace_my_access(workspace, user):
     return {
         "membership": {
             "id": workspace_member.id if workspace_member else None,
-            "role": workspace_member.role if workspace_member else None,
             "joined_at": workspace_member.created_at if workspace_member else None,
             "is_workspace_owner": is_workspace_owner,
             "is_instance_admin": is_instance_admin,
         },
-        "direct_roles": [
-            _role_payload(assignment.role) for assignment in direct_assignments
-        ],
+        "job_roles": job_roles,
+        "direct_roles": [_role_payload(assignment.role) for assignment in direct_assignments],
         "groups": [
             {
                 "id": group_membership.group.id,

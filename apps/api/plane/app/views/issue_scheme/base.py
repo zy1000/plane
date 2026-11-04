@@ -19,8 +19,8 @@ from plane.utils.issue_scheme import (
     following_project_count,
 )
 
-#: 读研发模式（含类型库、字段库）：查看或维护任一即可
-DEV_MODE_READ_KEYS = (PermissionKey.WORKSPACE_DEV_MODE_VIEW, PermissionKey.WORKSPACE_DEV_MODE_MANAGE)
+#: 读工作项方案（类型库、字段库）：查看或维护任一即可
+DEV_MODE_READ_KEYS = (PermissionKey.WORKSPACE_ISSUE_SCHEME_VIEW, PermissionKey.WORKSPACE_ISSUE_SCHEME_MANAGE)
 
 
 def _library_payload(scheme):
@@ -51,7 +51,7 @@ class IssueTypeLibraryEndpoint(BaseAPIView):
 class IssueSchemeDetailEndpoint(BaseAPIView):
     """GET workspaces/<slug>/issue-schemes/<issue_scheme_id>/：类型库概况。"""
 
-    @allow_fine_permission(PermissionKey.WORKSPACE_DEV_MODE_VIEW)
+    @allow_fine_permission(PermissionKey.WORKSPACE_ISSUE_SCHEME_VIEW)
     def get(self, request, slug, issue_scheme_id):
         scheme = IssueScheme.objects.get(pk=issue_scheme_id, workspace__slug=slug, project__isnull=True)
         ensure_issue_type_library(scheme.workspace_id, created_by=request.user)

@@ -234,7 +234,7 @@ class Command(BaseCommand):
                     deleted_at__isnull=True,
                 ).first()
                 if target_member:
-                    target = {"id": str(target_member.id), "role": target_member.role}
+                    target = {"id": str(target_member.id)}
                     member_targets[source_member.member_id] = target
 
             item = {
@@ -242,26 +242,14 @@ class Command(BaseCommand):
                 "source_workspace_id": str(source_member.workspace_id),
                 "member_id": str(source_member.member_id),
                 "member_email": getattr(source_member.member, "email", None),
-                "source_role": source_member.role,
             }
             if target:
-                merged_role = max(source_member.role, target["role"])
-                item.update(
-                    {
-                        "target_id": target["id"],
-                        "target_role": target["role"],
-                        "merged_role": merged_role,
-                    }
-                )
+                item["target_id"] = target["id"]
                 plan["merge"].append(item)
-                target["role"] = merged_role
             else:
                 plan["move"].append(item)
                 if source_member.deleted_at is None:
-                    member_targets[source_member.member_id] = {
-                        "id": str(source_member.id),
-                        "role": source_member.role,
-                    }
+                    member_targets[source_member.member_id] = {"id": str(source_member.id)}
 
         return plan
 
@@ -291,7 +279,6 @@ class Command(BaseCommand):
                 "source_id": str(source_invite.id),
                 "source_workspace_id": str(source_invite.workspace_id),
                 "email": source_invite.email,
-                "role": source_invite.role,
                 "accepted": source_invite.accepted,
             }
             if target_id:
@@ -422,7 +409,7 @@ class Command(BaseCommand):
             self.record_operation(report, "move_workspace_member", "db.WorkspaceMember", count, item)
 
         for item in member_plan["merge"]:
-            count = WorkspaceMember.objects.filter(id=item["target_id"]).update(role=item["merged_role"], is_active=True)
+            count = WorkspaceMember.objects.filter(id=item["target_id"]).update(is_active=True)
             self.record_operation(report, "merge_workspace_member", "db.WorkspaceMember", count, item)
 
     def apply_invite_moves(self, report, target_id):

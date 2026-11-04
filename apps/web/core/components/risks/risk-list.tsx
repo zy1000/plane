@@ -63,7 +63,7 @@ export const RiskList = observer(function RiskList({
 }) {
   const { t } = useTranslation();
   const { data: currentUser } = useUser();
-  const { canEdit } = useRiskPermissions(workspaceSlug, projectId);
+  const { canCreate, canEdit, canDelete } = useRiskPermissions(workspaceSlug, projectId);
   const { risks, isLoading, isMutating, error, refresh, createRisk, updateRisk, deleteRisk, applyRisk } = useRisks(
     workspaceSlug,
     projectId
@@ -157,7 +157,7 @@ export const RiskList = observer(function RiskList({
     <>
       <PageSearchInput searchQuery={search} updateSearchQuery={setSearch} placeholder={t(`${RISK_I18N}.header.search`)} />
       <FiltersToggle filter={filter} enableQuickAddFilter={false} />
-      {canEdit && (
+      {canCreate && (
         <Button variant="primary" size="lg" onClick={() => setForm({ mode: "create" })}>
           {t(`${RISK_I18N}.header.create`)}
         </Button>
@@ -175,7 +175,7 @@ export const RiskList = observer(function RiskList({
       );
     }
     if (risks.length === 0) {
-      return <RiskEmptyState canCreate={canEdit} onCreate={() => setForm({ mode: "create" })} />;
+      return <RiskEmptyState canCreate={canCreate} onCreate={() => setForm({ mode: "create" })} />;
     }
     if (visible.length === 0) {
       return <RiskNoMatch onClear={handleClearAll} />;
@@ -203,6 +203,7 @@ export const RiskList = observer(function RiskList({
               risk={risk}
               today={today}
               canEdit={canEdit}
+              canDelete={canDelete}
               isActive={openRiskId === risk.id}
               onOpen={() => setOpenRiskId(risk.id)}
               onEdit={() => handleOpenEdit(risk)}

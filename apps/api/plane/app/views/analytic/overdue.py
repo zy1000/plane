@@ -627,7 +627,7 @@ class WorkspaceOverdueAnalyticsExportEndpoint(WorkspaceOverdueAnalyticsEndpoint)
         response["Content-Disposition"] = f"attachment; filename*=UTF-8''{quote(filename)}"
         return response
 
-    @allow_fine_permission(PermissionKey.WORKSPACE_ANALYTICS_EXPORT, level="WORKSPACE")
+    @allow_fine_permission(PermissionKey.WORKSPACE_ANALYTICS_VIEW, level="WORKSPACE")
     def get(self, request, slug):
         status_filter, entity_type, project_ids = self._extract_filters_from_request(request)
         date_field = request.GET.get("date_field", "deadline")
@@ -679,7 +679,7 @@ class WorkspaceOverdueAnalyticsExportEndpoint(WorkspaceOverdueAnalyticsEndpoint)
 
         return self._build_xlsx_response(records)
 
-    @allow_fine_permission(PermissionKey.WORKSPACE_ANALYTICS_EXPORT, level="WORKSPACE")
+    @allow_fine_permission(PermissionKey.WORKSPACE_ANALYTICS_VIEW, level="WORKSPACE")
     def post(self, request, slug):
         # 直接导出前端按当前筛选条件得到的完整记录集（忽略分页），
         # 由前端传入已过滤的 records，后端仅负责生成 XLSX。

@@ -35,11 +35,6 @@ from plane.utils.data_dictionary import (
 from .data_dictionary import DataDictionaryItemLiteSerializer
 from .dev_mode import DevModeLiteSerializer
 from .issue_scheme import IssueSchemeLiteSerializer
-from plane.db.models.issue_type import (
-    ISSUE_TYPE_PERMISSION_ACTIONS,
-    ISSUE_TYPE_PERMISSION_KEY_PREFIX,
-    build_issue_type_permission_key,
-)
 from plane.utils.content_validator import validate_html_content
 from ...db.models.project import (
     ProjectAnnouncement,
@@ -64,6 +59,14 @@ def get_active_custom_role_ids(obj):
             role__deleted_at__isnull=True,
         ).values_list("role_id", flat=True)
     ]
+
+
+def get_member_job_role_ids(obj, context):
+    """成员的角色（job_role）id。列表接口在 context 里给好 {成员行 id: [...]}，否则单查。"""
+    job_role_map = context.get("job_role_ids_by_member_id")
+    if job_role_map is not None:
+        return [str(value) for value in job_role_map.get(obj.id, [])]
+    return [str(value) for value in obj.job_role_links.values_list("job_role_id", flat=True)]
 
 
 def get_project_member_role_template_ids(role_sources):
@@ -382,7 +385,7 @@ class ProjectLiteSerializer(BaseSerializer):
 class ProjectListSerializer(ProjectExtendedDetailMixin, DynamicBaseSerializer):
     is_favorite = serializers.BooleanField(read_only=True)
     sort_order = serializers.FloatField(read_only=True)
-    member_role = serializers.IntegerField(read_only=True)
+    is_member = serializers.BooleanField(read_only=True)
     anchor = serializers.CharField(read_only=True)
     members = serializers.SerializerMethodField()
     cover_image_url = serializers.CharField(read_only=True)
@@ -412,7 +415,7 @@ class ProjectDetailSerializer(BaseSerializer):
     project_lead = UserLiteSerializer(read_only=True)
     is_favorite = serializers.BooleanField(read_only=True)
     sort_order = serializers.FloatField(read_only=True)
-    member_role = serializers.IntegerField(read_only=True)
+    is_member = serializers.BooleanField(read_only=True)
     anchor = serializers.CharField(read_only=True)
 
     class Meta:
@@ -421,18 +424,48 @@ class ProjectDetailSerializer(BaseSerializer):
 
 
 class ProjectMemberSerializer(BaseSerializer):
+    """当前用户在项目里的身份（project-members/me/）：权限 key、类型限定、权限模式都在这里。"""
+
     workspace = WorkspaceLiteSerializer(read_only=True)
     project = ProjectLiteSerializer(read_only=True)
     member = UserLiteSerializer(read_only=True)
     custom_role_ids = serializers.SerializerMethodField(read_only=True)
+    job_role_ids = serializers.SerializerMethodField(read_only=True)
     permission_keys = serializers.SerializerMethodField(read_only=True)
+    type_limits = serializers.SerializerMethodField(read_only=True)
     inherited_role_ids = serializers.SerializerMethodField(read_only=True)
     role_template_ids = serializers.SerializerMethodField(read_only=True)
     role_sources = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = ProjectMember
-        fields = "__all__"
+        fields = [
+            "id",
+            "workspace",
+            "project",
+            "member",
+            "comment",
+            "view_props",
+            "default_props",
+            "preferences",
+            "sort_order",
+            "is_active",
+            "created_at",
+            "updated_at",
+            "custom_role_ids",
+            "job_role_ids",
+            "permission_keys",
+            "type_limits",
+            "inherited_role_ids",
+            "role_template_ids",
+            "role_sources",
+        ]
+
+    def get_job_role_ids(self, obj):
+        return get_member_job_role_ids(obj, self.context)
+
+    def get_type_limits(self, obj):
+        return self.context.get("type_limits", {})
 
     def get_role_template_ids(self, obj):
         return get_project_member_role_template_ids(get_project_member_role_sources(obj, self.context))
@@ -443,18 +476,13 @@ class ProjectMemberSerializer(BaseSerializer):
     def get_permission_keys(self, obj):
         precomputed = self.context.get("permission_keys")
         if precomputed is not None:
-            return list(precomputed)
-
-        project = getattr(obj, "project", None)
-        role_sources = get_project_member_role_sources(obj, self.context)
-        role_ids = {source["role"]["id"] for source in role_sources}
-        return list(
+            return sorted(precomputed)
+        return sorted(
             _get_user_project_permission_keys(
                 user=obj.member,
                 workspace_slug=obj.workspace.slug,
                 project_id=str(obj.project_id),
-                project=project,
-                role_ids=role_ids,
+                project=getattr(obj, "project", None),
             )
         )
 
@@ -494,8 +522,10 @@ class ProjectMemberAdminSerializer(BaseSerializer):
 
 
 class ProjectMemberRoleSerializer(DynamicBaseSerializer):
-    original_role = serializers.IntegerField(source="role", read_only=True)
+    """项目成员列表的一行：权限组（custom_role_ids）+ 角色（job_role_ids）。"""
+
     custom_role_ids = serializers.SerializerMethodField(read_only=True)
+    job_role_ids = serializers.SerializerMethodField(read_only=True)
     inherited_role_ids = serializers.SerializerMethodField(read_only=True)
     role_template_ids = serializers.SerializerMethodField(read_only=True)
     role_sources = serializers.SerializerMethodField(read_only=True)
@@ -504,17 +534,19 @@ class ProjectMemberRoleSerializer(DynamicBaseSerializer):
         model = ProjectMember
         fields = (
             "id",
-            "role",
             "member",
             "project",
-            "original_role",
             "created_at",
             "custom_role_ids",
+            "job_role_ids",
             "inherited_role_ids",
             "role_template_ids",
             "role_sources",
         )
-        read_only_fields = ["original_role", "created_at", "custom_role_ids"]
+        read_only_fields = ["created_at", "custom_role_ids", "job_role_ids"]
+
+    def get_job_role_ids(self, obj):
+        return get_member_job_role_ids(obj, self.context)
 
     def get_role_template_ids(self, obj):
         return get_project_member_role_template_ids(self.get_role_sources(obj))
@@ -762,67 +794,14 @@ class ProjectGroupMemberOptionSerializer(serializers.Serializer):
 
 
 class ProjectRolePermissionBindingSerializer(serializers.Serializer):
-    permission_keys = serializers.ListField(
-        child=serializers.CharField(max_length=255),
-        allow_empty=True,
-        required=True,
+    """项目自定义权限组提交的内容；合法性在 utils/permission_groups.py。"""
+
+    permission_keys = serializers.ListField(child=serializers.CharField(max_length=255), allow_empty=True)
+    type_limits = serializers.DictField(
+        child=serializers.ListField(child=serializers.CharField(max_length=64), allow_empty=True),
+        required=False,
+        default=dict,
     )
-
-    def validate_permission_keys(self, value):
-        normalized_keys = list(dict.fromkeys(value))
-        queryset = Permission.objects.filter(
-            key__in=normalized_keys,
-            is_active=True,
-            scope="project",
-        )
-        existing_keys = set(queryset.values_list("key", flat=True))
-
-        # issue_type 权限是按项目维度物化的，需要再校验所传 key 确实属于本项目，
-        # 防止把别的项目的 issue_type 权限写到当前角色上。
-        role = self.context.get("role")
-        project = (
-            getattr(role, "project", None) if role else self.context.get("project")
-        )
-        if project is not None:
-            allowed_issue_type_keys = self._get_project_issue_type_keys(project)
-            existing_keys = {
-                k
-                for k in existing_keys
-                if not k.startswith(ISSUE_TYPE_PERMISSION_KEY_PREFIX)
-                or k in allowed_issue_type_keys
-            }
-
-        return [key for key in normalized_keys if key in existing_keys]
-
-    def _get_project_issue_type_keys(self, project) -> set:
-        from plane.utils.issue_scheme import project_visible_type_q
-
-        issue_type_ids = (
-            IssueType.objects.filter(scheme_id=project.issue_scheme_id, deleted_at__isnull=True)
-            .filter(project_visible_type_q(project.id))
-            .values_list("id", flat=True)
-        )
-        return {
-            build_issue_type_permission_key(issue_type_id, action)
-            for issue_type_id in issue_type_ids
-            for action, _ in ISSUE_TYPE_PERMISSION_ACTIONS
-        }
-
-    def save(self, **kwargs):
-        role = self.context["role"]
-        permissions_payload = (
-            role.permissions if isinstance(role.permissions, dict) else {}
-        )
-        permissions_payload["permission_keys"] = self.validated_data["permission_keys"]
-        role.permissions = permissions_payload
-        role.save()
-        return role
-
-
-class ImportProjectRoleSerializer(serializers.Serializer):
-    """从工作区项目角色模板导入；固定为独立副本（与模板解绑，不设置 source_template）。"""
-
-    workspace_role_id = serializers.UUIDField(required=True)
 
 
 class ProjectCloseSerializer(serializers.Serializer):

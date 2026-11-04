@@ -2,195 +2,17 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
-import hashlib
-from collections import Counter
 
 # Django imports
 from django.core.exceptions import ValidationError
 from django.db import models, transaction
 from django.db.models import Q
-from django.db.models.signals import post_delete, post_save
-from django.dispatch import receiver
 
 # Module imports
-from plane.db.seed_data.issue_scheme import TEMPLATE_IDENTITY_PREFIX
 
 from .base import BaseModel
 from .issue_scheme import SchemeBaseModel
 from .project import ProjectBaseModel
-
-# IssueType 自动衍生的项目级权限定义。
-# key 形式：project.issue_type.<id_hex>.<action>
-#   - 用 id.hex 而不是 name 作为 key 主体，既能通过 Permission.key 的正则约束
-#     (^[a-z0-9_]+(\.[a-z0-9_]+){2,}$)，也能在 IssueType 改名时保持权限绑定关系不丢失。
-#   - 所有 IssueType 都会衍生 5 条权限，由 IssueType.id 唯一确定，
-#     运行时鉴权也直接基于 issue_type_id 推导 key（见 plane.app.permissions.base）。
-ISSUE_TYPE_PERMISSION_KEY_PREFIX = "project.issue_type."
-ISSUE_TYPE_TEMPLATE_PERMISSION_KEY_PREFIX = "project.issue_type_template."
-ISSUE_TYPE_TEMPLATE_PERMISSION_DESCRIPTOR_KEY = "issue_type_permission_templates"
-ISSUE_TYPE_PERMISSION_ACTIONS = (
-    ("create", "创建{}类型工作项"),
-    ("edit", "编辑{}类型工作项"),
-    ("delete", "删除{}类型工作项"),
-    ("archive", "归档{}类型工作项"),
-    ("unarchive", "恢复{}类型工作项"),
-)
-ISSUE_TYPE_PERMISSION_ACTION_SET = {
-    action for action, _ in ISSUE_TYPE_PERMISSION_ACTIONS
-}
-
-
-def build_issue_type_permission_key(issue_type_id, action: str) -> str:
-    if hasattr(issue_type_id, "hex"):
-        id_hex = issue_type_id.hex
-    else:
-        id_hex = str(issue_type_id).replace("-", "")
-    return f"{ISSUE_TYPE_PERMISSION_KEY_PREFIX}{id_hex}.{action}"
-
-
-def parse_issue_type_permission_key(key: str):
-    if not isinstance(key, str) or not key.startswith(ISSUE_TYPE_PERMISSION_KEY_PREFIX):
-        return None
-
-    rest = key[len(ISSUE_TYPE_PERMISSION_KEY_PREFIX):]
-    if "." not in rest:
-        return None
-
-    issue_type_id_hex, action = rest.rsplit(".", 1)
-    if action not in ISSUE_TYPE_PERMISSION_ACTION_SET or not issue_type_id_hex:
-        return None
-
-    return issue_type_id_hex, action
-
-
-def issue_type_template_identity(issue_type_name: str, system_key=None) -> str:
-    """角色模板里类型权限摘要的原文。
-
-    系统类型按 ``system_key``（改名不断、「缺陷」与「缺陷(软件)」是同一个），
-    自建类型按名字。系统类型带前缀，免得自建类型恰好叫 bug 时撞上同一个摘要。
-    """
-    if system_key:
-        return f"{TEMPLATE_IDENTITY_PREFIX}{system_key}"
-    return (issue_type_name or "").strip()
-
-
-def build_issue_type_template_permission_key(issue_type_name: str, action: str, system_key=None) -> str:
-    identity = issue_type_template_identity(issue_type_name, system_key)
-    digest = hashlib.sha1(identity.encode("utf-8")).hexdigest()
-    return f"{ISSUE_TYPE_TEMPLATE_PERMISSION_KEY_PREFIX}{digest}.{action}"
-
-
-def parse_issue_type_template_permission_key(key: str):
-    if not isinstance(key, str) or not key.startswith(
-        ISSUE_TYPE_TEMPLATE_PERMISSION_KEY_PREFIX
-    ):
-        return None
-
-    rest = key[len(ISSUE_TYPE_TEMPLATE_PERMISSION_KEY_PREFIX):]
-    if "." not in rest:
-        return None
-
-    name_digest, action = rest.rsplit(".", 1)
-    if action not in ISSUE_TYPE_PERMISSION_ACTION_SET or not name_digest:
-        return None
-
-    return name_digest, action
-
-
-def build_issue_type_template_permission_descriptors(issue_types):
-    """``issue_types`` 是 ``(名字, system_key)`` 的可迭代对象，返回 ``{模板 key: 描述符}``。
-
-    描述符 ``{"name": 展示名, "action": 动作, "system_key": 标识或 None}``；下发到项目时
-    有 system_key 按它找目标类型，否则按名字（``utils/project/role_import.py``）。
-    同一个摘要只取第一次出现的展示名。
-    """
-    descriptors = {}
-    for issue_type_name, system_key in issue_types:
-        name = (issue_type_name or "").strip()
-        if not name:
-            continue
-
-        for action, _ in ISSUE_TYPE_PERMISSION_ACTIONS:
-            key = build_issue_type_template_permission_key(name, action, system_key)
-            descriptors.setdefault(
-                key, {"name": name, "action": action, "system_key": system_key or None}
-            )
-
-    return descriptors
-
-
-def workspace_issue_type_template_descriptors(workspace_id):
-    """本工作区当前可选的类型权限模板：模板详情、模板保存、下发到项目三处共用。
-
-    按工作区里在用的类型去重：系统类型每个标识一组，展示名取工作区里用得最多的那个名字
-    （「缺陷」与「缺陷(软件)」并成一组）；自建类型按名字一组。按展示名排序。
-    """
-    rows = Counter(
-        IssueType.objects.filter(workspace_id=workspace_id, is_active=True).values_list(
-            "name", "system_key"
-        )
-    )
-    display_by_key = {}
-    for (name, system_key), count in rows.items():
-        if not system_key:
-            continue
-        best = display_by_key.get(system_key)
-        if best is None or (-count, name) < (-best[1], best[0]):
-            display_by_key[system_key] = (name, count)
-
-    issue_types = {(name, key) for key, (name, _) in display_by_key.items()}
-    issue_types |= {(name, None) for (name, system_key) in rows if not system_key}
-    return build_issue_type_template_permission_descriptors(sorted(issue_types, key=lambda x: (x[0] or "", x[1] or "")))
-
-
-def sync_issue_type_permissions(issue_type, *, deactivate: bool = False) -> None:
-    """根据 IssueType 当前状态 upsert 其对应的 5 条 Permission 行。
-
-    Permission 表的 name(255) / category(100) 长度有限，IssueType.name 上限 255 时
-    叠加固定文案会溢出，因此对入库前的展示文本做截断保护。
-    """
-    from .permission import Permission
-
-    raw_name = issue_type.name or ""
-    # 标签上限：Permission.name max_length=255，前缀「创建/编辑/...类型工作项」最多 8 字符，
-    # 这里给名字预留 240 字符空间，截断超长部分以避免 DataError。
-    safe_name_for_label = raw_name[:240]
-    # 分类上限：Permission.category max_length=100，前缀「工作项类型 - 」9 字符，
-    # 名字预留 80 字符空间。
-    safe_name_for_category = raw_name[:80]
-    module = f"issue.type.{issue_type.id.hex}"
-    category = f"工作项类型 - {safe_name_for_category}"
-    is_active = (not deactivate) and issue_type.is_active
-    for action, label_template in ISSUE_TYPE_PERMISSION_ACTIONS:
-        key = build_issue_type_permission_key(issue_type.id, action)
-        label = label_template.format(safe_name_for_label)
-        Permission.objects.update_or_create(
-            key=key,
-            defaults={
-                "name": label,
-                "description": label,
-                "scope": "project",
-                "module": module,
-                "action": action,
-                "category": category,
-                "sort_order": 100,
-                "is_active": is_active,
-            },
-        )
-
-
-def remove_issue_type_permissions(issue_type_id) -> None:
-    from .permission import Permission
-
-    keys = [
-        build_issue_type_permission_key(issue_type_id, action)
-        for action, _ in ISSUE_TYPE_PERMISSION_ACTIONS
-    ]
-    # Permission 继承 SoftDeleteModel，QuerySet.delete() 默认走软删除
-    # （只把 deleted_at 设为当前时间，行仍占着 key 的 unique 槽位）。
-    # 衍生 Permission 是 IssueType 的纯派生数据，没有保留历史的价值，因此硬删除。
-    Permission.objects.filter(key__in=keys).delete(soft=False)
-
 
 class IssueTypeCategory(models.Model):
     name = models.CharField(max_length=255)
@@ -235,6 +57,16 @@ class IssueType(SchemeBaseModel):
 
     category = models.ForeignKey(
         IssueTypeCategory, on_delete=models.CASCADE, related_name="issue_types", null=True
+    )
+    # 项目脱离方案时复制出来的类型指回类型库里的原类型。权限组按类型排除时存的是库类型 id，
+    # 项目里的副本靠它对上（permissions/base.py::issue_type_permission_info）。库类型自己为空。
+    library_type = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="project_copies",
+        verbose_name="类型库原类型",
     )
 
     class Meta:
@@ -430,14 +262,3 @@ class TypeExtraFieldValue(ProjectBaseModel):
         return f"{self.issue_id} - {self.extra_field.name}"
 
 
-@receiver(post_save, sender=IssueType)
-def _sync_issue_type_permissions_on_save(sender, instance, **kwargs):
-    # 软删除时（SoftDeleteModel.delete(soft=True) 走 save 路径），deleted_at 非空，
-    # 此时把对应权限标记为 is_active=False，防止它出现在权限选择列表里。
-    sync_issue_type_permissions(instance, deactivate=instance.deleted_at is not None)
-
-
-@receiver(post_delete, sender=IssueType)
-def _remove_issue_type_permissions_on_delete(sender, instance, **kwargs):
-    # 硬删除（delete(soft=False)）时彻底清理对应 Permission 行。
-    remove_issue_type_permissions(instance.id)

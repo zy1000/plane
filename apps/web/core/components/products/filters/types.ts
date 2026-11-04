@@ -14,7 +14,6 @@ export type TProductFilterProperty =
   | "project_lead"
   | "test_lead"
   | "reviewers"
-  | "network"
   | "model_number"
   | "external_model"
   | "start_date"
@@ -35,7 +34,6 @@ export const PRODUCT_FILTER_PROPERTY_KEYS = [
   "project_lead",
   "test_lead",
   "reviewers",
-  "network",
   "model_number",
   "external_model",
   "start_date",

@@ -22,13 +22,6 @@ from plane.db.models import (
     Workspace,
     WorkspaceMember,
 )
-from plane.db.models.project import ROLE
-
-LEGACY_ROLE_BY_NAME = {
-    "admin": ROLE.ADMIN.value,
-    "member": ROLE.MEMBER.value,
-    "guest": ROLE.GUEST.value,
-}
 
 
 class DryRunRollback(Exception):
@@ -45,7 +38,7 @@ def split_csv(value: str) -> list[str]:
 class Command(BaseCommand):
     help = (
         "批量把若干成员加入工作区内的多个项目。"
-        "会补齐 ProjectMember、ProjectUserProperty 和 ProjectMemberRole，不发送邀请邮件。"
+        "会补齐 ProjectMember、ProjectUserProperty，可选按名称绑定项目权限组（ProjectMemberRole），不发送邀请邮件。"
     )
 
     def add_arguments(self, parser):
@@ -58,28 +51,16 @@ class Command(BaseCommand):
             help="项目范围：all 表示工作区全部项目，或传逗号分隔的项目 ID / 项目 identifier",
         )
         parser.add_argument(
-            "--role",
-            type=str,
-            default="member",
-            help=f"内置角色，可选 {'/'.join(LEGACY_ROLE_BY_NAME)}，默认 member",
-        )
-        parser.add_argument(
             "--role-names",
             type=str,
             default="",
-            help="要绑定的项目角色名称，逗号分隔。每个项目各自匹配同名 ProjectRole，只增不删",
+            help="要绑定的项目权限组名称，逗号分隔（如「项目管理员」）。每个项目各自匹配同名 ProjectRole，只增不删",
         )
         parser.add_argument("--include-archived", action="store_true", help="同时处理已归档项目")
-        parser.add_argument(
-            "--update-existing",
-            action="store_true",
-            help="连同已在项目中的活跃成员一起改内置角色，默认跳过他们",
-        )
         parser.add_argument("--dry-run", action="store_true", help="只打印将要发生的改动，不落库")
 
     def handle(self, *args: Any, **options: Any):
         dry_run = options["dry_run"]
-        legacy_role = self._resolve_legacy_role(options["role"])
         role_names = split_csv(options["role_names"])
 
         workspace = Workspace.objects.filter(slug=options["workspace"]).first()
@@ -92,9 +73,8 @@ class Command(BaseCommand):
         )
 
         self.stdout.write(
-            f"工作区 {workspace.slug}：{len(users)} 名成员 × {len(projects)} 个项目，"
-            f"内置角色 {options['role']}"
-            + (f"，绑定项目角色 {'、'.join(role_names)}" if role_names else "")
+            f"工作区 {workspace.slug}：{len(users)} 名成员 × {len(projects)} 个项目"
+            + (f"，绑定项目权限组 {'、'.join(role_names)}" if role_names else "")
             + ("（dry-run，结束时回滚）" if dry_run else "")
         )
 
@@ -106,7 +86,7 @@ class Command(BaseCommand):
             .annotate(min_sort_order=Min("sort_order"))
         }
 
-        totals = {"created": 0, "reactivated": 0, "updated": 0, "skipped": 0, "roles": 0}
+        totals = {"created": 0, "reactivated": 0, "skipped": 0, "roles": 0}
         projects_missing_roles = {}
 
         try:
@@ -115,9 +95,7 @@ class Command(BaseCommand):
                     counts, missing_roles = self._sync_project(
                         project=project,
                         users=users,
-                        legacy_role=legacy_role,
                         role_names=role_names,
-                        update_existing=options["update_existing"],
                         sort_order_by_user_id=sort_order_by_user_id,
                     )
                     for key, value in counts.items():
@@ -130,8 +108,7 @@ class Command(BaseCommand):
                     self.stdout.write(
                         f"  {project.identifier or project.id} {project.name}："
                         f"新增 {counts['created']}、复活 {counts['reactivated']}、"
-                        f"改角色 {counts['updated']}、跳过 {counts['skipped']}、"
-                        f"绑定角色 {counts['roles']}"
+                        f"跳过 {counts['skipped']}、绑定权限组 {counts['roles']}"
                     )
 
                 if dry_run:
@@ -140,12 +117,6 @@ class Command(BaseCommand):
             pass
 
         self._report(totals, projects_missing_roles, dry_run)
-
-    def _resolve_legacy_role(self, value: str) -> int:
-        legacy_role = LEGACY_ROLE_BY_NAME.get(value.strip().lower())
-        if legacy_role is None:
-            raise CommandError(f"--role 只能是 {'/'.join(LEGACY_ROLE_BY_NAME)}，收到：{value}")
-        return legacy_role
 
     def _resolve_users(self, workspace: Workspace, emails: list[str]) -> list[User]:
         if not emails:
@@ -210,12 +181,10 @@ class Command(BaseCommand):
         self,
         project: Project,
         users: list[User],
-        legacy_role: int,
         role_names: list[str],
-        update_existing: bool,
         sort_order_by_user_id: dict,
     ) -> tuple[dict, list[str]]:
-        counts = {"created": 0, "reactivated": 0, "updated": 0, "skipped": 0, "roles": 0}
+        counts = {"created": 0, "reactivated": 0, "skipped": 0, "roles": 0}
 
         existing_members = {
             str(project_member.member_id): project_member
@@ -237,22 +206,16 @@ class Command(BaseCommand):
                 bulk_members.append(
                     ProjectMember(
                         member=user,
-                        role=legacy_role,
                         project=project,
                         workspace_id=project.workspace_id,
                     )
                 )
                 counts["created"] += 1
             elif not project_member.is_active:
-                # 被移除过的成员按本次入参重新激活，停用状态下的 role 已经过期，一并覆盖
+                # 被移除过的成员重新激活
                 project_member.is_active = True
-                project_member.role = legacy_role
                 members_to_update.append(project_member)
                 counts["reactivated"] += 1
-            elif update_existing and project_member.role != legacy_role:
-                project_member.role = legacy_role
-                members_to_update.append(project_member)
-                counts["updated"] += 1
             else:
                 counts["skipped"] += 1
 
@@ -271,7 +234,7 @@ class Command(BaseCommand):
 
         if members_to_update:
             ProjectMember.objects.bulk_update(
-                members_to_update, ["is_active", "role"], batch_size=100
+                members_to_update, ["is_active"], batch_size=100
             )
         if bulk_members:
             # bulk_create 绕过 ProjectMember.save()，所以 ProjectUserProperty 必须自己补
@@ -298,7 +261,7 @@ class Command(BaseCommand):
         return roles_by_name, missing_roles
 
     def _bind_project_roles(self, project: Project, users: list[User], roles_by_name: dict) -> int:
-        """把本次涉及的成员绑定到目标角色上，只增不删，已绑定的跳过。"""
+        """把本次涉及的成员绑定到目标权限组上，只增不删，已绑定的跳过。"""
         if not roles_by_name:
             return 0
 
@@ -330,7 +293,7 @@ class Command(BaseCommand):
     def _report(self, totals: dict, projects_missing_roles: dict, dry_run: bool) -> None:
         if projects_missing_roles:
             self.stdout.write(
-                self.style.WARNING("以下项目缺少同名角色，这些项目的角色绑定被跳过：")
+                self.style.WARNING("以下项目缺少同名权限组，这些项目的权限组绑定被跳过：")
             )
             for identifier, missing_roles in projects_missing_roles.items():
                 self.stdout.write(
@@ -339,7 +302,7 @@ class Command(BaseCommand):
 
         summary = (
             f"新增成员 {totals['created']}、复活成员 {totals['reactivated']}、"
-            f"改内置角色 {totals['updated']}、跳过 {totals['skipped']}、绑定角色 {totals['roles']}"
+            f"跳过 {totals['skipped']}、绑定权限组 {totals['roles']}"
         )
         if dry_run:
             self.stdout.write(self.style.WARNING(f"dry-run 完成，已回滚。实际会：{summary}"))

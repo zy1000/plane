@@ -22,7 +22,7 @@
    （产品决策）—— 所以这里没有任何「子活动没评完就不许提交父评审」的联动，各推各的。
 
 负责人解析（``resolve_role_candidates``）是模板落地到具体产品的那一跳：模板上存的是
-角色名称文本（发起者 / 主导者 / 审核者），这里按「该产品下担任这个角色的人」筛，
+角色名称文本（发起者 / 主导者 / 审核者），这里按研发矩阵与成员角色找人（utils/job_role.py），
 筛不出来就退回到全部项目成员 —— 角色没配好不该让人选不出负责人。
 """
 
@@ -33,7 +33,6 @@ from django.utils import timezone
 
 from plane.db.models import (
     FileAsset,
-    ProductMember,
     ProjectMember,
     StageReview,
     StageReviewActivity,
@@ -44,10 +43,6 @@ from plane.db.models import (
     StageReviewResult,
     StageReviewStatus,
     User,
-    WorkspaceGroupMember,
-    WorkspaceGroupRole,
-    WorkspaceMemberRole,
-    WorkspaceRole,
 )
 from plane.db.models.stage_review import (
     ACTIVITY_KINDS,
@@ -421,6 +416,7 @@ def rollback(review, *, actor, reason=""):
 
 #: 候选人是从哪一层找出来的。前端按它决定要不要提示「这不是产品配的人」
 ROLE_SOURCE_PRODUCT = "product"
+ROLE_SOURCE_PROJECT_ROLE = "project_role"
 ROLE_SOURCE_WORKSPACE = "workspace"
 ROLE_SOURCE_PROJECT = "project"
 
@@ -429,65 +425,33 @@ def _active_users(user_ids):
     return User.objects.filter(id__in=list(user_ids), is_active=True).order_by("display_name")
 
 
-def _workspace_role_holders(workspace_id, role_name):
-    """工作区里担任某个角色的人：直接绑定的 + 通过用户组绑定的。
-
-    两条路都要查 —— 权限体系本身就允许把角色挂在用户组上（``WorkspaceGroupRole``），
-    只看直接绑定会出现「明明在组里配了，这里却选不出人」。
-    """
-    role_ids = list(
-        WorkspaceRole.objects.filter(
-            workspace_id=workspace_id,
-            name=role_name,
-            type=WorkspaceRole.RoleType.WORKSPACE,
-        ).values_list("id", flat=True)
-    )
-    if not role_ids:
-        return set()
-
-    direct = WorkspaceMemberRole.objects.filter(
-        workspace_id=workspace_id, role_id__in=role_ids, member__is_active=True
-    ).values_list("member__member_id", flat=True)
-
-    group_ids = WorkspaceGroupRole.objects.filter(role_id__in=role_ids).values_list(
-        "group_id", flat=True
-    )
-    via_group = WorkspaceGroupMember.objects.filter(
-        group_id__in=list(group_ids), member__is_active=True
-    ).values_list("member__member_id", flat=True)
-
-    return {uid for uid in [*direct, *via_group] if uid}
-
-
 def resolve_role_candidates(review, role):
-    """按角色名筛出这条评审的候选人，**三级回退**：
+    """按角色名筛出这条评审的候选人，**四级回退**：
 
-    1. **产品**下担任这个角色的人（``ProductMember`` × ``ProductRole.name``）——
-       角色名是模板快照（发起者 / 主导者 / 审核者那三列），这是设计上的正路。
-    2. **工作区**里担任这个角色的人（``WorkspaceRole`` type=workspace，直接绑定或
-       通过用户组绑定）—— 像「DQA」「NPI主管」这种全公司就那几个人的岗位，配在工作区
-       一次比每个产品配一遍现实。
-    3. 都找不到就回落到**该项目的全部成员**：角色没配好不该让人选不出负责人。
+    1. 研发矩阵里本项目 × 本产品填了这个角色的人；
+    2. 本项目里挂了这个角色的成员；
+    3. 工作区里挂了这个角色的成员（「DQA」「NPI主管」这种全公司就那几个人的角色）；
+    4. 都找不到就回落到该项目的全部成员：角色没配好不该让人选不出负责人。
 
-    ``role`` 取 ``leader`` / ``auditor``。返回 ``(users, source)``，``source`` 是上面
-    三档之一，前端据此决定提示哪一句。
+    角色名是模板快照（发起者 / 主导者 / 审核者那三列），按角色字典的文字对上。
+    ``role`` 取 ``leader`` / ``auditor``。返回 ``(users, source)``。
     """
-    role_name = (getattr(review, f"{role}_role", "") or "").strip()
-    if role_name:
-        product_user_ids = ProductMember.objects.filter(
-            product_id=review.product_id,
-            custom_roles__name=role_name,
-            member__isnull=False,
-        ).values_list("member_id", flat=True)
-        users = _active_users(product_user_ids)
-        if users.exists():
-            return users, ROLE_SOURCE_PRODUCT
+    from plane.utils.job_role import job_role_ids_by_label, matrix_holders, project_holders, workspace_holders
 
-        workspace_user_ids = _workspace_role_holders(review.workspace_id, role_name)
-        if workspace_user_ids:
-            users = _active_users(workspace_user_ids)
-            if users.exists():
-                return users, ROLE_SOURCE_WORKSPACE
+    role_name = (getattr(review, f"{role}_role", "") or "").strip()
+    job_role_ids = job_role_ids_by_label(review.workspace_id, [role_name]) if role_name else []
+    if job_role_ids:
+        product_ids = [review.product_id] if review.product_id else None
+        for source, user_ids in (
+            (ROLE_SOURCE_PRODUCT, lambda: matrix_holders(review.project_id, job_role_ids, product_ids)),
+            (ROLE_SOURCE_PROJECT_ROLE, lambda: project_holders(review.project_id, job_role_ids)),
+            (ROLE_SOURCE_WORKSPACE, lambda: workspace_holders(review.workspace_id, job_role_ids)),
+        ):
+            ids = user_ids()
+            if ids:
+                users = _active_users(ids)
+                if users.exists():
+                    return users, source
 
     project_user_ids = ProjectMember.objects.filter(
         project_id=review.project_id, is_active=True

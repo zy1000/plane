@@ -30,7 +30,6 @@ from plane.db.models import (
     ProjectMember,
     WorkspaceMember,
 )
-from plane.db.models.project import ROLE
 from plane.db.models.user import UserExtraInfo
 from plane.utils.data_dictionary import (
     PROJECT_CODE_DICTIONARY_KEY,
@@ -250,13 +249,10 @@ def _members_by_employee_id(workspace):
 
 
 def _ensure_admin_member(project, user):
-    member = ProjectMember.objects.filter(project=project, member=user).first()
-    if member is None:
-        ProjectMember.objects.create(project=project, member=user, role=ROLE.ADMIN.value)
-    elif not member.is_active or member.role != ROLE.ADMIN.value:
-        member.is_active = True
-        member.role = ROLE.ADMIN.value
-        member.save(update_fields=["is_active", "role", "updated_at", "updated_by"])
+    """负责人加进项目并绑定「项目管理员」（负责人本身也直通）。"""
+    from plane.utils.project.member import add_project_admins
+
+    add_project_admins(project, [user.id])
 
 
 class _ProjectSync:

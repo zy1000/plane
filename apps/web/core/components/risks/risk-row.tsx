@@ -40,6 +40,7 @@ export const RiskRow = observer(function RiskRow({
   risk,
   today,
   canEdit,
+  canDelete,
   isActive,
   onOpen,
   onEdit,
@@ -49,6 +50,7 @@ export const RiskRow = observer(function RiskRow({
   /** `yyyy-MM-dd`，逾期判断用；列表算一次传下来 */
   today: string;
   canEdit: boolean;
+  canDelete: boolean;
   isActive: boolean;
   onOpen: () => void;
   onEdit: () => void;
@@ -106,7 +108,7 @@ export const RiskRow = observer(function RiskRow({
         )}
       </td>
       <td className={cn(PLAIN_TD, "pr-3 text-right")} onClick={(event) => event.stopPropagation()}>
-        {canEdit && (
+        {(canEdit || canDelete) && (
           <span className="inline-flex opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
             <CustomMenu
               ellipsis
@@ -115,10 +117,14 @@ export const RiskRow = observer(function RiskRow({
               buttonClassName="text-tertiary hover:text-primary"
               ariaLabel={t(`${RISK_I18N}.detail.more`)}
             >
-              <CustomMenu.MenuItem onClick={onEdit}>{t(`${RISK_I18N}.table.edit`)}</CustomMenu.MenuItem>
-              <CustomMenu.MenuItem onClick={onDelete} className="text-danger-primary">
-                {t(`${RISK_I18N}.table.delete`)}
-              </CustomMenu.MenuItem>
+              {canEdit && (
+                <CustomMenu.MenuItem onClick={onEdit}>{t(`${RISK_I18N}.table.edit`)}</CustomMenu.MenuItem>
+              )}
+              {canDelete && (
+                <CustomMenu.MenuItem onClick={onDelete} className="text-danger-primary">
+                  {t(`${RISK_I18N}.table.delete`)}
+                </CustomMenu.MenuItem>
+              )}
             </CustomMenu>
           </span>
         )}

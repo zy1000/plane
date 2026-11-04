@@ -5,7 +5,7 @@ import uuid
 from rest_framework import status
 from rest_framework.response import Response
 
-from plane.app.permissions import PermissionKey, allow_fine_permission
+from plane.app.permissions import allow_workspace_member, PermissionKey, allow_fine_permission
 from plane.app.views import BaseAPIView
 from plane.db.models import Workspace
 from plane.integrations.base import get_last_sync
@@ -36,7 +36,7 @@ def _positive_int(value, default):
 
 
 class DepartmentTreeAPIView(BaseAPIView):
-    @allow_fine_permission(PermissionKey.WORKSPACE_SETTINGS_VIEW, level="WORKSPACE")
+    @allow_workspace_member
     def get(self, request, slug):
         workspace = _get_workspace(slug)
         if workspace is None:
@@ -51,7 +51,7 @@ class DepartmentTreeAPIView(BaseAPIView):
 
 
 class DepartmentPeopleAPIView(BaseAPIView):
-    @allow_fine_permission(PermissionKey.WORKSPACE_SETTINGS_VIEW, level="WORKSPACE")
+    @allow_workspace_member
     def get(self, request, slug):
         workspace = _get_workspace(slug)
         if workspace is None:

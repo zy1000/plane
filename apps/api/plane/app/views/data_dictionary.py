@@ -9,6 +9,7 @@ from plane.app.serializers.data_dictionary import (
     DataDictionarySerializer,
 )
 from plane.app.views.base import BaseViewSet
+from plane.app.permissions import PermissionKey, has_workspace_permission
 from plane.app.views.requirement.type import is_workspace_member
 from plane.db.models import DataDictionary, DataDictionaryItem, Workspace
 from plane.utils.data_dictionary import (
@@ -88,7 +89,7 @@ class DataDictionaryViewSet(BaseViewSet):
         return Response(self.get_serializer(dictionary).data, status=status.HTTP_200_OK)
 
     def create(self, request, slug):
-        if not is_workspace_member(request.user, slug):
+        if not has_workspace_permission(request.user, slug, PermissionKey.WORKSPACE_DATA_DICTIONARY_MANAGE):
             return _forbidden()
         workspace = self._get_workspace()
         if workspace is None:
@@ -103,7 +104,7 @@ class DataDictionaryViewSet(BaseViewSet):
         )
 
     def partial_update(self, request, slug, pk):
-        if not is_workspace_member(request.user, slug):
+        if not has_workspace_permission(request.user, slug, PermissionKey.WORKSPACE_DATA_DICTIONARY_MANAGE):
             return _forbidden()
         dictionary = self._get_dictionary(pk)
         if dictionary is None:
@@ -114,7 +115,7 @@ class DataDictionaryViewSet(BaseViewSet):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     def destroy(self, request, slug, pk):
-        if not is_workspace_member(request.user, slug):
+        if not has_workspace_permission(request.user, slug, PermissionKey.WORKSPACE_DATA_DICTIONARY_MANAGE):
             return _forbidden()
         dictionary = self._get_dictionary(pk)
         if dictionary is None:
@@ -170,7 +171,7 @@ class DataDictionaryItemViewSet(BaseViewSet):
         return context
 
     def create(self, request, slug, dictionary_id):
-        if not is_workspace_member(request.user, slug):
+        if not has_workspace_permission(request.user, slug, PermissionKey.WORKSPACE_DATA_DICTIONARY_MANAGE):
             return _forbidden()
         dictionary = self._get_dictionary()
         if dictionary is None:
@@ -182,7 +183,7 @@ class DataDictionaryItemViewSet(BaseViewSet):
 
     def bulk_create(self, request, slug, dictionary_id):
         """多行粘贴批量新增：归一化后只写不存在的值；重名走 skipped 而不是报错。"""
-        if not is_workspace_member(request.user, slug):
+        if not has_workspace_permission(request.user, slug, PermissionKey.WORKSPACE_DATA_DICTIONARY_MANAGE):
             return _forbidden()
         field = drf_serializers.ListField(
             child=drf_serializers.CharField(allow_blank=True, trim_whitespace=False, max_length=10000),
@@ -227,7 +228,7 @@ class DataDictionaryItemViewSet(BaseViewSet):
         )
 
     def partial_update(self, request, slug, dictionary_id, pk):
-        if not is_workspace_member(request.user, slug):
+        if not has_workspace_permission(request.user, slug, PermissionKey.WORKSPACE_DATA_DICTIONARY_MANAGE):
             return _forbidden()
         item = self.get_queryset().filter(pk=pk).first()
         if item is None:
@@ -238,7 +239,7 @@ class DataDictionaryItemViewSet(BaseViewSet):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     def destroy(self, request, slug, dictionary_id, pk):
-        if not is_workspace_member(request.user, slug):
+        if not has_workspace_permission(request.user, slug, PermissionKey.WORKSPACE_DATA_DICTIONARY_MANAGE):
             return _forbidden()
         item = self.get_queryset().filter(pk=pk).first()
         if item is None:

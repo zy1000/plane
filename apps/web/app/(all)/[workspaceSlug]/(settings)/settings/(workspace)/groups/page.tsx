@@ -246,7 +246,7 @@ const WorkspaceGroupsPage = observer(function WorkspaceGroupsPage({ params }: Ro
           pendingDelete ? (
             <>
               删除「<span className="font-medium text-primary">{pendingDelete.name}</span>
-              」后，团队成员将不再通过该团队继承角色权限。成员账号和角色本身不会被删除，此操作不可恢复。
+              」后，团队成员将不再通过该团队获得权限组。成员账号和权限组本身不会被删除，此操作不可恢复。
             </>
           ) : null
         }

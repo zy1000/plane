@@ -7,10 +7,7 @@ from plane.db.models import (
     Issue,
     IssueActivity,
     IssueAssignee,
-    ProjectGroupRole,
     ProjectMember,
-    ProjectRole,
-    ProjectMemberRole,
     IssueTransitionApprovalRecord,
     IssueTransitionRecord,
     Notification,
@@ -93,45 +90,11 @@ def get_assignable_project_member_ids(project_id, member_ids):
     return _normalize_user_ids(
         ProjectMember.objects.filter(
             project_id=project_id,
-            role__gte=15,
             is_active=True,
             deleted_at__isnull=True,
             member_id__in=normalized_member_ids,
         ).values_list("member_id", flat=True)
     )
-
-
-def resolve_role_member_ids(project_id, role_ids):
-    """将项目角色集合解析为当前项目内在职成员的用户 ID 列表。"""
-    normalized_role_ids = _normalize_user_ids(role_ids)
-    if not normalized_role_ids:
-        return []
-
-    direct_member_ids = ProjectMemberRole.objects.filter(
-        role_id__in=normalized_role_ids,
-        role__project_id=project_id,
-        role__deleted_at__isnull=True,
-        member__project_id=project_id,
-        member__is_active=True,
-        member__deleted_at__isnull=True,
-        member__member_id__isnull=False,
-        deleted_at__isnull=True,
-    ).values_list("member__member_id", flat=True)
-    group_member_ids = ProjectGroupRole.objects.filter(
-        project_id=project_id,
-        role_id__in=normalized_role_ids,
-        role__deleted_at__isnull=True,
-        deleted_at__isnull=True,
-        group__deleted_at__isnull=True,
-        group__group_members__deleted_at__isnull=True,
-        group__group_members__member__deleted_at__isnull=True,
-        group__group_members__member__is_active=True,
-        group__group_members__member__member__member_project__project_id=project_id,
-        group__group_members__member__member__member_project__is_active=True,
-        group__group_members__member__member__member_project__deleted_at__isnull=True,
-    ).values_list("group__group_members__member__member_id", flat=True)
-
-    return _normalize_user_ids(list(direct_member_ids) + list(group_member_ids))
 
 
 def resolve_dimension_user_ids(
@@ -143,35 +106,27 @@ def resolve_dimension_user_ids(
         return []
 
     user_ids = []
-    role_ids = []
+    job_role_ids = []
     want_assignees = False
     want_created_by = False
 
-    template_ids = []
     for principal in principals:
         if principal.kind == WorkflowPrincipalKind.MEMBER and principal.member_id:
             user_ids.append(principal.member_id)
-        elif principal.kind == WorkflowPrincipalKind.ROLE and principal.role_id:
-            role_ids.append(principal.role_id)
-        elif principal.kind == WorkflowPrincipalKind.ROLE and principal.workspace_role_id:
-            template_ids.append(principal.workspace_role_id)
+        elif principal.kind == WorkflowPrincipalKind.ROLE and principal.job_role_id:
+            job_role_ids.append(principal.job_role_id)
         elif principal.kind == WorkflowPrincipalKind.DYNAMIC:
             if principal.dynamic_target == WorkflowApproverTarget.ASSIGNEES:
                 want_assignees = True
             elif principal.dynamic_target == WorkflowApproverTarget.CREATED_BY:
                 want_created_by = True
 
-    if template_ids:
-        # 角色模板（模式方案的审批人）→ 本项目里由该模板派生的角色；没有就视为空（需求 4.4）
-        role_ids.extend(
-            ProjectRole.objects.filter(
-                project_id=issue.project_id,
-                source_template_id__in=template_ids,
-                deleted_at__isnull=True,
-            ).values_list("id", flat=True)
-        )
-    if role_ids:
-        user_ids.extend(resolve_role_member_ids(issue.project_id, role_ids))
+    if job_role_ids:
+        # 按角色找人：研发矩阵里本项目 × 工作项所属产品填了人就用矩阵，否则项目里挂了这个角色的人
+        from plane.utils.job_role import resolve_project_job_role_users
+
+        product_ids = [issue.product_id] if getattr(issue, "product_id", None) else None
+        user_ids.extend(resolve_project_job_role_users(issue.project_id, job_role_ids, product_ids))
     if want_assignees:
         user_ids.extend(get_issue_assignee_ids(issue))
     if want_created_by and issue.created_by_id:

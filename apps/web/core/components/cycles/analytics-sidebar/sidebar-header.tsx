@@ -9,7 +9,7 @@ import { observer } from "mobx-react";
 import { Controller, useForm } from "react-hook-form";
 import { ArrowRight } from "lucide-react";
 // Plane Imports
-import { CYCLE_STATUS, CYCLE_STATUS_TRANSITIONS, EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import { CYCLE_STATUS, CYCLE_STATUS_TRANSITIONS, PROJECT_SPRINTS_EDIT_PERMISSION_KEY } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { ChevronRightIcon } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
@@ -50,7 +50,7 @@ type TCycleSubmitResult = { success: boolean; error?: unknown };
 export const CycleSidebarHeader = observer(function CycleSidebarHeader(props: Props) {
   const { workspaceSlug, projectId, cycleDetails, handleClose, isArchived = false } = props;
   // hooks
-  const { allowPermissions } = useUserPermissions();
+  const { allowProjectPermissionKeys } = useUserPermissions();
   const { updateCycleDetails } = useCycle();
   const { t } = useTranslation();
   const { renderFormattedDateInUserTimezone, getProjectUTCOffset } = useTimeZoneConverter(projectId);
@@ -164,10 +164,7 @@ export const CycleSidebarHeader = observer(function CycleSidebarHeader(props: Pr
     return true;
   };
 
-  const isEditingAllowed = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.PROJECT
-  );
+  const isEditingAllowed = allowProjectPermissionKeys([PROJECT_SPRINTS_EDIT_PERMISSION_KEY], workspaceSlug, projectId);
 
   const statusOptions = cycleStatus ? CYCLE_STATUS_TRANSITIONS[cycleStatus] ?? [] : [];
 

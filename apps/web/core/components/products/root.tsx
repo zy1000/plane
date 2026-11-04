@@ -3,14 +3,17 @@ import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 import { Link } from "react-router";
 import { Pagination } from "antd";
-import { AlertCircle, Eye, Globe2, LockKeyhole, PackageOpen, Pencil, Settings, Trash2 } from "lucide-react";
-import { PRODUCT_SETTINGS_DELETE_PERMISSION_KEY, PRODUCT_SETTINGS_EDIT_PERMISSION_KEY } from "@plane/constants";
+import { AlertCircle, Eye, PackageOpen, Pencil, Settings, Trash2 } from "lucide-react";
+import {
+  PERMISSION_KEYS,
+  PRODUCT_SETTINGS_DELETE_PERMISSION_KEY,
+  PRODUCT_SETTINGS_EDIT_PERMISSION_KEY,
+} from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { Logo } from "@plane/propel/emoji-icon-picker";
 import { Tooltip } from "@plane/propel/tooltip";
 import type { IUserLite, TProduct } from "@plane/types";
-import { EUserWorkspaceRoles } from "@plane/types";
 import { Avatar, ContentWrapper, ERowVariant, Loader } from "@plane/ui";
 import { cn, getFileURL, renderFormattedDate } from "@plane/utils";
 import { PageHead } from "@/components/core/page-title";
@@ -34,7 +37,7 @@ const ProductUserCell = ({ user }: { user: IUserLite | null | undefined }) => (
 export const ProductsRoot = observer(function ProductsRoot() {
   const { workspaceSlug } = useParams();
   const { t } = useTranslation();
-  const { workspaceInfoBySlug, hasAllWorkspacePermissions } = useUserPermissions();
+  const { allowWorkspacePermissionKeys } = useUserPermissions();
   const { products, searchQuery, filter, isLoading, error, fetchProducts, openProductModal, setProductToDelete } =
     useProductsContext();
   const slug = workspaceSlug?.toString() ?? "";
@@ -42,9 +45,7 @@ export const ProductsRoot = observer(function ProductsRoot() {
   // 这里是 observer，直接读实例上的条件，改筛选时会重渲
   const conditions = filter.allConditionsForDisplay;
   const hasConditions = conditions.length > 0;
-  const workspaceInfo = workspaceInfoBySlug(slug);
-  const isWorkspaceAdmin = workspaceInfo?.role === EUserWorkspaceRoles.ADMIN || hasAllWorkspacePermissions(slug);
-  const canCreate = workspaceInfo?.role === EUserWorkspaceRoles.MEMBER || isWorkspaceAdmin;
+  const canCreate = allowWorkspacePermissionKeys([PERMISSION_KEYS.WORKSPACE_PRODUCT_CREATE], slug);
   const canEditProduct = (product: TProduct) => hasProductPermission(product, PRODUCT_SETTINGS_EDIT_PERMISSION_KEY);
   const canDeleteProduct = (product: TProduct) => hasProductPermission(product, PRODUCT_SETTINGS_DELETE_PERMISSION_KEY);
   const normalizedSearch = searchQuery.trim().toLocaleLowerCase();
@@ -162,9 +163,6 @@ export const ProductsRoot = observer(function ProductsRoot() {
                       <th className="hidden w-36 px-4 py-3 text-left font-medium text-secondary lg:table-cell">
                         {t("workspace_products.fields.owner")}
                       </th>
-                      <th className="hidden w-24 px-4 py-3 text-left font-medium text-secondary xl:table-cell">
-                        {t("workspace_products.fields.visibility")}
-                      </th>
                       <th className="hidden w-32 px-4 py-3 text-left font-medium text-secondary xl:table-cell">
                         {t("workspace_products.fields.updated_at")}
                       </th>
@@ -216,20 +214,6 @@ export const ProductsRoot = observer(function ProductsRoot() {
                           </td>
                           <td className="hidden px-4 py-3 lg:table-cell">
                             <ProductUserCell user={product.owner_detail} />
-                          </td>
-                          <td className="hidden px-4 py-3 xl:table-cell">
-                            <span className="inline-flex items-center gap-1.5 text-xs text-primary">
-                              {product.network === 0 ? (
-                                <LockKeyhole className="size-3 text-secondary" />
-                              ) : (
-                                <Globe2 className="size-3 text-secondary" />
-                              )}
-                              {t(
-                                product.network === 0
-                                  ? "workspace_products.visibility.private"
-                                  : "workspace_products.visibility.public"
-                              )}
-                            </span>
                           </td>
                           <td className="hidden px-4 py-3 whitespace-nowrap text-secondary xl:table-cell">
                             {product.updated_at ? renderFormattedDate(product.updated_at) : "-"}

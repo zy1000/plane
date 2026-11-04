@@ -208,7 +208,7 @@ def has_project_side_link_permission(user, *, slug, requirement, manage=False):
 
     需求侧端点的第二道门。第一道是产品权限（can_view_product /
     can_edit_product_requirements），但项目成员不一定是产品成员，而
-    can_view_product 只对 public 产品（network=2）放行非产品成员 —— 只认第一道门的话，
+    can_view_product 按白名单 / 负责人 / 关联项目判可见 —— 只认第一道门的话，
     项目侧连读都读不到。
 
     **这不是在放开新权限**：用例侧的端点（views/qa/case_requirement.py）已经允许带
@@ -222,9 +222,9 @@ def has_project_side_link_permission(user, *, slug, requirement, manage=False):
     from plane.app.permissions.base import _get_user_project_permission_keys
 
     required = (
-        PermissionKey.PROJECT_REQUIREMENT_LINK_MANAGE.value
+        PermissionKey.PROJECT_REQUIREMENT_EDIT.value
         if manage
-        else PermissionKey.PROJECT_REQUIREMENT_LINK_VIEW.value
+        else PermissionKey.PROJECT_REQUIREMENT_VIEW.value
     )
     for project_id in linked_project_ids(requirement.id):
         try:

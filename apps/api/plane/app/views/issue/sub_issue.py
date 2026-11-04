@@ -24,12 +24,13 @@ from .utils import is_allowed_to_add_parent
 from .. import BaseAPIView
 from plane.app.serializers import IssueSerializer
 from plane.app.permissions import ProjectEntityPermission
-from plane.db.models import Issue, IssueLink, FileAsset, CycleIssue, ProjectMember
+from plane.db.models import Issue, IssueLink, FileAsset, CycleIssue
 from plane.bgtasks.issue_activities_task import issue_activity
 from plane.utils.timezone_converter import user_timezone_converter
 from collections import defaultdict
 from plane.utils.host import base_host
 from plane.utils.order_queryset import order_issue_queryset
+from plane.utils.visibility import visible_project_ids
 
 
 class BulkSubIssuesEndpoint(BaseAPIView):
@@ -68,9 +69,8 @@ class BulkSubIssuesEndpoint(BaseAPIView):
         visited_parent_ids = set()
         current_parent_ids = parent_issue_ids
 
-        accessible_project_ids = ProjectMember.objects.filter(
-            workspace__slug=slug, member=request.user, is_active=True
-        ).values_list("project_id", flat=True)
+        # 跨项目的父子链：只走当前用户能进的项目（成员 / 负责 / 直通 / 白名单）
+        accessible_project_ids = visible_project_ids(request.user, slug)
 
         for depth in range(max_depth):
             parent_ids = [parent_issue_id for parent_issue_id in current_parent_ids if parent_issue_id not in visited_parent_ids]

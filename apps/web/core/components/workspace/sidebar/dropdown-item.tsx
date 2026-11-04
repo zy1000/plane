@@ -18,7 +18,7 @@ import {
 import { useTranslation } from "@plane/i18n";
 import { CheckIcon } from "@plane/propel/icons";
 import type { IWorkspace } from "@plane/types";
-import { cn, getFileURL, getUserRole } from "@plane/utils";
+import { cn, getFileURL } from "@plane/utils";
 // hooks
 import { useUserPermissions } from "@/hooks/store/user";
 // plane web imports
@@ -94,8 +94,6 @@ const SidebarDropdownItem = observer(function SidebarDropdownItem(props: TProps)
                 {workspace.name}
               </div>
               <div className="flex w-fit gap-2 text-13 text-tertiary capitalize">
-                <span>{getUserRole(workspace.role)?.toLowerCase() || "guest"}</span>
-                <div className="m-auto h-1 w-1 rounded-full bg-layer-1/50" />
                 <span className="capitalize">{t("member", { count: workspace.total_members || 0 })}</span>
               </div>
             </div>

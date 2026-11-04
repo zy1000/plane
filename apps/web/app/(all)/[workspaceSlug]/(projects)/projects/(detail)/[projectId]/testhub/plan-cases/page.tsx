@@ -76,7 +76,7 @@ import { usePlanCaseFiltersConfig } from "@/components/qa/plans/plan-case-list-f
 import type { TPlanCaseFilterExpression } from "@/components/qa/plans/plan-case-list-filters/types";
 import type { TPlanCaseFilterSelectOption } from "@/components/qa/plans/plan-case-list-filters/use-plan-case-filters-config";
 
-const QA_PLAN_EDIT_PERMISSION_KEY = "qa.plan.edit" as const;
+const QA_PLAN_EDIT_PERMISSION_KEY = "project.test_plan.edit" as const;
 
 type TLabel = { id?: string; name?: string } | string;
 type TestCase = {

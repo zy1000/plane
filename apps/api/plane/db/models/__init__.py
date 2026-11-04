@@ -81,12 +81,12 @@ from .project import (
     ProjectMember,
     ProjectMemberInvite,
     ProjectMemberRole,
-    ProjectNetwork,
     ProjectPublicMember,
     ProjectRole,
     ProjectGroupRole,
     ProjectUserProperty,
     ProjectMemberRole,
+    ProjectMemberJobRole,
     ProjectRole,
 )
 from .session import Session
@@ -106,7 +106,9 @@ from .workspace import (
     WorkspaceHomePreference,
     WorkspaceUserPreference,
     WorkspaceRole,
+    WorkspaceRoleProjectExclusion,
     WorkspaceMemberRole,
+    WorkspaceMemberJobRole,
     WorkspaceGroup,
     WorkspaceGroupMember,
     WorkspaceGroupRole,
@@ -148,10 +150,8 @@ from .timesheet import TimeSheet, TimesheetCategory
 from .data_dictionary import DataDictionary, DataDictionaryItem
 from .product import (
     Product,
-    ProductMember,
-    ProductMemberRole,
     ProductProject,
-    ProductRole,
+    ProductTeamAssignment,
 )
 from .requirement import (
     Requirement,

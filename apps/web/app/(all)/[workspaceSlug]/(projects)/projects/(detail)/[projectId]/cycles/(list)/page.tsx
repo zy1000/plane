@@ -9,10 +9,14 @@ import { observer } from "mobx-react";
 import { usePathname, useSearchParams } from "next/navigation";
 // plane imports
 import { useTheme } from "next-themes";
-import { EUserPermissionsLevel, CYCLE_TRACKER_ELEMENTS, PROJECT_SPRINTS_VIEW_PERMISSION_KEY, PROJECT_SPRINTS_CREATE_PERMISSION_KEY } from "@plane/constants";
+import {
+  CYCLE_TRACKER_ELEMENTS,
+  PROJECT_SETTINGS_EDIT_PERMISSION_KEY,
+  PROJECT_SPRINTS_VIEW_PERMISSION_KEY,
+  PROJECT_SPRINTS_CREATE_PERMISSION_KEY,
+} from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { EmptyStateDetailed } from "@plane/propel/empty-state";
-import { EUserProjectRoles } from "@plane/types";
 // assets
 import darkEmptyState from "@/app/assets/empty-state/disabled-feature/cycles-dark.webp?url";
 import lightEmptyState from "@/app/assets/empty-state/disabled-feature/cycles-light.webp?url";
@@ -50,14 +54,15 @@ function ProjectCyclesPage({ params }: Route.ComponentProps) {
   const { t } = useTranslation();
   // 富筛选：建实例 + 注册属性配置（页头的漏斗按钮与这里拿的是同一份实例）
   const filter = useCycleListFiltering(workspaceSlug, projectId);
-  const { allowPermissions, allowProjectPermissionKeys, workspaceUserInfo } = useUserPermissions();
+  const { allowProjectPermissionKeys, workspaceUserInfo } = useUserPermissions();
   // derived values
   const resolvedEmptyState = resolvedTheme === "light" ? lightEmptyState : darkEmptyState;
   const totalCycles = currentProjectCycleIds?.length ?? 0;
   const filteredCycles = getFilteredCycleIds(projectId, false)?.length ?? 0;
   const project = getProjectById(projectId);
   const pageTitle = project?.name ? `${project?.name} - ${t("common.cycles", { count: 2 })}` : undefined;
-  const hasAdminLevelPermission = allowPermissions([EUserProjectRoles.ADMIN], EUserPermissionsLevel.PROJECT);
+  // 迭代功能关着时，空状态的动作是去项目设置里开功能
+  const hasAdminLevelPermission = allowProjectPermissionKeys([PROJECT_SETTINGS_EDIT_PERMISSION_KEY], workspaceSlug, projectId);
   const canCreateSprint = allowProjectPermissionKeys([PROJECT_SPRINTS_CREATE_PERMISSION_KEY], workspaceSlug, projectId);
   const currentPath = getPathWithSearch(pathname, searchParams);
 

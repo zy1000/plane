@@ -138,7 +138,7 @@ export function GroupDetailPanel({
                               {group.member_count} 位成员
                             </span>
                             <span className="rounded-md bg-layer-1 px-2 py-1 text-11 text-secondary tabular-nums">
-                              {group.role_count} 个角色
+                              {group.role_count} 个权限组
                             </span>
                           </div>
                         </div>
@@ -196,7 +196,7 @@ export function GroupDetailPanel({
                             </Tabs.Trigger>
                             <Tabs.Trigger value="roles">
                               <span className="flex items-center gap-1.5">
-                                角色与权限
+                                权限组
                                 <span className="text-11 text-tertiary tabular-nums">{group.role_count}</span>
                               </span>
                             </Tabs.Trigger>

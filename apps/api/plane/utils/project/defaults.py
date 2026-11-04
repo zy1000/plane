@@ -15,7 +15,7 @@ from plane.db.models import (
     WorkflowTransition,
     WorkflowTransitionPrincipal,
     WorkflowTransitionRequiredField,
-    IssueTypeCategory, User, Workspace, WorkspaceRole, ProjectRole
+    IssueTypeCategory, User, Workspace
 )
 from plane.db.seed_data.issue_scheme import BUG, EPIC, FEATURE, STORY, TASK
 from plane.utils.data_model import IssueTypeModel
@@ -380,32 +380,20 @@ def create_default_bug_extra_field(issue_types: list[IssueType]):
 def add_principal(rule_info: dict, project: Project | None, transition: WorkflowTransition):
     """添加工作流的审批人、目标人、发起人。
 
-    ``project`` 为空表示模式方案：没有项目角色可选，角色按工作区里的同名「项目角色模板」写 workspace_role，
-    运行时再解析到项目里 source_template 等于它的角色（需求 4.4）。
+    ``role_name`` 按角色字典（job_role）的名字找角色，运行时解析成项目里挂了这个角色的人；
+    项目方案与模式方案写法一样。
     """
+    from plane.utils.job_role import job_role_ids_by_label
+
     bulk_object = []
 
     def add(data: dict, dimension: str):
         for key, value in data.items():
             if key == 'role_name':
-                if project is not None:
-                    role_ids = list(
-                        ProjectRole.objects.filter(project=project, name__in=value).values_list('id', flat=True))
-                    for role_id in role_ids:
-                        bulk_object.append(
-                            WorkflowTransitionPrincipal(transition=transition, role_id=role_id, dimension=dimension,
-                                                        kind=WorkflowPrincipalKind.ROLE))
-                else:
-                    template_ids = list(
-                        WorkspaceRole.objects.filter(
-                            workspace_id=transition.workspace_id,
-                            type=WorkspaceRole.RoleType.PROJECT_TEMPLATE,
-                            name__in=value,
-                        ).values_list('id', flat=True))
-                    for template_id in template_ids:
-                        bulk_object.append(
-                            WorkflowTransitionPrincipal(transition=transition, workspace_role_id=template_id,
-                                                        dimension=dimension, kind=WorkflowPrincipalKind.ROLE))
+                for job_role_id in job_role_ids_by_label(transition.workspace_id, value):
+                    bulk_object.append(
+                        WorkflowTransitionPrincipal(transition=transition, job_role_id=job_role_id,
+                                                    dimension=dimension, kind=WorkflowPrincipalKind.ROLE))
             elif key == 'member_name':
                 member_ids = list(
                     User.objects.filter(display_name__in=value).values_list('id', flat=True)
@@ -491,44 +479,22 @@ def create_default_bug_workflow(issue_types: list[IssueType], **kwargs):
     return workflow
 
 
-def create_default_role(workspace: Workspace, project_id: str):
-    """按工作区的项目角色模板建本项目角色。权限先原样复制，其中的工作项类型权限是模板格式、对不上本项目
-    任何类型，须在工作项方案就位后用 role_import.apply_template_permissions_to_project_roles 换算（见 setup_new_project）。"""
-    workspace_roles: list[WorkspaceRole] = WorkspaceRole.objects.filter(
-        workspace=workspace, type=WorkspaceRole.RoleType.PROJECT_TEMPLATE
-    )
-    bulk_obj = [
-        ProjectRole(name=role.name, description=role.description, permissions=role.permissions, source_template=role,
-                    project_id=project_id, workspace=workspace)
-        for role in workspace_roles
-    ]
-    ProjectRole.objects.bulk_create(bulk_obj)
-
-
 def setup_new_project(project: Project, creator: User):
-    """新建项目后的初始化：创建人 / 负责人加为管理员、角色、工作项配置、研发模式阶段。
+    """新建项目后的初始化：创建人 / 负责人加为项目管理员、工作项配置、研发模式阶段。
 
     创建项目接口与简道云项目同步共用，两边建出来的项目一模一样。project 须已建好 ProjectIdentifier。
-
-    工作项配置看项目指向哪个方案，见 utils.issue_scheme.prepare_project_issue_scheme。放在建角色之后：
-    缺陷工作流的角色审批人要按项目角色 / 角色模板的名字找。
+    项目权限组不再按模板复制：模板在项目里是引用，绑人时按需生成引用行（utils/permission_groups.py）。
     """
-    from plane.db.models import ProjectMember
-    from plane.db.models.project import ROLE
     from plane.utils.issue_scheme import prepare_project_issue_scheme
-    from plane.utils.project.role_import import apply_template_permissions_to_project_roles
+    from plane.utils.project.member import add_project_admins
     from plane.utils.project_stage import copy_stages_from_dev_mode
 
-    ProjectMember.objects.create(project_id=project.id, member=creator, role=ROLE.ADMIN.value)
+    admin_ids = [creator.id]
     if project.project_lead_id is not None and str(project.project_lead_id) != str(creator.id):
-        ProjectMember.objects.create(
-            project_id=project.id, member_id=project.project_lead_id, role=ROLE.ADMIN.value
-        )
+        admin_ids.append(project.project_lead_id)
+    add_project_admins(project, admin_ids)
 
-    create_default_role(workspace=project.workspace, project_id=project.id)
     prepare_project_issue_scheme(project, creator=creator)
-    # 类型就位后才能把模板里的类型权限换成本项目的 key；原样复制的话普通成员建不了任何类型的工作项
-    apply_template_permissions_to_project_roles(project)
 
     # 从所选研发模式拷一份阶段到项目下（PMS-101）。放最后且自己包事务：
     # 上面几步都是裸写，这一步失败不该让已经建成的项目回滚，缺了可以在

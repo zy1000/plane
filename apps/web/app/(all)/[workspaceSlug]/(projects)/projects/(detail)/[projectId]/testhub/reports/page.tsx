@@ -18,10 +18,10 @@ import { qaCaseSetToastError } from "@/utils/qa-case-error";
 
 const reportService = new ReportService();
 
-const QA_REPORT_VIEW_PERMISSION_KEY = "qa.report.view" as const;
-const QA_REPORT_CREATE_PERMISSION_KEY = "qa.report.create" as const;
-const QA_REPORT_EDIT_PERMISSION_KEY = "qa.report.edit" as const;
-const QA_REPORT_DELETE_PERMISSION_KEY = "qa.report.delete" as const;
+const QA_REPORT_VIEW_PERMISSION_KEY = "project.test_report.view" as const;
+const QA_REPORT_CREATE_PERMISSION_KEY = "project.test_report.create" as const;
+const QA_REPORT_EDIT_PERMISSION_KEY = "project.test_report.edit" as const;
+const QA_REPORT_DELETE_PERMISSION_KEY = "project.test_report.delete" as const;
 
 type TEditingReport = TReportListItem & { plans?: string[] };
 

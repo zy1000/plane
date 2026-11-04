@@ -7,7 +7,7 @@ from plane.db.models.project import ProjectTemplate, Project
 class ProjectSimpleSerializer(ModelSerializer):
     class Meta:
         model = Project
-        fields = ['name', 'description', 'network', 'workspace', 'identifier', 'emoji', 'icon_prop',
+        fields = ['name', 'description', 'workspace', 'identifier', 'emoji', 'icon_prop',
                   'cover_image', 'cover_image_asset', 'is_template']
         read_only_fields = ['id']
 

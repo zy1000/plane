@@ -4,9 +4,6 @@
  * See the LICENSE file for details.
  */
 
-import { computedFn } from "mobx-utils";
-import type { EUserProjectRoles } from "@plane/types";
-// plane imports
 // plane web imports
 import type { RootStore } from "@/plane-web/store/root.store";
 // store
@@ -20,25 +17,6 @@ export class ProjectMemberStore extends BaseProjectMemberStore implements IProje
   constructor(_memberRoot: IMemberRootStore, rootStore: RootStore) {
     super(_memberRoot, rootStore);
   }
-
-  /**
-   * @description Returns the highest role from the project membership
-   * @param { string } userId
-   * @param { string } projectId
-   * @returns { EUserProjectRoles | undefined }
-   */
-  getUserProjectRole = computedFn((userId: string, projectId: string): EUserProjectRoles | undefined =>
-    this.getRoleFromProjectMembership(userId, projectId)
-  );
-
-  /**
-   * @description Returns the role from the project membership
-   * @param projectId
-   * @param userId
-   * @param role
-   */
-  getProjectMemberRoleForUpdate = (_projectId: string, _userId: string, role: EUserProjectRoles): EUserProjectRoles =>
-    role;
 
   /**
    * @description Processes the removal of a member from a project

@@ -19,12 +19,12 @@ import {
   Users,
 } from "lucide-react";
 // plane imports
-import { EUserPermissionsLevel } from "@plane/constants";
+import { PERMISSION_KEYS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { LinkIcon, TrashIcon, ContrastIcon, DiceIcon, DoubleCircleIcon } from "@plane/propel/icons";
 import { setToast, TOAST_TYPE } from "@plane/propel/toast";
 import type { ICycle, IIssueLabel, IModule, TIssue, TIssuePriorities } from "@plane/types";
-import { EIssueServiceType, EUserPermissions } from "@plane/types";
+import { EIssueServiceType } from "@plane/types";
 import { copyTextToClipboard } from "@plane/utils";
 // components
 import type { TPowerKCommandConfig } from "@/components/power-k/core/types";
@@ -34,6 +34,8 @@ import { useCommandPalette } from "@/hooks/store/use-command-palette";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useProject } from "@/hooks/store/use-project";
 import { useUser } from "@/hooks/store/user";
+// services
+import { projectIssueTypesCache } from "@/services/project/project-issue-type.service";
 
 export const usePowerKWorkItemContextBasedCommands = (): TPowerKCommandConfig[] => {
   // params
@@ -41,7 +43,7 @@ export const usePowerKWorkItemContextBasedCommands = (): TPowerKCommandConfig[] 
   // store
   const {
     data: currentUser,
-    permission: { allowPermissions },
+    permission: { allowIssuePermission, allowProjectPermissionKeys, isProjectMember },
   } = useUser();
   const { toggleDeleteIssueModal } = useCommandPalette();
   const { getProjectById } = useProject();
@@ -77,13 +79,31 @@ export const usePowerKWorkItemContextBasedCommands = (): TPowerKCommandConfig[] 
   const createEntitySubscription = isEpic ? createEpicSubscription : createSubscription;
   const removeEntitySubscription = isEpic ? removeEpicSubscription : removeSubscription;
   // permission
-  const isEditingAllowed =
-    allowPermissions(
-      [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-      EUserPermissionsLevel.PROJECT,
-      workspaceSlug?.toString(),
-      entityDetails?.project_id ?? undefined
-    ) && !entityDetails?.archived_at;
+  // 类型决定看 project.issue.edit 还是 project.defect.edit（以及类型限定）；类型还没加载时两把 key 任一即可，后端兜底
+  const entityIssueType =
+    entityDetails?.project_id && entityDetails.type_id
+      ? projectIssueTypesCache.get(entityDetails.project_id)?.[entityDetails.type_id]
+      : undefined;
+  const hasEditPermission = entityIssueType
+    ? allowIssuePermission("edit", entityIssueType, workspaceSlug?.toString(), entityDetails?.project_id ?? undefined)
+    : allowProjectPermissionKeys(
+        [PERMISSION_KEYS.PROJECT_ISSUE_EDIT, PERMISSION_KEYS.PROJECT_DEFECT_EDIT],
+        workspaceSlug?.toString(),
+        entityDetails?.project_id ?? undefined
+      );
+  const hasDeletePermission = entityIssueType
+    ? allowIssuePermission("delete", entityIssueType, workspaceSlug?.toString(), entityDetails?.project_id ?? undefined)
+    : allowProjectPermissionKeys(
+        [PERMISSION_KEYS.PROJECT_ISSUE_DELETE, PERMISSION_KEYS.PROJECT_DEFECT_DELETE],
+        workspaceSlug?.toString(),
+        entityDetails?.project_id ?? undefined
+      );
+  // 负责人改自己负责的工作项不看 key（同后端 has_project_issue_permission）
+  const isEditingAllowed = (isCurrentUserAssigned || hasEditPermission) && !entityDetails?.archived_at;
+  const canDelete = hasDeletePermission && !entityDetails?.archived_at;
+  // 订阅是个人行为，项目成员就行
+  const canSubscribe =
+    isProjectMember(workspaceSlug?.toString(), entityDetails?.project_id ?? undefined) && !entityDetails?.archived_at;
 
   const handleUpdateEntity = useCallback(
     async (formData: Partial<TIssue>) => {
@@ -397,8 +417,8 @@ export const usePowerKWorkItemContextBasedCommands = (): TPowerKCommandConfig[] 
       type: "action",
       action: handleSubscription,
       modifierShortcut: "shift+s",
-      isEnabled: () => isEditingAllowed,
-      isVisible: () => isEditingAllowed,
+      isEnabled: () => canSubscribe,
+      isVisible: () => canSubscribe,
       closeOnSelect: true,
     },
     {
@@ -410,8 +430,8 @@ export const usePowerKWorkItemContextBasedCommands = (): TPowerKCommandConfig[] 
       type: "action",
       action: handleDeleteWorkItem,
       modifierShortcut: "cmd+backspace",
-      isEnabled: () => isEditingAllowed,
-      isVisible: () => isEditingAllowed,
+      isEnabled: () => canDelete,
+      isVisible: () => canDelete,
       closeOnSelect: true,
     },
     {

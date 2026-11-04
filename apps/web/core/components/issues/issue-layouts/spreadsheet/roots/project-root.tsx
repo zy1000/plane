@@ -8,7 +8,7 @@ import React from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 // plane imports
-import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import { PERMISSION_KEYS } from "@plane/constants";
 // hooks
 import { useUserPermissions } from "@/hooks/store/user";
 // local imports
@@ -19,12 +19,12 @@ export const ProjectSpreadsheetLayout = observer(function ProjectSpreadsheetLayo
   // router
   const { workspaceSlug } = useParams();
   // hooks
-  const { allowPermissions } = useUserPermissions();
+  const { allowProjectPermissionKeys } = useUserPermissions();
   // derived values
+  // 行内改属性：项目里能编辑工作项或缺陷（单条的类型限定以后端为准）
   const canEditPropertiesBasedOnProject = (projectId: string) =>
-    allowPermissions(
-      [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-      EUserPermissionsLevel.PROJECT,
+    allowProjectPermissionKeys(
+      [PERMISSION_KEYS.PROJECT_ISSUE_EDIT, PERMISSION_KEYS.PROJECT_DEFECT_EDIT],
       workspaceSlug?.toString(),
       projectId
     );

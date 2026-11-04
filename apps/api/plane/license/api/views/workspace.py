@@ -93,7 +93,6 @@ class InstanceWorkSpaceEndpoint(BaseAPIView):
                 _ = WorkspaceMember.objects.create(
                     workspace_id=serializer.data["id"],
                     member=request.user,
-                    role=20,
                     company_role=request.data.get("company_role", ""),
                 )
                 return Response(serializer.data, status=status.HTTP_201_CREATED)

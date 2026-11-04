@@ -79,9 +79,7 @@ class RequirementLibraryViewSet(BaseViewSet):
             )
         return Response(self.get_serializer(library).data, status=status.HTTP_200_OK)
 
-    @allow_fine_permission(
-        PermissionKey.WORKSPACE_REQUIREMENT_LIBRARY_MANAGE, level="WORKSPACE"
-    )
+    @allow_fine_permission(PermissionKey.WORKSPACE_REQUIREMENT_LIBRARY_MANAGE, level="WORKSPACE")
     def create(self, request, slug):
         workspace = self.get_serializer_context().get("workspace")
         if workspace is None:
@@ -113,21 +111,15 @@ class RequirementLibraryViewSet(BaseViewSet):
         library = serializer.save()
         return Response(self.get_serializer(library).data, status=status.HTTP_200_OK)
 
-    @allow_fine_permission(
-        PermissionKey.WORKSPACE_REQUIREMENT_LIBRARY_MANAGE, level="WORKSPACE"
-    )
+    @allow_fine_permission(PermissionKey.WORKSPACE_REQUIREMENT_LIBRARY_MANAGE, level="WORKSPACE")
     def update(self, request, slug, pk):
         return self._update(request, pk, partial=False)
 
-    @allow_fine_permission(
-        PermissionKey.WORKSPACE_REQUIREMENT_LIBRARY_MANAGE, level="WORKSPACE"
-    )
+    @allow_fine_permission(PermissionKey.WORKSPACE_REQUIREMENT_LIBRARY_MANAGE, level="WORKSPACE")
     def partial_update(self, request, slug, pk):
         return self._update(request, pk, partial=True)
 
-    @allow_fine_permission(
-        PermissionKey.WORKSPACE_REQUIREMENT_LIBRARY_MANAGE, level="WORKSPACE"
-    )
+    @allow_fine_permission(PermissionKey.WORKSPACE_REQUIREMENT_LIBRARY_MANAGE, level="WORKSPACE")
     def destroy(self, request, slug, pk):
         library = self._get_library(pk)
         if library is None:

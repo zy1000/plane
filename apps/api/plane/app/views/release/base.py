@@ -34,10 +34,9 @@ from rest_framework.response import Response
 
 # Module imports
 from plane.app.permissions import (
+    allow_project_member,
     ProjectEntityPermission,
     ProjectLitePermission,
-    allow_permission,
-    ROLE,
     allow_fine_permission,
     PermissionKey,
 )
@@ -67,7 +66,6 @@ from plane.db.models import (
     ReleaseOverdueRecord,
     ReleaseOverduePhase,
     Project,
-    ProjectMember,
     User,
     UserRecentVisit,
     Cycle,
@@ -96,6 +94,7 @@ from plane.bgtasks.entity_status_email_task import (
 from .. import BaseAPIView, BaseViewSet
 from plane.bgtasks.recent_visited_task import recent_visited_task
 from plane.utils.host import base_host
+from plane.utils.visibility import can_access_project, visible_projects_q
 from ...serializers.cycle import CycleSimpleFieldSerializer
 
 
@@ -375,7 +374,7 @@ class ReleaseViewSet(BaseViewSet):
             .order_by("-is_favorite", "-created_at")
         )
 
-    @allow_fine_permission(PermissionKey.RELEASES_CREATE)
+    @allow_fine_permission(PermissionKey.PROJECT_RELEASE_CREATE)
     def create(self, request, slug, project_id):
         project = Project.objects.get(workspace__slug=slug, pk=project_id)
         serializer = ReleaseWriteSerializer(data=request.data, context={"project": project})
@@ -466,7 +465,7 @@ class ReleaseViewSet(BaseViewSet):
             return Response(release, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    @allow_fine_permission(PermissionKey.RELEASES_VIEW)
+    @allow_fine_permission(PermissionKey.PROJECT_RELEASE_VIEW)
     def list(self, request, slug, project_id):
         queryset = self.get_queryset().filter(archived_at__isnull=True)
         from plane.utils.release.overdue_strategy import scan_releases_for_overdue
@@ -519,7 +518,7 @@ class ReleaseViewSet(BaseViewSet):
             releases = user_timezone_converter(releases, datetime_fields, request.user.user_timezone)
         return Response(releases, status=status.HTTP_200_OK)
 
-    @allow_fine_permission(PermissionKey.RELEASES_VIEW)
+    @allow_fine_permission(PermissionKey.PROJECT_RELEASE_VIEW)
     def retrieve(self, request, slug, project_id, pk):
         queryset = (
             self.get_queryset()
@@ -771,7 +770,7 @@ class ReleaseViewSet(BaseViewSet):
 
         return Response(data, status=status.HTTP_200_OK)
 
-    @allow_fine_permission(PermissionKey.RELEASES_EDIT)
+    @allow_fine_permission(PermissionKey.PROJECT_RELEASE_EDIT)
     def partial_update(self, request, slug, project_id, pk):
         release_queryset = self.get_queryset().filter(pk=pk)
 
@@ -943,7 +942,7 @@ class ReleaseViewSet(BaseViewSet):
             promote_on_release_completed(instance.id)
         return response
 
-    @allow_fine_permission(PermissionKey.RELEASES_VIEW)
+    @allow_fine_permission(PermissionKey.PROJECT_RELEASE_VIEW)
     def overdues(self, request, slug, project_id, pk):
         """返回该发布的逾期记录列表（含已结束记录），最新优先。"""
         if not Release.objects.filter(
@@ -960,7 +959,7 @@ class ReleaseViewSet(BaseViewSet):
         serializer = ReleaseOverdueRecordSerializer(records, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    @allow_fine_permission(PermissionKey.RELEASES_DELETE)
+    @allow_fine_permission(PermissionKey.PROJECT_RELEASE_DELETE)
     def destroy(self, request, slug, project_id, pk):
         release = Release.objects.get(workspace__slug=slug, project_id=project_id, pk=pk)
 
@@ -1028,8 +1027,7 @@ class ReleaseLinkViewSet(BaseViewSet):
             .filter(project_id=self.kwargs.get("project_id"))
             .filter(release_id=self.kwargs.get("release_id"))
             .filter(
-                project__project_projectmember__member=self.request.user,
-                project__project_projectmember__is_active=True,
+                visible_projects_q(self.request.user, self.kwargs.get("slug"), "project"),
                 project__archived_at__isnull=True,
             )
             .order_by("-created_at")
@@ -1072,7 +1070,7 @@ class ReleaseFavoriteViewSet(BaseViewSet):
 
 
 class ReleaseUserPropertiesEndpoint(BaseAPIView):
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    @allow_project_member
     def patch(self, request, slug, project_id, release_id):
         release_properties = ReleaseUserProperties.objects.get(
             user=request.user,
@@ -1092,7 +1090,7 @@ class ReleaseUserPropertiesEndpoint(BaseAPIView):
         serializer = ReleaseUserPropertiesSerializer(release_properties)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    @allow_project_member
     def get(self, request, slug, project_id, release_id):
         release_properties, _ = ReleaseUserProperties.objects.get_or_create(
             user=request.user,
@@ -1107,7 +1105,7 @@ class ReleaseUserPropertiesEndpoint(BaseAPIView):
 class ReleaseAPI(BaseViewSet):
     pagination_class = CustomPaginator
 
-    @allow_fine_permission(PermissionKey.RELEASES_CYCLE_MANAGE)
+    @allow_fine_permission(PermissionKey.PROJECT_RELEASE_EDIT)
     @action(detail=False, methods=["post"], url_path="associate-cycle")
     def associate_cycle(self, request, slug, project_id):
         release_id = request.data.get("release_id")
@@ -1191,7 +1189,7 @@ class ReleaseAPI(BaseViewSet):
             status=status.HTTP_201_CREATED,
         )
 
-    @allow_fine_permission(PermissionKey.RELEASES_CYCLE_MANAGE)
+    @allow_fine_permission(PermissionKey.PROJECT_RELEASE_EDIT)
     @action(detail=False, methods=["get"], url_path="select-cycle-list")
     def select_cycle_list(self, request, slug, project_id):
         query = Cycle.objects.filter(workspace__slug=slug, project=project_id, release__isnull=True)
@@ -1200,7 +1198,7 @@ class ReleaseAPI(BaseViewSet):
         serializer = CycleSimpleFieldSerializer(paginated_queryset, many=True)
         return list_response(data=serializer.data, count=query.count())
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
+    @allow_fine_permission(PermissionKey.PROJECT_RELEASE_VIEW)
     @action(detail=False, methods=["get"], url_path="cycles")
     def cycle_list(self, request, slug, project_id):
         release_id = request.query_params.get("release_id")
@@ -1208,7 +1206,7 @@ class ReleaseAPI(BaseViewSet):
         serializer = CycleSerializer(query, many=True)
         return Response(data=serializer.data)
 
-    @allow_fine_permission(PermissionKey.RELEASES_CYCLE_MANAGE)
+    @allow_fine_permission(PermissionKey.PROJECT_RELEASE_EDIT)
     @action(detail=False, methods=["post"], url_path="cancel-cycle")
     def cancel_cycle(self, request, slug, project_id):
         release_id = request.data.get("release_id")
@@ -1256,7 +1254,7 @@ class ReleaseAPI(BaseViewSet):
 
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
+    @allow_fine_permission(PermissionKey.PROJECT_RELEASE_VIEW)
     @action(detail=False, methods=["get"], url_path="statistics")
     def statistics(self, request, slug, project_id):
         release_id = request.GET.get("release_id")
@@ -1318,7 +1316,7 @@ class ReleaseAPI(BaseViewSet):
 
         return Response(response_data, status=status.HTTP_200_OK)
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
+    @allow_fine_permission(PermissionKey.PROJECT_RELEASE_EDIT)
     @action(detail=False, methods=["post"], url_path="note")
     def update_note(self, request, slug, project_id):
         release_id = request.data.get("release_id")
@@ -1326,7 +1324,7 @@ class ReleaseAPI(BaseViewSet):
         Release.objects.filter(pk=release_id).update(note=note)
         return Response(status=status.HTTP_200_OK)
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
+    @allow_fine_permission(PermissionKey.PROJECT_RELEASE_VIEW)
     @action(detail=False, methods=["get"], url_path="plans")
     def plan_list(self, request, slug, project_id):
         release_id = request.query_params.get("release_id")
@@ -1358,7 +1356,7 @@ class ReleaseAPI(BaseViewSet):
             )
         return Response(result, status=status.HTTP_200_OK)
 
-    @allow_fine_permission(PermissionKey.RELEASES_PLAN_MANAGE)
+    @allow_fine_permission(PermissionKey.PROJECT_RELEASE_EDIT)
     @action(detail=False, methods=["get"], url_path="select-plan-list")
     def select_plan_list(self, request, slug, project_id):
         """返回当前项目下尚未关联到指定 release 的测试计划（用于发布 -> 关联测试计划弹窗）。"""
@@ -1374,7 +1372,7 @@ class ReleaseAPI(BaseViewSet):
         serializer = PlanListSerializer(plans, many=True)
         return Response({"data": serializer.data, "count": plans.count()}, status=status.HTTP_200_OK)
 
-    @allow_fine_permission(PermissionKey.RELEASES_PLAN_MANAGE)
+    @allow_fine_permission(PermissionKey.PROJECT_RELEASE_EDIT)
     @action(detail=False, methods=["post"], url_path="associate-plans")
     def associate_plans(self, request, slug, project_id):
         release_id = request.data.get("release_id")
@@ -1413,7 +1411,7 @@ class ReleaseAPI(BaseViewSet):
 
         return Response({"release_id": str(release_id), "updated": len(plans)}, status=status.HTTP_200_OK)
 
-    @allow_fine_permission(PermissionKey.RELEASES_PLAN_MANAGE)
+    @allow_fine_permission(PermissionKey.PROJECT_RELEASE_EDIT)
     @action(detail=False, methods=["post"], url_path="cancel-plan-association")
     def cancel_plan_association(self, request, slug, project_id):
         release_id = request.data.get("release_id")
@@ -1453,14 +1451,9 @@ class ReleaseOverdueByAssigneeEndpoint(BaseAPIView):
     响应结构与迭代 CycleOverdueByAssignee、项目统计 overdue_by_assignee 一致。
     """
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    @allow_fine_permission(PermissionKey.PROJECT_RELEASE_VIEW)
     def get(self, request, slug, project_id, release_id):
-        if not ProjectMember.objects.filter(
-            workspace__slug=slug,
-            project_id=project_id,
-            member_id=request.user.id,
-            is_active=True,
-        ).exists():
+        if not can_access_project(request.user, slug, project_id):
             return Response({"error": "forbidden"}, status=status.HTTP_403_FORBIDDEN)
 
         if not Release.objects.filter(id=release_id, project_id=project_id, workspace__slug=slug).exists():

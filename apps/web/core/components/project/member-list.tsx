@@ -4,136 +4,155 @@
  * See the LICENSE file for details.
  */
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { observer } from "mobx-react";
+import { Search } from "lucide-react";
 // plane imports
-import { MEMBER_TRACKER_ELEMENTS, PROJECT_MEMBER_INVITE_PERMISSION_KEY } from "@plane/constants";
-import { useTranslation } from "@plane/i18n";
-import { Button } from "@plane/propel/button";
-import { SearchIcon } from "@plane/propel/icons";
+import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 // components
-import { MembersSettingsLoader } from "@/components/ui/loader/settings/members";
+import { MemberFilterSelect } from "@/components/project/settings/members/filter-select";
+import { buildGroupOptions } from "@/components/project/settings/members/helpers";
+import { ProjectMemberAccessModal } from "@/components/project/settings/members/member-access-modal";
+import { ProjectMembersTable } from "@/components/project/settings/members/project-members-table";
+import type { TProjectMemberRow } from "@/components/project/settings/members/use-project-members-table";
+import { useProjectMembersTable } from "@/components/project/settings/members/use-project-members-table";
+import { errorMessage } from "@/components/project/settings/permission-groups/shared";
 // hooks
+import { useJobRoles } from "@/hooks/store/use-job-roles";
 import { useMember } from "@/hooks/store/use-member";
-import { useUserPermissions } from "@/hooks/store/user";
+import { useProject } from "@/hooks/store/use-project";
+import { useProjectRoles } from "@/hooks/store/use-project-roles";
+import { useUser, useUserPermissions } from "@/hooks/store/user";
+import { useAppRouter } from "@/hooks/use-app-router";
 // local imports
-import { MemberListFiltersDropdown } from "./dropdowns/filters/member-list";
-import { ProjectMemberListItem } from "./member-list-item";
+import { ConfirmProjectMemberRemove } from "./confirm-project-member-remove";
 import { SendProjectInvitationModal } from "./send-project-invitation-modal";
 
 type TProjectMemberListProps = {
   projectId: string;
   workspaceSlug: string;
-  /** 覆盖默认「成员」标题（如概览页使用「项目成员」） */
-  sectionHeading?: string;
-  /** 是否显示标题行，默认 true；概览页由外部卡片提供固定标题时传 false */
-  showHeading?: boolean;
+  canManage: boolean;
+  /** 「添加成员」按钮在页头，弹窗开关由页面传进来 */
+  isAddModalOpen: boolean;
+  onAddModalClose: () => void;
 };
 
+/** 项目设置「成员」：搜索 + 角色 / 权限组筛选 + 成员表（效果图「项目成员」） */
 export const ProjectMemberList = observer(function ProjectMemberList(props: TProjectMemberListProps) {
-  const { projectId, workspaceSlug, sectionHeading, showHeading = true } = props;
-  // states
-  const [inviteModal, setInviteModal] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
+  const { projectId, workspaceSlug, canManage, isAddModalOpen, onAddModalClose } = props;
+  const router = useAppRouter();
+  const [editingRow, setEditingRow] = useState<TProjectMemberRow | null>(null);
+  const [removingRow, setRemovingRow] = useState<TProjectMemberRow | null>(null);
+
+  const { data: currentUser } = useUser();
+  const { leaveProject } = useUserPermissions();
+  const { getProjectById } = useProject();
   const {
-    project: { projectMemberIds, getFilteredProjectMemberDetails, filters },
+    project: { removeMemberFromProject, updateMemberAccess },
   } = useMember();
-  const { allowProjectPermissionKeys } = useUserPermissions();
+  const { roles: groups, fetchRoles } = useProjectRoles(workspaceSlug, projectId);
+  const { jobRoles, jobRoleMap, isColored } = useJobRoles(workspaceSlug);
+  const table = useProjectMembersTable(projectId);
 
-  const { t } = useTranslation();
+  useEffect(() => {
+    void fetchRoles();
+  }, [fetchRoles]);
 
-  const searchedProjectMembers = (projectMemberIds ?? []).filter((userId) => {
-    const memberDetails = projectId ? getFilteredProjectMemberDetails(userId, projectId.toString()) : null;
-
-    if (!memberDetails?.member || !memberDetails.original_role) return false;
-
-    const fullName = `${memberDetails?.member.first_name} ${memberDetails?.member.last_name}`.toLowerCase();
-    const displayName = memberDetails?.member.display_name.toLowerCase();
-
-    return displayName?.includes(searchQuery.toLowerCase()) || fullName.includes(searchQuery.toLowerCase());
-  });
-
-  const memberDetails = searchedProjectMembers?.map((memberId) =>
-    projectId ? getFilteredProjectMemberDetails(memberId, projectId.toString()) : null
+  const project = getProjectById(projectId);
+  const projectLeadId =
+    typeof project?.project_lead === "string" ? project.project_lead : (project?.project_lead?.id ?? null);
+  const groupFilterOptions = useMemo(
+    () => buildGroupOptions(groups).map((option) => ({ id: option.id, label: option.label })),
+    [groups]
   );
 
-  const canInviteProjectMembers = allowProjectPermissionKeys(
-    [PROJECT_MEMBER_INVITE_PERMISSION_KEY],
-    workspaceSlug,
-    projectId
-  );
-
-  // Handler for role filter updates
-  const handleRoleFilterUpdate = (role: string) => {
-    if (projectId) {
-      const currentFilters = filters.getFilters(projectId);
-      const currentRoles = currentFilters?.roles || [];
-      const updatedRoles = currentRoles.includes(role)
-        ? currentRoles.filter((r) => r !== role)
-        : [...currentRoles, role];
-
-      filters.updateFilters(projectId, {
-        roles: updatedRoles.length > 0 ? updatedRoles : undefined,
+  const handleRemove = async (row: TProjectMemberRow) => {
+    const isSelf = row.user.id === currentUser?.id;
+    try {
+      if (isSelf) {
+        await leaveProject(workspaceSlug, projectId);
+        router.push(`/${workspaceSlug}/projects`);
+      } else {
+        await removeMemberFromProject(workspaceSlug, projectId, row.user.id);
+        void fetchRoles();
+      }
+    } catch (error) {
+      setToast({
+        type: TOAST_TYPE.ERROR,
+        title: isSelf ? "退出失败" : "移出失败",
+        message: errorMessage(error, "请稍后重试"),
       });
     }
   };
 
-  // Get current role filters
-  const appliedRoleFilters = projectId ? filters.getFilters(projectId)?.roles || [] : [];
-
   return (
     <>
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex h-9 w-64 items-center gap-1.5 rounded-lg border border-subtle bg-surface-1 px-3">
+          <Search className="size-3.5 shrink-0 text-placeholder" />
+          <input
+            value={table.query}
+            onChange={(event) => table.setQuery(event.target.value)}
+            placeholder="搜索成员"
+            className="min-w-0 flex-1 border-none bg-transparent text-13 outline-none placeholder:text-placeholder"
+          />
+        </div>
+        <MemberFilterSelect
+          label="角色"
+          options={jobRoles.map((role) => ({ id: role.id, label: role.label }))}
+          value={table.jobRoleFilter}
+          onChange={table.setJobRoleFilter}
+        />
+        <MemberFilterSelect
+          label="权限组"
+          options={groupFilterOptions}
+          value={table.groupFilter}
+          onChange={table.setGroupFilter}
+        />
+        <span className="ml-auto text-13 text-tertiary tabular-nums">{table.filteredRows.length} 人</span>
+      </div>
+
+      <div className="mt-3">
+        <ProjectMembersTable
+          rows={table.filteredRows}
+          isLoading={table.isLoading}
+          groups={groups}
+          jobRoleMap={jobRoleMap}
+          isJobRoleColored={isColored}
+          currentUserId={currentUser?.id}
+          projectLeadId={projectLeadId}
+          canManage={canManage}
+          onEdit={setEditingRow}
+          onRemove={setRemovingRow}
+        />
+      </div>
+
       <SendProjectInvitationModal
-        isOpen={inviteModal}
-        onClose={() => setInviteModal(false)}
+        isOpen={isAddModalOpen}
+        onClose={onAddModalClose}
+        onSuccess={() => void fetchRoles()}
         projectId={projectId}
         workspaceSlug={workspaceSlug}
       />
-      <div className="flex items-center justify-between gap-4 overflow-x-hidden border-b border-subtle py-2">
-        {showHeading && <div className="text-14 font-semibold">{sectionHeading ?? t("common.members")}</div>}
-        <div className="ml-auto flex items-center gap-2">
-          <div className="flex items-center justify-start gap-1.5 rounded-md border border-subtle bg-surface-1 px-2 py-1">
-            <SearchIcon className="h-3.5 w-3.5" />
-            <input
-              className="w-full max-w-[234px] border-none bg-transparent text-13 placeholder:text-placeholder focus:outline-none"
-              placeholder="Search"
-              value={searchQuery}
-              autoFocus
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-          </div>
-          <MemberListFiltersDropdown
-            appliedFilters={appliedRoleFilters}
-            handleUpdate={handleRoleFilterUpdate}
-            memberType="project"
-          />
-          <Button
-            variant="primary"
-            onClick={() => {
-              setInviteModal(true);
-            }}
-            disabled={!canInviteProjectMembers}
-            data-ph-element={MEMBER_TRACKER_ELEMENTS.HEADER_ADD_BUTTON}
-          >
-            {t("add_member")}
-          </Button>
-        </div>
-      </div>
-      {!projectMemberIds ? (
-        <MembersSettingsLoader />
-      ) : (
-        <div className="divide-y divide-subtle overflow-scroll">
-          {searchedProjectMembers.length !== 0 && (
-            <ProjectMemberListItem
-              memberDetails={memberDetails ?? []}
-              projectId={projectId}
-              workspaceSlug={workspaceSlug}
-            />
-          )}
-          {searchedProjectMembers.length === 0 && (
-            <h4 className="mt-16 text-center text-13 text-placeholder">{t("no_matching_members")}</h4>
-          )}
-        </div>
+
+      <ProjectMemberAccessModal
+        row={editingRow}
+        groups={groups}
+        jobRoles={jobRoles}
+        onClose={() => setEditingRow(null)}
+        onSubmit={async (row, data) => {
+          await updateMemberAccess(workspaceSlug, projectId, row.user.id, data);
+          void fetchRoles();
+        }}
+      />
+
+      {removingRow && (
+        <ConfirmProjectMemberRemove
+          isOpen
+          onClose={() => setRemovingRow(null)}
+          data={{ id: removingRow.user.id, display_name: removingRow.user.display_name || "" }}
+          onSubmit={() => handleRemove(removingRow)}
+        />
       )}
     </>
   );

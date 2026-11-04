@@ -6,10 +6,14 @@
 
 import { BarChart2, Briefcase, FileText, Home, Inbox, Layers, PenSquare, Settings } from "lucide-react";
 // plane imports
-import { EUserPermissionsLevel } from "@plane/constants";
+import {
+  PROJECT_MEMBER_ACCESS,
+  PROJECT_MODULES_VIEW_PERMISSION_KEY,
+  PROJECT_SPRINTS_VIEW_PERMISSION_KEY,
+  WORKSPACE_ANALYTICS_VIEW_PERMISSION_KEY,
+} from "@plane/constants";
 import { ArchiveIcon, UserActivityIcon, LayersIcon, ContrastIcon, DiceIcon, Intake } from "@plane/propel/icons";
 import type { ICycle, IModule, IPartialProject, IProjectView, IWorkspace } from "@plane/types";
-import { EUserProjectRoles, EUserWorkspaceRoles } from "@plane/types";
 // components
 import type { TPowerKCommandConfig, TPowerKContext } from "@/components/power-k/core/types";
 import { handlePowerKNavigate } from "@/components/power-k/utils/navigation";
@@ -54,23 +58,14 @@ export const usePowerKNavigationCommandsRecord = (): Record<TPowerKNavigationCom
   // store hooks
   const {
     data: currentUser,
-    permission: { allowPermissions },
+    permission: { allowProjectPermissionKeys, allowWorkspacePermissionKeys, isWorkspaceMember },
   } = useUser();
   const { getPartialProjectById } = useProject();
   // derived values
-  const hasWorkspaceMemberLevelPermissions = (ctx: TPowerKContext) =>
-    allowPermissions(
-      [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER],
-      EUserPermissionsLevel.WORKSPACE,
-      ctx.params.workspaceSlug?.toString()
-    );
-  const hasProjectMemberLevelPermissions = (ctx: TPowerKContext) =>
-    allowPermissions(
-      [EUserProjectRoles.ADMIN, EUserProjectRoles.MEMBER],
-      EUserPermissionsLevel.PROJECT,
-      ctx.params.workspaceSlug?.toString(),
-      ctx.params.projectId?.toString()
-    );
+  const hasWorkspacePermission = (ctx: TPowerKContext, permissionKey: string) =>
+    allowWorkspacePermissionKeys([permissionKey], ctx.params.workspaceSlug?.toString());
+  const hasProjectPermission = (ctx: TPowerKContext, permissionKey: string) =>
+    allowProjectPermissionKeys([permissionKey], ctx.params.workspaceSlug?.toString(), ctx.params.projectId?.toString());
   const baseWorkspaceConditions = (ctx: TPowerKContext) => Boolean(ctx.params.workspaceSlug?.toString());
   const baseProjectConditions = (ctx: TPowerKContext) =>
     Boolean(ctx.params.workspaceSlug?.toString() && ctx.params.projectId?.toString());
@@ -125,8 +120,8 @@ export const usePowerKNavigationCommandsRecord = (): Record<TPowerKNavigationCom
       icon: UserActivityIcon,
       keySequence: "gy",
       action: (ctx) => handlePowerKNavigate(ctx, [ctx.params.workspaceSlug?.toString(), "profile", currentUser?.id]),
-      isEnabled: (ctx) => baseWorkspaceConditions(ctx) && hasWorkspaceMemberLevelPermissions(ctx),
-      isVisible: (ctx) => baseWorkspaceConditions(ctx) && hasWorkspaceMemberLevelPermissions(ctx),
+      isEnabled: (ctx) => baseWorkspaceConditions(ctx) && isWorkspaceMember(ctx.params.workspaceSlug?.toString()),
+      isVisible: (ctx) => baseWorkspaceConditions(ctx) && isWorkspaceMember(ctx.params.workspaceSlug?.toString()),
       closeOnSelect: true,
     },
     nav_account_settings: {
@@ -222,8 +217,8 @@ export const usePowerKNavigationCommandsRecord = (): Record<TPowerKNavigationCom
       icon: BarChart2,
       keySequence: "ga",
       action: (ctx) => handlePowerKNavigate(ctx, [ctx.params.workspaceSlug?.toString(), "analytics", "overview"]),
-      isEnabled: (ctx) => baseWorkspaceConditions(ctx) && hasWorkspaceMemberLevelPermissions(ctx),
-      isVisible: (ctx) => baseWorkspaceConditions(ctx) && hasWorkspaceMemberLevelPermissions(ctx),
+      isEnabled: (ctx) => baseWorkspaceConditions(ctx) && hasWorkspacePermission(ctx, WORKSPACE_ANALYTICS_VIEW_PERMISSION_KEY),
+      isVisible: (ctx) => baseWorkspaceConditions(ctx) && hasWorkspacePermission(ctx, WORKSPACE_ANALYTICS_VIEW_PERMISSION_KEY),
       closeOnSelect: true,
     },
     nav_workspace_drafts: {
@@ -234,8 +229,8 @@ export const usePowerKNavigationCommandsRecord = (): Record<TPowerKNavigationCom
       icon: PenSquare,
       keySequence: "gj",
       action: (ctx) => handlePowerKNavigate(ctx, [ctx.params.workspaceSlug?.toString(), "drafts"]),
-      isEnabled: (ctx) => baseWorkspaceConditions(ctx) && hasWorkspaceMemberLevelPermissions(ctx),
-      isVisible: (ctx) => baseWorkspaceConditions(ctx) && hasWorkspaceMemberLevelPermissions(ctx),
+      isEnabled: (ctx) => baseWorkspaceConditions(ctx) && isWorkspaceMember(ctx.params.workspaceSlug?.toString()),
+      isVisible: (ctx) => baseWorkspaceConditions(ctx) && isWorkspaceMember(ctx.params.workspaceSlug?.toString()),
       closeOnSelect: true,
     },
     nav_workspace_archives: {
@@ -247,9 +242,9 @@ export const usePowerKNavigationCommandsRecord = (): Record<TPowerKNavigationCom
       keySequence: "gr",
       action: (ctx) => handlePowerKNavigate(ctx, [ctx.params.workspaceSlug?.toString(), "projects", "archives"]),
       isEnabled: (ctx) =>
-        baseWorkspaceConditions(ctx) && !baseProjectConditions(ctx) && hasWorkspaceMemberLevelPermissions(ctx),
+        baseWorkspaceConditions(ctx) && !baseProjectConditions(ctx) && isWorkspaceMember(ctx.params.workspaceSlug?.toString()),
       isVisible: (ctx) =>
-        baseWorkspaceConditions(ctx) && !baseProjectConditions(ctx) && hasWorkspaceMemberLevelPermissions(ctx),
+        baseWorkspaceConditions(ctx) && !baseProjectConditions(ctx) && isWorkspaceMember(ctx.params.workspaceSlug?.toString()),
       closeOnSelect: true,
     },
     open_workspace_setting: {
@@ -317,9 +312,9 @@ export const usePowerKNavigationCommandsRecord = (): Record<TPowerKNavigationCom
         ]);
       },
       isEnabled: (ctx) =>
-        baseProjectConditions(ctx) && hasProjectMemberLevelPermissions(ctx) && !!getContextProject(ctx)?.cycle_view,
+        baseProjectConditions(ctx) && hasProjectPermission(ctx, PROJECT_SPRINTS_VIEW_PERMISSION_KEY) && !!getContextProject(ctx)?.cycle_view,
       isVisible: (ctx) =>
-        baseProjectConditions(ctx) && hasProjectMemberLevelPermissions(ctx) && !!getContextProject(ctx)?.cycle_view,
+        baseProjectConditions(ctx) && hasProjectPermission(ctx, PROJECT_SPRINTS_VIEW_PERMISSION_KEY) && !!getContextProject(ctx)?.cycle_view,
       closeOnSelect: true,
     },
     nav_project_cycles: {
@@ -337,9 +332,9 @@ export const usePowerKNavigationCommandsRecord = (): Record<TPowerKNavigationCom
           "cycles",
         ]),
       isEnabled: (ctx) =>
-        baseProjectConditions(ctx) && hasProjectMemberLevelPermissions(ctx) && !!getContextProject(ctx)?.cycle_view,
+        baseProjectConditions(ctx) && hasProjectPermission(ctx, PROJECT_SPRINTS_VIEW_PERMISSION_KEY) && !!getContextProject(ctx)?.cycle_view,
       isVisible: (ctx) =>
-        baseProjectConditions(ctx) && hasProjectMemberLevelPermissions(ctx) && !!getContextProject(ctx)?.cycle_view,
+        baseProjectConditions(ctx) && hasProjectPermission(ctx, PROJECT_SPRINTS_VIEW_PERMISSION_KEY) && !!getContextProject(ctx)?.cycle_view,
       closeOnSelect: true,
     },
     open_project_module: {
@@ -362,9 +357,9 @@ export const usePowerKNavigationCommandsRecord = (): Record<TPowerKNavigationCom
         ]);
       },
       isEnabled: (ctx) =>
-        baseProjectConditions(ctx) && hasProjectMemberLevelPermissions(ctx) && !!getContextProject(ctx)?.module_view,
+        baseProjectConditions(ctx) && hasProjectPermission(ctx, PROJECT_MODULES_VIEW_PERMISSION_KEY) && !!getContextProject(ctx)?.module_view,
       isVisible: (ctx) =>
-        baseProjectConditions(ctx) && hasProjectMemberLevelPermissions(ctx) && !!getContextProject(ctx)?.module_view,
+        baseProjectConditions(ctx) && hasProjectPermission(ctx, PROJECT_MODULES_VIEW_PERMISSION_KEY) && !!getContextProject(ctx)?.module_view,
       closeOnSelect: true,
     },
     nav_project_modules: {
@@ -382,9 +377,9 @@ export const usePowerKNavigationCommandsRecord = (): Record<TPowerKNavigationCom
           "modules",
         ]),
       isEnabled: (ctx) =>
-        baseProjectConditions(ctx) && hasProjectMemberLevelPermissions(ctx) && !!getContextProject(ctx)?.module_view,
+        baseProjectConditions(ctx) && hasProjectPermission(ctx, PROJECT_MODULES_VIEW_PERMISSION_KEY) && !!getContextProject(ctx)?.module_view,
       isVisible: (ctx) =>
-        baseProjectConditions(ctx) && hasProjectMemberLevelPermissions(ctx) && !!getContextProject(ctx)?.module_view,
+        baseProjectConditions(ctx) && hasProjectPermission(ctx, PROJECT_MODULES_VIEW_PERMISSION_KEY) && !!getContextProject(ctx)?.module_view,
       closeOnSelect: true,
     },
     open_project_view: {
@@ -478,8 +473,8 @@ export const usePowerKNavigationCommandsRecord = (): Record<TPowerKNavigationCom
           "archives",
           "issues",
         ]),
-      isEnabled: (ctx) => baseProjectConditions(ctx) && hasProjectMemberLevelPermissions(ctx),
-      isVisible: (ctx) => baseProjectConditions(ctx) && hasProjectMemberLevelPermissions(ctx),
+      isEnabled: (ctx) => baseProjectConditions(ctx) && hasProjectPermission(ctx, PROJECT_MEMBER_ACCESS),
+      isVisible: (ctx) => baseProjectConditions(ctx) && hasProjectPermission(ctx, PROJECT_MEMBER_ACCESS),
       closeOnSelect: true,
     },
     open_project_setting: {

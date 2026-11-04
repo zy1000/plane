@@ -6,7 +6,7 @@ import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { EmptyStateDetailed } from "@plane/propel/empty-state";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import type { IUserLite, TRequirementBatchSavePayload, TRequirementItemStatus } from "@plane/types";
+import type { TRequirementBatchSavePayload, TRequirementItemStatus } from "@plane/types";
 import { cn } from "@plane/utils";
 import { ContentWrapper } from "@/components/core/content-wrapper";
 import { PageHead } from "@/components/core/page-title";
@@ -20,12 +20,11 @@ import { RequirementCreateModal } from "@/components/requirements/requirement-cr
 import { RequirementGrid, type TRequirementGridHandle } from "@/components/requirements/requirement-grid";
 import { useRequirementAssetUpload } from "@/components/requirements/use-requirement-asset-upload";
 import { useTemplatePermissions } from "@/components/template-management/permissions";
-import { useProductMembers } from "@/hooks/store/use-product-members";
 import { useProductRequirements } from "@/hooks/store/use-product-requirements";
 import { useRequirementModules } from "@/hooks/store/use-requirement-modules";
 import { useRequirementBaselines } from "@/hooks/store/use-requirement-baselines";
 import { useRequirementApprovalInbox, useRequirementChangeRequests } from "@/hooks/store/use-requirement-changes";
-import { useUser } from "@/hooks/store/user";
+import { useProductMemberCandidates } from "../use-product-member-candidates";
 import { RequirementBaselinesTab } from "./baseline/requirement-baselines-tab";
 import { RequirementChangesTab } from "./change/requirement-changes-tab";
 import { REQUIREMENT_TOOLBAR_BUTTON_CLASS } from "@/components/requirements/requirement-data-toolbar";
@@ -59,10 +58,10 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
   const { workspaceSlug, productId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { members } = useProductMembers(workspaceSlug, productId);
+  // 负责人 / 审批人候选：工作区活跃成员（产品没有成员表了，资格由后端校验）
+  const { members: memberOptions } = useProductMemberCandidates(workspaceSlug, productId ? { id: productId } : null);
   // 「从标准库导入」读的是工作区级标准库，要单独的模板权限
   const { canViewLibraries } = useTemplatePermissions(workspaceSlug);
-  const { data: currentUser } = useUser();
   const [dataToolbarHost, setDataToolbarHost] = useState<HTMLDivElement | null>(null);
   const [isImportOpen, setIsImportOpen] = useState(false);
   /** 鼠标移到「导入」上就开始预热条目，点开时基本无等待 */
@@ -106,12 +105,6 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
    */
   const approvalInbox = useRequirementApprovalInbox({ workspaceSlug, productId });
   const pendingCount = store.pendingChangeRequestCount;
-  const memberOptions = useMemo(() => {
-    const byId = new Map<string, IUserLite>();
-    members.forEach((membership) => byId.set(membership.member, membership.member_detail));
-    if (currentUser) byId.set(currentUser.id, currentUser);
-    return Array.from(byId.values());
-  }, [currentUser, members]);
 
   const requirementTypes = store.requirementTypes;
   const activeView = useMemo(

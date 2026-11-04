@@ -126,6 +126,13 @@ SYSTEM_DICTIONARIES = (
             "综合能源设备",
         ),
     },
+    # 角色：成员是干什么的。审批人、评审负责人按角色找人，与权限组无关（docs/permission-refactor/）
+    {
+        "key": "job_role",
+        "name": "角色",
+        "description": "成员是干什么的。审批人、评审负责人按角色找人，与权限组无关。",
+        "items": (),
+    },
 )
 SYSTEM_DICTIONARY_KEYS = tuple(spec["key"] for spec in SYSTEM_DICTIONARIES)
 
@@ -317,12 +324,30 @@ def project_reference_filter(item_ids):
     return _reference_filter(PROJECT_DICTIONARY_FIELD_KEYS, item_ids)
 
 
+def _job_role_referenced(item_ids):
+    """角色（job_role）被成员、研发矩阵或审批人引用就不能删（这几张表是 PROTECT）。"""
+    from plane.db.models import (
+        ProductTeamAssignment,
+        ProjectMemberJobRole,
+        WorkflowTransitionPrincipal,
+        WorkspaceMemberJobRole,
+    )
+
+    return (
+        WorkspaceMemberJobRole.all_objects.filter(job_role_id__in=item_ids).exists()
+        or ProjectMemberJobRole.all_objects.filter(job_role_id__in=item_ids).exists()
+        or ProductTeamAssignment.all_objects.filter(job_role_id__in=item_ids).exists()
+        or WorkflowTransitionPrincipal.all_objects.filter(job_role_id__in=item_ids).exists()
+    )
+
+
 def _is_referenced(item_ids, code_labels=(), workspace_id=None):
     item_ids = list(item_ids)
     # all_objects：软删的产品 / 项目（含模板项目）仍持有 FK，硬删字典值会撞 DB 的 RESTRICT
     if item_ids and (
         Product.all_objects.filter(product_reference_filter(item_ids)).exists()
         or Project.all_objects.filter(project_reference_filter(item_ids)).exists()
+        or _job_role_referenced(item_ids)
     ):
         return True
     # project_code 按 label 引用（字符串列，无 DB 约束）：只算活跃非模板项目，且必须按工作区过滤，label 会跨工作区撞
@@ -384,6 +409,28 @@ def dictionary_item_usage(dictionary):
             "items": [
                 {"item_id": str(item_id), "count": hits.get(label, 0), "blocking": label in hits}
                 for item_id, label in rows
+            ],
+        }
+    if dictionary.key == "job_role":
+        # 角色：引用数 = 挂了这个角色的工作区成员数；被成员、矩阵、审批人引用都会挡住删除
+        from plane.db.models import WorkspaceMemberJobRole
+
+        item_ids = [item_id for item_id, _ in rows]
+        counts = dict(
+            WorkspaceMemberJobRole.objects.filter(job_role_id__in=item_ids, member__is_active=True)
+            .values("job_role_id")
+            .annotate(n=Count("member_id", distinct=True))
+            .values_list("job_role_id", "n")
+        )
+        return {
+            "entity": "member",
+            "items": [
+                {
+                    "item_id": str(item_id),
+                    "count": counts.get(item_id, 0),
+                    "blocking": _job_role_referenced([item_id]),
+                }
+                for item_id, _ in rows
             ],
         }
     model, field, entity = _field_for_key(dictionary.key)

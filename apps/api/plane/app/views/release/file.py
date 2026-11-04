@@ -49,7 +49,7 @@ class ReleaseFileAPI(BaseViewSet):
     pagination_class = CustomPaginator
 
     @action(detail=False, methods=["post"], url_path="upload")
-    @allow_fine_permission(PermissionKey.RELEASES_FILE_UPLOAD)
+    @allow_fine_permission(PermissionKey.PROJECT_RELEASE_EDIT)
     def upload(self, request, slug, project_id):
         release_id = request.data.get("release_id")
         name = request.data.get("name")
@@ -86,7 +86,7 @@ class ReleaseFileAPI(BaseViewSet):
         )
 
     @action(detail=False, methods=["patch"], url_path="(?P<asset_id>[^/.]+)/uploaded")
-    @allow_fine_permission(PermissionKey.RELEASES_FILE_UPLOAD)
+    @allow_fine_permission(PermissionKey.PROJECT_RELEASE_EDIT)
     def mark_uploaded(self, request, slug, project_id, asset_id):
         asset = FileAsset.objects.get(
             pk=asset_id,
@@ -141,7 +141,7 @@ class ReleaseFileAPI(BaseViewSet):
             count=assets.count(),
         )
 
-    @allow_fine_permission(PermissionKey.RELEASES_FILE_DELETE)
+    @allow_fine_permission(PermissionKey.PROJECT_RELEASE_EDIT)
     def delete_file(self, request, slug, project_id, file_id):
         asset = FileAsset.objects.filter(
             pk=file_id,
@@ -182,7 +182,7 @@ class ReleaseFileAPI(BaseViewSet):
         return Response(status=status.HTTP_200_OK)
 
     @action(detail=False, methods=["get"], url_path="batch-download")
-    @allow_fine_permission(PermissionKey.RELEASES_FILE_DOWNLOAD)
+    @allow_fine_permission(PermissionKey.PROJECT_RELEASE_VIEW)
     def batch_download(self, request, slug, project_id):
         release_id = request.query_params.get("release_id")
         if not release_id:
@@ -221,7 +221,7 @@ class ReleaseFileAPI(BaseViewSet):
             skipped=len(skipped),
         )
 
-    @allow_fine_permission(PermissionKey.RELEASES_FILE_DOWNLOAD)
+    @allow_fine_permission(PermissionKey.PROJECT_RELEASE_VIEW)
     def download(self, request, slug, project_id, file_id):
         try:
             asset = FileAsset.objects.get(

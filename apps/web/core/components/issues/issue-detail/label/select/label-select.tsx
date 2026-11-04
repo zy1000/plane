@@ -10,12 +10,11 @@ import { usePopper } from "react-popper";
 import { Loader } from "lucide-react";
 import { Combobox } from "@headlessui/react";
 // plane imports
-import { EUserPermissionsLevel, getRandomLabelColor } from "@plane/constants";
+import { PERMISSION_KEYS, getRandomLabelColor } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { CheckIcon, SearchIcon, PlusIcon } from "@plane/propel/icons";
 import type { IIssueLabel } from "@plane/types";
-import { EUserProjectRoles } from "@plane/types";
 // helpers
 import { getTabIndex } from "@plane/utils";
 // hooks
@@ -38,7 +37,7 @@ export const IssueLabelSelect = observer(function IssueLabelSelect(props: IIssue
   // store hooks
   const { isMobile } = usePlatformOS();
   const { fetchProjectLabels, getProjectLabels } = useLabel();
-  const { allowPermissions } = useUserPermissions();
+  const { allowProjectPermissionKeys } = useUserPermissions();
   // states
   const [referenceElement, setReferenceElement] = useState<HTMLButtonElement | null>(null);
   const [popperElement, setPopperElement] = useState<HTMLDivElement | null>(null);
@@ -47,7 +46,7 @@ export const IssueLabelSelect = observer(function IssueLabelSelect(props: IIssue
   const [submitting, setSubmitting] = useState<boolean>(false);
 
   const canCreateLabel =
-    projectId && allowPermissions([EUserProjectRoles.ADMIN], EUserPermissionsLevel.PROJECT, workspaceSlug, projectId);
+    projectId && allowProjectPermissionKeys([PERMISSION_KEYS.PROJECT_LABEL_MANAGE], workspaceSlug, projectId);
 
   const projectLabels = getProjectLabels(projectId);
 

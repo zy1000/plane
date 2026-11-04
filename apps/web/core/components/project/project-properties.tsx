@@ -116,21 +116,6 @@ export const ProjectProperties: FC<IProjectProperties> = observer((props) => {
           </div>
         )} */}
 
-        {/* 项目可见性 */}
-        {/* <div className="flex w-full items-center gap-3 h-8">
-          <div className="flex items-center gap-1 w-1/3 flex-shrink-0 text-sm text-secondary">
-            {project.network === 0 ? (
-              <Lock className="h-4 w-4 flex-shrink-0" />
-            ) : (
-              <Globe className="h-4 w-4 flex-shrink-0" />
-            )}
-            <span>可见性</span>
-          </div>
-          <div className="w-full h-full flex items-center gap-1.5 rounded px-2 py-0.5 text-sm justify-between cursor-not-allowed">
-            <span className="flex-grow truncate leading-5">{project.network === 0 ? "私有" : "公开"}</span>
-          </div>
-        </div> */}
-
         {/* 创建时间 */}
         <div className="flex w-full items-center gap-3 h-8">
           <div className="flex items-center gap-1 w-1/3 flex-shrink-0 text-sm text-secondary">

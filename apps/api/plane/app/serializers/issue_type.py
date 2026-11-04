@@ -196,6 +196,8 @@ class IssueTypeSerializer(BaseSerializer):
         allow_null=True,
     )
     category_name = serializers.CharField(source="category.name", read_only=True, allow_null=True)
+    # 项目方案副本指回的类型库类型；权限组按类型限定时，库类型 id 与副本 id 都算
+    library_type_id = serializers.UUIDField(read_only=True, allow_null=True)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -231,6 +233,7 @@ class IssueTypeSerializer(BaseSerializer):
             "extra_fields",
             "category_id",
             "category_name",
+            "library_type_id",
             "created_at",
             "updated_at",
         ]

@@ -6,168 +6,97 @@
 
 import { useState } from "react";
 import { observer } from "mobx-react";
-import Link from "next/link";
-
-import { Disclosure } from "@headlessui/react";
 // plane imports
-import { EUserPermissions, MEMBER_TRACKER_ELEMENTS } from "@plane/constants";
-import { TrashIcon, SuspendedUserIcon } from "@plane/propel/icons";
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import type { IUser, IWorkspaceGroup, IWorkspaceMember, IWorkspaceRole, TNetworkZone } from "@plane/types";
-// plane ui
-import { AlertModalCore, CustomSelect, PopoverMenu } from "@plane/ui";
+import type { IPermissionGroup, IWorkspaceMember, TNetworkZone } from "@plane/types";
+import { AlertModalCore, CustomSelect } from "@plane/ui";
+import { cn } from "@plane/utils";
+// hooks
 import { useMember } from "@/hooks/store/use-member";
-// helpers
-import { SYSTEM_USER_AVATAR_FALLBACK_COLOR } from "@/helpers/user-avatar.helper";
-import { getFileURL } from "@plane/utils";
-import { WorkspaceRoleMultiSelect } from "./workspace-role-multi-select";
-import { WorkspaceTeamMultiSelect } from "./workspace-team-multi-select";
 
-export interface RowData {
-  member: IWorkspaceMember;
-  role: EUserPermissions;
-  is_active: boolean;
-  custom_role_ids: string[];
-  group_role_ids: string[];
-  group_ids: string[];
-}
+/** 成员表的一行：store 的 getWorkspaceMemberDetails（member 是带工号 / 部门的 IUserLite） */
+export type RowData = IWorkspaceMember;
 
-type NameProps = {
+const CHIP = "inline-flex h-5 max-w-full items-center truncate rounded border px-1.5 text-12";
+
+/** 权限组列：直绑的组 + 团队带来的组（虚线框，悬停看来源）。 */
+export const PermissionGroupsColumn = observer(function PermissionGroupsColumn(props: {
   rowData: RowData;
-  workspaceSlug: string;
+  groupMap: Map<string, IPermissionGroup>;
+}) {
+  const { rowData, groupMap } = props;
+  if (rowData.is_active === false) return <span className="text-13 text-placeholder">已停用</span>;
+  const direct = (rowData.custom_role_ids ?? [])
+    .map((id) => groupMap.get(id))
+    .filter((group): group is IPermissionGroup => !!group);
+  const directIds = new Set(direct.map((group) => group.id));
+  const viaTeam = (rowData.group_role_ids ?? [])
+    .filter((id) => !directIds.has(id))
+    .map((id) => groupMap.get(id))
+    .filter((group): group is IPermissionGroup => !!group);
+  const names = [...direct.map((group) => group.name), ...viaTeam.map((group) => group.name)];
+
+  return (
+    <span className="flex min-w-0 flex-wrap items-center gap-1" title={names.join("、")}>
+      {names.length === 0 && <span className="text-13 text-placeholder">—</span>}
+      {direct.map((group) => (
+        <span key={group.id} className={cn(CHIP, "border-accent-primary/30 bg-accent-primary/10 text-accent-primary")}>
+          {group.name}
+        </span>
+      ))}
+      {viaTeam.map((group) => (
+        <span
+          key={group.id}
+          className={cn(CHIP, "border-dashed border-subtle-1 text-tertiary")}
+          title={`通过团队获得：${group.name}`}
+        >
+          {group.name}
+        </span>
+      ))}
+    </span>
+  );
+});
+
+/** 操作列：「编辑」改角色与权限组，「移出 / 退出」。按钮常显，没权限时置灰 */
+export function MemberActionsColumn(props: {
+  rowData: RowData;
+  isCurrentUser: boolean;
+  isOwner: boolean;
+  canEditMember: boolean;
   canRemoveMember: boolean;
   canLeaveWorkspace: boolean;
-  currentUser: IUser | undefined;
-  setRemoveMemberModal: (rowData: RowData) => void;
-};
-
-type CustomRolesProps = {
-  rowData: RowData;
-  workspaceSlug: string;
-  roles: IWorkspaceRole[];
-  isLoading: boolean;
-  canEditMember: boolean;
-};
-
-type TeamsProps = {
-  rowData: RowData;
-  workspaceSlug: string;
-  groups: IWorkspaceGroup[];
-  isLoading: boolean;
-  canManageTeams: boolean;
-};
-
-export function NameColumn(props: NameProps) {
-  const { rowData, workspaceSlug, canRemoveMember, canLeaveWorkspace, currentUser, setRemoveMemberModal } = props;
-  // derived values
-  const { avatar_url, display_name, email, first_name, id, last_name } = rowData.member;
-  const isSuspended = rowData.is_active === false;
-  const isCurrentUser = id === currentUser?.id;
-  const canRemove = isCurrentUser ? canLeaveWorkspace : canRemoveMember;
-
+  onEdit: (rowData: RowData) => void;
+  onRemove: (rowData: RowData) => void;
+}) {
+  const { rowData, isCurrentUser, isOwner, canEditMember, canRemoveMember, canLeaveWorkspace, onEdit, onRemove } =
+    props;
+  if (rowData.is_active === false) return null;
+  const canRemove = !isOwner && (isCurrentUser ? canLeaveWorkspace : canRemoveMember);
+  const button =
+    "text-13 hover:underline disabled:cursor-not-allowed disabled:text-placeholder disabled:no-underline";
   return (
-    <Disclosure>
-      {() => (
-        <div className="group relative">
-          <div className="flex w-full items-center justify-between gap-x-2 gap-y-2">
-            <div className="flex min-w-0 flex-1 items-center gap-x-2 gap-y-2">
-              {isSuspended ? (
-                <div className="rounded-full bg-layer-1">
-                  <SuspendedUserIcon className="size-6 text-placeholder" />
-                </div>
-              ) : avatar_url && avatar_url.trim() !== "" ? (
-                <Link href={`/${workspaceSlug}/profile/${id}`}>
-                  <span className="relative flex size-6 items-center justify-center rounded-full text-on-color capitalize">
-                    <img
-                      src={getFileURL(avatar_url)}
-                      className="absolute top-0 left-0 h-full w-full rounded-full object-cover"
-                      alt={display_name || email}
-                    />
-                  </span>
-                </Link>
-              ) : (
-                <Link href={`/${workspaceSlug}/profile/${id}`}>
-                  <span
-                    className="relative flex size-6 items-center justify-center rounded-full text-11 text-on-color capitalize"
-                    style={{ backgroundColor: SYSTEM_USER_AVATAR_FALLBACK_COLOR }}
-                  >
-                    {(email ?? display_name ?? "?")[0]}
-                  </span>
-                </Link>
-              )}
-              <span className={`truncate ${isSuspended ? "text-placeholder" : ""}`}>
-                {first_name} {last_name}
-              </span>
-            </div>
-
-            {!isSuspended && canRemove && (
-              <PopoverMenu
-                data={[""]}
-                keyExtractor={(item) => item}
-                popoverClassName="w-auto shrink-0 justify-end"
-                buttonClassName="outline-none	origin-center rotate-90 size-8 aspect-square flex-shrink-0 grid place-items-center opacity-0 group-hover:opacity-100 transition-opacity"
-                render={() => (
-                  <div
-                    role="button"
-                    tabIndex={0}
-                    className="flex cursor-pointer items-center gap-x-3"
-                    onClick={() => setRemoveMemberModal(rowData)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        setRemoveMemberModal(rowData);
-                      }
-                    }}
-                    data-ph-element={MEMBER_TRACKER_ELEMENTS.WORKSPACE_MEMBER_TABLE_CONTEXT_MENU}
-                  >
-                    <TrashIcon className="size-3.5 align-middle" /> {id === currentUser?.id ? "Leave " : "Remove "}
-                  </div>
-                )}
-              />
-            )}
-          </div>
-        </div>
-      )}
-    </Disclosure>
+    <span className="flex items-center justify-end gap-3">
+      <button
+        type="button"
+        className={cn(button, "text-accent-primary")}
+        disabled={!canEditMember || isOwner}
+        title={isOwner ? "工作区所有者拥有全部权限，不需要分配" : undefined}
+        onClick={() => onEdit(rowData)}
+      >
+        编辑
+      </button>
+      <button
+        type="button"
+        className={cn(button, "text-danger-primary")}
+        disabled={!canRemove}
+        onClick={() => onRemove(rowData)}
+      >
+        {isCurrentUser ? "退出" : "移出"}
+      </button>
+    </span>
   );
 }
-
-export const CustomRolesColumn = observer(function CustomRolesColumn(props: CustomRolesProps) {
-  const { rowData, workspaceSlug, roles, isLoading, canEditMember } = props;
-  const isSuspended = rowData.is_active === false;
-
-  if (isSuspended) return null;
-
-  return (
-    <WorkspaceRoleMultiSelect
-      workspaceSlug={workspaceSlug}
-      memberId={rowData.member.id}
-      selectedRoleIds={rowData.custom_role_ids ?? []}
-      roles={roles}
-      isLoading={isLoading}
-      disabled={!canEditMember}
-    />
-  );
-});
-
-export const TeamsColumn = observer(function TeamsColumn(props: TeamsProps) {
-  const { rowData, workspaceSlug, groups, isLoading, canManageTeams } = props;
-  const isSuspended = rowData.is_active === false;
-
-  if (isSuspended) return null;
-
-  return (
-    <WorkspaceTeamMultiSelect
-      workspaceSlug={workspaceSlug}
-      memberId={rowData.member.id}
-      selectedGroupIds={rowData.group_ids ?? []}
-      groups={groups}
-      isLoading={isLoading}
-      disabled={!canManageTeams}
-    />
-  );
-});
 
 type NetworkZoneProps = {
   rowData: RowData;

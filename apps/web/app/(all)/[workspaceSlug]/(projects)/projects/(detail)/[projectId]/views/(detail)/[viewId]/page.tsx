@@ -6,7 +6,7 @@
 
 import { observer } from "mobx-react";
 import useSWR from "swr";
-import { PROJECT_VIEWS_VIEW_PERMISSION_KEY } from "@plane/constants";
+import { PROJECT_VIEWS_VIEW_PERMISSION_KEYS } from "@plane/constants";
 // assets
 import emptyView from "@/app/assets/empty-state/view.svg?url";
 // components
@@ -35,7 +35,7 @@ function ProjectViewIssuesPage({ params }: Route.ComponentProps) {
   const pageTitle = project?.name && projectView?.name ? `${project?.name} - ${projectView?.name}` : undefined;
 
   const canViewViews = allowProjectPermissionKeys(
-    [PROJECT_VIEWS_VIEW_PERMISSION_KEY],
+    PROJECT_VIEWS_VIEW_PERMISSION_KEYS,
     workspaceSlug,
     projectId
   );

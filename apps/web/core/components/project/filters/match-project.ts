@@ -82,8 +82,6 @@ const matchCondition = (project: TProject, condition: TProjectFilterCondition, c
       return matchOption(project.business_category, condition.operator, selected);
     case "dev_mode":
       return matchOption(project.dev_mode, condition.operator, selected);
-    case "network":
-      return matchOption(project.network === undefined ? undefined : String(project.network), condition.operator, selected);
     case "lead":
       return people([typeof project.project_lead === "string" ? project.project_lead : project.project_lead?.id]);
     case "product_manager":

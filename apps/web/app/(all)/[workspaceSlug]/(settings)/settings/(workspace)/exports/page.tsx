@@ -5,7 +5,7 @@
  */
 
 import { observer } from "mobx-react";
-import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import { PERMISSION_KEYS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { cn } from "@plane/utils";
 // components
@@ -22,15 +22,13 @@ import { ExportsWorkspaceSettingsHeader } from "./header";
 
 function ExportsPage() {
   // store hooks
-  const { workspaceUserInfo, allowPermissions } = useUserPermissions();
+  const { workspaceUserInfo, allowWorkspacePermissionKeys } = useUserPermissions();
   const { currentWorkspace } = useWorkspace();
   const { t } = useTranslation();
 
   // derived values
-  const canPerformWorkspaceMemberActions = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.WORKSPACE
-  );
+  // 导出接口（exporter）要 workspace.export.manage
+  const canPerformWorkspaceMemberActions = allowWorkspacePermissionKeys([PERMISSION_KEYS.WORKSPACE_EXPORT_MANAGE]);
   const pageTitle = currentWorkspace?.name
     ? `${currentWorkspace.name} - ${t("workspace_settings.settings.exports.title")}`
     : undefined;

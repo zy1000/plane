@@ -17,8 +17,9 @@ from rest_framework import status
 # Module imports
 from .. import BaseAPIView
 from plane.app.serializers import IssueActivitySerializer, IssueCommentSerializer
-from plane.app.permissions import ProjectEntityPermission, allow_permission, ROLE
+from plane.app.permissions import allow_project_member, ProjectEntityPermission
 from plane.db.models import IssueActivity, IssueComment, CommentReaction, IntakeIssue
+from plane.utils.visibility import visible_projects_q
 
 
 class IssueActivityEndpoint(BaseAPIView):
@@ -26,7 +27,7 @@ class IssueActivityEndpoint(BaseAPIView):
     use_read_replica = True
 
     @method_decorator(gzip_page)
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    @allow_project_member
     def get(self, request, slug, project_id, issue_id):
         filters = {}
         if request.GET.get("created_at__gt", None) is not None:
@@ -35,9 +36,8 @@ class IssueActivityEndpoint(BaseAPIView):
         issue_activities = (
             IssueActivity.objects.filter(issue_id=issue_id)
             .filter(
+                visible_projects_q(self.request.user, slug, "project"),
                 ~Q(field__in=["comment", "vote", "reaction", "draft"]),
-                project__project_projectmember__member=self.request.user,
-                project__project_projectmember__is_active=True,
                 project__archived_at__isnull=True,
                 workspace__slug=slug,
             )
@@ -47,8 +47,7 @@ class IssueActivityEndpoint(BaseAPIView):
         issue_comments = (
             IssueComment.objects.filter(issue_id=issue_id)
             .filter(
-                project__project_projectmember__member=self.request.user,
-                project__project_projectmember__is_active=True,
+                visible_projects_q(self.request.user, slug, "project"),
                 project__archived_at__isnull=True,
                 workspace__slug=slug,
             )

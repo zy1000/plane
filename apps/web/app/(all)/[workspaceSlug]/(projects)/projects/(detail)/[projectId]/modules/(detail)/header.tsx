@@ -11,8 +11,6 @@ import { ChartNoAxesColumn, ChevronDown, PanelRight, SlidersHorizontal } from "l
 import {
   EIssueFilterType,
   ISSUE_DISPLAY_FILTERS_BY_PAGE,
-  EUserPermissions,
-  EUserPermissionsLevel,
   WORK_ITEM_TRACKER_ELEMENTS,
   PROJECT_ERROR_MESSAGES,
   PROJECT_MODULES_ISSUE_MANAGE_PERMISSION_KEY,
@@ -72,16 +70,13 @@ export const ModuleIssuesHeader = observer(function ModuleIssuesHeader() {
   const { updateFilters } = useIssuesActions(EIssuesStoreType.MODULE);
   const { projectModuleIds, getModuleById } = useModule();
   const { toggleCreateIssueModal } = useCommandPalette();
-  const { allowPermissions, allowProjectPermissionKeys } = useUserPermissions();
+  const { allowIssuePermission, allowProjectPermissionKeys } = useUserPermissions();
   const { currentProjectDetails, loader } = useProject();
   const { setValue, storedValue } = useLocalStorage("module_sidebar_collapsed", "false");
   const isSidebarCollapsed = storedValue ? storedValue === "true" : false;
   const activeLayout = issueFilters?.displayFilters?.layout;
   const moduleDetails = moduleId ? getModuleById(moduleId) : undefined;
-  const canUserCreateIssue = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.PROJECT
-  );
+  const canUserCreateIssue = allowIssuePermission("create", undefined, workspaceSlug?.toString(), projectId?.toString());
   const canManageModuleIssues = allowProjectPermissionKeys(
     [PROJECT_MODULES_ISSUE_MANAGE_PERMISSION_KEY],
     workspaceSlug?.toString(),

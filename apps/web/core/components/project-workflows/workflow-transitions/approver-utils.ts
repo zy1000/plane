@@ -3,8 +3,6 @@ export const WORKFLOW_SPECIAL_APPROVER_IDS = {
   CREATED_BY: "special:created_by",
 } as const;
 
-export const ROLE_PRINCIPAL_PREFIX = "role:";
-
 export type TWorkflowSpecialApproverId =
   (typeof WORKFLOW_SPECIAL_APPROVER_IDS)[keyof typeof WORKFLOW_SPECIAL_APPROVER_IDS];
 
@@ -25,42 +23,32 @@ export const WORKFLOW_SPECIAL_APPROVER_OPTIONS: Array<{
   },
 ];
 
-export const buildRoleToken = (roleId: string) => `${ROLE_PRINCIPAL_PREFIX}${roleId}`;
-
-export const isRoleToken = (token: string) => token.startsWith(ROLE_PRINCIPAL_PREFIX);
-
-export const getRoleIdFromToken = (token: string): string | null => {
-  if (!isRoleToken(token)) return null;
-  const roleId = token.slice(ROLE_PRINCIPAL_PREFIX.length);
-  return roleId || null;
-};
-
 /**
- * 工作区角色模板（项目角色模板）。模式方案没有项目角色，只能选它；运行时解析到项目里由该模板派生的角色。
- * 项目自定义的工作流里也可能有（脱离时从模式方案拷过来的）。与 "role:" 前缀不冲突。
+ * 角色（数据字典 job_role 的值）。运行时找人：研发矩阵里这个项目 ×（工作项关联的）产品填的人优先，
+ * 没填就是项目里挂了这个角色的成员。项目方案与模式方案一样用这个令牌（后端 views/workflow/base.py）。
  */
-export const ROLE_TEMPLATE_PRINCIPAL_PREFIX = "role_template:";
+export const JOB_ROLE_PRINCIPAL_PREFIX = "job_role:";
 
-export const buildRoleTemplateToken = (templateId: string) => `${ROLE_TEMPLATE_PRINCIPAL_PREFIX}${templateId}`;
+export const buildJobRoleToken = (jobRoleId: string) => `${JOB_ROLE_PRINCIPAL_PREFIX}${jobRoleId}`;
 
-export const isRoleTemplateToken = (token: string) => token.startsWith(ROLE_TEMPLATE_PRINCIPAL_PREFIX);
+export const isJobRoleToken = (token: string) => token.startsWith(JOB_ROLE_PRINCIPAL_PREFIX);
 
-export const getRoleTemplateIdFromToken = (token: string): string | null => {
-  if (!isRoleTemplateToken(token)) return null;
-  return token.slice(ROLE_TEMPLATE_PRINCIPAL_PREFIX.length) || null;
+export const getJobRoleIdFromToken = (token: string): string | null => {
+  if (!isJobRoleToken(token)) return null;
+  return token.slice(JOB_ROLE_PRINCIPAL_PREFIX.length) || null;
 };
 
 export const getWorkflowApproverLabel = (
   approverId: string,
   getUserDetails?: (userId: string) => { display_name?: string | null } | undefined,
-  getRoleName?: (roleId: string) => string | undefined
+  getJobRoleName?: (jobRoleId: string) => string | undefined
 ) => {
   const specialOption = WORKFLOW_SPECIAL_APPROVER_OPTIONS.find((option) => option.id === approverId);
   if (specialOption) return specialOption.label;
-  const roleId = getRoleIdFromToken(approverId);
-  if (roleId) {
-    const roleName = getRoleName?.(roleId);
-    return roleName ? `${roleName}（角色）` : "项目角色";
+  const jobRoleId = getJobRoleIdFromToken(approverId);
+  if (jobRoleId) {
+    const jobRoleName = getJobRoleName?.(jobRoleId);
+    return jobRoleName ? `${jobRoleName}（角色）` : "角色";
   }
   return getUserDetails?.(approverId)?.display_name ?? "未知成员";
 };

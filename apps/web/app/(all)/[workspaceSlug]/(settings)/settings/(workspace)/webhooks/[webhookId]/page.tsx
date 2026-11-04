@@ -7,7 +7,7 @@
 import { useState } from "react";
 import { observer } from "mobx-react";
 import useSWR from "swr";
-import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import { PERMISSION_KEYS } from "@plane/constants";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { IWebhook } from "@plane/types";
 // ui
@@ -32,14 +32,14 @@ function WebhookDetailsPage({ params }: Route.ComponentProps) {
   // mobx store
   const { currentWebhook, fetchWebhookById, updateWebhook } = useWebhook();
   const { currentWorkspace } = useWorkspace();
-  const { allowPermissions } = useUserPermissions();
+  const { allowWorkspacePermissionKeys } = useUserPermissions();
 
   // TODO: fix this error
   // useEffect(() => {
   //   if (isCreated !== "true") clearSecretKey();
   // }, [clearSecretKey, isCreated]);
   // derived values
-  const isAdmin = allowPermissions([EUserPermissions.ADMIN], EUserPermissionsLevel.WORKSPACE);
+  const isAdmin = allowWorkspacePermissionKeys([PERMISSION_KEYS.WORKSPACE_WEBHOOK_MANAGE], workspaceSlug);
   const pageTitle = currentWorkspace?.name ? `${currentWorkspace.name} - Webhook` : undefined;
 
   useSWR(

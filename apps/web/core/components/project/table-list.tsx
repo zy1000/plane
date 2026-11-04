@@ -7,8 +7,7 @@ import { useParams, usePathname, useSearchParams } from "next/navigation";
 import { Pagination } from "antd";
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 import {
-  EUserPermissions,
-  EUserPermissionsLevel,
+  PERMISSION_KEYS,
   PROJECT_PUBLISH_CREATE_PERMISSION_KEY,
   PROJECT_PUBLISH_VIEW_PERMISSION_KEY,
   PROJECT_SETTINGS_EDIT_PERMISSION_KEY,
@@ -18,9 +17,7 @@ import {
 import { useTranslation } from "@plane/i18n";
 import { EmptyStateDetailed } from "@plane/propel/empty-state";
 import { Logo } from "@plane/propel/emoji-icon-picker";
-import { LockIcon } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import { Tooltip } from "@plane/propel/tooltip";
 import type { TProject, TProjectOrderByOptions } from "@plane/types";
 import { ContentWrapper, ERowVariant } from "@plane/ui";
 import { cn, copyUrlToClipboard, renderFormattedPayloadDate } from "@plane/utils";
@@ -92,7 +89,7 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
   } = useProject();
   const { currentWorkspaceDisplayFilters, currentWorkspaceDisplayProperties, updateDisplayFilters, getRichFilter } =
     useProjectFilter();
-  const { allowPermissions, allowWorkspacePermissionKeys, allowProjectPermissionKeys } = useUserPermissions();
+  const { allowWorkspacePermissionKeys, allowProjectPermissionKeys } = useUserPermissions();
   const { getUserDetails } = useMember();
   const ownLookups = useProjectListLookups(lookupsProps ? undefined : workspaceSlugString);
   const lookups = lookupsProps ?? ownLookups;
@@ -345,12 +342,9 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
               <tbody>
                 {currentPageProjects.map((project) => {
                   const isArchived = !!project.archived_at;
-                  const isPrivateProject = project.network === 0;
-                  // 私有项目非成员：可见但不能进入 / 加入
-                  const isInviteOnly = isPrivateProject && !project.member_role;
-                  const canManageProject = allowPermissions(
-                    [EUserPermissions.ADMIN],
-                    EUserPermissionsLevel.PROJECT,
+                  // 归档 / 恢复：与后端 ProjectArchiveUnarchiveEndpoint 同一把 key（列表接口带这把 key）
+                  const canManageProject = allowProjectPermissionKeys(
+                    [PERMISSION_KEYS.PROJECT_SETTINGS_ARCHIVE],
                     workspaceSlugString,
                     project.id
                   );
@@ -363,12 +357,13 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
                     (project.permission_keys ?? []).some(
                       (k) => k === PROJECT_PUBLISH_VIEW_PERMISSION_KEY || k === PROJECT_PUBLISH_CREATE_PERMISSION_KEY
                     );
-                  // 关闭 / 重新开启与后端同一把 key（项目设置编辑）；列表页只有进过的项目才拉了权限 key，
-                  // 所以项目管理员也直接放行（管理员必有这把 key）
-                  const canCloseProject =
-                    canManageProject ||
-                    allowProjectPermissionKeys([PROJECT_SETTINGS_EDIT_PERMISSION_KEY], workspaceSlugString, project.id) ||
-                    (project.permission_keys ?? []).includes(PROJECT_SETTINGS_EDIT_PERMISSION_KEY);
+                  // 关闭 / 重新开启与后端 ProjectCloseReopenEndpoint 同一把 key（项目设置编辑）；
+                  // 没进过的项目由 store 退回列表接口带的 key
+                  const canCloseProject = allowProjectPermissionKeys(
+                    [PROJECT_SETTINGS_EDIT_PERMISSION_KEY],
+                    workspaceSlugString,
+                    project.id
+                  );
                   const projectSettingsPath = workspaceSlugString
                     ? buildProjectSettingsPath({ workspaceSlug: workspaceSlugString, projectId: project.id, currentPath })
                     : "#";
@@ -391,14 +386,11 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
                           <Link
                             href={workspaceSlugString ? `/${workspaceSlugString}/projects/${project.id}/overview` : "#"}
                             className="flex min-w-0 flex-1 items-center gap-2 text-primary"
-                            data-prevent-progress={isArchived || isInviteOnly}
+                            data-prevent-progress={isArchived}
                             onClick={(e) => {
-                              if (isArchived || isInviteOnly) {
+                              if (isArchived) {
                                 e.preventDefault();
                                 e.stopPropagation();
-                              }
-                              if (isInviteOnly) {
-                                setToast({ type: TOAST_TYPE.INFO, title: t("workspace_projects.network.private.description") });
                               }
                             }}
                           >
@@ -408,13 +400,6 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
                               </div>
                               <div className="flex min-w-0 flex-grow items-center gap-2">
                                 <p className="min-w-0 truncate text-sm font-medium text-primary">{project.name}</p>
-                                {isPrivateProject && (
-                                  <Tooltip tooltipContent={t("workspace_projects.network.private.title")} position="top">
-                                    <span className="grid flex-shrink-0 place-items-center">
-                                      <LockIcon className="h-3 w-3 text-placeholder" />
-                                    </span>
-                                  </Tooltip>
-                                )}
                               </div>
                             </div>
                           </Link>

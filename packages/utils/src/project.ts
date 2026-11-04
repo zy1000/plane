@@ -124,7 +124,7 @@ export const projectIdentifierSanitizer = (identifier: string): string =>
  * @returns {boolean}
  */
 export const shouldFilterProject = (project: TProject, displayFilters: TProjectDisplayFilters): boolean => {
-  if (displayFilters.my_projects && !project.member_role) return false;
+  if (displayFilters.my_projects && !project.is_member) return false;
   if (displayFilters.archived_projects && !project.archived_at) return false;
   if (!displayFilters.archived_projects && !displayFilters.show_archived_projects && project.archived_at) return false;
   return true;

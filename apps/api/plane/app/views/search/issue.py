@@ -16,7 +16,6 @@ from .base import BaseAPIView
 from plane.db.seed_data.issue_scheme import BUG, EPIC, FEATURE, STORY, TASK
 from plane.db.models import (
     Issue,
-    ProjectMember,
     IssueRelation,
     IssueType,
     RequirementIssue,
@@ -27,6 +26,7 @@ from plane.db.models import (
 )
 from plane.utils.issue_search import search_issues
 from plane.utils.work_item_picker import build_picker_rows, order_picker_issues
+from plane.utils.visibility import visible_projects_q
 
 
 class IssueSearchEndpoint(BaseAPIView):
@@ -256,9 +256,8 @@ class IssueSearchEndpoint(BaseAPIView):
         offset = self.parse_int_query_param(request.query_params.get("offset"), 0, minimum=0)
 
         issues = Issue.issue_objects.filter(
+            visible_projects_q(self.request.user, slug, "project"),
             workspace__slug=slug,
-            project__project_projectmember__member=self.request.user,
-            project__project_projectmember__is_active=True,
             project__archived_at__isnull=True,
         )
 
@@ -326,11 +325,6 @@ class IssueSearchEndpoint(BaseAPIView):
 
         if type_name and type_filter:
             issues = self.filter_issues_by_id(issues, type_name, type_filter)
-
-        if ProjectMember.objects.filter(
-                project_id=project_id, member=self.request.user, is_active=True, role=5
-        ).exists():
-            issues = issues.filter(created_by=self.request.user)
 
         if paginated == "true":
             issues = order_picker_issues(issues, order_by, order)

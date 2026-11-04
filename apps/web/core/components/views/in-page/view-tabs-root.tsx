@@ -131,6 +131,7 @@ export const ViewTabsRoot = observer(function ViewTabsRoot(props: TViewTabsRootP
         initialAccess={saveModal?.mode === "edit" ? saveModal.view.access : undefined}
         initialIsDefault={saveModal?.mode === "edit" ? tabs.defaultViewId === saveModal.view.id : false}
         summary={summary}
+        canPublish={tabs.canPublish}
         modeOption={
           tabs.canShareToMode
             ? {

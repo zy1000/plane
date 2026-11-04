@@ -261,7 +261,7 @@ class RequirementChangeRequestViewSet(ProductScopedMixin, BaseViewSet):
             with transaction.atomic():
                 scope, error = self.scope_for_write(
                     for_update=True,
-                    permission_key=PermissionKey.PRODUCT_CHANGE_REQUEST_SUBMIT,
+                    permission_key=PermissionKey.PROJECT_CHANGE_REQUEST_CREATE,
                 )
                 if error is not None:
                     return error
@@ -601,7 +601,7 @@ class RequirementBaselineViewSet(ProductScopedMixin, BaseViewSet):
         with transaction.atomic():
             scope, error = self.scope_for_write(
                 for_update=not is_preview,
-                permission_key=PermissionKey.PRODUCT_BASELINE_MANAGE,
+                permission_key=PermissionKey.PROJECT_REQUIREMENT_BASELINE_MANAGE,
             )
             if error is not None:
                 return error
@@ -666,7 +666,7 @@ class RequirementBaselineViewSet(ProductScopedMixin, BaseViewSet):
 
     def partial_update(self, request, slug, product_id, pk):
         _, error = self.scope_for_write(
-            permission_key=PermissionKey.PRODUCT_BASELINE_MANAGE
+            permission_key=PermissionKey.PROJECT_REQUIREMENT_BASELINE_MANAGE
         )
         if error is not None:
             return error
@@ -685,7 +685,7 @@ class RequirementBaselineViewSet(ProductScopedMixin, BaseViewSet):
 
     def destroy(self, request, slug, product_id, pk):
         _, error = self.scope_for_write(
-            permission_key=PermissionKey.PRODUCT_BASELINE_MANAGE
+            permission_key=PermissionKey.PROJECT_REQUIREMENT_BASELINE_MANAGE
         )
         if error is not None:
             return error

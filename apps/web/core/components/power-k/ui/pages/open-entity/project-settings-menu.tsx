@@ -6,7 +6,7 @@
 
 import { observer } from "mobx-react";
 // plane imports
-import { EUserPermissionsLevel, PROJECT_SETTINGS } from "@plane/constants";
+import { PROJECT_MEMBER_ACCESS, PROJECT_SETTINGS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 // components
 import type { TPowerKContext } from "@/components/power-k/core/types";
@@ -25,24 +25,18 @@ export const PowerKOpenProjectSettingsMenu = observer(function PowerKOpenProject
   // plane hooks
   const { t } = useTranslation();
   // store hooks
-  const { allowPermissions, allowProjectPermissionKeys } = useUserPermissions();
+  const { allowProjectPermissionKeys } = useUserPermissions();
   // derived values
   const settingsList = Object.values(PROJECT_SETTINGS).filter(
     (setting) =>
       context.params.workspaceSlug &&
       context.params.projectId &&
-      (setting.permissionKeys?.length
-        ? allowProjectPermissionKeys(
-            setting.permissionKeys,
-            context.params.workspaceSlug.toString(),
-            context.params.projectId.toString()
-          )
-        : allowPermissions(
-            setting.access,
-            EUserPermissionsLevel.PROJECT,
-            context.params.workspaceSlug.toString(),
-            context.params.projectId.toString()
-          ))
+      // 没配 key 的设置页项目成员即可
+      allowProjectPermissionKeys(
+        setting.permissionKeys?.length ? setting.permissionKeys : [PROJECT_MEMBER_ACCESS],
+        context.params.workspaceSlug.toString(),
+        context.params.projectId.toString()
+      )
   );
   const settingsListWithIcons = settingsList.map((setting) => ({
     ...setting,

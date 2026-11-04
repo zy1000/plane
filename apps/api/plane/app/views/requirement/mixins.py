@@ -178,7 +178,7 @@ def can_write_requirements(user, product, permission_key=None):
     """能不能对产品需求做某个动作。缺省是「编辑」；建 / 删 / 模块 / 评审 / 基线各传自己的 key。
     传一组 key 表示任一命中即可。"""
     if permission_key is None:
-        keys = (PermissionKey.PRODUCT_REQUIREMENT_EDIT,)
+        keys = (PermissionKey.PROJECT_REQUIREMENT_EDIT,)
     elif isinstance(permission_key, (tuple, list, set, frozenset)):
         keys = tuple(permission_key)
     else:

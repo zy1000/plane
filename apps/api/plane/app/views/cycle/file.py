@@ -54,7 +54,7 @@ class CycleFileAPI(BaseViewSet):
     pagination_class = CustomPaginator
 
     @action(detail=False, methods=["post"], url_path="upload")
-    @allow_fine_permission(PermissionKey.SPRINTS_FILE_UPLOAD)
+    @allow_fine_permission(PermissionKey.PROJECT_CYCLE_EDIT)
     def upload(self, request, slug, project_id):
         cycle_id = request.data.get("cycle_id")
         name = request.data.get("name")
@@ -91,7 +91,7 @@ class CycleFileAPI(BaseViewSet):
         )
 
     @action(detail=False, methods=["patch"], url_path="(?P<asset_id>[^/.]+)/uploaded")
-    @allow_fine_permission(PermissionKey.SPRINTS_FILE_UPLOAD)
+    @allow_fine_permission(PermissionKey.PROJECT_CYCLE_EDIT)
     def mark_uploaded(self, request, slug, project_id, asset_id):
         asset = FileAsset.objects.get(
             pk=asset_id,
@@ -146,7 +146,7 @@ class CycleFileAPI(BaseViewSet):
             count=assets.count(),
         )
 
-    @allow_fine_permission(PermissionKey.SPRINTS_FILE_DELETE)
+    @allow_fine_permission(PermissionKey.PROJECT_CYCLE_EDIT)
     def delete_file(self, request, slug, project_id, file_id):
         asset = FileAsset.objects.filter(
             pk=file_id,
@@ -184,7 +184,7 @@ class CycleFileAPI(BaseViewSet):
         return Response(status=status.HTTP_200_OK)
 
     @action(detail=False, methods=["get"], url_path="batch-download")
-    @allow_fine_permission(PermissionKey.SPRINTS_FILE_DOWNLOAD)
+    @allow_fine_permission(PermissionKey.PROJECT_CYCLE_VIEW)
     def batch_download(self, request, slug, project_id):
         cycle_id = request.query_params.get("cycle_id")
         if not cycle_id:
@@ -223,7 +223,7 @@ class CycleFileAPI(BaseViewSet):
             skipped=len(skipped),
         )
 
-    @allow_fine_permission(PermissionKey.SPRINTS_FILE_DOWNLOAD)
+    @allow_fine_permission(PermissionKey.PROJECT_CYCLE_VIEW)
     def download(self, request, slug, project_id, file_id):
         try:
             asset = FileAsset.objects.get(

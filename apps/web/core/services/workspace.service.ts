@@ -30,8 +30,14 @@ import type {
   IWorkspaceGroup,
   IWorkspaceGroupMember,
   IWorkspaceGroupRole,
-  IWorkspaceRole,
   IWorkspaceMyAccess,
+  IPermissionGroup,
+  IPermissionGroupDetail,
+  TPermissionGroupContent,
+  TPermissionGroupTemplateProjects,
+  TDataScope,
+  TDataScopeEntry,
+  TDataScopePreview,
 } from "@plane/types";
 import type { TNetworkZone } from "@plane/types";
 // services
@@ -190,7 +196,7 @@ export class WorkspaceService extends APIService {
   async fetchWorkspaceMemberCustomRoles(
     workspaceSlug: string,
     memberId: string
-  ): Promise<{ custom_role_ids: string[] }> {
+  ): Promise<{ custom_role_ids: string[]; job_role_ids: string[] }> {
     return this.get(`/api/workspaces/${workspaceSlug}/members/${memberId}/custom-roles/`)
       .then((response) => response?.data)
       .catch((error) => {
@@ -213,14 +219,13 @@ export class WorkspaceService extends APIService {
       });
   }
 
+  /** 整份替换成员的权限组和 / 或角色（job_role）；没传的那一项后端不动 */
   async updateWorkspaceMemberCustomRoles(
     workspaceSlug: string,
     memberId: string,
-    customRoleIds: string[]
-  ): Promise<{ custom_role_ids: string[] }> {
-    return this.put(`/api/workspaces/${workspaceSlug}/members/${memberId}/custom-roles/`, {
-      custom_role_ids: customRoleIds,
-    })
+    payload: { custom_role_ids?: string[]; job_role_ids?: string[] }
+  ): Promise<{ custom_role_ids: string[]; job_role_ids: string[] }> {
+    return this.put(`/api/workspaces/${workspaceSlug}/members/${memberId}/custom-roles/`, payload)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
@@ -512,8 +517,8 @@ export class WorkspaceService extends APIService {
       });
   }
 
-  // workspace roles
-  async fetchWorkspaceRoles(workspaceSlug: string): Promise<IWorkspaceRole[]> {
+  // workspace permission groups（后端 WorkspaceRole：工作区权限 + 项目权限 + 数据权限 + 模板开关）
+  async fetchWorkspaceRoles(workspaceSlug: string): Promise<IPermissionGroup[]> {
     return this.get(`/api/workspaces/${workspaceSlug}/roles/`)
       .then((response) => response?.data)
       .catch((error) => {
@@ -521,10 +526,19 @@ export class WorkspaceService extends APIService {
       });
   }
 
+  async fetchWorkspaceRole(workspaceSlug: string, roleId: string): Promise<IPermissionGroup> {
+    return this.get(`/api/workspaces/${workspaceSlug}/roles/${roleId}/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** copy_from：新组照这个组的权限内容建（同一工作区里的任一权限组） */
   async createWorkspaceRole(
     workspaceSlug: string,
-    data: { name: string; description?: string; type?: import("@plane/types").TWorkspaceRoleType }
-  ): Promise<IWorkspaceRole> {
+    data: { name: string; description?: string; is_template?: boolean; copy_from?: string | null }
+  ): Promise<IPermissionGroup> {
     return this.post(`/api/workspaces/${workspaceSlug}/roles/`, data)
       .then((response) => response?.data)
       .catch((error) => {
@@ -535,8 +549,8 @@ export class WorkspaceService extends APIService {
   async updateWorkspaceRole(
     workspaceSlug: string,
     roleId: string,
-    data: Partial<{ name: string; description: string }>
-  ): Promise<IWorkspaceRole> {
+    data: Partial<{ name: string; description: string; is_template: boolean }>
+  ): Promise<IPermissionGroup> {
     return this.patch(`/api/workspaces/${workspaceSlug}/roles/${roleId}/`, data)
       .then((response) => response?.data)
       .catch((error) => {
@@ -552,18 +566,7 @@ export class WorkspaceService extends APIService {
       });
   }
 
-  async fetchWorkspacePermissions(workspaceSlug: string): Promise<import("@plane/types").IPermission[]> {
-    return this.get(`/api/workspaces/${workspaceSlug}/permissions/`)
-      .then((response) => response?.data)
-      .catch((error) => {
-        throw error?.response?.data;
-      });
-  }
-
-  async fetchWorkspaceRolePermissions(
-    workspaceSlug: string,
-    roleId: string
-  ): Promise<import("@plane/types").IRolePermissionData> {
+  async fetchWorkspaceRolePermissions(workspaceSlug: string, roleId: string): Promise<IPermissionGroupDetail> {
     return this.get(`/api/workspaces/${workspaceSlug}/roles/${roleId}/permissions/`)
       .then((response) => response?.data)
       .catch((error) => {
@@ -571,25 +574,110 @@ export class WorkspaceService extends APIService {
       });
   }
 
+  /** 整份替换权限内容（permission_keys + type_limits） */
   async updateWorkspaceRolePermissions(
     workspaceSlug: string,
     roleId: string,
-    permissionKeys: string[]
-  ): Promise<import("@plane/types").IRolePermissionData> {
-    return this.patch(`/api/workspaces/${workspaceSlug}/roles/${roleId}/permissions/`, {
-      permission_keys: permissionKeys,
-    })
+    content: TPermissionGroupContent
+  ): Promise<IPermissionGroupDetail> {
+    return this.patch(`/api/workspaces/${workspaceSlug}/roles/${roleId}/permissions/`, content)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
       });
   }
 
-  async syncWorkspaceRoleToProjects(
+  /** 工作区权限组的成员（用户 id）。「工作区成员」组返回全部活跃成员 */
+  async fetchWorkspaceRoleMembers(workspaceSlug: string, roleId: string): Promise<{ member_ids: string[] }> {
+    return this.get(`/api/workspaces/${workspaceSlug}/roles/${roleId}/members/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async addWorkspaceRoleMembers(
+    workspaceSlug: string,
+    roleId: string,
+    userIds: string[]
+  ): Promise<{ member_ids: string[] }> {
+    return this.post(`/api/workspaces/${workspaceSlug}/roles/${roleId}/members/`, { member_ids: userIds })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async removeWorkspaceRoleMember(workspaceSlug: string, roleId: string, userId: string): Promise<void> {
+    return this.delete(`/api/workspaces/${workspaceSlug}/roles/${roleId}/members/${userId}/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 模板组的「引用项目」：白名单命中的项目，带已排除标记 */
+  async fetchWorkspaceRoleTemplateProjects(
     workspaceSlug: string,
     roleId: string
-  ): Promise<import("@plane/types").IWorkspaceRoleSyncToProjectsResult> {
-    return this.post(`/api/workspaces/${workspaceSlug}/roles/${roleId}/sync-projects/`, {})
+  ): Promise<TPermissionGroupTemplateProjects> {
+    return this.get(`/api/workspaces/${workspaceSlug}/roles/${roleId}/projects/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 项目不再引用这个模板（记排除、解绑项目里绑到它的人） */
+  async excludeTemplateProject(workspaceSlug: string, roleId: string, projectId: string): Promise<void> {
+    return this.delete(`/api/workspaces/${workspaceSlug}/roles/${roleId}/projects/${projectId}/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 从排除列表拿掉，项目还在白名单里就恢复引用 */
+  async restoreTemplateProject(
+    workspaceSlug: string,
+    roleId: string,
+    projectId: string
+  ): Promise<TPermissionGroupTemplateProjects> {
+    return this.put(`/api/workspaces/${workspaceSlug}/roles/${roleId}/projects/${projectId}/`, {})
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async fetchWorkspaceRoleDataScope(workspaceSlug: string, roleId: string): Promise<{ data_scope: TDataScope }> {
+    return this.get(`/api/workspaces/${workspaceSlug}/roles/${roleId}/data-scope/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 整份替换数据权限（项目 + 产品白名单） */
+  async updateWorkspaceRoleDataScope(
+    workspaceSlug: string,
+    roleId: string,
+    dataScope: TDataScope
+  ): Promise<{ data_scope: TDataScope }> {
+    return this.patch(`/api/workspaces/${workspaceSlug}/roles/${roleId}/data-scope/`, { data_scope: dataScope })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 编辑白名单时的实时预览：一段白名单现在命中多少 */
+  async previewWorkspaceRoleDataScope(
+    workspaceSlug: string,
+    kind: "projects" | "products",
+    entry: TDataScopeEntry
+  ): Promise<TDataScopePreview> {
+    return this.post(`/api/workspaces/${workspaceSlug}/roles/data-scope-preview/`, { kind, entry })
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;

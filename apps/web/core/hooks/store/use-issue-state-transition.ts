@@ -6,11 +6,8 @@ import {
 } from "@/services/project/project-workflow.service";
 import { useMember } from "./use-member";
 
-const ROLE_TOKEN_PREFIX = "role:";
-/** 角色模板（模式方案的工作流约束）：命中 = 成员持有由该模板派生的项目角色（后端同口径） */
-const ROLE_TEMPLATE_TOKEN_PREFIX = "role_template:";
-/** 流程图接口里角色模板的 id 形如 `template:<模板 id>`（见后端 build_workflow_principal_item） */
-const FLOWCHART_TEMPLATE_ID_PREFIX = "template:";
+/** 角色（数据字典 job_role 的值）：命中 = 成员在本项目挂了这个角色（后端还会先看研发矩阵，这里只能按项目角色近似） */
+const JOB_ROLE_TOKEN_PREFIX = "job_role:";
 const SPECIAL_ASSIGNEES_TOKEN = "special:assignees";
 const SPECIAL_CREATED_BY_TOKEN = "special:created_by";
 
@@ -43,10 +40,7 @@ const EMPTY_RESULT: TStateTransitionCheckResult = {
 
 const workflowService = new ProjectWorkflowService();
 
-const toRolePrincipalToken = (principalId: string) =>
-  principalId.startsWith(FLOWCHART_TEMPLATE_ID_PREFIX)
-    ? `${ROLE_TEMPLATE_TOKEN_PREFIX}${principalId.slice(FLOWCHART_TEMPLATE_ID_PREFIX.length)}`
-    : `${ROLE_TOKEN_PREFIX}${principalId}`;
+const toRolePrincipalToken = (principalId: string) => `${JOB_ROLE_TOKEN_PREFIX}${principalId}`;
 
 const normalizeIds = (ids: Array<string | null | undefined> | undefined | null) =>
   Array.from(new Set((ids ?? []).filter(Boolean) as string[]));
@@ -162,30 +156,12 @@ export const useIssueStateTransition = (
           }
           return;
         }
-        if (token.startsWith(ROLE_TEMPLATE_TOKEN_PREFIX)) {
-          const templateId = token.slice(ROLE_TEMPLATE_TOKEN_PREFIX.length);
-          if (!templateId) return;
+        if (token.startsWith(JOB_ROLE_TOKEN_PREFIX)) {
+          const jobRoleId = token.slice(JOB_ROLE_TOKEN_PREFIX.length);
+          if (!jobRoleId) return;
           projectMemberIds.forEach((memberId) => {
             const memberDetails = getProjectMemberDetails(memberId, projectId);
-            if (memberDetails?.role_template_ids?.includes(templateId)) {
-              allowedAssigneeSet.add(memberId);
-            }
-          });
-          return;
-        }
-        if (token.startsWith(ROLE_TOKEN_PREFIX)) {
-          const roleId = token.slice(ROLE_TOKEN_PREFIX.length);
-          if (!roleId) return;
-          projectMemberIds.forEach((memberId) => {
-            const memberDetails = getProjectMemberDetails(memberId, projectId);
-            // 角色可能是直接授予（custom_role_ids），也可能是通过用户组继承（inherited_role_ids）。
-            // 后端 resolve_role_member_ids 两者都算，这里必须保持一致，否则组继承的成员选不到。
-            const hasRole =
-              memberDetails?.custom_role_ids?.includes(roleId) ||
-              memberDetails?.inherited_role_ids?.includes(roleId);
-            if (hasRole) {
-              allowedAssigneeSet.add(memberId);
-            }
+            if (memberDetails?.job_role_ids?.includes(jobRoleId)) allowedAssigneeSet.add(memberId);
           });
           return;
         }

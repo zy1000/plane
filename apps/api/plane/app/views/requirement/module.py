@@ -115,7 +115,7 @@ class _RequirementModuleScopeMixin:
                 status=status.HTTP_404_NOT_FOUND,
             )
         if require_write and not can_write_requirements(
-            self.request.user, product, PermissionKey.PRODUCT_REQUIREMENT_MODULE_MANAGE
+            self.request.user, product, PermissionKey.PROJECT_REQUIREMENT_MODULE_MANAGE
         ):
             return None, None, Response(
                 {"error": self.FORBIDDEN},
@@ -300,8 +300,8 @@ class ProjectProductRequirementModuleTreeAPIView(BaseAPIView):
     """
 
     @allow_fine_permission(
-        PermissionKey.PROJECT_REQUIREMENT_LINK_VIEW,
-        PermissionKey.PROJECT_PRODUCT_LINK_MANAGE,
+        PermissionKey.PROJECT_REQUIREMENT_VIEW,
+        PermissionKey.PROJECT_PRODUCT_MANAGE,
     )
     def get(self, request, slug, project_id, product_id):
         if not (
@@ -331,7 +331,7 @@ class ProjectRequirementModuleTreeAPIView(BaseAPIView):
     一致。按产品分组返回，单产品时由前端拍平。
     """
 
-    @allow_fine_permission(PermissionKey.PROJECT_REQUIREMENT_LINK_VIEW)
+    @allow_fine_permission(PermissionKey.PROJECT_REQUIREMENT_VIEW)
     def get(self, request, slug, project_id):
         linked = list(
             Requirement.objects.filter(

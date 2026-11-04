@@ -6,7 +6,7 @@
 
 import { observer } from "mobx-react";
 // components
-import { EUserPermissions, EUserPermissionsLevel, WORK_ITEM_TRACKER_ELEMENTS } from "@plane/constants";
+import { WORK_ITEM_TRACKER_ELEMENTS } from "@plane/constants";
 import { EmptyStateDetailed } from "@plane/propel/empty-state";
 import { EIssuesStoreType } from "@plane/types";
 // hooks
@@ -16,13 +16,10 @@ import { useUserPermissions } from "@/hooks/store/user";
 export const ProjectViewEmptyState = observer(function ProjectViewEmptyState() {
   // store hooks
   const { toggleCreateIssueModal } = useCommandPalette();
-  const { allowPermissions } = useUserPermissions();
+  const { allowIssuePermission } = useUserPermissions();
 
   // auth
-  const isCreatingIssueAllowed = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.PROJECT
-  );
+  const isCreatingIssueAllowed = allowIssuePermission("create");
 
   return (
     // TODO: Add translation

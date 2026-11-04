@@ -10,8 +10,7 @@ import type { Control, UseFormSetValue } from "react-hook-form";
 import { Controller, useFormState, useWatch } from "react-hook-form";
 import {
   ETabIndices,
-  EUserPermissions,
-  EUserPermissionsLevel,
+  PERMISSION_KEYS,
   PROJECT_SPRINTS_ISSUE_MANAGE_PERMISSION_KEY,
   PROJECT_MODULES_ISSUE_MANAGE_PERMISSION_KEY,
   PROJECT_RELEASES_ISSUE_MANAGE_PERMISSION_KEY,
@@ -87,14 +86,14 @@ export const IssueDefaultProperties = observer(function IssueDefaultProperties(p
   const { areEstimateEnabledByProjectId } = useProjectEstimates();
   const { getProjectById } = useProject();
   const { isMobile } = usePlatformOS();
-  const { allowPermissions, allowProjectPermissionKeys } = useUserPermissions();
+  const { allowProjectPermissionKeys } = useUserPermissions();
   // derived values
   const projectDetails = getProjectById(projectId);
 
   const { getIndex } = getTabIndex(ETabIndices.ISSUE_FORM, isMobile);
 
   const canCreateLabel =
-    projectId && allowPermissions([EUserPermissions.ADMIN], EUserPermissionsLevel.PROJECT, workspaceSlug, projectId);
+    projectId && allowProjectPermissionKeys([PERMISSION_KEYS.PROJECT_LABEL_MANAGE], workspaceSlug, projectId);
 
   // 以下三个是后端独立细粒度权限，对应三条独立的关联接口：
   //   /cycle-issues/        sprints.issue.manage

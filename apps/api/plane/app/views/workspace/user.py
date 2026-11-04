@@ -96,6 +96,7 @@ from plane.app.serializers.requirement_project import ProjectRequirementSerializ
 from plane.app.views.requirement.row_base import annotate_pending
 from plane.utils.filters import ComplexFilterBackend
 from plane.utils.filters import IssueFilterSet
+from plane.utils.visibility import visible_projects_q
 
 
 class UserLastProjectWithWorkspaceEndpoint(BaseAPIView):
@@ -163,19 +164,18 @@ class WorkspaceUserProfileIssuesEndpoint(BaseAPIView):
             .prefetch_related("assignees", "labels", "issue_module__module")
         )
 
-    @allow_workspace_self_or_permission(PermissionKey.WORKSPACE_USER_PROFILE_VIEW)
+    @allow_workspace_self_or_permission(PermissionKey.WORKSPACE_MEMBER_VIEW)
     def get(self, request, slug, user_id):
         filters = issue_filters(request.query_params, "GET")
 
         order_by_param = request.GET.get("order_by", "-created_at")
         issue_queryset = Issue.issue_objects.filter(
+            visible_projects_q(request.user, slug, "project"),
             id__in=Issue.issue_objects.filter(
                 Q(assignees__in=[user_id]) | Q(created_by_id=user_id) | Q(issue_subscribers__subscriber_id=user_id),
                 workspace__slug=slug,
             ).values_list("id", flat=True),
             workspace__slug=slug,
-            project__project_projectmember__member=request.user,
-            project__project_projectmember__is_active=True,
         )
 
         # Apply filtering from filterset
@@ -317,7 +317,7 @@ class WorkspaceUserPropertiesEndpoint(BaseAPIView):
 
 
 class WorkspaceUserProfileEndpoint(BaseAPIView):
-    @allow_workspace_self_or_permission(PermissionKey.WORKSPACE_USER_PROFILE_VIEW)
+    @allow_workspace_self_or_permission(PermissionKey.WORKSPACE_MEMBER_VIEW)
     def get(self, request, slug, user_id):
         user_data = User.objects.get(pk=user_id)
 
@@ -326,10 +326,8 @@ class WorkspaceUserProfileEndpoint(BaseAPIView):
         if can_view_project_contributions:
             projects = (
                 Project.objects.filter(
+                    visible_projects_q(request.user, slug, None),
                     workspace__slug=slug,
-                    project_projectmember__member=request.user,
-                    project_projectmember__is_active=True,
-                    project_projectmember__deleted_at__isnull=True,
                     archived_at__isnull=True,
                 )
                 .annotate(
@@ -420,7 +418,15 @@ class WorkspaceUserProfileEndpoint(BaseAPIView):
                 Q(owner_id=user_id)
                 | Q(project_lead_id=user_id)
                 | Q(test_lead_id=user_id)
-                | Q(member_product__member_id=user_id)
+                | (
+                    # 被查看人参与的项目 ∩ 当前用户能看到的项目
+                    Q(
+                        product_projects__project__project_projectmember__member_id=user_id,
+                        product_projects__project__project_projectmember__is_active=True,
+                        product_projects__deleted_at__isnull=True,
+                    )
+                    & visible_projects_q(request.user, slug, "product_projects__project")
+                )
                 | Q(id__in=list(assigned_requirement_counts.keys()))
             )
             .distinct()
@@ -451,15 +457,14 @@ class WorkspaceUserProfileEndpoint(BaseAPIView):
 
 
 class WorkspaceUserActivityEndpoint(BaseAPIView):
-    @allow_workspace_self_or_permission(PermissionKey.WORKSPACE_USER_PROFILE_VIEW)
+    @allow_workspace_self_or_permission(PermissionKey.WORKSPACE_MEMBER_VIEW)
     def get(self, request, slug, user_id):
         projects = request.query_params.getlist("project", [])
 
         queryset = IssueActivity.objects.filter(
             ~Q(field__in=["comment", "vote", "reaction", "draft"]),
+            visible_projects_q(request.user, slug, "project"),
             workspace__slug=slug,
-            project__project_projectmember__member=request.user,
-            project__project_projectmember__is_active=True,
             project__archived_at__isnull=True,
             actor=user_id,
         ).select_related("actor", "workspace", "issue", "project")
@@ -487,7 +492,7 @@ class WorkspaceUserProfileRequirementsEndpoint(BaseAPIView):
     DEFAULT_PER_PAGE = 20
     MAX_PER_PAGE = 100
 
-    @allow_workspace_self_or_permission(PermissionKey.WORKSPACE_USER_PROFILE_VIEW)
+    @allow_workspace_self_or_permission(PermissionKey.WORKSPACE_MEMBER_VIEW)
     def get(self, request, slug, user_id):
         base = assigned_requirements_queryset(slug, user_id, request.user)
 
@@ -554,7 +559,7 @@ class WorkspaceUserProfileRequirementsEndpoint(BaseAPIView):
 
 
 class WorkspaceUserProfileStatsEndpoint(BaseAPIView):
-    @allow_workspace_self_or_permission(PermissionKey.WORKSPACE_USER_PROFILE_VIEW)
+    @allow_workspace_self_or_permission(PermissionKey.WORKSPACE_MEMBER_VIEW)
     def get(self, request, slug, user_id):
         filters = issue_filters(request.query_params, "GET")
         today = timezone.now().date()
@@ -569,9 +574,8 @@ class WorkspaceUserProfileStatsEndpoint(BaseAPIView):
         state_distribution = (
             Issue.issue_objects.filter(
                 (Q(assignees__in=[user_id]) & Q(issue_assignee__deleted_at__isnull=True)),
+                visible_projects_q(request.user, slug, "project"),
                 workspace__slug=slug,
-                project__project_projectmember__member=request.user,
-                project__project_projectmember__is_active=True,
             )
             .filter(**filters)
             .annotate(state_group=F("state__group"))
@@ -585,9 +589,8 @@ class WorkspaceUserProfileStatsEndpoint(BaseAPIView):
         priority_distribution = (
             Issue.issue_objects.filter(
                 (Q(assignees__in=[user_id]) & Q(issue_assignee__deleted_at__isnull=True)),
+                visible_projects_q(request.user, slug, "project"),
                 workspace__slug=slug,
-                project__project_projectmember__member=request.user,
-                project__project_projectmember__is_active=True,
             )
             .filter(**filters)
             .values("priority")
@@ -607,9 +610,8 @@ class WorkspaceUserProfileStatsEndpoint(BaseAPIView):
             Issue.issue_objects.filter(
                 ~Q(state__group__in=["completed", "cancelled"]),
                 (Q(assignees__in=[user_id]) & Q(issue_assignee__deleted_at__isnull=True)),
+                visible_projects_q(request.user, slug, "project"),
                 workspace__slug=slug,
-                project__project_projectmember__member=request.user,
-                project__project_projectmember__is_active=True,
             )
             .filter(**filters)
             .count()
@@ -618,10 +620,9 @@ class WorkspaceUserProfileStatsEndpoint(BaseAPIView):
         completed_issues_count = (
             Issue.issue_objects.filter(
                 (Q(assignees__in=[user_id]) & Q(issue_assignee__deleted_at__isnull=True)),
+                visible_projects_q(request.user, slug, "project"),
                 workspace__slug=slug,
                 state__group="completed",
-                project__project_projectmember__member=request.user,
-                project__project_projectmember__is_active=True,
             )
             .filter(**filters)
             .count()
@@ -631,9 +632,8 @@ class WorkspaceUserProfileStatsEndpoint(BaseAPIView):
             Issue.issue_objects.filter(
                 ~Q(state__group__in=["completed", "cancelled"]),
                 (Q(assignees__in=[user_id]) & Q(issue_assignee__deleted_at__isnull=True)),
+                visible_projects_q(request.user, slug, "project"),
                 workspace__slug=slug,
-                project__project_projectmember__member=request.user,
-                project__project_projectmember__is_active=True,
                 priority__in=["urgent", "high"],
             )
             .filter(**filters)
@@ -643,9 +643,8 @@ class WorkspaceUserProfileStatsEndpoint(BaseAPIView):
         completed_today_issues_count = (
             Issue.issue_objects.filter(
                 (Q(assignees__in=[user_id]) & Q(issue_assignee__deleted_at__isnull=True)),
+                visible_projects_q(request.user, slug, "project"),
                 workspace__slug=slug,
-                project__project_projectmember__member=request.user,
-                project__project_projectmember__is_active=True,
                 completed_at__date=today,
             )
             .filter(**filters)
@@ -655,9 +654,8 @@ class WorkspaceUserProfileStatsEndpoint(BaseAPIView):
         completed_this_week_issues_count = (
             Issue.issue_objects.filter(
                 (Q(assignees__in=[user_id]) & Q(issue_assignee__deleted_at__isnull=True)),
+                visible_projects_q(request.user, slug, "project"),
                 workspace__slug=slug,
-                project__project_projectmember__member=request.user,
-                project__project_projectmember__is_active=True,
                 completed_at__date__gte=week_start,
                 completed_at__date__lte=week_end,
             )
@@ -718,7 +716,7 @@ class WorkspaceUserProfileStatsEndpoint(BaseAPIView):
 
 
 class WorkspaceUserProfileMetricTreeEndpoint(BaseAPIView):
-    @allow_workspace_self_or_permission(PermissionKey.WORKSPACE_USER_PROFILE_VIEW)
+    @allow_workspace_self_or_permission(PermissionKey.WORKSPACE_MEMBER_VIEW)
     def get(self, request, slug, user_id, metric):
         query_serializer = WorkspaceUserMetricQuerySerializer(
             data=request.query_params,
@@ -737,7 +735,7 @@ class WorkspaceUserProfileMetricTreeEndpoint(BaseAPIView):
 
 
 class WorkspaceUserProfileMetricItemsEndpoint(BaseAPIView):
-    @allow_workspace_self_or_permission(PermissionKey.WORKSPACE_USER_PROFILE_VIEW)
+    @allow_workspace_self_or_permission(PermissionKey.WORKSPACE_MEMBER_VIEW)
     def get(self, request, slug, user_id, metric):
         query_serializer = WorkspaceUserMetricQuerySerializer(
             data=request.query_params,

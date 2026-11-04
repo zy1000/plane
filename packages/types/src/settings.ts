@@ -4,10 +4,6 @@
  * See the LICENSE file for details.
  */
 
-// local imports
-import type { EUserProjectRoles } from ".";
-import type { EUserWorkspaceRoles } from "./workspace";
-
 export type TProfileSettingsTabs = "general" | "preferences" | "activity" | "notifications" | "security" | "api-tokens";
 
 export type TWorkspaceSettingsTabs =
@@ -30,7 +26,7 @@ export type TWorkspaceSettingsItem = {
   key: TWorkspaceSettingsTabs;
   i18n_label: string;
   href: string;
-  access: EUserWorkspaceRoles[];
+  /** 任一 key（或成员身份类访问条件）满足即显示；不填看 requiresMembership */
   permissionKeys?: string[];
   requiresMembership?: boolean;
   highlight: (pathname: string, baseUrl: string) => boolean;
@@ -41,6 +37,7 @@ export type TProjectSettingsTabs =
   | "members"
   | "teams"
   | "roles"
+  | "products"
   | "features_cycles"
   | "features_modules"
   | "features_releases"
@@ -59,7 +56,7 @@ export type TProjectSettingsItem = {
   key: TProjectSettingsTabs;
   i18n_label: string;
   href: string;
-  access: EUserProjectRoles[];
+  /** 任一满足即可看到（可含 @plane/constants 的 PROJECT_MEMBER_ACCESS 等成员条件） */
   permissionKeys?: string[];
   editPermissionKeys?: string[];
   highlight: (pathname: string, baseUrl: string) => boolean;

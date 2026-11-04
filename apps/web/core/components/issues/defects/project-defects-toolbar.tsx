@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
-import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import { PERMISSION_KEYS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { EIssuesStoreType } from "@plane/types";
@@ -32,7 +32,7 @@ export const ProjectDefectsToolbar = observer(function ProjectDefectsToolbar() {
   const projectIdValue = projectId?.toString();
   const { t } = useTranslation();
   const { currentProjectDetails } = useProject();
-  const { allowPermissions } = useUserPermissions();
+  const { allowProjectPermissionKeys, isProjectMember } = useUserPermissions();
   const { issues, issuesFilter } = useIssues(EIssuesStoreType.PROJECT);
   const { selectedEntityIds } = useMultipleSelectStore();
   const [isAnalyticsModalOpen, setIsAnalyticsModalOpen] = useState(false);
@@ -62,15 +62,18 @@ export const ProjectDefectsToolbar = observer(function ProjectDefectsToolbar() {
     return stringifyAppliedFilters(applied as Record<string, unknown> | undefined);
   }, [issuesFilter, projectIdValue, issuesFilter?.appliedFilters]);
 
-  const canCreateDefect =
-    workspaceSlugValue && projectIdValue
-      ? allowPermissions(
-          [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-          EUserPermissionsLevel.PROJECT,
-          workspaceSlugValue,
-          projectIdValue
-        )
-      : false;
+  const canCreateDefect = allowProjectPermissionKeys(
+    [PERMISSION_KEYS.PROJECT_DEFECT_CREATE],
+    workspaceSlugValue,
+    projectIdValue
+  );
+  const isMemberOfProject = isProjectMember(workspaceSlugValue, projectIdValue);
+  // 缺陷没有单独的导出 key，跟工作项导出走
+  const canExportDefects = allowProjectPermissionKeys(
+    [PERMISSION_KEYS.PROJECT_ISSUE_EXPORT],
+    workspaceSlugValue,
+    projectIdValue
+  );
   const handleFilterToggle = useCallback(() => {
     if (!projectIdValue) return;
     window.dispatchEvent(
@@ -94,21 +97,21 @@ export const ProjectDefectsToolbar = observer(function ProjectDefectsToolbar() {
           onFilterToggle={handleFilterToggle}
         />
       </div>
+      {isMemberOfProject ? (
+        /* 审批常显：有待办时按钮本身就是红字计数，收进菜单就看不见了 */
+        <Button variant="secondary" size="lg" className="hidden md:flex" onClick={() => setIsApprovalModalOpen(true)}>
+          {pendingCount > 0 ? (
+            <span style={{ color: "#f87171" }}>待审批·{pendingCount > 99 ? "99+" : pendingCount}</span>
+          ) : (
+            "审批"
+          )}
+        </Button>
+      ) : null}
       {canCreateDefect ? (
-        <>
-          {/* 审批常显：有待办时按钮本身就是红字计数，收进菜单就看不见了 */}
-          <Button variant="secondary" size="lg" className="hidden md:flex" onClick={() => setIsApprovalModalOpen(true)}>
-            {pendingCount > 0 ? (
-              <span style={{ color: "#f87171" }}>待审批·{pendingCount > 99 ? "99+" : pendingCount}</span>
-            ) : (
-              "审批"
-            )}
-          </Button>
-          <Button variant="primary" size="lg" onClick={() => setIsCreateModalOpen(true)}>
-            <span className="hidden sm:inline">新增缺陷</span>
-            <span className="sm:hidden">新增</span>
-          </Button>
-        </>
+        <Button variant="primary" size="lg" onClick={() => setIsCreateModalOpen(true)}>
+          <span className="hidden sm:inline">新增缺陷</span>
+          <span className="sm:hidden">新增</span>
+        </Button>
       ) : null}
       <HeaderMoreMenu
         items={[
@@ -116,10 +119,10 @@ export const ProjectDefectsToolbar = observer(function ProjectDefectsToolbar() {
             key: "analytics",
             label: t("common.analytics"),
             onClick: () => setIsAnalyticsModalOpen(true),
-            shouldRender: canCreateDefect,
+            shouldRender: isMemberOfProject,
           },
           { key: "workflow", label: "工作流", onClick: () => setIsFlowchartModalOpen(true), shouldRender: hasActiveWorkflow },
-          { key: "export", label: "导出", onClick: () => setIsExportModalOpen(true), shouldRender: canCreateDefect },
+          { key: "export", label: "导出", onClick: () => setIsExportModalOpen(true), shouldRender: canExportDefects },
         ]}
       />
       <DefectAnalysisModal

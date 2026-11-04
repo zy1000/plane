@@ -1,13 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Archive, Trash2 } from "lucide-react";
+import { Archive, Trash2 } from "lucide-react";
 import { observer } from "mobx-react";
 import { useNavigate, useParams } from "react-router";
-import { PRODUCT_SETTINGS_DELETE_PERMISSION_KEY, PRODUCT_SETTINGS_EDIT_PERMISSION_KEY } from "@plane/constants";
+import {
+  PRODUCT_SETTINGS_DELETE_PERMISSION_KEY,
+  PRODUCT_SETTINGS_EDIT_PERMISSION_KEY,
+  WORKSPACE_OWNER_ACCESS,
+} from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import { EUserWorkspaceRoles } from "@plane/types";
-import type { TLogoProps, TProductNetwork } from "@plane/types";
+import type { TLogoProps } from "@plane/types";
 import { Avatar, Loader } from "@plane/ui";
 import { getFileURL, renderFormattedDate } from "@plane/utils";
 import { IdentifierInput, isValidIdentifier } from "@/components/common/identifier-input";
@@ -17,13 +20,13 @@ import { PageHead } from "@/components/core/page-title";
 import { SettingsBoxedControlItem } from "@/components/settings/boxed-control-item";
 import { SettingsContentWrapper } from "@/components/settings/content-wrapper";
 import { useProductEditorAssets } from "@/hooks/use-product-editor-assets";
-import { useProductMembers } from "@/hooks/store/use-product-members";
-import { useUser, useUserPermissions } from "@/hooks/store/user";
+import { useUserPermissions } from "@/hooks/store/user";
 import { useWorkspace } from "@/hooks/store/use-workspace";
 import { WorkspaceService } from "@/services/workspace.service";
 import { useProductsContext } from "../context";
 import { DeleteProductModal } from "../delete-modal";
 import { hasProductPermission } from "../permissions";
+import { useProductMemberCandidates } from "../use-product-member-candidates";
 import { ProductExtendedFields, useProductExtendedFields } from "../extended-fields";
 import { ProductLogoHeader } from "../logo-header";
 import { ProductSettingsHeader } from "./header";
@@ -35,20 +38,18 @@ export const ProductGeneralSettings = observer(function ProductGeneralSettings()
   const { workspaceSlug, productId } = useParams();
   const navigate = useNavigate();
   const { t } = useTranslation();
-  const { data: currentUser } = useUser();
-  const { workspaceInfoBySlug, hasAllWorkspacePermissions } = useUserPermissions();
+  const { allowWorkspacePermissionKeys } = useUserPermissions();
   const { getWorkspaceBySlug } = useWorkspace();
   const { products, updateProduct, setProductToDelete } = useProductsContext();
   const product = products.find(({ id }) => id === productId);
   const workspaceId = workspaceSlug ? getWorkspaceBySlug(workspaceSlug)?.id?.toString() : undefined;
-  const { members: productMembers } = useProductMembers(workspaceSlug, productId);
+  const { memberIds: candidateMemberIds, isLinkedMember } = useProductMemberCandidates(workspaceSlug, product);
 
   const [name, setName] = useState("");
   const [identifier, setIdentifier] = useState("");
   const [identifierError, setIdentifierError] = useState<string | null>(null);
   const [descriptionHTML, setDescriptionHTML] = useState(EMPTY_DESCRIPTION);
   const [ownerId, setOwnerId] = useState<string | null>(null);
-  const [network, setNetwork] = useState<TProductNetwork>(2);
   const [logoProps, setLogoProps] = useState<TLogoProps | undefined>(undefined);
   const [isSaving, setIsSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -62,28 +63,17 @@ export const ProductGeneralSettings = observer(function ProductGeneralSettings()
       workspaceSlug: workspaceSlug ?? "",
     });
 
-  const workspaceInfo = workspaceSlug ? workspaceInfoBySlug(workspaceSlug) : undefined;
-  const hasWorkspaceAdminAccess = Boolean(
-    workspaceSlug && (workspaceInfo?.role === EUserWorkspaceRoles.ADMIN || hasAllWorkspacePermissions(workspaceSlug))
-  );
-  const isPrivateProduct = network === 0;
-  const isProductMember = Boolean(
-    currentUser?.id && productMembers.some((membership) => membership.member === currentUser.id)
-  );
-  const willLosePrivateAccess = Boolean(
-    isPrivateProduct &&
-    ownerId &&
-    ownerId !== currentUser?.id &&
-    !isProductMember &&
-    !hasWorkspaceAdminAccess
+  // 持 workspace.product.edit（或工作区 owner）能看全部产品，换负责人不会失去访问
+  const canSeeAllProducts = Boolean(
+    workspaceSlug && allowWorkspacePermissionKeys([PRODUCT_SETTINGS_EDIT_PERMISSION_KEY, WORKSPACE_OWNER_ACCESS], workspaceSlug)
   );
 
-  // 负责人只能从产品成员里选。成员还在加载时先兜住当前负责人，否则下拉会短暂空掉。
+  // 负责人候选：工作区活跃成员（资格由后端校验）。先兜住当前负责人，避免成员未加载时下拉空掉
   const ownerCandidateIds = useMemo(() => {
-    const ids = productMembers.map((membership) => membership.member);
+    const ids = [...candidateMemberIds];
     if (product?.owner && !ids.includes(product.owner)) ids.unshift(product.owner);
     return ids;
-  }, [product?.owner, productMembers]);
+  }, [product?.owner, candidateMemberIds]);
 
   useEffect(() => {
     if (!product) return;
@@ -91,7 +81,6 @@ export const ProductGeneralSettings = observer(function ProductGeneralSettings()
     setIdentifier(product.identifier);
     setDescriptionHTML(product.description_html?.trim() ? product.description_html : EMPTY_DESCRIPTION);
     setOwnerId(product.owner);
-    setNetwork(product.network);
     extended.reset(product);
     // 老产品可能没有 logo：不注入随机默认，展示层用 PackageOpen 兜底
     setLogoProps(product.logo_props?.in_use ? product.logo_props : undefined);
@@ -141,7 +130,6 @@ export const ProductGeneralSettings = observer(function ProductGeneralSettings()
         name: trimmedName,
         identifier,
         description_html: descriptionHTML,
-        network,
         owner: ownerId,
         ...(logoProps ? { logo_props: logoProps } : {}),
         ...extended.getPayload(),
@@ -155,8 +143,9 @@ export const ProductGeneralSettings = observer(function ProductGeneralSettings()
       });
 
       // 保存响应里带最新的 my_permission_keys：换掉负责人后自己可能就没资格再编辑。
-      // 还看得见产品就留在这页（自动转只读），彻底看不见了才踢走。
-      const canStillView = savedProduct.network === 2 || isProductMember;
+      // 还看得见产品（关联项目成员 / 评审人 / 能维护全部产品）就留在这页（自动转只读），否则踢走；
+      // 白名单带来的可见性这里判不了，踢走后列表页会按后端结果重新展示
+      const canStillView = isLinkedMember || canSeeAllProducts;
       if (!hasProductPermission(savedProduct, PRODUCT_SETTINGS_EDIT_PERMISSION_KEY) && !canStillView) {
         navigate(`/${workspaceSlug}/products`, { replace: true });
       }
@@ -329,12 +318,6 @@ export const ProductGeneralSettings = observer(function ProductGeneralSettings()
                   </div>
                 )}
                 {ownerError ? <p className="mt-1.5 text-caption-md-regular text-danger-primary">{ownerError}</p> : null}
-                {willLosePrivateAccess ? (
-                  <div className="mt-1.5 flex items-start gap-2 text-caption-md-regular text-warning-primary">
-                    <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-                    <span>{t("workspace_products.visibility.private_access_warning")}</span>
-                  </div>
-                ) : null}
               </div>
             }
           />

@@ -45,6 +45,7 @@ from plane.db.models import (
 )
 from plane.utils.requirement import RequirementScopeHandle
 from plane.utils.requirement_module import expand_requirement_module_subtree_ids
+from plane.utils.visibility import visible_projects_q
 
 
 def split_query_csv(raw):
@@ -265,19 +266,12 @@ def linked_products_by_project(project_ids):
 def visible_product_ids(*, user, slug):
     """当前用户在工作区里看得见的产品 id，与产品列表接口（views/product/base.py）同一口径。"""
     from plane.db.models import Workspace
-    from plane.utils.product import can_manage_workspace_products
+    from plane.utils.product import filter_visible_products
 
     workspace = Workspace.objects.filter(slug=slug).first()
     if workspace is None:
         return Product.objects.none().values_list("id", flat=True)
-    queryset = Product.objects.filter(workspace=workspace)
-    if not can_manage_workspace_products(user, workspace):
-        queryset = queryset.filter(
-            Q(network=2)
-            | Q(owner=user)
-            | Q(reviewers=user)
-            | Q(network=0, member_product__member=user)
-        )
+    queryset = filter_visible_products(Product.objects.filter(workspace=workspace), user, workspace)
     return queryset.order_by().values_list("id", flat=True).distinct()
 
 
@@ -688,7 +682,7 @@ def resolve_linkable_products(*, user, slug, project, product_ids):
     两条规则，缺一不可：
     - 两端必须同工作区。DB 表达不了（workspace 各自挂在父表上），这里兜住。
     - **调用者必须看得见这个产品**（can_view_product）。少了这条，任何持有
-      project.product_link.manage 的人都可以把一个 network=0 的私密产品关联进自己的
+      project.product.manage 的人可以把一个自己看得见的产品关联进自己的
       项目，然后从 linkable-requirements 里读出它全部已评审需求的正文与自定义字段 ——
       产品作用域的端点会 404 掉他，项目这条路却绕开了那道门。
     """
@@ -721,10 +715,11 @@ def resolve_linkable_products(*, user, slug, project, product_ids):
 def resolve_linkable_projects(*, user, slug, product, project_ids):
     """解析一批可从产品侧关联的项目 id。
 
-    产品页写这张桥时，不能只看「看得见这个项目」：公开项目对工作区全员可见，
-    产品负责人若能把产品塞进任意公开项目，等于改了别人的需求候选池。
-    所以这里要求调用者是该项目的活跃成员，且项目未归档、与产品同工作区。
+    关联会改那个项目的需求候选池，所以和项目侧同一道门：调用者在该项目里要有 project.product.manage
+    （能进只是前提）；项目未归档、与产品同工作区；看不见或没权限的项目不能被关联。
     """
+    from plane.app.permissions.base import resolve_project_grant
+    from plane.app.permissions.keys import PermissionKey
     from plane.db.models import Project
 
     requested = list(dict.fromkeys(str(item) for item in project_ids))
@@ -732,18 +727,21 @@ def resolve_linkable_projects(*, user, slug, product, project_ids):
         return []
 
     rows = Project.objects.filter(
+        visible_projects_q(user, slug, None),
         id__in=requested,
         workspace__slug=slug,
         workspace_id=product.workspace_id,
         archived_at__isnull=True,
-        project_projectmember__member=user,
-        project_projectmember__is_active=True,
     ).distinct()
-    visible = {str(row.id) for row in rows}
-    missing = [item for item in requested if item not in visible]
+    allowed = {
+        str(row.id)
+        for row in rows
+        if resolve_project_grant(user, slug, str(row.id), project=row).allows(PermissionKey.PROJECT_PRODUCT_MANAGE)
+    }
+    missing = [item for item in requested if item not in allowed]
     if missing:
         raise RequirementLinkError(
-            "Some projects do not exist in this workspace.",
+            "Some projects do not exist in this workspace or you cannot manage their products.",
             code="PROJECT_LINK_REJECTED",
             detail={"project_ids": missing},
         )

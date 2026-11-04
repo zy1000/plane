@@ -11,9 +11,8 @@ import { SquareUser } from "lucide-react";
 // Plane imports
 import {
   MODULE_STATUS,
-  EUserPermissions,
-  EUserPermissionsLevel,
   IS_FAVORITE_MENU_OPEN,
+  PROJECT_MODULES_EDIT_PERMISSION_KEY,
   MODULE_TRACKER_EVENTS,
   MODULE_TRACKER_ELEMENTS,
   PROJECT_ERROR_MESSAGES,
@@ -47,7 +46,7 @@ export const ModuleListItemAction = observer(function ModuleListItemAction(props
   // router
   const { workspaceSlug, projectId } = useParams();
   //   store hooks
-  const { allowPermissions } = useUserPermissions();
+  const { allowProjectPermissionKeys, isProjectMember } = useUserPermissions();
   const { addModuleToFavorites, removeModuleFromFavorites, updateModuleDetails } = useModule();
   const { getUserDetails } = useMember();
 
@@ -58,10 +57,9 @@ export const ModuleListItemAction = observer(function ModuleListItemAction(props
   // derived values
 
   const moduleStatus = MODULE_STATUS.find((status) => status.value === moduleDetails.status);
-  const isEditingAllowed = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.PROJECT
-  );
+  const isEditingAllowed = allowProjectPermissionKeys([PROJECT_MODULES_EDIT_PERMISSION_KEY]);
+  // 收藏是个人行为，项目成员就行
+  const canFavorite = isProjectMember();
   const isDisabled = !isEditingAllowed || !!moduleDetails?.archived_at;
   const renderIcon = Boolean(moduleDetails.start_date) || Boolean(moduleDetails.target_date);
 
@@ -190,7 +188,7 @@ export const ModuleListItemAction = observer(function ModuleListItemAction(props
         </Tooltip>
       )}
 
-      {isEditingAllowed && !moduleDetails.archived_at && (
+      {canFavorite && !moduleDetails.archived_at && (
         <FavoriteStar
           onClick={(e) => {
             if (moduleDetails.is_favorite) handleRemoveFromFavorites(e);

@@ -51,7 +51,6 @@ PROJECT_EXAMPLE = OpenApiExample(
         "name": "Mobile App Development",
         "description": "Development of the mobile application",
         "identifier": "MAD",
-        "network": 2,
         "project_lead": "550e8400-e29b-41d4-a716-446655440001",
         "created_at": "2024-01-15T10:30:00Z",
         "updated_at": "2024-01-15T10:30:00Z",
@@ -626,7 +625,6 @@ WORKSPACE_MEMBER_EXAMPLE = OpenApiExample(
             "display_name": "John Doe",
             "email": "john.doe@example.com",
             "avatar": "https://example.com/avatar.jpg",
-            "role": 20,
         },
         {
             "id": "550e8400-e29b-41d4-a716-446655440001",
@@ -635,7 +633,6 @@ WORKSPACE_MEMBER_EXAMPLE = OpenApiExample(
             "display_name": "Jane Smith",
             "email": "jane.smith@example.com",
             "avatar": "https://example.com/avatar2.jpg",
-            "role": 15,
         },
     ],
 )
@@ -733,7 +730,6 @@ SAMPLE_PROJECT = {
     "name": "Mobile App Backend",
     "description": "Backend services for the mobile application",
     "identifier": "MAB",
-    "network": 2,
 }
 
 SAMPLE_STATE = {

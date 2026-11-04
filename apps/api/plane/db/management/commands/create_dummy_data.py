@@ -36,11 +36,11 @@ class Command(BaseCommand):
             # Create workspace
             workspace = Workspace.objects.create(slug=workspace_slug, name=workspace_name, owner=user)
             # Create workspace member
-            WorkspaceMember.objects.create(workspace=workspace, role=20, member=user)
+            WorkspaceMember.objects.create(workspace=workspace, member=user)
             user_ids = User.objects.filter(email__in=members)
 
             _ = WorkspaceMember.objects.bulk_create(
-                [WorkspaceMember(workspace=workspace, member=user_id, role=20) for user_id in user_ids],
+                [WorkspaceMember(workspace=workspace, member=user_id) for user_id in user_ids],
                 ignore_conflicts=True,
             )
 

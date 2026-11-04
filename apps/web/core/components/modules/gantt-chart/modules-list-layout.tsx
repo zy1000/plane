@@ -7,6 +7,7 @@
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 // PLane
+import { PROJECT_MODULES_EDIT_PERMISSION_KEY } from "@plane/constants";
 import { GANTT_TIMELINE_TYPE } from "@plane/types";
 import type { IBlockUpdateData, IBlockUpdateDependencyData, IModule } from "@plane/types";
 // components
@@ -16,13 +17,13 @@ import { ModuleGanttBlock } from "@/components/modules";
 // hooks
 import { useModule } from "@/hooks/store/use-module";
 import { useModuleFilter } from "@/hooks/store/use-module-filter";
-import { useProject } from "@/hooks/store/use-project";
+import { useUserPermissions } from "@/hooks/store/user";
 
 export const ModulesListGanttChartView = observer(function ModulesListGanttChartView() {
   // router
   const { workspaceSlug, projectId } = useParams();
   // store
-  const { currentProjectDetails } = useProject();
+  const { allowProjectPermissionKeys } = useUserPermissions();
   const { getFilteredModuleIds, updateModuleDetails } = useModule();
   const { currentProjectDisplayFilters: displayFilters } = useModuleFilter();
 
@@ -51,7 +52,8 @@ export const ModulesListGanttChartView = observer(function ModulesListGanttChart
     await updateModuleDetails(workspaceSlug.toString(), projectId.toString(), blockUpdate.id, payload);
   };
 
-  const isAllowed = currentProjectDetails?.member_role === 20 || currentProjectDetails?.member_role === 15;
+  // 拖动改日期 / 排序 / 加块都是改模块
+  const isAllowed = allowProjectPermissionKeys([PROJECT_MODULES_EDIT_PERMISSION_KEY]);
 
   if (!filteredModuleIds) return null;
 

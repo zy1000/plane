@@ -39,8 +39,8 @@ export const SendWorkspaceInvitationModal = observer(function SendWorkspaceInvit
     onSubmit,
     onClose,
   });
-  // 工作区自定义角色，供每行邀请选择
-  const { roles, isLoading: isRolesLoading, fetchRoles } = useWorkspaceRoles(workspaceSlug?.toString(), "workspace");
+  // 工作区权限组，供每行邀请选择（可不选：进来就有「工作区成员」组）
+  const { roles, isLoading: isRolesLoading, fetchRoles } = useWorkspaceRoles(workspaceSlug?.toString());
   useSWR(isOpen && workspaceSlug ? `WORKSPACE_INVITE_MODAL_ROLES_${workspaceSlug.toString()}` : null, fetchRoles);
 
   return (

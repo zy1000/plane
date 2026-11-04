@@ -26,7 +26,7 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.response import Response
 
-from plane.app.permissions import PermissionKey, allow_fine_permission
+from plane.app.permissions import allow_workspace_owner, allow_workspace_member, PermissionKey, allow_fine_permission
 
 # Module imports
 from plane.app.serializers import WorkSpaceSerializer, WorkspaceThemeSerializer
@@ -47,6 +47,7 @@ from plane.utils.url import contains_url
 from plane.utils.analytics_events import WORKSPACE_CREATED, WORKSPACE_DELETED
 from plane.utils.csv_utils import sanitize_csv_row
 from plane.utils.dev_mode import ensure_dev_modes
+from plane.utils.visibility import visible_projects_q
 
 logger = logging.getLogger("plane")
 
@@ -124,7 +125,6 @@ class WorkSpaceViewSet(BaseViewSet):
                 _ = WorkspaceMember.objects.create(
                     workspace_id=serializer.data["id"],
                     member=request.user,
-                    role=20,
                     company_role=request.data.get("company_role", ""),
                 )
 
@@ -141,11 +141,10 @@ class WorkSpaceViewSet(BaseViewSet):
                         workspace.id,
                     )
 
-                # Get total members and role
+                # Get total members
                 total_members = WorkspaceMember.objects.filter(workspace_id=serializer.data["id"]).count()
                 data = serializer.data
                 data["total_members"] = total_members
-                data["role"] = 20
 
                 workspace_seed.delay(serializer.data["id"])
 
@@ -194,7 +193,7 @@ class WorkSpaceViewSet(BaseViewSet):
         Profile.objects.filter(last_workspace_id=id).update(last_workspace_id=None)
         return
 
-    @allow_fine_permission(PermissionKey.WORKSPACE_SETTINGS_DELETE, level="WORKSPACE")
+    @allow_workspace_owner
     def destroy(self, request, *args, **kwargs):
         # Get the workspace
         workspace = self.get_object()
@@ -229,10 +228,6 @@ class UserWorkSpacesEndpoint(BaseAPIView):
             .values("count")
         )
 
-        role = WorkspaceMember.objects.filter(workspace=OuterRef("id"), member=request.user, is_active=True).values(
-            "role"
-        )
-
         workspace = (
             Workspace.objects.prefetch_related(
                 Prefetch(
@@ -240,7 +235,7 @@ class UserWorkSpacesEndpoint(BaseAPIView):
                     queryset=WorkspaceMember.objects.filter(member=request.user, is_active=True),
                 )
             )
-            .annotate(role=role, total_members=member_count)
+            .annotate(total_members=member_count)
             .filter(workspace_member__member=request.user, workspace_member__is_active=True)
             .distinct()
         )
@@ -369,11 +364,11 @@ class WorkspaceThemeViewSet(BaseViewSet):
     def get_queryset(self):
         return super().get_queryset().filter(workspace__slug=self.kwargs.get("slug"))
 
-    @allow_fine_permission(PermissionKey.WORKSPACE_SETTINGS_VIEW, level="WORKSPACE")
+    @allow_workspace_member
     def list(self, request, slug):
         return super().list(request, slug)
 
-    @allow_fine_permission(PermissionKey.WORKSPACE_SETTINGS_VIEW, level="WORKSPACE")
+    @allow_workspace_member
     def retrieve(self, request, slug, pk):
         return super().retrieve(request, slug, pk)
 
@@ -404,17 +399,16 @@ class ExportWorkspaceUserActivityEndpoint(BaseAPIView):
         csv_buffer.seek(0)
         return csv_buffer
 
-    @allow_fine_permission(PermissionKey.WORKSPACE_USER_PROFILE_EXPORT, level="WORKSPACE")
+    @allow_fine_permission(PermissionKey.WORKSPACE_MEMBER_VIEW, level="WORKSPACE")
     def post(self, request, slug, user_id):
         if not request.data.get("date"):
             return Response({"error": "Date is required"}, status=status.HTTP_400_BAD_REQUEST)
 
         user_activities = IssueActivity.objects.filter(
             ~Q(field__in=["comment", "vote", "reaction", "draft"]),
+            visible_projects_q(request.user, slug, "project"),
             workspace__slug=slug,
             created_at__date=request.data.get("date"),
-            project__project_projectmember__member=request.user,
-            project__project_projectmember__is_active=True,
             actor_id=user_id,
         ).select_related("actor", "workspace", "issue", "project")[:10000]
 

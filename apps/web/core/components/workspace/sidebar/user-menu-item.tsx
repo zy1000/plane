@@ -8,9 +8,7 @@ import { observer } from "mobx-react";
 import Link from "next/link";
 import { useParams, usePathname } from "next/navigation";
 // plane imports
-import { EUserPermissionsLevel } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
-import type { EUserWorkspaceRoles } from "@plane/types";
 // components
 import { SidebarNavItem } from "@/components/sidebar/sidebar-navigation";
 import { NotificationAppSidebarOption } from "@/components/workspace-notifications/notification-app-sidebar-option";
@@ -22,7 +20,6 @@ export interface SidebarUserMenuItemProps {
   item: {
     key: string;
     href: string;
-    access: EUserWorkspaceRoles[];
     labelTranslationKey: string;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     Icon: any;
@@ -38,15 +35,15 @@ export const SidebarUserMenuItem = observer(function SidebarUserMenuItem(props: 
   // package hooks
   const { t } = useTranslation();
   // store hooks
-  const { allowPermissions } = useUserPermissions();
+  const { isWorkspaceMember } = useUserPermissions();
   const { toggleSidebar } = useAppTheme();
 
   const isActive = pathname === item.href;
 
   if (item.key === "drafts" && draftIssueCount === 0) return null;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  if (!allowPermissions(item.access as any, EUserPermissionsLevel.WORKSPACE, workspaceSlug.toString())) return null;
+  // 个人菜单（首页 / 我的工作 / 草稿等）：工作区成员都有
+  if (!isWorkspaceMember(workspaceSlug.toString())) return null;
 
   const handleLinkClick = () => {
     if (window.innerWidth < 768) {

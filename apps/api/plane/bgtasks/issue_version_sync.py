@@ -18,6 +18,7 @@ from celery import shared_task
 
 # Module imports
 from plane.db.models import (
+    Project,
     Issue,
     IssueVersion,
     ProjectMember,
@@ -73,11 +74,11 @@ def get_owner_id(issue: Issue) -> Optional[int]:
     if issue.created_by_id:
         return issue.created_by_id
 
-    # Find project admin as fallback
-    project_member = ProjectMember.objects.filter(
-        project_id=issue.project_id,
-        role=20,  # Admin role
-    ).first()
+    # 兜底：项目负责人，再不行取任一活跃成员
+    lead_id = Project.objects.filter(pk=issue.project_id).values_list("project_lead_id", flat=True).first()
+    if lead_id:
+        return lead_id
+    project_member = ProjectMember.objects.filter(project_id=issue.project_id, is_active=True).first()
 
     return project_member.member_id if project_member else None
 

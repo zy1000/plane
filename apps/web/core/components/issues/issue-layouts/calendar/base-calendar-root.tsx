@@ -9,7 +9,7 @@ import { useCallback, useEffect } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 // plane imports
-import { EIssueGroupByToServerOptions, EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import { EIssueGroupByToServerOptions, PERMISSION_KEYS } from "@plane/constants";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TGroupedIssues } from "@plane/types";
 import { EIssuesStoreType } from "@plane/types";
@@ -57,7 +57,7 @@ export const BaseCalendarRoot = observer(function BaseCalendarRoot(props: IBaseC
   // hooks
   const fallbackStoreType = useIssueStoreType() as CalendarStoreType;
   const storeType = isEpic ? EIssuesStoreType.EPIC : fallbackStoreType;
-  const { allowPermissions } = useUserPermissions();
+  const { allowProjectPermissionKeys } = useUserPermissions();
   const { issues, issuesFilter, issueMap } = useIssues(storeType);
   const {
     fetchIssues,
@@ -72,10 +72,8 @@ export const BaseCalendarRoot = observer(function BaseCalendarRoot(props: IBaseC
 
   const issueCalendarView = useCalendarView();
 
-  const isEditingAllowed = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.PROJECT
-  );
+  // 拖拽 / 行内改属性：项目里能编辑工作项或缺陷（单条的类型限定以后端为准）
+  const isEditingAllowed = allowProjectPermissionKeys([PERMISSION_KEYS.PROJECT_ISSUE_EDIT, PERMISSION_KEYS.PROJECT_DEFECT_EDIT]);
 
   const { enableInlineEditing } = issues?.viewFlags || {};
 

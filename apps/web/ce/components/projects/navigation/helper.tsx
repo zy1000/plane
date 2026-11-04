@@ -5,7 +5,7 @@
  */
 
 // plane imports
-import { EUserPermissions, EProjectFeatureKey } from "@plane/constants";
+import { EProjectFeatureKey } from "@plane/constants";
 import { CycleIcon, IntakeIcon, ModuleIcon, PageIcon, ViewsIcon, WorkItemsIcon } from "@plane/propel/icons";
 import { Rocket } from "lucide-react";
 // components
@@ -28,7 +28,6 @@ export const getProjectFeatureNavigation = (
     name: "Work items",
     href: `/${workspaceSlug}/projects/${projectId}/issues`,
     icon: WorkItemsIcon,
-    access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
     shouldRender: true,
     sortOrder: 1,
   },
@@ -38,7 +37,6 @@ export const getProjectFeatureNavigation = (
     name: "Sprints",
     href: `/${workspaceSlug}/projects/${projectId}/cycles`,
     icon: CycleIcon,
-    access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
     shouldRender: project.cycle_view,
     sortOrder: 3,
   },
@@ -48,7 +46,6 @@ export const getProjectFeatureNavigation = (
     name: "Modules",
     href: `/${workspaceSlug}/projects/${projectId}/modules`,
     icon: ModuleIcon,
-    access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
     shouldRender: project.module_view,
     sortOrder: 2,
   },
@@ -58,7 +55,6 @@ export const getProjectFeatureNavigation = (
     name: "Releases",
     href: `/${workspaceSlug}/projects/${projectId}/releases`,
     icon: Rocket,
-    access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
     shouldRender: project.module_view,
     sortOrder: 3.5,
   },
@@ -68,7 +64,6 @@ export const getProjectFeatureNavigation = (
     name: "Views",
     href: `/${workspaceSlug}/projects/${projectId}/views`,
     icon: ViewsIcon,
-    access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
     shouldRender: project.issue_views_view,
     sortOrder: 4,
   },
@@ -78,7 +73,6 @@ export const getProjectFeatureNavigation = (
     name: "Pages",
     href: `/${workspaceSlug}/projects/${projectId}/pages`,
     icon: PageIcon,
-    access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
     shouldRender: project.page_view,
     sortOrder: 5,
   },
@@ -88,7 +82,6 @@ export const getProjectFeatureNavigation = (
     name: "Intake",
     href: `/${workspaceSlug}/projects/${projectId}/intake`,
     icon: IntakeIcon,
-    access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
     shouldRender: project.inbox_view,
     sortOrder: 6,
   },

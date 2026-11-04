@@ -2,7 +2,7 @@
 
 这是同一张关联表 RequirementTestCase 的第二扇门。第一扇在
 views/requirement/test_case.py（需求侧）。用例归产品后两扇门都是产品作用域，
-权限暂不细分（只要求工作区成员，等权限重构统一做）。
+读要用例查看权限，写要用例编辑权限（按产品的关联项目算）。
 
 配对规则一律走 utils/requirement_test_case.py，本文件不自己判断任何作用域。
 """
@@ -11,6 +11,7 @@ from django.db.models import Q
 from rest_framework import status
 from rest_framework.response import Response
 
+from plane.app.permissions import PermissionKey
 from plane.app.views.qa.product_scope import allow_product_scope
 from plane.app.views.base import BaseAPIView
 from plane.db.models import RequirementTestCase, TestCase
@@ -46,7 +47,7 @@ class CaseRequirementAPIView(CaseScopedMixin, BaseAPIView):
 
     model = RequirementTestCase
 
-    @allow_product_scope
+    @allow_product_scope(PermissionKey.PROJECT_TEST_CASE_VIEW)
     def get(self, request, slug, product_id, case_id):
         """已关联的需求行。轻量反查，不走需求序列化器（那是给产品需求网格的）。"""
         case = self._get_case(slug, product_id, case_id)
@@ -78,7 +79,7 @@ class CaseRequirementAPIView(CaseScopedMixin, BaseAPIView):
             status=status.HTTP_200_OK,
         )
 
-    @allow_product_scope
+    @allow_product_scope(PermissionKey.PROJECT_TEST_CASE_EDIT)
     def post(self, request, slug, product_id, case_id):
         """关联需求，唯一载荷 {"requirements": [id, ...]}。全有或全无。"""
         case = self._get_case(slug, product_id, case_id)
@@ -108,7 +109,7 @@ class CaseRequirementAPIView(CaseScopedMixin, BaseAPIView):
             )
         return Response({"message": "success"}, status=status.HTTP_201_CREATED)
 
-    @allow_product_scope
+    @allow_product_scope(PermissionKey.PROJECT_TEST_CASE_EDIT)
     def delete(self, request, slug, product_id, case_id):
         """解除单条关联，载荷 {"requirement_id": id}。"""
         case = self._get_case(slug, product_id, case_id)
@@ -147,7 +148,7 @@ class CaseLinkableRequirementAPIView(CaseScopedMixin, BaseAPIView):
 
     model = RequirementTestCase
 
-    @allow_product_scope
+    @allow_product_scope(PermissionKey.PROJECT_TEST_CASE_VIEW)
     def get(self, request, slug, product_id, case_id):
         case = self._get_case(slug, product_id, case_id)
         if case is None:

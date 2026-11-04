@@ -46,9 +46,11 @@ export const WorkspaceMembersList = observer(function WorkspaceMembersList(props
     },
   } = useMember();
   const { t } = useTranslation();
-  // 待处理邀请的自定义角色候选（在父组件取一次，避免每个列表项各自请求）
-  const { roles, isLoading: isRolesLoading, fetchRoles } = useWorkspaceRoles(workspaceSlug?.toString(), "workspace");
-  useSWR(isAdmin && workspaceSlug ? `WORKSPACE_INVITATION_ASSIGNABLE_ROLES_${workspaceSlug.toString()}` : null, fetchRoles);
+  // 待处理邀请可分配的权限组（在父组件取一次，避免每个列表项各自请求）
+  const { roles, isLoading: isRolesLoading, fetchRoles } = useWorkspaceRoles(workspaceSlug?.toString());
+  useSWR(isAdmin && workspaceSlug ? `WORKSPACE_PERMISSION_GROUPS_${workspaceSlug.toString()}` : null, fetchRoles, {
+    revalidateOnFocus: false,
+  });
   // fetching workspace invitations
   useSWR(
     workspaceSlug

@@ -8,7 +8,7 @@ from rest_framework.response import Response
 # Module imports
 from plane.app.views import BaseAPIView, BaseViewSet
 from plane.app.views.issue_scheme.scope import IssueSchemeScopeMixin
-from plane.app.permissions import IssueSchemeConfigPermission, WorkspaceEntityPermission
+from plane.app.permissions import IssueSchemeConfigPermission, WorkspaceIssueSchemeConfigPermission
 from plane.app.serializers.issue_type import IssueTypeCategorySerializer, IssueTypeSerializer
 from plane.db.models import (
     DevModeIssueType,
@@ -211,7 +211,7 @@ class IssueTypeViewSet(IssueSchemeScopeMixin, BaseAPIView):
 class IssueTypeCategoryViewSet(BaseViewSet):
     model = IssueTypeCategory
     serializer_class = IssueTypeCategorySerializer
-    permission_classes = [WorkspaceEntityPermission]
+    permission_classes = [WorkspaceIssueSchemeConfigPermission]
     search_fields = ["name", "description"]
 
     def get_queryset(self):

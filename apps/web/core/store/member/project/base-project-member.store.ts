@@ -8,9 +8,7 @@ import { uniq, unset, set, update, sortBy } from "lodash-es";
 import { action, computed, makeObservable, observable, runInAction } from "mobx";
 import { computedFn } from "mobx-utils";
 // plane imports
-import { EUserPermissions } from "@plane/constants";
 import type {
-  EUserProjectRoles,
   IProjectBulkAddFormData,
   IProjectUserPropertiesResponse,
   IUserLite,
@@ -52,6 +50,7 @@ export interface IBaseProjectMemberStore {
   // computed actions
   getProjectMemberFetchStatus: (projectId: string) => boolean;
   getProjectMemberDetails: (userId: string, projectId: string) => IProjectMemberDetails | null;
+  /** 第二个参数是整数角色时代「是否含访客」的遗留，已无访客，忽略 */
   getProjectMemberIds: (projectId: string, includeGuestUsers: boolean) => string[] | null;
   getFilteredProjectMemberDetails: (userId: string, projectId: string) => IProjectMemberDetails | null;
   getProjectUserProperties: (projectId: string) => IProjectUserPropertiesResponse | null;
@@ -75,18 +74,13 @@ export interface IBaseProjectMemberStore {
     data: IProjectBulkAddFormData
   ) => Promise<TProjectMembership[]>;
   // crud actions
-  updateMemberRole: (
+  /** 整份替换成员的权限组（custom_role_ids）和 / 或角色（job_role_ids），没传的不动 */
+  updateMemberAccess: (
     workspaceSlug: string,
     projectId: string,
     userId: string,
-    role: EUserProjectRoles
-  ) => Promise<TProjectMembership>;
-  updateMemberCustomRoles: (
-    workspaceSlug: string,
-    projectId: string,
-    userId: string,
-    customRoleIds: string[]
-  ) => Promise<string[]>;
+    data: { custom_role_ids?: string[]; job_role_ids?: string[] }
+  ) => Promise<void>;
   removeMemberFromProject: (workspaceSlug: string, projectId: string, userId: string) => Promise<void>;
 }
 
@@ -125,8 +119,7 @@ export abstract class BaseProjectMemberStore implements IBaseProjectMemberStore 
       fetchProjectUserProperties: action,
       updateProjectUserProperties: action,
       bulkAddMembersToProject: action,
-      updateMemberRole: action,
-      updateMemberCustomRoles: action,
+      updateMemberAccess: action,
       removeMemberFromProject: action,
     });
     // root store
@@ -190,30 +183,6 @@ export abstract class BaseProjectMemberStore implements IBaseProjectMemberStore 
   );
 
   /**
-   * @description get the role from the project membership
-   * @param userId
-   * @param projectId
-   */
-  protected getRoleFromProjectMembership = computedFn(
-    (userId: string, projectId: string): EUserProjectRoles | undefined => {
-      const projectMembership = this.getProjectMembershipByUserId(userId, projectId);
-      if (!projectMembership) return undefined;
-      const projectMembershipRole = projectMembership.original_role ?? projectMembership.role;
-      return projectMembershipRole ? (projectMembershipRole as EUserProjectRoles) : undefined;
-    }
-  );
-
-  /**
-   * @description Returns the project membership role for a user
-   * @description This method is specifically used when adding new members to a project. For existing members,
-   * the role is fetched directly from the backend during member listing.
-   * @param { string } userId - The ID of the user
-   * @param { string } projectId - The ID of the project
-   * @returns { EUserProjectRoles | undefined } The user's role in the project, or undefined if not found
-   */
-  abstract getUserProjectRole: (userId: string, projectId: string) => EUserProjectRoles | undefined;
-
-  /**
    * @description get the details of a project member
    * @param userId
    * @param projectId
@@ -224,9 +193,8 @@ export abstract class BaseProjectMemberStore implements IBaseProjectMemberStore 
     if (!projectMember || !userDetails) return null;
     const memberDetails: IProjectMemberDetails = {
       id: projectMember.id,
-      role: projectMember.role,
-      original_role: projectMember.original_role,
       custom_role_ids: projectMember.custom_role_ids,
+      job_role_ids: projectMember.job_role_ids,
       inherited_role_ids: projectMember.inherited_role_ids,
       role_template_ids: projectMember.role_template_ids,
       role_sources: projectMember.role_sources,
@@ -243,12 +211,9 @@ export abstract class BaseProjectMemberStore implements IBaseProjectMemberStore 
    * @description get the list of all the user ids of all the members of a project using projectId
    * @param projectId
    */
-  getProjectMemberIds = computedFn((projectId: string, includeGuestUsers: boolean): string[] | null => {
+  getProjectMemberIds = computedFn((projectId: string, _includeGuestUsers: boolean): string[] | null => {
     if (!this.projectMemberMap?.[projectId]) return null;
     let members = this.getProjectMemberships(projectId);
-    if (includeGuestUsers === false) {
-      members = members.filter((m) => m.role !== EUserPermissions.GUEST);
-    }
     members = sortBy(members, [
       (m) => m.member !== this.userStore.data?.id,
       (m) => this.memberRoot?.memberMap?.[m.member]?.display_name?.toLowerCase(),
@@ -281,9 +246,8 @@ export abstract class BaseProjectMemberStore implements IBaseProjectMemberStore 
 
     const memberDetails: IProjectMemberDetails = {
       id: projectMember.id,
-      role: projectMember.role,
-      original_role: projectMember.original_role,
       custom_role_ids: projectMember.custom_role_ids,
+      job_role_ids: projectMember.job_role_ids,
       inherited_role_ids: projectMember.inherited_role_ids,
       role_template_ids: projectMember.role_template_ids,
       role_sources: projectMember.role_sources,
@@ -326,11 +290,7 @@ export abstract class BaseProjectMemberStore implements IBaseProjectMemberStore 
     await this.projectMemberService.bulkAddMembersToProject(workspaceSlug, projectId, data).then((response) => {
       runInAction(() => {
         response.forEach((member) => {
-          set(this.projectMemberMap, [projectId, member.member], {
-            ...member,
-            role: this.getUserProjectRole(member.member, projectId) ?? member.role,
-            original_role: member.role,
-          });
+          set(this.projectMemberMap, [projectId, member.member], member);
         });
       });
       update(this.projectRoot.projectMap, [projectId, "members"], (memberIds) =>
@@ -344,115 +304,42 @@ export abstract class BaseProjectMemberStore implements IBaseProjectMemberStore 
     });
 
   /**
-   * @description update the role of a member in a project
-   * @param projectId
-   * @param userId
-   * @param role
+   * @description 整份替换成员的权限组和 / 或角色。自己的权限组变了要重拉自己的有效权限。
+   * @param userId 用户 id
    */
-  abstract getProjectMemberRoleForUpdate: (
-    projectId: string,
-    userId: string,
-    role: EUserProjectRoles
-  ) => EUserProjectRoles;
-
-  /**
-   * @description update the role of a member in a project
-   * @param workspaceSlug
-   * @param projectId
-   * @param userId
-   * @param data
-   */
-  updateMemberRole = async (workspaceSlug: string, projectId: string, userId: string, role: EUserProjectRoles) => {
-    const memberDetails = this.getProjectMemberDetails(userId, projectId);
-    if (!memberDetails || !memberDetails?.id) throw new Error("Member not found");
-    // original data to revert back in case of error
-    const isCurrentUser = this.rootStore.user.data?.id === userId;
-    const membershipBeforeUpdate = { ...this.getProjectMembershipByUserId(userId, projectId) };
-    const permissionBeforeUpdate = isCurrentUser
-      ? this.rootStore.user.permission.getProjectRoleByWorkspaceSlugAndProjectId(workspaceSlug, projectId)
-      : undefined;
-    const updatedProjectRole = this.getProjectMemberRoleForUpdate(projectId, userId, role);
-    try {
-      runInAction(() => {
-        set(this.projectMemberMap, [projectId, userId, "original_role"], role);
-        set(this.projectMemberMap, [projectId, userId, "role"], updatedProjectRole);
-        if (isCurrentUser) {
-          set(
-            this.rootStore.user.permission.workspaceProjectsPermissions,
-            [workspaceSlug, projectId],
-            updatedProjectRole
-          );
-        }
-        set(this.rootStore.user.permission.projectUserInfo, [workspaceSlug, projectId, "role"], updatedProjectRole);
-      });
-      const response = await this.projectMemberService.updateProjectMember(
-        workspaceSlug,
-        projectId,
-        memberDetails?.id,
-        {
-          role,
-        }
-      );
-      return response;
-    } catch (error) {
-      // revert back to original members in case of error
-      runInAction(() => {
-        set(this.projectMemberMap, [projectId, userId, "original_role"], membershipBeforeUpdate?.original_role);
-        set(this.projectMemberMap, [projectId, userId, "role"], membershipBeforeUpdate?.role);
-        if (isCurrentUser) {
-          set(
-            this.rootStore.user.permission.workspaceProjectsPermissions,
-            [workspaceSlug, projectId],
-            membershipBeforeUpdate?.original_role
-          );
-          set(
-            this.rootStore.user.permission.projectUserInfo,
-            [workspaceSlug, projectId, "role"],
-            permissionBeforeUpdate
-          );
-        }
-      });
-      throw error;
-    }
-  };
-
-  /**
-   * @description update the custom roles of a member in a project
-   * @param workspaceSlug
-   * @param projectId
-   * @param userId
-   * @param customRoleIds
-   */
-  updateMemberCustomRoles = async (
+  updateMemberAccess = async (
     workspaceSlug: string,
     projectId: string,
     userId: string,
-    customRoleIds: string[]
-  ): Promise<string[]> => {
+    data: { custom_role_ids?: string[]; job_role_ids?: string[] }
+  ): Promise<void> => {
     const memberDetails = this.getProjectMemberDetails(userId, projectId);
     if (!memberDetails?.id) throw new Error("Member not found");
+    const before = { ...this.getProjectMembershipByUserId(userId, projectId) };
 
-    const previousRoleIds = this.getProjectMembershipByUserId(userId, projectId)?.custom_role_ids ?? [];
-
-    // Optimistic update
     runInAction(() => {
-      set(this.projectMemberMap, [projectId, userId, "custom_role_ids"], customRoleIds);
+      if (data.custom_role_ids) set(this.projectMemberMap, [projectId, userId, "custom_role_ids"], data.custom_role_ids);
+      if (data.job_role_ids) set(this.projectMemberMap, [projectId, userId, "job_role_ids"], data.job_role_ids);
     });
 
     try {
-      const response = await this.projectMemberService.updateMemberCustomRoles(
+      const response = await this.projectMemberService.updateMemberAccess(
         workspaceSlug,
         projectId,
         memberDetails.id,
-        customRoleIds
+        data
       );
       runInAction(() => {
         set(this.projectMemberMap, [projectId, userId, "custom_role_ids"], response.custom_role_ids);
+        set(this.projectMemberMap, [projectId, userId, "job_role_ids"], response.job_role_ids);
       });
-      return response.custom_role_ids;
+      if (data.custom_role_ids && userId === this.rootStore.user.data?.id) {
+        void this.rootStore.user.permission.fetchUserProjectInfo(workspaceSlug, projectId).catch(() => undefined);
+      }
     } catch (error) {
       runInAction(() => {
-        set(this.projectMemberMap, [projectId, userId, "custom_role_ids"], previousRoleIds);
+        set(this.projectMemberMap, [projectId, userId, "custom_role_ids"], before.custom_role_ids);
+        set(this.projectMemberMap, [projectId, userId, "job_role_ids"], before.job_role_ids);
       });
       throw error;
     }

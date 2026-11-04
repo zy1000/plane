@@ -95,8 +95,8 @@ from plane.app.serializers import (
     CycleSerializer,
 )
 from plane.app.permissions import (
-    allow_permission,
-    ROLE,
+    allow_project_member,
+    allow_creator_or,
     allow_fine_permission,
     allow_workspace_member,
     PermissionKey,
@@ -322,7 +322,7 @@ class PlanAPIView(BaseAPIView):
             "reviewers", "releases"
         )
 
-    @allow_fine_permission(PermissionKey.QA_PLAN_CREATE)
+    @allow_fine_permission(PermissionKey.PROJECT_TEST_PLAN_CREATE)
     def post(self, request, slug, project_id):
         serializer = self.serializer_class(
             data=request.data,
@@ -333,7 +333,7 @@ class PlanAPIView(BaseAPIView):
         serializer = TestPlanDetailSerializer(instance=test_plan)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-    @allow_fine_permission(PermissionKey.QA_PLAN_VIEW)
+    @allow_fine_permission(PermissionKey.PROJECT_TEST_PLAN_VIEW)
     def get(self, request, slug, project_id):
         planes = self.filter_queryset(self.get_queryset()).distinct()
         paginator = self.pagination_class()
@@ -350,7 +350,7 @@ class PlanAPIView(BaseAPIView):
             data=serializer.data, count=count if count is not None else planes.count()
         )
 
-    @allow_fine_permission(PermissionKey.QA_PLAN_EDIT)
+    @allow_fine_permission(PermissionKey.PROJECT_TEST_PLAN_EDIT)
     def put(self, request, slug, project_id):
         plan_id = request.data.pop("id")
         plan = self.queryset.get(id=plan_id)
@@ -365,7 +365,7 @@ class PlanAPIView(BaseAPIView):
         serializer = TestPlanDetailSerializer(instance=updated_plan)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    @allow_fine_permission(PermissionKey.QA_PLAN_DELETE)
+    @allow_fine_permission(PermissionKey.PROJECT_TEST_PLAN_DELETE)
     def delete(self, request, slug, project_id):
         plan_ids = request.data.pop("ids")
         self.queryset.filter(id__in=plan_ids).delete()
@@ -673,7 +673,7 @@ class PlanView(BaseViewSet):
         return query
 
     @action(detail=False, methods=["post"], url_path="cancel")
-    @allow_fine_permission(PermissionKey.QA_PLAN_EDIT)
+    @allow_fine_permission(PermissionKey.PROJECT_TEST_PLAN_EDIT)
     def cancel(self, request, slug):
         project_id = request.query_params.get("project_id")
         qs = PlanCase.objects.filter(id__in=request.data["id"])
@@ -793,7 +793,7 @@ class PlanView(BaseViewSet):
         )
 
     @action(detail=False, methods=["patch"], url_path="case-assignee")
-    @allow_fine_permission(PermissionKey.QA_PLAN_EDIT)
+    @allow_fine_permission(PermissionKey.PROJECT_TEST_PLAN_EDIT)
     def case_assignee(self, request, slug):
         plan_case_id = request.data.get("plan_case_id")
         if not plan_case_id:
@@ -1306,7 +1306,7 @@ class PlanView(BaseViewSet):
 
     @transaction.atomic
     @action(detail=False, methods=["post"], url_path="add-cases")
-    @allow_fine_permission(PermissionKey.QA_PLAN_EDIT)
+    @allow_fine_permission(PermissionKey.PROJECT_TEST_PLAN_EDIT)
     def add_cases(self, request, slug):
         plan_id = request.data.get("plan_id")
         raw_case_ids = request.data.get("case_ids")
@@ -1407,7 +1407,7 @@ class PlanView(BaseViewSet):
 
     @transaction.atomic
     @action(detail=False, methods=["post"], url_path="copy-cases")
-    @allow_fine_permission(PermissionKey.QA_PLAN_EDIT)
+    @allow_fine_permission(PermissionKey.PROJECT_TEST_PLAN_EDIT)
     def copy_cases(self, request, slug):
         """将源计划中选中的计划用例复制到目标计划（同项目），执行结果重置为未执行。
 
@@ -1600,7 +1600,7 @@ class PlanView(BaseViewSet):
 
     @transaction.atomic
     @action(detail=False, methods=["post"], url_path="associate-releases")
-    @allow_fine_permission(PermissionKey.QA_PLAN_EDIT)
+    @allow_fine_permission(PermissionKey.PROJECT_TEST_PLAN_EDIT)
     def associate_releases(self, request, slug):
         plan_id = request.data.get("plan_id")
         release_ids = request.data.get("release_ids", [])
@@ -1709,7 +1709,7 @@ class CaseAPIView(BaseAPIView):
             repository__workspace__slug=slug, repository__product_id=product_id
         )
 
-    @allow_product_scope
+    @allow_product_scope(PermissionKey.PROJECT_TEST_CASE_VIEW)
     def get(self, request, slug, product_id):
         queryset = self.product_queryset(slug, product_id)
         # 按模块过滤时递归包含所有子模块，与模块树上的计数口径保持一致；"none" = 未归类。
@@ -1784,7 +1784,7 @@ class CaseAPIView(BaseAPIView):
 
         return list_response(data=data, count=cases.count())
 
-    @allow_product_scope
+    @allow_product_scope(PermissionKey.PROJECT_TEST_CASE_CREATE)
     def post(self, request, slug, product_id):
         serializer = CaseCreateUpdateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -1810,7 +1810,7 @@ class CaseAPIView(BaseAPIView):
         serializer = self.serializer_class(instance=test_case)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-    @allow_product_scope
+    @allow_product_scope(PermissionKey.PROJECT_TEST_CASE_EDIT)
     def put(self, request, slug, product_id):
         case_id = request.data.pop("id")
         case = get_object_or_404(self.product_queryset(slug, product_id), id=case_id)
@@ -1841,7 +1841,7 @@ class CaseAPIView(BaseAPIView):
         serializer = self.serializer_class(instance=case)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    @allow_product_scope
+    @allow_product_scope(PermissionKey.PROJECT_TEST_CASE_DELETE)
     def delete(self, request, slug, product_id):
         cases = self.filter_queryset(self.product_queryset(slug, product_id))
         # 硬删用例会级联删掉计划用例，受影响的计划状态要重算；plan_id 得在删前取
@@ -2185,7 +2185,7 @@ class CaseAttachmentV2Endpoint(BaseAPIView):
     serializer_class = CaseAttachmentSerializer
     model = FileAsset
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    @allow_project_member
     def post(self, request, slug, project_id, case_id):
         name = request.data.get("name")
         type = request.data.get("type") or "application/octet-stream"
@@ -2220,7 +2220,7 @@ class CaseAttachmentV2Endpoint(BaseAPIView):
             status=status.HTTP_200_OK,
         )
 
-    @allow_permission([ROLE.ADMIN], creator=True, model=FileAsset)
+    @allow_creator_or(PermissionKey.PROJECT_TEST_CASE_EDIT, model=FileAsset)
     def delete(self, request, slug, project_id, case_id, pk):
         case_attachment = FileAsset.objects.get(
             pk=pk, workspace__slug=slug, project_id=project_id
@@ -2279,7 +2279,7 @@ class CaseAttachmentV2Endpoint(BaseAPIView):
             item["can_download"] = can_download_asset(request, asset)
         return Response(data, status=status.HTTP_200_OK)
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    @allow_project_member
     def patch(self, request, slug, project_id, case_id, pk):
         case_attachment = FileAsset.objects.get(
             pk=pk, workspace__slug=slug, project_id=project_id

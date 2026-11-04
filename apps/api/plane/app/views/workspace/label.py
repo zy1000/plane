@@ -12,6 +12,7 @@ from plane.app.views.base import BaseAPIView
 from plane.db.models import Label
 from plane.app.permissions import WorkspaceViewerPermission
 from plane.utils.cache import cache_response
+from plane.utils.visibility import visible_projects_q
 
 
 class WorkspaceLabelsEndpoint(BaseAPIView):
@@ -21,9 +22,8 @@ class WorkspaceLabelsEndpoint(BaseAPIView):
     @cache_response(60 * 60 * 2)
     def get(self, request, slug):
         labels = Label.objects.filter(
+            visible_projects_q(request.user, slug, "project"),
             workspace__slug=slug,
-            project__project_projectmember__member=request.user,
-            project__project_projectmember__is_active=True,
             project__archived_at__isnull=True,
         )
         serializer = LabelSerializer(labels, many=True).data

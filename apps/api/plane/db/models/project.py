@@ -6,7 +6,6 @@
 import pytz
 from decimal import Decimal
 from uuid import uuid4
-from enum import Enum
 
 # Django imports
 from django.conf import settings
@@ -19,9 +18,6 @@ from django.db.models import Q
 from plane.db.mixins import AuditModel, SoftDeletionManager
 
 from .base import BaseModel
-
-ROLE_CHOICES = ((20, "Admin"), (15, "Member"), (5, "Guest"))
-
 
 def validate_estimated_hours_half_step(value):
     """预估工时必须为 0.5 小时的整数倍（如 100、100.5、101）。"""
@@ -39,21 +35,6 @@ def validate_estimated_hours_half_step(value):
 class SoftProjectManager(SoftDeletionManager):
     def get_queryset(self):
         return super().get_queryset().filter(is_template=False)
-
-
-class ROLE(Enum):
-    ADMIN = 20
-    MEMBER = 15
-    GUEST = 5
-
-
-class ProjectNetwork(Enum):
-    SECRET = 0
-    PUBLIC = 2
-
-    @classmethod
-    def choices(cls):
-        return [(0, "Secret"), (2, "Public")]
 
 
 def get_default_props():
@@ -86,12 +67,10 @@ def get_default_preferences():
 
 
 class Project(BaseModel):
-    NETWORK_CHOICES = ((0, "Secret"), (2, "Public"))
     name = models.CharField(max_length=255, verbose_name="Project Name")
     description = models.TextField(verbose_name="Project Description", blank=True)
     description_text = models.JSONField(verbose_name="Project Description RT", blank=True, null=True)
     description_html = models.JSONField(verbose_name="Project Description HTML", blank=True, null=True)
-    network = models.PositiveSmallIntegerField(default=2, choices=NETWORK_CHOICES)
     workspace = models.ForeignKey("db.WorkSpace", on_delete=models.CASCADE, related_name="workspace_project")
     identifier = models.CharField(max_length=12, verbose_name="Project Identifier", db_index=True)
     default_assignee = models.ForeignKey(
@@ -140,7 +119,6 @@ class Project(BaseModel):
         related_name="projects",
         verbose_name="工作项方案",
     )
-    guest_view_all_features = models.BooleanField(default=False)
     cover_image = models.TextField(blank=True, null=True)
     cover_image_asset = models.ForeignKey(
         "db.FileAsset",
@@ -345,7 +323,6 @@ class ProjectMemberInvite(ProjectBaseModel):
     token = models.CharField(max_length=255)
     message = models.TextField(null=True)
     responded_at = models.DateTimeField(null=True)
-    role = models.PositiveSmallIntegerField(choices=ROLE_CHOICES, default=5)
 
     class Meta:
         verbose_name = "Project Member Invite"
@@ -396,7 +373,6 @@ class ProjectMember(ProjectBaseModel):
         related_name="member_project",
     )
     comment = models.TextField(blank=True, null=True)
-    role = models.PositiveSmallIntegerField(choices=ROLE_CHOICES, default=5)
     view_props = models.JSONField(default=get_default_props)
     default_props = models.JSONField(default=get_default_props)
     preferences = models.JSONField(default=get_default_preferences)
@@ -407,6 +383,13 @@ class ProjectMember(ProjectBaseModel):
         through="ProjectMemberRole",
         blank=True,
         related_name="role_members",
+    )
+    # 角色（「他在这个项目里是干什么的」），审批人、评审候选按它找人
+    job_roles = models.ManyToManyField(
+        "db.DataDictionaryItem",
+        through="ProjectMemberJobRole",
+        blank=True,
+        related_name="project_members",
     )
 
     def save(self, *args, **kwargs):
@@ -656,3 +639,28 @@ class ProjectPmsInfo(models.Model):
 
     class Meta:
         db_table = "project_pms_info"
+
+
+class ProjectMemberJobRole(ProjectBaseModel):
+    """项目成员挂的角色。纯连接行，硬删。"""
+
+    member = models.ForeignKey(ProjectMember, on_delete=models.CASCADE, related_name="job_role_links")
+    job_role = models.ForeignKey(
+        "db.DataDictionaryItem",
+        on_delete=models.PROTECT,
+        related_name="project_member_links",
+    )
+
+    class Meta:
+        db_table = "project_member_job_roles"
+        ordering = ("created_at",)
+        constraints = [
+            models.UniqueConstraint(
+                fields=["member", "job_role"],
+                condition=Q(deleted_at__isnull=True),
+                name="project_member_job_role_unique_active",
+            ),
+        ]
+
+    def delete(self, using=None, soft=False, *args, **kwargs):
+        return super().delete(using=using, soft=False, *args, **kwargs)

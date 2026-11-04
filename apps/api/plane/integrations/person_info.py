@@ -28,7 +28,6 @@ from .base import DIRECTION_PULL, IntegrationError, IntegrationSpec
 REQUIRED_SETTINGS = ("PERSON_INFO_API_URL", "PERSON_INFO_APP_KEY")
 CONNECT_TIMEOUT_SECONDS = 5
 READ_TIMEOUT_SECONDS = 60
-WORKSPACE_MEMBER_ROLE = 15  # Member
 EMPLOYEE_ID_MAX_LENGTH = UserExtraInfo._meta.get_field("employee_id").max_length
 
 
@@ -243,7 +242,7 @@ def _add_workspace_members(workspace, users):
         )
     )
     to_add = [
-        WorkspaceMember(workspace=workspace, member_id=user_id, role=WORKSPACE_MEMBER_ROLE)
+        WorkspaceMember(workspace=workspace, member_id=user_id)
         for user_id in user_ids
         if user_id not in existing
     ]

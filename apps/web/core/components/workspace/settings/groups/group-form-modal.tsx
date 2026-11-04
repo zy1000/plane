@@ -80,7 +80,7 @@ export function GroupFormModal({ isOpen, group, onClose, onSubmit }: Props) {
           <div className="min-w-0 flex-1">
             <h3 className="text-body-lg-medium text-primary">{isEditMode ? "编辑团队" : "创建团队"}</h3>
             <p className="mt-1 text-13 leading-5 text-secondary">
-              {isEditMode ? "更新团队名称和用途说明。" : "先创建团队，再继续添加成员并分配工作区角色。"}
+              {isEditMode ? "更新团队名称和用途说明。" : "先创建团队，再继续添加成员并分配工作区权限组。"}
             </p>
           </div>
           <button

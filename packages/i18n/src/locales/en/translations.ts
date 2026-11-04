@@ -4371,7 +4371,6 @@ export default {
       no_description: "No description",
       owner: "Owner",
       product_owner: "Product owner",
-      visibility: "Visibility",
       updated_at: "Updated",
       actions: "Actions",
       code: "Project code",
@@ -4422,13 +4421,6 @@ export default {
       plan: "Schedule",
       team: "Team",
     },
-    visibility: {
-      public: "Public",
-      public_description: "Visible to every member of this workspace.",
-      private: "Private",
-      private_description: "Visible only to the owner, product members, and workspace admins.",
-      private_access_warning: "You will lose access after saving unless you add yourself as a product member.",
-    },
     validation: {
       owner_required: "Select an owner",
       owner_not_member: "The owner must be a member of this product. Add them in member settings first.",
@@ -4465,9 +4457,7 @@ export default {
       back_to_product: "Back to product",
       navigation: {
         general: "General",
-        members: "Members",
-        teams: "Teams",
-        permissions: "Permissions",
+        teams: "Dev team",
       },
       fields: {
         name: "Product name",
@@ -4476,7 +4466,6 @@ export default {
           "e.g. KF01A008: starts with a letter, uppercase letters and digits only, up to 12 characters. Also used as the requirement ID prefix.",
         description: "Product description",
         owner: "Owner",
-        visibility: "Visibility",
       },
       validation: {
         name_required: "Enter a product name.",
@@ -5327,7 +5316,6 @@ export default {
       code_hint: "Picked from the data dictionary; unique per workspace",
       dev_mode: "Dev mode",
       dev_mode_view: "View mode settings",
-      network: "Visibility",
       business_unit: "Business unit",
       description: "Description",
       pms_project_name: "PMS project name",
@@ -5366,17 +5354,6 @@ export default {
       dev_mode_required: "Select a dev mode.",
       dev_mode_immutable: "The dev mode cannot be changed after the project is created.",
       feature_not_allowed_by_dev_mode: "The current dev mode does not allow this component.",
-    },
-    network: {
-      label: "Network",
-      private: {
-        title: "Private",
-        description: "Accessible only by invite",
-      },
-      public: {
-        title: "Public",
-        description: "Anyone in the workspace except Guests can join",
-      },
     },
     error: {
       permission: "You don't have permission to perform this action.",
@@ -5595,30 +5572,32 @@ export default {
     settings: {
       my_access: {
         title: "My permissions",
-        description: "See how your roles and teams determine what you can do in this workspace.",
+        description: "See how your permission groups and teams determine what you can do in this workspace.",
         read_only: "Read only",
         loading: "Loading access details",
         identity: {
           workspace: "Current workspace",
           granted_permissions: "Granted permissions",
+          job_roles: "My roles",
+          no_job_roles: "Not set",
           joined: "Joined",
           unavailable: "Not available",
         },
         sources: {
           title: "Access sources",
-          direct_roles: "Direct roles",
+          direct_roles: "My permission groups",
           teams: "Teams",
           no_direct_roles:
-            "No direct roles are assigned. Your access may still come from teams or workspace ownership.",
+            "No permission groups are assigned. Your access may still come from teams or workspace ownership.",
           no_teams: "You are not currently part of a workspace team.",
-          no_team_roles: "No inherited roles",
+          no_team_roles: "No permission groups bound to this team",
         },
         permissions: {
           title: "Effective permissions",
           search_placeholder: "Search by permission name, description, or key",
           filters: {
             all: "All permissions",
-            direct_role: "Direct role",
+            direct_role: "My permission groups",
             group_role: "Inherited from team",
             privileged: "Owner or administrator",
             not_granted: "Not granted",
@@ -5637,7 +5616,7 @@ export default {
           clear_filters: "Clear filters",
           uncategorized: "Other permissions",
           sources: {
-            direct_role: "Direct role · {role}",
+            direct_role: "Permission group · {role}",
             group_role: "{group} · {role}",
             workspace_owner: "Workspace owner",
             instance_admin: "Instance administrator",
@@ -5717,10 +5696,38 @@ export default {
         title: "Member groups",
       },
       roles: {
-        title: "Permissions",
+        title: "Permission groups",
+        template_flag: "Use as a project permission group template",
+        template_hint:
+          "Projects in this group's data scope will reference it automatically, so project managers can bind project members to it.",
+        referenced_projects: "Referencing projects",
+        data_scope: {
+          title: "Data scope",
+          description:
+            "Decides which projects and products members of this group can see and open (allow list); the group's project permissions only apply inside allow-listed projects. Projects outside every allow list stay closed even with a direct link.",
+          projects: "Projects",
+          products: "Products",
+          projects_hint: "Which projects group members can see. Projects they belong to or lead are always visible.",
+          products_hint:
+            "Which products group members can see. Products they own, review or reach through a visible project are always visible.",
+          mode_all: "All",
+          mode_selected: "Selected",
+          mode_filter: "By condition",
+          mode_all_hint: "every {kind} in the workspace",
+          mode_selected_hint: "pick one by one",
+          mode_filter_hint: "everything matching, including ones created later",
+          matched: "{count} {kind} match now",
+          no_condition: "Add at least one condition",
+          search: "Search {kind}",
+          selected_count: "{count} selected",
+          no_match: "No matches",
+          archived: "Archived",
+          empty_project_permissions:
+            "Members of this group can open the allow-listed projects but cannot do anything inside: tick project permissions under “Permissions”.",
+        },
       },
       templates: {
-        title: "Roles",
+        title: "Permission group templates",
       },
       exports: {
         heading: "Exports",
@@ -6710,7 +6717,10 @@ export default {
         label: "Workflow",
       },
       roles: {
-        label: "Permissions",
+        label: "Permission groups",
+      },
+      products: {
+        label: "Products",
       },
       pms_sync: {
         label: "PMS defect sync",

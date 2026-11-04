@@ -34,7 +34,6 @@ export interface IPartialProject {
   identifier: string;
   sort_order: number | null;
   logo_props: TLogoProps;
-  member_role?: TUserPermissions | EUserProjectRoles | null;
   archived_at: string | null;
   workspace: IWorkspace | string;
   cycle_view: boolean;
@@ -49,7 +48,6 @@ export interface IPartialProject {
   is_issue_type_enabled?: boolean;
   guest_view_all_features?: boolean;
   project_lead?: IUserLite | string | null;
-  network?: number;
   bug_count?: number;
   cycle_count?: number;
   total_work_items?: number;
@@ -58,8 +56,10 @@ export interface IPartialProject {
   un_started_work_items?: number;
   completed_work_items?: number;
   cancelled_work_items?: number;
-  /** 当前用户在该项目下的细粒度权限键，与 project-members/me 及列表接口一致 */
+  /** 当前用户在该项目下的细粒度权限键。列表接口只带几个常用 key，完整的进项目后取 project-members/me */
   permission_keys?: string[];
+  /** 当前用户是不是本项目成员（列表接口带）。能不能进看 store 的 isProjectMember（成员 / 负责 / 白名单） */
+  is_member?: boolean;
   // Timestamps
   created_at?: Date | string | null;
   updated_at?: Date | string | null;
@@ -166,7 +166,14 @@ export interface IProjectMemberLite {
 
 export type TProjectMembership = {
   member: string;
-  role: TUserPermissions | EUserProjectRoles;
+  /** @deprecated 整数角色已退役，权限看 permission_keys / type_limits */
+  role?: TUserPermissions | EUserProjectRoles;
+  /** 角色（数据字典 job_role 的值 id），只用来「找人」，与权限无关 */
+  job_role_ids?: string[];
+  /** {key: [不适用的工作项类型 id]}：权限组按工作项类型限定的新建 / 编辑 / 删除 */
+  type_limits?: Record<string, string[]>;
+  /** 实例管理员 / 工作区 owner / 项目负责人：不看权限组，全部放行 */
+  is_passthrough?: boolean;
   custom_role_ids?: string[];
   inherited_role_ids?: string[];
   /** 所持角色（直接 + 用户组继承）的来源角色模板 id；模式方案的工作流约束指向模板（`role_template:<id>`） */
@@ -176,18 +183,20 @@ export type TProjectMembership = {
 } & (
   | {
       id: string;
-      original_role: EUserProjectRoles;
+      /** @deprecated */
+      original_role?: EUserProjectRoles;
       created_at: string;
     }
   | {
       id: null;
-      original_role: null;
+      original_role?: null;
       created_at: null;
     }
 );
 
 export interface IProjectBulkAddFormData {
-  members: { role: TUserPermissions | EUserProjectRoles; member_id: string; role_ids?: string[] }[];
+  /** role_ids 是权限组（可给模板 id），job_role_ids 是角色 */
+  members: { member_id: string; role_ids?: string[]; job_role_ids?: string[] }[];
 }
 
 export type IProjectRoleSource = {

@@ -10,15 +10,13 @@ import { Controller } from "react-hook-form";
 import type { Control, FieldErrors } from "react-hook-form";
 import { Lock, Pencil } from "lucide-react";
 // plane imports
-import { NETWORK_CHOICES } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Logo } from "@plane/propel/emoji-icon-picker";
 import type { IProject } from "@plane/types";
 import { cn, projectIdentifierSanitizer, renderFormattedDate } from "@plane/utils";
 // components
 import { ModalInlineError } from "@/components/common/form-modal";
-import { ProjectLogoField, ProjectNetworkSegmented, getProjectDateFormatToken } from "@/components/project/form-fields";
-import { ProjectNetworkIcon } from "@/components/project/project-network-icon";
+import { ProjectLogoField, getProjectDateFormatToken } from "@/components/project/form-fields";
 // plane web types
 import type { TProject } from "@/plane-web/types/projects";
 
@@ -165,7 +163,7 @@ export function ProjectSettingsIdentity(props: TProjectSettingsIdentityProps) {
           {errors.identifier?.message ? <ModalInlineError message={errors.identifier.message} /> : null}
         </>
       }
-      aside={<ProjectNetworkSegmented control={control} />}
+      aside={null}
     />
   );
 }
@@ -173,7 +171,6 @@ export function ProjectSettingsIdentity(props: TProjectSettingsIdentityProps) {
 // ---- 成员只读 ----
 export function ProjectSettingsIdentityReadOnly({ project }: { project: IProject }) {
   const { t } = useTranslation();
-  const network = NETWORK_CHOICES.find((choice) => choice.key === project.network);
   return (
     <IdentityLayout
       tile={
@@ -189,12 +186,6 @@ export function ProjectSettingsIdentityReadOnly({ project }: { project: IProject
               <span className={CHIP_PREFIX_CLASS}>ID</span>
               <span className={cn(CHIP_VALUE_CLASS, "flex items-center")}>{project.identifier}</span>
             </span>
-            {network ? (
-              <span className="inline-flex items-center gap-1.5">
-                <ProjectNetworkIcon iconKey={network.iconKey} className="size-3.5" />
-                {t(network.i18n_label)}
-              </span>
-            ) : null}
             <CreatedOn project={project} />
           </div>
         </>

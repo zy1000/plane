@@ -60,8 +60,10 @@ def create_project(workspace, user_id):
         attach_own_scheme(project)
         project.save()
 
-    # Add current member as project member
-    _ = ProjectMember.objects.create(project=project, member_id=user_id, role=20)
+    # Add current member as project admin
+    from plane.utils.project.member import add_project_admins
+
+    add_project_admins(project, [user_id])
 
     return project
 
@@ -75,7 +77,6 @@ def create_project_members(workspace, project, members):
                 project=project,
                 workspace=workspace,
                 member=member,
-                role=20,
                 sort_order=random.randint(0, 65535),
             )
             for member in members

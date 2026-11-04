@@ -9,71 +9,62 @@ import { observer } from "mobx-react";
 // plane imports
 import { Button } from "@plane/propel/button";
 import { ChevronDownIcon } from "@plane/propel/icons";
-import { EUserProjectRoles, EUserWorkspaceRoles } from "@plane/types";
 // plane ui
 import { CustomMenu } from "@plane/ui";
 // components
 import { FilterHeader, FilterOption } from "@/components/issues/issue-layouts/filters";
 
-interface IRoleOption {
+export interface IMemberFilterOption {
   value: string;
   label: string;
 }
 
 type Props = {
   appliedFilters: string[] | null;
-  handleUpdate: (role: string) => void;
+  handleUpdate: (value: string) => void;
   memberType: "project" | "workspace";
+  /** 筛选项；不给时工作区只有「已停用」（整数角色已退役，不再按管理员 / 成员 / 访客筛） */
+  options?: IMemberFilterOption[];
+  /** 分组标题，默认「状态」 */
+  title?: string;
 };
 
-const PROJECT_ROLE_OPTIONS: IRoleOption[] = [
-  { value: String(EUserProjectRoles.ADMIN), label: "Admin" },
-  { value: String(EUserProjectRoles.MEMBER), label: "Member" },
-  { value: String(EUserProjectRoles.GUEST), label: "Guest" },
-];
+const DEFAULT_OPTIONS: Record<Props["memberType"], IMemberFilterOption[]> = {
+  project: [],
+  workspace: [{ value: "suspended", label: "已停用" }],
+};
 
-const WORKSPACE_ROLE_OPTIONS: IRoleOption[] = [
-  { value: String(EUserWorkspaceRoles.ADMIN), label: "Admin" },
-  { value: String(EUserWorkspaceRoles.MEMBER), label: "Member" },
-  { value: String(EUserWorkspaceRoles.GUEST), label: "Guest" },
-  { value: "suspended", label: "Suspended" },
-];
-
-// Role filter group component
-const RoleFilterGroup = observer(function RoleFilterGroup({
+const MemberFilterGroup = observer(function MemberFilterGroup({
   appliedFilters,
   handleUpdate,
-  memberType,
+  options,
+  title,
 }: {
   appliedFilters: string[] | null;
-  handleUpdate: (role: string) => void;
-  memberType: "project" | "workspace";
+  handleUpdate: (value: string) => void;
+  options: IMemberFilterOption[];
+  title: string;
 }) {
   const [isExpanded, setIsExpanded] = useState(true);
   const appliedFiltersCount = appliedFilters?.length ?? 0;
-  const roleOptions = memberType === "project" ? PROJECT_ROLE_OPTIONS : WORKSPACE_ROLE_OPTIONS;
 
   return (
     <div className="space-y-2">
       <FilterHeader
-        title={`Roles${appliedFiltersCount > 0 ? ` (${appliedFiltersCount})` : ""}`}
+        title={`${title}${appliedFiltersCount > 0 ? ` (${appliedFiltersCount})` : ""}`}
         isPreviewEnabled={isExpanded}
         handleIsPreviewEnabled={() => setIsExpanded(!isExpanded)}
       />
-
       {isExpanded && (
         <div className="space-y-1">
-          {roleOptions.map((role) => {
-            const isSelected = appliedFilters?.includes(role.value) ?? false;
-            return (
-              <FilterOption
-                key={`role-${role.value}`}
-                isChecked={isSelected}
-                title={role.label}
-                onClick={() => handleUpdate(role.value)}
-              />
-            );
-          })}
+          {options.map((option) => (
+            <FilterOption
+              key={`member-filter-${option.value}`}
+              isChecked={appliedFilters?.includes(option.value) ?? false}
+              title={option.label}
+              onClick={() => handleUpdate(option.value)}
+            />
+          ))}
         </div>
       )}
     </div>
@@ -81,28 +72,29 @@ const RoleFilterGroup = observer(function RoleFilterGroup({
 });
 
 export const MemberListFilters = observer(function MemberListFilters(props: Props) {
-  const { appliedFilters, handleUpdate, memberType } = props;
-
+  const { appliedFilters, handleUpdate, memberType, options, title = "状态" } = props;
   return (
     <div className="space-y-4">
-      {/* Role Filter Group */}
-      <RoleFilterGroup appliedFilters={appliedFilters} handleUpdate={handleUpdate} memberType={memberType} />
+      <MemberFilterGroup
+        appliedFilters={appliedFilters}
+        handleUpdate={handleUpdate}
+        options={options ?? DEFAULT_OPTIONS[memberType]}
+        title={title}
+      />
     </div>
   );
 });
 
 // Dropdown component for member list filters
 export const MemberListFiltersDropdown = observer(function MemberListFiltersDropdown(props: Props) {
-  const { appliedFilters, handleUpdate, memberType } = props;
-
-  const appliedFiltersCount = appliedFilters?.length ?? 0;
+  const appliedFiltersCount = props.appliedFilters?.length ?? 0;
 
   return (
     <CustomMenu
       customButton={
         <div className="relative">
           <Button variant="secondary" size="lg" className="flex items-center gap-2">
-            <span>Filters</span>
+            <span>筛选</span>
             <ChevronDownIcon className="h-3 w-3" />
           </Button>
           {appliedFiltersCount > 0 && (
@@ -112,7 +104,7 @@ export const MemberListFiltersDropdown = observer(function MemberListFiltersDrop
       }
       placement="bottom-start"
     >
-      <MemberListFilters appliedFilters={appliedFilters} handleUpdate={handleUpdate} memberType={memberType} />
+      <MemberListFilters {...props} />
     </CustomMenu>
   );
 });

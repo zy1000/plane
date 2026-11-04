@@ -24,10 +24,10 @@ import { LayersIcon } from "@plane/propel/icons";
 import { cn } from "@plane/utils";
 
 const STATE_PERMISSION_KEYS = {
-  create: "state.create",
-  edit: "state.edit",
-  delete: "state.delete",
-  markDefault: "state.mark_default",
+  create: "project.state.manage",
+  edit: "project.state.manage",
+  delete: "project.state.manage",
+  markDefault: "project.state.manage",
 } as const;
 
 const PROJECT_PERMISSION_DENIED_ERROR = { error: "You don't have the required permissions." };

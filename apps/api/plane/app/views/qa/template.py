@@ -120,9 +120,7 @@ class TemplateCaseAPIView(BaseAPIView):
         serializer = self.serializer_class(instance=paginated_queryset, many=True)
         return list_response(data=serializer.data, count=cases.count())
 
-    @allow_fine_permission(
-        PermissionKey.WORKSPACE_CASE_TEMPLATE_MANAGE, level="WORKSPACE"
-    )
+    @allow_fine_permission(PermissionKey.WORKSPACE_CASE_TEMPLATE_MANAGE, level="WORKSPACE")
     def post(self, request, slug):
         self._get_template_repository(slug, request.data.get("repository"))
         serializer = CaseCreateUpdateSerializer(data=request.data)
@@ -139,9 +137,7 @@ class TemplateCaseAPIView(BaseAPIView):
         serializer = self.serializer_class(instance=test_case)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-    @allow_fine_permission(
-        PermissionKey.WORKSPACE_CASE_TEMPLATE_MANAGE, level="WORKSPACE"
-    )
+    @allow_fine_permission(PermissionKey.WORKSPACE_CASE_TEMPLATE_MANAGE, level="WORKSPACE")
     def put(self, request, slug):
         case_id = request.data.pop("id")
         case = get_object_or_404(self.get_queryset(), id=case_id)
@@ -163,9 +159,7 @@ class TemplateCaseAPIView(BaseAPIView):
         serializer = self.serializer_class(instance=case)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    @allow_fine_permission(
-        PermissionKey.WORKSPACE_CASE_TEMPLATE_MANAGE, level="WORKSPACE"
-    )
+    @allow_fine_permission(PermissionKey.WORKSPACE_CASE_TEMPLATE_MANAGE, level="WORKSPACE")
     def delete(self, request, slug):
         # 防呆：必须显式指定要删的用例，避免无参请求清空全工作区模板用例
         if not request.query_params.get("id__in"):

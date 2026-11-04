@@ -5,6 +5,7 @@
  */
 
 import type { TPaginationInfo } from "./common";
+import type { TDataScope } from "./data-scope";
 import type { ICycle } from "./cycle";
 import type { TUserPermissions } from "./enums";
 import type { TProjectMembership } from "./project";
@@ -88,7 +89,8 @@ export type Properties = {
 export interface IWorkspaceMember {
   id: string;
   member: IUserLite;
-  role: TUserPermissions | EUserWorkspaceRoles;
+  /** @deprecated 整数角色已退役，后端不再返回 */
+  role?: TUserPermissions | EUserWorkspaceRoles;
   created_at?: string;
   avatar_url?: string;
   email?: string;
@@ -101,6 +103,8 @@ export interface IWorkspaceMember {
   custom_role_ids: string[];
   group_role_ids: string[];
   group_ids: string[];
+  /** 角色（数据字典 job_role 的值 id） */
+  job_role_ids?: string[];
   // 人员扩展信息：工号 / 部门路径 / 上级
   employee_id?: string | null;
   department?: string | null;
@@ -123,6 +127,7 @@ export interface IWorkspaceMemberMe {
   custom_role_ids: string[];
   group_role_ids: string[];
   group_ids?: string[];
+  job_role_ids?: string[];
 }
 
 export type TWorkspaceMyAccessPermissionSourceType =
@@ -168,11 +173,13 @@ export interface IWorkspaceMyAccessPermission {
 export interface IWorkspaceMyAccess {
   membership: {
     id: string | null;
-    role: EUserWorkspaceRoles | null;
     joined_at: string | null;
     is_workspace_owner: boolean;
     is_instance_admin: boolean;
   };
+  /** 我的角色（数据字典 job_role） */
+  job_roles: { id: string; label: string; color: string }[];
+  /** 我的工作区权限组，第一个是隐式持有的「工作区成员」 */
   direct_roles: IWorkspaceMyAccessRole[];
   groups: IWorkspaceMyAccessGroup[];
   permissions: IWorkspaceMyAccessPermission[];
@@ -337,22 +344,27 @@ export enum ECreateOrJoinWorkspaceViews {
 }
 
 // Workspace Role
-export type TWorkspaceRoleType = "workspace" | "project_template";
-
+/**
+ * 权限组（WorkspaceRole）：工作区权限 + 项目权限 + 数据权限（白名单）+ 模板开关。
+ * 权限内容走 roles/<id>/permissions/，数据权限走 roles/<id>/data-scope/（见 permission-group.ts / data-scope.ts）。
+ */
 export interface IWorkspaceRole {
   id: string;
   workspace: string;
   name: string;
   description: string;
-  permissions: Record<string, unknown>;
-  type: TWorkspaceRoleType;
-  legacy_role: EUserWorkspaceRoles | null;
-  is_system: boolean;
+  /** 勾上 = 白名单里的项目自动引用这个组（减去排除列表），项目里只能绑人不能改 */
+  is_template: boolean;
+  data_scope: TDataScope;
   created_at: string;
   updated_at: string;
   created_by: string;
   updated_by: string;
   deleted_at: string | null;
+  /** @deprecated 列表接口已不返回，权限内容走 roles/<id>/permissions/ */
+  permissions?: Record<string, unknown>;
+  /** @deprecated 整数角色已退役 */
+  legacy_role?: EUserWorkspaceRoles | null;
 }
 
 // Workspace Group
@@ -392,33 +404,6 @@ export interface IWorkspaceGroupRole {
   created_by: string;
   updated_by: string;
   deleted_at: string | null;
-}
-
-// Permission
-export interface IPermission {
-  id: string;
-  key: string;
-  name: string;
-  description: string | null;
-  scope: "workspace" | "project" | "product";
-  module: string | null;
-  action: string | null;
-  category: string | null;
-  sort_order: number;
-  is_active: boolean;
-  is_bound: boolean;
-}
-
-export interface IRolePermissionData {
-  role: IWorkspaceRole;
-  permission_keys: string[];
-  permissions: IPermission[];
-}
-
-// 角色模板「同步权限到项目」结果：updated 被覆盖的同名项目角色数，skipped 没有同名角色的项目数
-export interface IWorkspaceRoleSyncToProjectsResult {
-  updated: number;
-  skipped: number;
 }
 
 // Project Role — 项目内实际生效的自定义角色
@@ -466,8 +451,3 @@ export interface IProjectGroupMember {
   is_project_member: boolean;
 }
 
-export interface IProjectRolePermissionData {
-  role: IProjectRole;
-  permission_keys: string[];
-  permissions: IPermission[];
-}

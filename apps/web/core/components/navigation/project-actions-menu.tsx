@@ -22,6 +22,8 @@ type Props = {
   };
   isAdmin: boolean;
   isAuthorized: boolean;
+  /** 成员表里真有自己才显示「退出项目」（白名单访客没什么可退的） */
+  isProjectJoined: boolean;
   onCopyText: () => void;
   onLeaveProject: () => void;
   onPublishModal: () => void;
@@ -32,6 +34,7 @@ export function ProjectActionsMenu({
   project,
   isAdmin,
   isAuthorized,
+  isProjectJoined,
   onCopyText,
   onLeaveProject,
   onPublishModal,
@@ -106,7 +109,7 @@ export function ProjectActionsMenu({
         </div>
       </CustomMenu.MenuItem>
       {/* Leave project */}
-      {!isAuthorized && (
+      {isProjectJoined && (
         <CustomMenu.MenuItem
           onClick={onLeaveProject}
           data-ph-element={MEMBER_TRACKER_ELEMENTS.SIDEBAR_PROJECT_QUICK_ACTIONS}

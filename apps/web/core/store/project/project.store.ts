@@ -298,7 +298,7 @@ export class ProjectStore implements IProjectStore {
     projects = sortBy(projects, "sort_order");
 
     const projectIds = projects
-      .filter((project) => project.workspace === currentWorkspace.id && !!project.member_role && !project.archived_at)
+      .filter((project) => project.workspace === currentWorkspace.id && !!project.is_member && !project.archived_at)
       .map((project) => project.id);
     return projectIds;
   }
@@ -317,7 +317,7 @@ export class ProjectStore implements IProjectStore {
       .filter(
         (project) =>
           project.workspace === currentWorkspace.id &&
-          !!project.member_role &&
+          !!project.is_member &&
           project.is_favorite &&
           !project.archived_at
       )
@@ -362,8 +362,11 @@ export class ProjectStore implements IProjectStore {
   processProjectAfterCreation = (workspaceSlug: string, data: TProject) => {
     runInAction(() => {
       set(this.projectMap, [data.id], data);
-      // updating the user project role in workspaceProjectsPermissions
-      set(this.rootStore.user.permission.workspaceProjectsPermissions, [workspaceSlug, data.id], data.member_role);
+      // 创建人自动成为成员：记进「能进的项目」
+      set(this.rootStore.user.permission.workspaceProjectsPermissions, [workspaceSlug, data.id], {
+        accessible: true,
+        member: true,
+      });
     });
   };
 

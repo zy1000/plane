@@ -47,7 +47,7 @@ class RequirementIssueViewSet(BaseViewSet):
 
     model = RequirementIssue
 
-    @allow_fine_permission(PermissionKey.PROJECT_REQUIREMENT_LINK_VIEW)
+    @allow_fine_permission(PermissionKey.PROJECT_REQUIREMENT_VIEW)
     def list(self, request, slug, project_id, requirement_id):
         """轻量工作项行，不走 issue_on_results / grouper 重型链路（那是给全功能
         网格的）。Issue.objects **含归档** —— 归档不是进度回退，仍算研发事实，
@@ -94,7 +94,7 @@ class RequirementIssueViewSet(BaseViewSet):
         )
         return Response(issues, status=status.HTTP_200_OK)
 
-    @allow_fine_permission(PermissionKey.PROJECT_REQUIREMENT_LINK_MANAGE)
+    @allow_fine_permission(PermissionKey.PROJECT_REQUIREMENT_EDIT)
     def create(self, request, slug, project_id, requirement_id):
         """关联已有工作项，唯一载荷 {"issues": [id, ...]}。全有或全无，与
         resolve_linkable_requirements 同取舍 —— 部分成功会让前端不知道该刷谁。"""
@@ -181,7 +181,7 @@ class RequirementIssueViewSet(BaseViewSet):
         )
         return Response({"message": "success"}, status=status.HTTP_201_CREATED)
 
-    @allow_fine_permission(PermissionKey.PROJECT_REQUIREMENT_LINK_MANAGE)
+    @allow_fine_permission(PermissionKey.PROJECT_REQUIREMENT_EDIT)
     def destroy(self, request, slug, project_id, requirement_id, issue_id):
         link = RequirementIssue.objects.filter(
             workspace__slug=slug,

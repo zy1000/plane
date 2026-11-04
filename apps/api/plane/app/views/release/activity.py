@@ -5,7 +5,7 @@ from django.views.decorators.gzip import gzip_page
 from rest_framework import status
 from rest_framework.response import Response
 
-from plane.app.permissions import allow_permission, ROLE
+from plane.app.permissions import allow_fine_permission, PermissionKey
 from plane.app.serializers import ReleaseActivitySerializer
 from plane.db.models import Release, ReleaseActivity
 
@@ -22,7 +22,7 @@ class ReleaseActivityEndpoint(BaseAPIView):
     use_read_replica = True
 
     @method_decorator(gzip_page)
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    @allow_fine_permission(PermissionKey.PROJECT_RELEASE_VIEW)
     def get(self, request, slug, project_id, release_id):
         if not Release.all_objects.filter(
             pk=release_id, project_id=project_id, workspace__slug=slug

@@ -6,7 +6,7 @@ from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
 from django.db import IntegrityError, transaction
 
-from plane.app.permissions import PermissionKey
+from plane.app.permissions import allow_workspace_member, PermissionKey
 from plane.app.serializers.qa import (
     CaseModuleCreateUpdateSerializer,
     CaseModuleListSerializer,

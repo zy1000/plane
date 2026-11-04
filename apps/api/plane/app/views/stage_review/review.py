@@ -71,13 +71,14 @@ from plane.utils.stage_review import (
     update_row,
     write_activity,
 )
+from plane.utils.visibility import visible_projects_q
 
 #: 读评审：查看或维护任一即可（只配了维护的角色不该被读挡住，口径同评审裁剪）
 STAGE_REVIEW_READ_KEYS = (
     PermissionKey.PROJECT_STAGE_REVIEW_VIEW,
-    PermissionKey.PROJECT_STAGE_REVIEW_MANAGE,
+    PermissionKey.PROJECT_STAGE_REVIEW_EDIT,
 )
-STAGE_REVIEW_MANAGE_KEY = PermissionKey.PROJECT_STAGE_REVIEW_MANAGE
+STAGE_REVIEW_MANAGE_KEY = PermissionKey.PROJECT_STAGE_REVIEW_EDIT
 
 STAGE_REVIEW_FILE_ENTITY_TYPE = FileAsset.EntityTypeContext.STAGE_REVIEW_FILE
 
@@ -177,8 +178,7 @@ class StageReviewViewSet(BaseViewSet):
             .filter(workspace__slug=self.kwargs.get("slug"))
             .filter(project_id=self.kwargs.get("project_id"))
             .filter(
-                project__project_projectmember__member=self.request.user,
-                project__project_projectmember__is_active=True,
+                visible_projects_q(self.request.user, self.kwargs.get("slug"), "project"),
                 project__archived_at__isnull=True,
             )
             .select_related(
@@ -611,8 +611,7 @@ class StageReviewCommentViewSet(BaseViewSet):
             .filter(project_id=self.kwargs.get("project_id"))
             .filter(stage_review_id=self.kwargs.get("stage_review_id"))
             .filter(
-                project__project_projectmember__member=self.request.user,
-                project__project_projectmember__is_active=True,
+                visible_projects_q(self.request.user, self.kwargs.get("slug"), "project"),
                 project__archived_at__isnull=True,
             )
             .select_related("project", "workspace", "stage_review", "actor")

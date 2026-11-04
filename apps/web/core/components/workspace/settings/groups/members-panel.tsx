@@ -141,7 +141,7 @@ export function MembersPanel({
             </div>
             <p className="text-13 font-medium text-primary">团队中还没有成员</p>
             <p className="mt-1 max-w-80 text-13 leading-5 text-secondary">
-              从工作区成员中选择人员加入团队，他们将自动继承团队的全部角色权限。
+              从工作区成员中选择人员加入团队，他们将自动获得团队绑定的全部权限组。
             </p>
             {canManage && (
               <Button
@@ -214,7 +214,7 @@ export function MembersPanel({
           pendingRemove ? (
             <>
               <span className="font-medium text-primary">{pendingRemove.displayName}</span> 将不再通过「{group.name}
-              」继承团队角色权限；其直接角色和其他团队权限不会受影响。
+              」获得团队绑定的权限组；他直绑的权限组和其他团队给的权限不受影响。
             </>
           ) : null
         }

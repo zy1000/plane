@@ -24,12 +24,11 @@ from rest_framework.response import Response
 
 # Module imports
 from plane.app.permissions import (
-    allow_permission,
+    allow_project_member,
     allow_fine_permission,
     allow_workspace_member,
     has_workspace_permission,
     PermissionKey,
-    ROLE,
 )
 from plane.app.serializers import IssueViewSerializer, ViewIssueListSerializer
 from plane.db.models import (
@@ -39,7 +38,6 @@ from plane.db.models import (
     IssueView,
     Workspace,
     WorkspaceMember,
-    ProjectMember,
     Project,
     CycleIssue,
     UserRecentVisit,
@@ -55,6 +53,7 @@ from plane.db.models import UserFavorite
 from plane.utils.filters import ComplexFilterBackend
 from plane.utils.filters import IssueFilterSet
 from plane.utils.scheme_views import following_dev_mode_id, project_local_filter_labels
+from plane.utils.visibility import can_access_project, visible_projects_q
 
 #: 带了项目自有条件（迭代 / 模块 / 发布 / 标签）的视图不能存到研发模式
 MODE_VIEW_PROJECT_LOCAL_FILTERS = "MODE_VIEW_PROJECT_LOCAL_FILTERS"
@@ -72,6 +71,11 @@ def project_local_filters_response(labels):
         status=status.HTTP_400_BAD_REQUEST,
     )
 
+
+
+def _becomes_public(view, data):
+    """这次更新会不会把个人视图（access=0）变成公共视图（access=1）。"""
+    return "access" in data and str(data.get("access")) == "1" and view.access != 1
 
 class WorkspaceViewViewSet(BaseViewSet):
     serializer_class = IssueViewSerializer
@@ -94,6 +98,11 @@ class WorkspaceViewViewSet(BaseViewSet):
 
     @allow_workspace_member
     def create(self, request, slug):
+        # 建公共视图（access=1）要 workspace.view.manage，个人视图成员都能建
+        if str(request.data.get("access", "1")) == "1" and not has_workspace_permission(
+            request.user, slug, PermissionKey.WORKSPACE_VIEW_MANAGE
+        ):
+            return Response({"error": "没有管理公共视图的权限。"}, status=status.HTTP_403_FORBIDDEN)
         return super().create(request, slug)
 
     @allow_workspace_member
@@ -119,6 +128,13 @@ class WorkspaceViewViewSet(BaseViewSet):
                     {"error": "Only the owner of the view can update the view"},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
+
+            # 个人视图改成公共视图，和新建公共视图同一道门（否则先建私有再改公开就绕过了）
+            if (
+                _becomes_public(workspace_view, request.data)
+                and not has_workspace_permission(request.user, slug, PermissionKey.WORKSPACE_VIEW_MANAGE)
+            ):
+                return Response({"error": "没有管理公共视图的权限。"}, status=status.HTTP_403_FORBIDDEN)
 
             serializer = IssueViewSerializer(workspace_view, data=request.data, partial=True)
 
@@ -168,26 +184,8 @@ class WorkspaceViewIssuesViewSet(BaseViewSet):
     filterset_class = IssueFilterSet
 
     def _get_project_permission_filters(self):
-        """
-        Get common project permission filters for guest users and role-based access control.
-        Returns Q object for filtering issues based on user role and project settings.
-        """
-        return Q(
-            Q(
-                project__project_projectmember__role=5,
-                project__guest_view_all_features=True,
-            )
-            | Q(
-                project__project_projectmember__role=5,
-                project__guest_view_all_features=False,
-                created_by=self.request.user,
-            )
-            |
-            # For other roles (role > 5), show all issues
-            Q(project__project_projectmember__role__gt=5),
-            project__project_projectmember__member=self.request.user,
-            project__project_projectmember__is_active=True,
-        )
+        """工作区视图里看得到的工作项：此人能看到的项目（成员 / 负责 / 白名单，utils/visibility.py）。"""
+        return visible_projects_q(self.request.user, self.kwargs.get("slug"), "project")
 
     def apply_annotations(self, issues):
         return (
@@ -242,7 +240,7 @@ class WorkspaceViewIssuesViewSet(BaseViewSet):
         return Issue.issue_objects.filter(workspace__slug=self.kwargs.get("slug"))
 
     @method_decorator(gzip_page)
-    @allow_permission(allowed_roles=[ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
+    @allow_workspace_member
     def list(self, request, slug):
         issue_queryset = self.get_queryset()
 
@@ -301,14 +299,11 @@ class IssueViewViewSet(BaseViewSet):
     def get_queryset(self):
         slug = self.kwargs.get("slug")
         project_id = self.kwargs.get("project_id")
-        is_member = ProjectMember.objects.filter(
-            workspace__slug=slug,
-            project_id=project_id,
-            member=self.request.user,
-            is_active=True,
-            project__archived_at__isnull=True,
-        ).exists()
-        if not is_member:
+        # 能进的、未归档的项目才有视图（成员 / 负责 / 白名单）
+        if (
+            not Project.objects.filter(workspace__slug=slug, pk=project_id, archived_at__isnull=True).exists()
+            or not can_access_project(self.request.user, slug, project_id)
+        ):
             return IssueView.objects.none()
         subquery = UserFavorite.objects.filter(
             user=self.request.user,
@@ -335,15 +330,16 @@ class IssueViewViewSet(BaseViewSet):
         )
 
     def _is_project_admin(self, slug, project_id):
-        return ProjectMember.objects.filter(
-            workspace__slug=slug,
-            project_id=project_id,
-            member=self.request.user,
-            role=20,
-            is_active=True,
-        ).exists()
+        """能管理别人建的公共视图：project.view.manage。"""
+        from plane.app.permissions.base import resolve_project_grant
 
-    @allow_fine_permission(PermissionKey.VIEW_VIEW)
+        return PermissionKey.PROJECT_VIEW_MANAGE.value in resolve_project_grant(
+            self.request.user, slug, str(project_id)
+        ).keys
+
+    @allow_fine_permission(
+        PermissionKey.PROJECT_ISSUE_VIEW, PermissionKey.PROJECT_DEFECT_VIEW, PermissionKey.PROJECT_REQUIREMENT_VIEW
+    )
     def list(self, request, slug, project_id):
         # 页内视图页签按页面范围取：不传 scope 时沿用原「视图」页签的工作项视图；all = 不限页面
         queryset = self.get_queryset()
@@ -353,47 +349,18 @@ class IssueViewViewSet(BaseViewSet):
         if request.GET.get("mode_only") == "true":
             queryset = queryset.filter(dev_mode__isnull=False)
         project = Project.objects.get(id=project_id)
-        if (
-                ProjectMember.objects.filter(
-                    workspace__slug=slug,
-                    project_id=project_id,
-                    member=request.user,
-                    role=5,
-                    is_active=True,
-                ).exists()
-                and not project.guest_view_all_features
-        ):
-            queryset = queryset.filter(owned_by=request.user)
         fields = [field for field in request.GET.get("fields", "").split(",") if field]
         views = IssueViewSerializer(queryset, many=True, fields=fields if fields else None).data
         return Response(views, status=status.HTTP_200_OK)
 
-    @allow_fine_permission(PermissionKey.VIEW_VIEW)
+    @allow_fine_permission(
+        PermissionKey.PROJECT_ISSUE_VIEW, PermissionKey.PROJECT_DEFECT_VIEW, PermissionKey.PROJECT_REQUIREMENT_VIEW
+    )
     def retrieve(self, request, slug, project_id, pk):
         issue_view = self.get_queryset().filter(pk=pk).first()
         if not issue_view:
             return Response({"error": "View not found"}, status=status.HTTP_404_NOT_FOUND)
         project = Project.objects.get(id=project_id)
-        """
-        if the role is guest and guest_view_all_features is false and owned by is not 
-        the requesting user then dont show the view
-        """
-
-        if (
-                ProjectMember.objects.filter(
-                    workspace__slug=slug,
-                    project_id=project_id,
-                    member=request.user,
-                    role=5,
-                    is_active=True,
-                ).exists()
-                and not project.guest_view_all_features
-                and not issue_view.owned_by == request.user
-        ):
-            return Response(
-                {"error": "You are not allowed to view this issue"},
-                status=status.HTTP_403_FORBIDDEN,
-            )
 
         serializer = IssueViewSerializer(issue_view)
         recent_visited_task.delay(
@@ -410,7 +377,7 @@ class IssueViewViewSet(BaseViewSet):
         # 不再落到框架默认的 update
         return self.partial_update(request, *args, **kwargs)
 
-    @allow_fine_permission(PermissionKey.VIEW_EDIT)
+    @allow_project_member
     def partial_update(self, request, slug, project_id, pk):
         with transaction.atomic():
             issue_view = IssueView.objects.select_for_update().filter(pk=pk, workspace__slug=slug).first()
@@ -430,6 +397,10 @@ class IssueViewViewSet(BaseViewSet):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
+            # 个人视图改成公共视图，和新建公共视图同一道门
+            if _becomes_public(issue_view, request.data) and not self._is_project_admin(slug, project_id):
+                return Response({"error": "没有管理公共视图的权限。"}, status=status.HTTP_403_FORBIDDEN)
+
             data = {key: value for key, value in request.data.items() if key != "scope"}
             serializer = IssueViewSerializer(issue_view, data=data, partial=True)
 
@@ -438,7 +409,7 @@ class IssueViewViewSet(BaseViewSet):
                 return Response(serializer.data, status=status.HTTP_200_OK)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    @allow_fine_permission(PermissionKey.VIEW_DELETE)
+    @allow_project_member
     def destroy(self, request, slug, project_id, pk):
         project_view = IssueView.objects.filter(pk=pk, project_id=project_id, workspace__slug=slug).first()
         if not project_view:
@@ -516,10 +487,13 @@ class IssueViewViewSet(BaseViewSet):
         )
         return Response(IssueViewSerializer(view).data, status=status.HTTP_201_CREATED)
 
-    @allow_fine_permission(PermissionKey.VIEW_CREATE)
+    @allow_project_member
     def create(self, request, slug, project_id, *args, **kwargs):
         if request.data.get("share_to_mode"):
             return self._create_mode_view(request, slug, project_id)
+        # 建公共视图（access=1）要 project.view.manage，个人视图成员都能建
+        if str(request.data.get("access", "1")) == "1" and not self._is_project_admin(slug, project_id):
+            return Response({"error": "没有管理公共视图的权限。"}, status=status.HTTP_403_FORBIDDEN)
         return super().create(request, slug, project_id, *args, **kwargs)
 
 
@@ -535,7 +509,7 @@ class IssueViewFavoriteViewSet(BaseViewSet):
             .select_related("view")
         )
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
+    @allow_project_member
     def create(self, request, slug, project_id):
         _ = UserFavorite.objects.create(
             user=request.user,
@@ -545,7 +519,7 @@ class IssueViewFavoriteViewSet(BaseViewSet):
         )
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
+    @allow_project_member
     def destroy(self, request, slug, project_id, view_id):
         view_favorite = UserFavorite.objects.get(
             project=project_id,

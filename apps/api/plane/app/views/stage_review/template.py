@@ -81,9 +81,7 @@ class StageReviewTemplateViewSet(BaseViewSet):
             )
         return Response(self.get_serializer(template).data, status=status.HTTP_200_OK)
 
-    @allow_fine_permission(
-        PermissionKey.WORKSPACE_REVIEW_TEMPLATE_MANAGE, level="WORKSPACE"
-    )
+    @allow_fine_permission(PermissionKey.WORKSPACE_REVIEW_TEMPLATE_MANAGE, level="WORKSPACE")
     def create(self, request, slug):
         workspace = self._get_workspace()
         if workspace is None:
@@ -109,21 +107,15 @@ class StageReviewTemplateViewSet(BaseViewSet):
         template = serializer.save()
         return Response(self.get_serializer(template).data, status=status.HTTP_200_OK)
 
-    @allow_fine_permission(
-        PermissionKey.WORKSPACE_REVIEW_TEMPLATE_MANAGE, level="WORKSPACE"
-    )
+    @allow_fine_permission(PermissionKey.WORKSPACE_REVIEW_TEMPLATE_MANAGE, level="WORKSPACE")
     def update(self, request, slug, pk):
         return self._update(request, pk, partial=False)
 
-    @allow_fine_permission(
-        PermissionKey.WORKSPACE_REVIEW_TEMPLATE_MANAGE, level="WORKSPACE"
-    )
+    @allow_fine_permission(PermissionKey.WORKSPACE_REVIEW_TEMPLATE_MANAGE, level="WORKSPACE")
     def partial_update(self, request, slug, pk):
         return self._update(request, pk, partial=True)
 
-    @allow_fine_permission(
-        PermissionKey.WORKSPACE_REVIEW_TEMPLATE_MANAGE, level="WORKSPACE"
-    )
+    @allow_fine_permission(PermissionKey.WORKSPACE_REVIEW_TEMPLATE_MANAGE, level="WORKSPACE")
     def destroy(self, request, slug, pk):
         template = self._get_template(pk)
         if template is None:
@@ -168,9 +160,7 @@ class StageReviewTemplateViewSet(BaseViewSet):
         template.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-    @allow_fine_permission(
-        PermissionKey.WORKSPACE_REVIEW_TEMPLATE_MANAGE, level="WORKSPACE"
-    )
+    @allow_fine_permission(PermissionKey.WORKSPACE_REVIEW_TEMPLATE_MANAGE, level="WORKSPACE")
     def reorder(self, request, slug):
         """整段重排：客户端传同一分组（同阶段同父）内的完整有序 id 列表。
 

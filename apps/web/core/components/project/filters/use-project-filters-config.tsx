@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { useMemo } from "react";
-import { Building2, Calendar, CircleDot, Globe2, Lock, Package, Route, Tag, UserCheck, Users } from "lucide-react";
+import { Building2, Calendar, CircleDot, Package, Route, Tag, UserCheck, Users } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { DueDatePropertyIcon, MembersPropertyIcon, StartDatePropertyIcon } from "@plane/propel/icons";
 import type { IUserLite, TFilterConfig, TProject, TProjectFilterProperty, TSupportedOperators } from "@plane/types";
@@ -256,20 +256,6 @@ export const useProjectFiltersConfig = ({
         icon: Users,
         isEnabled: true,
         supportedOperatorConfigsMap: multiSelect(memberOptions, params, isLabel),
-      }),
-      createFilterConfig<TProjectFilterProperty>({
-        id: "network",
-        label: t(`${I18N}.fields.network`),
-        icon: Lock,
-        isEnabled: true,
-        supportedOperatorConfigsMap: multiSelect(
-          [
-            { id: "0", value: "0", label: t(`${I18N}.network.private.title`), icon: <Lock className="size-3.5" /> },
-            { id: "2", value: "2", label: t(`${I18N}.network.public.title`), icon: <Globe2 className="size-3.5" /> },
-          ],
-          params,
-          isLabel
-        ),
       }),
       createFilterConfig<TProjectFilterProperty>({
         id: "start_date",

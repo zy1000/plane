@@ -49,7 +49,7 @@ class ReportModuleAPIView(BaseAPIView):
     model = ReportModule
     serializer_class = ReportModuleListSerializer
 
-    @allow_fine_permission(PermissionKey.QA_REPORT_VIEW)
+    @allow_fine_permission(PermissionKey.PROJECT_TEST_REPORT_VIEW)
     def get(self, request, slug, project_id):
         modules = list(_project_report_modules(slug, project_id).order_by("created_at"))
         children_map = defaultdict(list)
@@ -65,7 +65,7 @@ class ReportModuleAPIView(BaseAPIView):
         )
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    @allow_fine_permission(PermissionKey.QA_REPORT_CREATE)
+    @allow_fine_permission(PermissionKey.PROJECT_TEST_REPORT_CREATE)
     def post(self, request, slug, project_id):
         data = request.data.copy()
         data["project"] = str(project_id)
@@ -77,7 +77,7 @@ class ReportModuleAPIView(BaseAPIView):
             status=status.HTTP_201_CREATED,
         )
 
-    @allow_fine_permission(PermissionKey.QA_REPORT_DELETE)
+    @allow_fine_permission(PermissionKey.PROJECT_TEST_REPORT_DELETE)
     def delete(self, request, slug, project_id):
         module_ids = request.data.get("ids") or []
         # 硬删：子模块随 CASCADE 一起删，报告的 module 由 SET_NULL 置空
@@ -93,7 +93,7 @@ class ReportModuleDetailAPIView(BaseAPIView):
     model = ReportModule
     serializer_class = ReportModuleCreateUpdateSerializer
 
-    @allow_fine_permission(PermissionKey.QA_REPORT_EDIT)
+    @allow_fine_permission(PermissionKey.PROJECT_TEST_REPORT_EDIT)
     def patch(self, request, slug, project_id, module_id):
         module = get_object_or_404(_project_report_modules(slug, project_id), id=module_id)
         serializer = self.serializer_class(instance=module, data=request.data, partial=True)
@@ -110,7 +110,7 @@ class ReportModuleCountAPIView(BaseAPIView):
 
     model = ReportModule
 
-    @allow_fine_permission(PermissionKey.QA_REPORT_VIEW)
+    @allow_fine_permission(PermissionKey.PROJECT_TEST_REPORT_VIEW)
     def get(self, request, slug, project_id):
         modules_qs = _project_report_modules(slug, project_id)
         direct_counts = {}
@@ -164,7 +164,7 @@ class TestReportAPIView(BaseAPIView):
             deleted_at__isnull=True,
         ).select_related("module")
 
-    @allow_fine_permission(PermissionKey.QA_REPORT_CREATE)
+    @allow_fine_permission(PermissionKey.PROJECT_TEST_REPORT_CREATE)
     def post(self, request, slug, project_id):
         data = request.data.copy()
         data["project"] = project_id
@@ -177,7 +177,7 @@ class TestReportAPIView(BaseAPIView):
         report = TestReportDetailSerializer(instance=report).data
         return Response(report, status=status.HTTP_201_CREATED)
 
-    @allow_fine_permission(PermissionKey.QA_REPORT_VIEW)
+    @allow_fine_permission(PermissionKey.PROJECT_TEST_REPORT_VIEW)
     def get(self, request, slug, project_id):
         report_id = request.query_params.get("id")
         base = self.filter_queryset(self._project_queryset(slug, project_id)).distinct()
@@ -199,7 +199,7 @@ class TestReportAPIView(BaseAPIView):
             data=serializer.data, count=count if count is not None else base.count()
         )
 
-    @allow_fine_permission(PermissionKey.QA_REPORT_EDIT)
+    @allow_fine_permission(PermissionKey.PROJECT_TEST_REPORT_EDIT)
     def put(self, request, slug, project_id):
         report_id = request.data.get("id")
         report = get_object_or_404(self._project_queryset(slug, project_id), id=report_id)
@@ -215,7 +215,7 @@ class TestReportAPIView(BaseAPIView):
         update_serializer.save()
         return Response(TestReportDetailSerializer(instance=report).data, status=status.HTTP_200_OK)
 
-    @allow_fine_permission(PermissionKey.QA_REPORT_DELETE)
+    @allow_fine_permission(PermissionKey.PROJECT_TEST_REPORT_DELETE)
     def delete(self, request, slug, project_id):
         report_ids = request.data.get("ids") or []
         self._project_queryset(slug, project_id).filter(id__in=report_ids).delete()
@@ -240,7 +240,7 @@ class ReportView(BaseViewSet):
         return get_object_or_404(qs)
 
     @action(detail=False, methods=["get"], url_path="analysis")
-    @allow_fine_permission(PermissionKey.QA_REPORT_VIEW)
+    @allow_fine_permission(PermissionKey.PROJECT_TEST_REPORT_VIEW)
     def analysis(self, request, slug):
         report = self._get_report(request, slug)
         stats = build_report_stats_map([report.id]).get(report.id, {})
@@ -266,7 +266,7 @@ class ReportView(BaseViewSet):
         )
 
     @action(detail=False, methods=["get"], url_path="case-list")
-    @allow_fine_permission(PermissionKey.QA_REPORT_VIEW)
+    @allow_fine_permission(PermissionKey.PROJECT_TEST_REPORT_VIEW)
     def case_list(self, request, slug):
         report = self._get_report(request, slug)
         plan_ids = list(report.plans.filter(deleted_at__isnull=True).values_list("id", flat=True))

@@ -8,40 +8,14 @@ import { unset, set } from "lodash-es";
 import { action, makeObservable, observable, runInAction } from "mobx";
 import { computedFn } from "mobx-utils";
 // plane imports
-import type { TUserPermissions, TUserPermissionsLevel } from "@plane/constants";
 import {
-  EUserPermissions,
-  EUserPermissionsLevel,
-  WORKSPACE_ANALYTICS_EXPORT_PERMISSION_KEY,
-  WORKSPACE_ANALYTICS_MANAGE_SAVED_VIEW_PERMISSION_KEY,
-  WORKSPACE_ANALYTICS_VIEW_PERMISSION_KEY,
-  WORKSPACE_GROUP_CREATE_PERMISSION_KEY,
-  WORKSPACE_GROUP_DELETE_PERMISSION_KEY,
-  WORKSPACE_GROUP_EDIT_PERMISSION_KEY,
-  WORKSPACE_GROUP_MANAGE_MEMBER_PERMISSION_KEY,
-  WORKSPACE_GROUP_MANAGE_ROLE_PERMISSION_KEY,
-  WORKSPACE_GROUP_VIEW_PERMISSION_KEY,
-  WORKSPACE_MEMBER_EDIT_PERMISSION_KEY,
-  WORKSPACE_MEMBER_INVITE_PERMISSION_KEY,
-  WORKSPACE_MEMBER_LEAVE_PERMISSION_KEY,
-  WORKSPACE_MEMBER_REMOVE_PERMISSION_KEY,
-  WORKSPACE_MEMBER_VIEW_PERMISSION_KEY,
-  WORKSPACE_PROJECT_CREATE_PERMISSION_KEY,
-  WORKSPACE_PROJECT_VIEW_PERMISSION_KEY,
-  WORKSPACE_ROLE_CREATE_PERMISSION_KEY,
-  WORKSPACE_ROLE_DELETE_PERMISSION_KEY,
-  WORKSPACE_ROLE_EDIT_PERMISSION_KEY,
-  WORKSPACE_ROLE_VIEW_PERMISSION_KEY,
+  PROJECT_MEMBER_ACCESS,
+  WORKSPACE_MEMBER_ACCESS,
+  WORKSPACE_OWNER_ACCESS,
   WORKSPACE_SIDEBAR_DYNAMIC_NAVIGATION_ITEMS_LINKS,
   WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS,
-  WORKSPACE_SETTINGS_DELETE_PERMISSION_KEY,
-  WORKSPACE_SETTINGS_EDIT_PERMISSION_KEY,
-  WORKSPACE_SETTINGS_VIEW_PERMISSION_KEY,
-  WORKSPACE_USER_PROFILE_EXPORT_PERMISSION_KEY,
-  WORKSPACE_USER_PROFILE_VIEW_PERMISSION_KEY,
 } from "@plane/constants";
-import type { EUserProjectRoles, IUserProjectsRole, IWorkspaceMemberMe, TProjectMembership } from "@plane/types";
-import { EUserWorkspaceRoles } from "@plane/types";
+import type { IUserProjectsRole, IWorkspaceMemberMe, TProjectMembership } from "@plane/types";
 // plane web imports
 import { WorkspaceService } from "@/services/workspace.service";
 import type { RootStore } from "@/plane-web/store/root.store";
@@ -52,35 +26,19 @@ import userService from "@/services/user.service";
 // derived services
 const workspaceService = new WorkspaceService();
 
-const WORKSPACE_ALL_PERMISSION_KEYS = [
-  WORKSPACE_SETTINGS_VIEW_PERMISSION_KEY,
-  WORKSPACE_SETTINGS_EDIT_PERMISSION_KEY,
-  WORKSPACE_SETTINGS_DELETE_PERMISSION_KEY,
-  WORKSPACE_MEMBER_VIEW_PERMISSION_KEY,
-  WORKSPACE_MEMBER_INVITE_PERMISSION_KEY,
-  WORKSPACE_MEMBER_EDIT_PERMISSION_KEY,
-  WORKSPACE_MEMBER_REMOVE_PERMISSION_KEY,
-  WORKSPACE_MEMBER_LEAVE_PERMISSION_KEY,
-  WORKSPACE_ROLE_VIEW_PERMISSION_KEY,
-  WORKSPACE_ROLE_CREATE_PERMISSION_KEY,
-  WORKSPACE_ROLE_EDIT_PERMISSION_KEY,
-  WORKSPACE_ROLE_DELETE_PERMISSION_KEY,
-  WORKSPACE_GROUP_VIEW_PERMISSION_KEY,
-  WORKSPACE_GROUP_CREATE_PERMISSION_KEY,
-  WORKSPACE_GROUP_EDIT_PERMISSION_KEY,
-  WORKSPACE_GROUP_DELETE_PERMISSION_KEY,
-  WORKSPACE_GROUP_MANAGE_MEMBER_PERMISSION_KEY,
-  WORKSPACE_GROUP_MANAGE_ROLE_PERMISSION_KEY,
-  WORKSPACE_PROJECT_VIEW_PERMISSION_KEY,
-  WORKSPACE_PROJECT_CREATE_PERMISSION_KEY,
-  WORKSPACE_USER_PROFILE_VIEW_PERMISSION_KEY,
-  WORKSPACE_USER_PROFILE_EXPORT_PERMISSION_KEY,
-  WORKSPACE_ANALYTICS_VIEW_PERMISSION_KEY,
-  WORKSPACE_ANALYTICS_MANAGE_SAVED_VIEW_PERMISSION_KEY,
-  WORKSPACE_ANALYTICS_EXPORT_PERMISSION_KEY,
-] as const;
+/** 工作项类型的类别名为「缺陷」时按 project.defect.* 判，其余按 project.issue.*（与后端 DEFECT_CATEGORY_NAME 一致） */
+export const DEFECT_CATEGORY_NAME = "缺陷";
 
-type ETempUserRole = TUserPermissions | EUserWorkspaceRoles | EUserProjectRoles; // TODO: Remove this once we have migrated user permissions to enums to plane constants package
+/** 判工作项权限需要的类型信息：类别决定模块，id / library_type_id 用来比对权限组的类型限定 */
+export type TIssueTypeLike =
+  | { id?: string | null; category_name?: string | null; library_type_id?: string | null }
+  | null
+  | undefined;
+
+export type TIssuePermissionAction = "view" | "create" | "edit" | "delete" | "archive" | "import" | "export";
+
+/** 只有工作项 / 缺陷有这些动作（缺陷没有单独的归档 / 导入 / 导出，跟工作项走） */
+const DEFECT_ACTIONS = new Set<TIssuePermissionAction>(["view", "create", "edit", "delete"]);
 
 export interface IBaseUserPermissionStore {
   loader: boolean;
@@ -88,35 +46,40 @@ export interface IBaseUserPermissionStore {
   workspaceUserInfo: Record<string, IWorkspaceMemberMe>; // workspaceSlug -> IWorkspaceMemberMe
   workspacePermissionKeys: Record<string, string[]>; // workspaceSlug -> permission keys
   projectUserInfo: Record<string, Record<string, TProjectMembership>>; // workspaceSlug -> projectId -> TProjectMembership
-  workspaceProjectsPermissions: Record<string, IUserProjectsRole>; // workspaceSlug -> IUserProjectsRole
+  workspaceProjectsPermissions: Record<string, IUserProjectsRole>; // workspaceSlug -> { projectId: {accessible, member} }（能进的项目）
   // computed helpers
   workspaceInfoBySlug: (workspaceSlug: string) => IWorkspaceMemberMe | undefined;
-  getWorkspaceRoleByWorkspaceSlug: (workspaceSlug: string) => TUserPermissions | EUserWorkspaceRoles | undefined;
   getWorkspacePermissionKeysByWorkspaceSlug: (workspaceSlug: string) => string[];
-  getProjectRolesByWorkspaceSlug: (workspaceSlug: string) => IUserProjectsRole;
-  getProjectRoleByWorkspaceSlugAndProjectId: (
-    workspaceSlug: string,
-    projectId?: string
-  ) => EUserPermissions | undefined;
+  /** 能进的项目 id（成员、负责人等直通身份、工作区权限组白名单）。名字沿用，语义是「能进」不是「已加入」 */
+  getJoinedProjectIdsByWorkspaceSlug: (workspaceSlug: string) => string[];
+  /** 成员表里有自己的项目 id（侧栏「我的项目」这种只看真成员的地方用） */
+  getMemberProjectIdsByWorkspaceSlug: (workspaceSlug: string) => string[];
   getProjectPermissionKeysByWorkspaceSlugAndProjectId: (workspaceSlug: string, projectId?: string) => string[];
+  /** {key: [不适用的工作项类型 id]}，只有工作项 / 缺陷的新建、编辑、删除会出现 */
+  getProjectTypeLimits: (workspaceSlug: string, projectId?: string) => Record<string, string[]>;
   fetchWorkspaceLevelProjectEntities: (workspaceSlug: string, projectId: string) => void;
-  allowPermissions: (
-    allowPermissions: ETempUserRole[],
-    level: TUserPermissionsLevel,
-    workspaceSlug?: string,
-    projectId?: string,
-    onPermissionAllowed?: () => boolean
-  ) => boolean;
+  isWorkspaceMember: (workspaceSlug?: string) => boolean;
+  isWorkspaceOwner: (workspaceSlug?: string) => boolean;
+  /** 能进这个项目：成员、直通身份，或项目在自己某个工作区权限组的白名单里（白名单访客）。名字沿用，70 多处在用 */
+  isProjectMember: (workspaceSlug?: string, projectId?: string) => boolean;
+  /** 成员表里真有自己 */
+  isProjectJoined: (workspaceSlug?: string, projectId?: string) => boolean;
+  /** 任一 key（或成员身份类访问条件，见 @plane/constants permission-access）满足即可 */
   allowProjectPermissionKeys: (permissionKeys: string[], workspaceSlug?: string, projectId?: string) => boolean;
   allowWorkspacePermissionKeys: (permissionKeys: string[], workspaceSlug?: string) => boolean;
-  hasAllWorkspacePermissions: (workspaceSlug?: string) => boolean;
+  /** 工作项 / 缺陷的动作：按类型类别选模块，再看类型限定。不传类型按工作项判 */
+  allowIssuePermission: (
+    action: TIssuePermissionAction,
+    issueType?: TIssueTypeLike,
+    workspaceSlug?: string,
+    projectId?: string
+  ) => boolean;
   // actions
   fetchUserWorkspaceInfo: (workspaceSlug: string) => Promise<IWorkspaceMemberMe>;
   fetchWorkspacePermissionKeys: (workspaceSlug: string) => Promise<string[]>;
   leaveWorkspace: (workspaceSlug: string) => Promise<void>;
   fetchUserProjectInfo: (workspaceSlug: string, projectId: string) => Promise<TProjectMembership>;
   fetchUserProjectPermissions: (workspaceSlug: string) => Promise<IUserProjectsRole>;
-  joinProject: (workspaceSlug: string, projectId: string) => Promise<void>;
   leaveProject: (workspaceSlug: string, projectId: string) => Promise<void>;
   hasPageAccess: (workspaceSlug: string, key: string) => boolean;
 }
@@ -149,7 +112,6 @@ export abstract class BaseUserPermissionStore implements IBaseUserPermissionStor
       leaveWorkspace: action,
       fetchUserProjectInfo: action,
       fetchUserProjectPermissions: action,
-      joinProject: action,
       leaveProject: action,
     });
   }
@@ -165,69 +127,37 @@ export abstract class BaseUserPermissionStore implements IBaseUserPermissionStor
     return this.workspaceUserInfo[workspaceSlug] || undefined;
   });
 
-  /**
-   * @description Returns the workspace role by slug
-   * @param { string } workspaceSlug
-   * @returns { TUserPermissions | EUserWorkspaceRoles | undefined }
-   */
-  getWorkspaceRoleByWorkspaceSlug = computedFn(
-    (workspaceSlug: string): TUserPermissions | EUserWorkspaceRoles | undefined => {
-      if (!workspaceSlug) return undefined;
-      return this.workspaceUserInfo[workspaceSlug]?.role as TUserPermissions | EUserWorkspaceRoles | undefined;
-    }
-  );
-
   getWorkspacePermissionKeysByWorkspaceSlug = computedFn((workspaceSlug: string): string[] => {
     if (!workspaceSlug) return [];
     return this.workspacePermissionKeys[workspaceSlug] ?? [];
   });
 
-  /**
-   * @description Returns the project membership permission
-   * @param { string } workspaceSlug
-   * @param { string } projectId
-   * @returns { EUserPermissions | undefined }
-   */
-  protected getProjectRole = computedFn((workspaceSlug: string, projectId?: string): EUserPermissions | undefined => {
-    if (!workspaceSlug || !projectId) return undefined;
-    const projectRole = this.workspaceProjectsPermissions?.[workspaceSlug]?.[projectId];
-    if (!projectRole) return undefined;
-    return projectRole;
+  getJoinedProjectIdsByWorkspaceSlug = computedFn((workspaceSlug: string): string[] => {
+    if (!workspaceSlug) return [];
+    const projects = this.workspaceProjectsPermissions[workspaceSlug] ?? {};
+    return Object.keys(projects).filter((projectId) => Boolean(projects[projectId]?.accessible));
   });
 
-  /**
-   * @description Returns the project permissions by workspace slug
-   * @param { string } workspaceSlug
-   * @returns { IUserProjectsRole }
-   */
-  getProjectRolesByWorkspaceSlug = computedFn((workspaceSlug: string): IUserProjectsRole => {
-    const projectPermissions = this.workspaceProjectsPermissions[workspaceSlug] || {};
-    return Object.keys(projectPermissions).reduce((acc, projectId) => {
-      const projectRole = this.getProjectRoleByWorkspaceSlugAndProjectId(workspaceSlug, projectId);
-      if (projectRole) {
-        acc[projectId] = projectRole;
-      }
-      return acc;
-    }, {} as IUserProjectsRole);
+  getMemberProjectIdsByWorkspaceSlug = computedFn((workspaceSlug: string): string[] => {
+    if (!workspaceSlug) return [];
+    const projects = this.workspaceProjectsPermissions[workspaceSlug] ?? {};
+    return Object.keys(projects).filter((projectId) => Boolean(projects[projectId]?.member));
   });
 
-  /**
-   * @description Returns the current project permissions
-   * @param { string } workspaceSlug
-   * @param { string } projectId
-   * @returns { EUserPermissions | undefined }
-   */
-  abstract getProjectRoleByWorkspaceSlugAndProjectId: (
-    workspaceSlug: string,
-    projectId?: string
-  ) => EUserPermissions | undefined;
-
+  /** 进入过的项目有完整 key（project-members/me）；没进过的退回项目列表接口带的那几个 key */
   getProjectPermissionKeysByWorkspaceSlugAndProjectId = computedFn(
     (workspaceSlug: string, projectId?: string): string[] => {
       if (!workspaceSlug || !projectId) return [];
-      return this.projectUserInfo?.[workspaceSlug]?.[projectId]?.permission_keys ?? [];
+      const membership = this.projectUserInfo?.[workspaceSlug]?.[projectId];
+      if (membership?.permission_keys) return membership.permission_keys;
+      return this.store.projectRoot.project.projectMap?.[projectId]?.permission_keys ?? [];
     }
   );
+
+  getProjectTypeLimits = computedFn((workspaceSlug: string, projectId?: string): Record<string, string[]> => {
+    if (!workspaceSlug || !projectId) return {};
+    return this.projectUserInfo?.[workspaceSlug]?.[projectId]?.type_limits ?? {};
+  });
 
   /**
    * @description Fetches project-level entities that are not automatically loaded by the project wrapper.
@@ -257,55 +187,41 @@ export abstract class BaseUserPermissionStore implements IBaseUserPermissionStor
     return false;
   });
 
-  // action helpers
-  /**
-   * @description Returns whether the user has the permission to perform an action
-   * @param { TUserPermissions[] } allowPermissions
-   * @param { TUserPermissionsLevel } level
-   * @param { string } workspaceSlug
-   * @param { string } projectId
-   * @param { () => boolean } onPermissionAllowed
-   * @returns { boolean }
-   */
-  allowPermissions = (
-    allowPermissions: ETempUserRole[],
-    level: TUserPermissionsLevel,
-    workspaceSlug?: string,
-    projectId?: string,
-    onPermissionAllowed?: () => boolean
-  ): boolean => {
-    const { workspaceSlug: currentWorkspaceSlug, projectId: currentProjectId } = this.store.router;
-    if (!workspaceSlug) workspaceSlug = currentWorkspaceSlug;
-    if (!projectId) projectId = currentProjectId;
-
-    let currentUserRole: TUserPermissions | undefined = undefined;
-
-    if (level === EUserPermissionsLevel.WORKSPACE) {
-      if (!workspaceSlug || !this.workspaceInfoBySlug(workspaceSlug)) return false;
-      return this.hasAllWorkspacePermissions(workspaceSlug);
-    }
-
-    if (level === EUserPermissionsLevel.PROJECT) {
-      currentUserRole = (workspaceSlug &&
-        projectId &&
-        this.getProjectRoleByWorkspaceSlugAndProjectId(workspaceSlug, projectId)) as EUserPermissions | undefined;
-    }
-
-    if (typeof currentUserRole === "string") {
-      currentUserRole = parseInt(currentUserRole);
-    }
-
-    if (currentUserRole && typeof currentUserRole === "number" && allowPermissions.includes(currentUserRole)) {
-      if (onPermissionAllowed) {
-        return onPermissionAllowed();
-      } else {
-        return true;
-      }
-    }
-
-    return false;
+  // membership helpers
+  isWorkspaceMember = (workspaceSlug?: string): boolean => {
+    const resolvedWorkspaceSlug = workspaceSlug ?? this.store.router.workspaceSlug;
+    if (!resolvedWorkspaceSlug) return false;
+    return Boolean(this.workspaceInfoBySlug(resolvedWorkspaceSlug));
   };
 
+  isWorkspaceOwner = (workspaceSlug?: string): boolean => {
+    const resolvedWorkspaceSlug = workspaceSlug ?? this.store.router.workspaceSlug;
+    if (!resolvedWorkspaceSlug) return false;
+    const workspace = this.store.workspaceRoot.getWorkspaceBySlug(resolvedWorkspaceSlug);
+    const currentUserId = this.store.user.data?.id;
+    return Boolean(workspace?.owner?.id && currentUserId && workspace.owner.id === currentUserId);
+  };
+
+  isProjectMember = (workspaceSlug?: string, projectId?: string): boolean => {
+    const resolvedWorkspaceSlug = workspaceSlug ?? this.store.router.workspaceSlug;
+    const resolvedProjectId = projectId ?? this.store.router.projectId;
+    if (!resolvedWorkspaceSlug || !resolvedProjectId) return false;
+    if (this.workspaceProjectsPermissions?.[resolvedWorkspaceSlug]?.[resolvedProjectId]?.accessible) return true;
+    if (this.projectUserInfo?.[resolvedWorkspaceSlug]?.[resolvedProjectId]) return true;
+    return Boolean(this.store.projectRoot.project.projectMap?.[resolvedProjectId]?.is_member);
+  };
+
+  isProjectJoined = (workspaceSlug?: string, projectId?: string): boolean => {
+    const resolvedWorkspaceSlug = workspaceSlug ?? this.store.router.workspaceSlug;
+    const resolvedProjectId = projectId ?? this.store.router.projectId;
+    if (!resolvedWorkspaceSlug || !resolvedProjectId) return false;
+    if (this.workspaceProjectsPermissions?.[resolvedWorkspaceSlug]?.[resolvedProjectId]?.member) return true;
+    // project-members/me：成员表里有行才有 id，白名单访客是 null
+    if (this.projectUserInfo?.[resolvedWorkspaceSlug]?.[resolvedProjectId]?.id) return true;
+    return Boolean(this.store.projectRoot.project.projectMap?.[resolvedProjectId]?.is_member);
+  };
+
+  // action helpers
   allowProjectPermissionKeys = (permissionKeys: string[], workspaceSlug?: string, projectId?: string): boolean => {
     const { workspaceSlug: currentWorkspaceSlug, projectId: currentProjectId } = this.store.router;
     const resolvedWorkspaceSlug = workspaceSlug ?? currentWorkspaceSlug;
@@ -318,21 +234,41 @@ export abstract class BaseUserPermissionStore implements IBaseUserPermissionStor
       resolvedProjectId
     );
 
-    return permissionKeys.some((key) => currentPermissionKeys.includes(key));
+    return permissionKeys.some((key) => {
+      if (key === PROJECT_MEMBER_ACCESS) return this.isProjectMember(resolvedWorkspaceSlug, resolvedProjectId);
+      if (key === WORKSPACE_MEMBER_ACCESS) return this.isWorkspaceMember(resolvedWorkspaceSlug);
+      if (key === WORKSPACE_OWNER_ACCESS) return this.isWorkspaceOwner(resolvedWorkspaceSlug);
+      return currentPermissionKeys.includes(key);
+    });
   };
 
   allowWorkspacePermissionKeys = (permissionKeys: string[], workspaceSlug?: string): boolean => {
     const resolvedWorkspaceSlug = workspaceSlug ?? this.store.router.workspaceSlug;
     if (!resolvedWorkspaceSlug || permissionKeys.length === 0) return false;
     const currentPermissionKeys = this.getWorkspacePermissionKeysByWorkspaceSlug(resolvedWorkspaceSlug);
-    return permissionKeys.some((key) => currentPermissionKeys.includes(key));
+    return permissionKeys.some((key) => {
+      if (key === WORKSPACE_MEMBER_ACCESS) return this.isWorkspaceMember(resolvedWorkspaceSlug);
+      if (key === WORKSPACE_OWNER_ACCESS) return this.isWorkspaceOwner(resolvedWorkspaceSlug);
+      if (key === PROJECT_MEMBER_ACCESS) return false;
+      return currentPermissionKeys.includes(key);
+    });
   };
 
-  hasAllWorkspacePermissions = (workspaceSlug?: string): boolean => {
+  allowIssuePermission = (
+    action: TIssuePermissionAction,
+    issueType?: TIssueTypeLike,
+    workspaceSlug?: string,
+    projectId?: string
+  ): boolean => {
     const resolvedWorkspaceSlug = workspaceSlug ?? this.store.router.workspaceSlug;
-    if (!resolvedWorkspaceSlug || !this.workspaceInfoBySlug(resolvedWorkspaceSlug)) return false;
-    const currentPermissionKeys = this.getWorkspacePermissionKeysByWorkspaceSlug(resolvedWorkspaceSlug);
-    return WORKSPACE_ALL_PERMISSION_KEYS.every((permissionKey) => currentPermissionKeys.includes(permissionKey));
+    const resolvedProjectId = projectId ?? this.store.router.projectId;
+    if (!resolvedWorkspaceSlug || !resolvedProjectId) return false;
+    const isDefect = issueType?.category_name === DEFECT_CATEGORY_NAME && DEFECT_ACTIONS.has(action);
+    const key = `project.${isDefect ? "defect" : "issue"}.${action}`;
+    if (!this.allowProjectPermissionKeys([key], resolvedWorkspaceSlug, resolvedProjectId)) return false;
+    const excluded = this.getProjectTypeLimits(resolvedWorkspaceSlug, resolvedProjectId)[key];
+    if (!excluded?.length || !issueType) return true;
+    return ![issueType.id, issueType.library_type_id].some((typeId) => typeId && excluded.includes(typeId));
   };
 
   // actions
@@ -408,7 +344,10 @@ export abstract class BaseUserPermissionStore implements IBaseUserPermissionStor
       if (response) {
         runInAction(() => {
           set(this.projectUserInfo, [workspaceSlug, projectId], response);
-          set(this.workspaceProjectsPermissions, [workspaceSlug, projectId], response.role);
+          set(this.workspaceProjectsPermissions, [workspaceSlug, projectId], {
+            accessible: true,
+            member: Boolean(response.id),
+          });
         });
       }
       return response;
@@ -432,28 +371,6 @@ export abstract class BaseUserPermissionStore implements IBaseUserPermissionStor
       return response;
     } catch (error) {
       console.error("Error fetching user project permissions", error);
-      throw error;
-    }
-  };
-
-  /**
-   * @description Joins a project
-   * @param { string } workspaceSlug
-   * @param { string } projectId
-   * @returns { Promise<void> }
-   */
-  joinProject = async (workspaceSlug: string, projectId: string): Promise<void> => {
-    try {
-      const response = await userService.joinProject(workspaceSlug, [projectId]);
-      const projectMemberRole = this.getWorkspaceRoleByWorkspaceSlug(workspaceSlug) ?? EUserPermissions.MEMBER;
-      if (response) {
-        runInAction(() => {
-          set(this.workspaceProjectsPermissions, [workspaceSlug, projectId], projectMemberRole);
-        });
-        void this.fetchWorkspaceLevelProjectEntities(workspaceSlug, projectId);
-      }
-    } catch (error) {
-      console.error("Error user joining the project", error);
       throw error;
     }
   };

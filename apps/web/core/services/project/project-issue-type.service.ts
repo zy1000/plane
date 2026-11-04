@@ -37,6 +37,8 @@ export type TIssueType = {
   category_id?: number | string | null;
   /** IssueTypeCategory 的名称 */
   category_name?: string | null;
+  /** 项目方案副本指回的类型库类型；权限组按类型限定时库类型 id 与副本 id 都算 */
+  library_type_id?: string | null;
   /** 类型库（方案作用域）接口才有：关联了这个类型的研发模式 */
   linked_dev_modes?: { id: string; name: string }[];
   created_at?: string;

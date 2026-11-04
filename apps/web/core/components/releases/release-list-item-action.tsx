@@ -9,8 +9,6 @@ import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 import { SquareUser } from "lucide-react";
 import {
-  EUserPermissions,
-  EUserPermissionsLevel,
   IS_FAVORITE_MENU_OPEN,
   PROJECT_ERROR_MESSAGES,
   PROJECT_RELEASES_EDIT_PERMISSION_KEY,
@@ -43,7 +41,7 @@ type Props = {
 export const ReleaseListItemAction = observer(function ReleaseListItemAction(props: Props) {
   const { releaseId, releaseDetails, parentRef } = props;
   const { workspaceSlug, projectId } = useParams();
-  const { allowPermissions, allowProjectPermissionKeys } = useUserPermissions();
+  const { isProjectMember, allowProjectPermissionKeys } = useUserPermissions();
   const { addReleaseToFavorites, removeReleaseFromFavorites, updateReleaseDetails } = useRelease();
   const { currentProjectDisplayFilters } = useReleaseFilter();
   const { t } = useTranslation();
@@ -57,10 +55,8 @@ export const ReleaseListItemAction = observer(function ReleaseListItemAction(pro
   const showMembersProperty = displayProperties.members !== false;
   const { setValue: toggleFavoriteMenu, storedValue } = useLocalStorage<boolean>(IS_FAVORITE_MENU_OPEN, false);
 
-  const canUseFavorite = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.PROJECT
-  );
+  // 收藏是个人行为，项目成员就行
+  const canUseFavorite = isProjectMember();
   const workspaceSlugValue = workspaceSlug?.toString() ?? "";
   const projectIdValue = projectId?.toString() ?? "";
   const canEditRelease =

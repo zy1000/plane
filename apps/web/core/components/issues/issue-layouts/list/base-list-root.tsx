@@ -9,7 +9,7 @@ import { useCallback, useEffect, useState } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 // plane constants
-import { EIssueFilterType, EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import { EIssueFilterType, PERMISSION_KEYS } from "@plane/constants";
 // types
 import type { GroupByColumnTypes, TGroupedIssues, TIssueKanbanFilters } from "@plane/types";
 import { EIssueLayoutTypes, EIssuesStoreType } from "@plane/types";
@@ -73,7 +73,7 @@ export const BaseListRoot = observer(function BaseListRoot(props: IBaseListRoot)
     restoreIssue,
   } = useIssuesActions(storeType);
   // mobx store
-  const { allowPermissions } = useUserPermissions();
+  const { allowProjectPermissionKeys } = useUserPermissions();
   const { issueMap } = useIssues();
 
   const displayFilters = issuesFilter?.issueFilters?.displayFilters;
@@ -105,10 +105,9 @@ export const BaseListRoot = observer(function BaseListRoot(props: IBaseListRoot)
 
   const groupedIssueIds = issues?.groupedIssueIds as TGroupedIssues | undefined;
   // auth
-  const isEditingAllowed = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.PROJECT
-  );
+  // 拖拽 / 行内改属性：项目里能编辑工作项或缺陷（单条的类型限定以后端为准）
+  const isEditingAllowed = allowProjectPermissionKeys([PERMISSION_KEYS.PROJECT_ISSUE_EDIT, PERMISSION_KEYS.PROJECT_DEFECT_EDIT]);
+  const canCreateIssue = allowProjectPermissionKeys([PERMISSION_KEYS.PROJECT_ISSUE_CREATE, PERMISSION_KEYS.PROJECT_DEFECT_CREATE]);
   const { enableInlineEditing, enableIssueCreation } = issues?.viewFlags || {};
 
   const canEditProperties = useCallback(
@@ -194,7 +193,7 @@ export const BaseListRoot = observer(function BaseListRoot(props: IBaseListRoot)
             loadMoreIssues={loadMoreIssues}
             showEmptyGroup={showEmptyGroup}
             canEditProperties={canEditProperties}
-            disableIssueCreation={!enableIssueCreation || !isEditingAllowed}
+            disableIssueCreation={!enableIssueCreation || !canCreateIssue}
             hideColumnHeaderAddButton={hideColumnHeaderAddButton}
             addIssuesToView={addIssuesToView}
             isCompletedCycle={isCompletedCycle}

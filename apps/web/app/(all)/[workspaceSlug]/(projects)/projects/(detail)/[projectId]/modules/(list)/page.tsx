@@ -9,10 +9,9 @@ import { observer } from "mobx-react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useTheme } from "next-themes";
 // plane imports
-import { EUserPermissionsLevel } from "@plane/constants";
+import { PROJECT_SETTINGS_EDIT_PERMISSION_KEY } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import type { TModuleFilters } from "@plane/types";
-import { EUserProjectRoles } from "@plane/types";
 import { calculateTotalFilters } from "@plane/utils";
 // assets
 import darkModulesAsset from "@/app/assets/empty-state/disabled-feature/modules-dark.webp?url";
@@ -48,11 +47,12 @@ function ProjectModulesPage({ params }: Route.ComponentProps) {
     updateFilters,
     updateDisplayFilters,
   } = useModuleFilter();
-  const { allowPermissions } = useUserPermissions();
+  const { allowProjectPermissionKeys } = useUserPermissions();
   // derived values
   const project = getProjectById(projectId);
   const pageTitle = project?.name ? `${project?.name} - Modules` : undefined;
-  const canPerformEmptyStateActions = allowPermissions([EUserProjectRoles.ADMIN], EUserPermissionsLevel.PROJECT);
+  // 空状态的动作是去项目设置里开功能
+  const canPerformEmptyStateActions = allowProjectPermissionKeys([PROJECT_SETTINGS_EDIT_PERMISSION_KEY]);
   const resolvedPath = resolvedTheme === "light" ? lightModulesAsset : darkModulesAsset;
   const currentPath = getPathWithSearch(pathname, searchParams);
 

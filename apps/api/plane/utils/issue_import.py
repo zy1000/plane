@@ -402,7 +402,6 @@ class _RowResolver:
             workspace_id=self.workspace_id,
             is_active=True,
             deleted_at__isnull=True,
-            role__gte=15,
         ).select_related("member")
         for pm in members:
             user_obj = pm.member

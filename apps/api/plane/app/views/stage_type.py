@@ -5,6 +5,7 @@ from rest_framework.response import Response
 
 from plane.app.serializers.stage_type import StageTypeSerializer
 from plane.app.views.base import BaseViewSet
+from plane.app.permissions import PermissionKey, has_workspace_permission
 from plane.app.views.requirement.type import is_workspace_member
 from plane.db.models import StageType, Workspace
 from plane.db.models.stage_type import SORT_ORDER_STEP
@@ -66,7 +67,7 @@ class StageTypeViewSet(BaseViewSet):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     def create(self, request, slug):
-        if not is_workspace_member(request.user, slug):
+        if not has_workspace_permission(request.user, slug, PermissionKey.WORKSPACE_STAGE_TYPE_MANAGE):
             return _forbidden()
         workspace = self._get_workspace()
         if workspace is None:
@@ -79,7 +80,7 @@ class StageTypeViewSet(BaseViewSet):
         )
 
     def partial_update(self, request, slug, pk):
-        if not is_workspace_member(request.user, slug):
+        if not has_workspace_permission(request.user, slug, PermissionKey.WORKSPACE_STAGE_TYPE_MANAGE):
             return _forbidden()
         stage_type = self.get_queryset().filter(pk=pk).first()
         if stage_type is None:
@@ -90,7 +91,7 @@ class StageTypeViewSet(BaseViewSet):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     def destroy(self, request, slug, pk):
-        if not is_workspace_member(request.user, slug):
+        if not has_workspace_permission(request.user, slug, PermissionKey.WORKSPACE_STAGE_TYPE_MANAGE):
             return _forbidden()
         stage_type = self.get_queryset().filter(pk=pk).first()
         if stage_type is None:
@@ -125,7 +126,7 @@ class StageTypeViewSet(BaseViewSet):
 
     def reorder(self, request, slug):
         """整段重排：客户端传工作区内完整的有序 id 列表（照评审模板的 reorder）。"""
-        if not is_workspace_member(request.user, slug):
+        if not has_workspace_permission(request.user, slug, PermissionKey.WORKSPACE_STAGE_TYPE_MANAGE):
             return _forbidden()
         ids = request.data.get("stage_type_ids")
         if not isinstance(ids, list) or not ids:

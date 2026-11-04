@@ -1,345 +1,34 @@
+"""权限字典（permissions 表）跟着 ``plane.app.permissions.registry`` 走。
+
+表里的行纯粹是注册表的派生数据：启动和每次 migrate 之后按注册表补齐、改文案，注册表里
+没有的 key 硬删。管理员在权限字典里停用（is_active=False）的状态保留。
+"""
+
 import logging
 
 from django.db import DEFAULT_DB_ALIAS, connections
 from django.db.models.signals import post_migrate
 from django.db.utils import DatabaseError, OperationalError, ProgrammingError
 
-from plane.app.permissions.keys import PermissionKey
-
 logger = logging.getLogger("plane.db")
 
 _STATIC_PERMISSIONS_SYNCED = False
 
-ACTION_LABELS = {
-    "add": "关联",
-    "archive": "归档",
-    "bind_role": "绑定角色",
-    "config": "配置",
-    "create": "创建",
-    "delete": "删除",
-    "download": "下载",
-    "edit": "编辑",
-    "export": "导出",
-    "import_export": "导入/导出",
-    "invite": "邀请",
-    "leave": "退出",
-    "lock": "锁定",
-    "manage": "管理",
-    "manage_member": "管理成员",
-    "manage_role": "管理角色",
-    "manage_saved_view": "管理保存视图",
-    "mark_default": "设为默认",
-    "remove": "移除",
-    "submit": "提交",
-    "unarchive": "恢复",
-    "upload": "上传",
-    "view": "查看",
-}
 
-MODULE_LABELS = {
-    "estimate": "估算",
-    "intake": "需求收集",
-    "intake.description_version": "需求收集描述版本",
-    "intake.issue": "需求收集工作项",
-    "issue": "工作项",
-    "issue.attachment": "工作项附件",
-    "issue.comment": "工作项评论",
-    "issue.link": "工作项链接",
-    "issue.relation": "工作项关联",
-    "label": "标签",
-    "modules": "模块",
-    "modules.issue": "模块工作项",
-    "page": "页面",
-    "page.access": "页面访问",
-    "page.version": "页面版本",
-    "product.baseline": "需求基线",
-    "product.change_request": "需求评审",
-    "product.member": "产品成员",
-    "product.project_link": "产品关联项目",
-    "project.review_tailoring": "裁剪表",
-    "project.stage_review": "阶段评审",
-    "project.stage": "项目阶段",
-    "product.requirement": "产品需求",
-    "product.requirement_module": "需求模块",
-    "product.role": "产品角色",
-    "product.settings": "产品设置",
-    "product.test_case_link": "需求用例关联",
-    "project": "项目",
-    "project.analytics": "项目概览",
-    "project.announcement": "项目公告",
-    "project.asset": "项目资产",
-    "project.group_grant": "项目用户组授权",
-    "project.member": "项目成员",
-    "project.product_link": "项目关联产品",
-    "project.publish": "项目发布",
-    "project.requirement_link": "项目关联需求",
-    "project.role": "项目角色",
-    "project.settings": "项目设置",
-    "qa.case": "测试用例",
-    "qa.mindmap": "用例脑图",
-    "qa.plan": "测试计划",
-    "qa.report": "测试报告",
-    "qa.review": "测试评审",
-    "releases": "发布",
-    "releases.comment": "发布评论",
-    "releases.cycle": "发布迭代",
-    "releases.file": "发布文件",
-    "releases.issue": "发布工作项",
-    "releases.plan": "发布测试计划",
-    "sprints": "迭代",
-    "sprints.comment": "迭代评论",
-    "sprints.file": "迭代文件",
-    "sprints.issue": "迭代工作项",
-    "sprints.plan": "迭代测试计划",
-    "state": "状态",
-    "view": "视图",
-    "workflow": "工作流",
-    "workspace.analytics": "工作区分析",
-    "workspace.group": "工作区用户组",
-    "workspace.member": "工作区成员",
-    "workspace.project": "工作区项目",
-    "workspace.role": "工作区角色模板",
-    "workspace.settings": "工作区设置",
-    "workspace.user_profile": "成员画像",
-}
+def _permission_definitions() -> dict:
+    from plane.app.permissions.registry import PERMISSION_DEFS
 
-CATEGORY_LABELS = {
-    "estimate": "项目估算",
-    "intake": "需求收集",
-    "issue": "工作项",
-    "label": "项目标签",
-    "modules": "模块",
-    "page": "页面",
-    "product": "产品",
-    "project": "项目",
-    "qa": "测试管理",
-    "releases": "发布",
-    "sprints": "迭代",
-    "state": "项目状态",
-    "view": "视图",
-    "workflow": "工作流",
-    "workspace": "工作区",
-}
-
-PERMISSION_OVERRIDES = {
-    "workspace.member.leave": {
-        "name": "主动退出工作区",
-        "module": "member",
-        "category": "成员",
-        "sort_order": 5,
-    },
-    "project.analytics.view": {
-        "name": "查看项目概览",
-        "module": "project.overview",
-        "category": "项目概览",
-    },
-    "project.announcement.create": {
-        "name": "添加项目公告",
-        "category": "项目概览",
-    },
-    "project.announcement.delete": {
-        "name": "删除项目公告",
-        "category": "项目概览",
-    },
-    "issue.import_export": {
-        "name": "导入/导出工作项",
-        "module": "issue",
-        "action": "import_export",
-        "category": "工作项",
-    },
-    # 与 project.requirements.view 同归「需求」类，否则角色编辑器里三个 key 会散落
-    # 在「项目」类下，跟研发需求页那一项对不上。
-    "project.requirement_link.view": {
-        "name": "查看项目关联的产品需求",
-        "category": "需求",
-        "sort_order": 110,
-    },
-    "project.requirement_link.manage": {
-        "name": "关联/解除关联产品需求",
-        "category": "需求",
-        "sort_order": 120,
-    },
-    "project.product_link.manage": {
-        "name": "管理项目关联的产品",
-        "category": "需求",
-        "sort_order": 130,
-    },
-    # 模板中心：module / category 用工作区侧的短名口径（迁移 0359 有一份副本，改这里要同步）
-    "workspace.requirement_library.view": {
-        "name": "查看需求标准库",
-        "description": "查看标准库列表与库内条目",
-        "module": "requirement_library",
-        "category": "需求标准库",
-        "sort_order": 1,
-    },
-    "workspace.requirement_library.manage": {
-        "name": "维护需求标准库",
-        "description": "新建/编辑/删除标准库，维护库内条目与模块树",
-        "module": "requirement_library",
-        "category": "需求标准库",
-        "sort_order": 2,
-    },
-    "workspace.requirement_library.import_export": {
-        "name": "导入/导出标准库条目",
-        "description": "Excel 导出库内条目；导入还需要「维护需求标准库」",
-        "module": "requirement_library",
-        "category": "需求标准库",
-        "sort_order": 3,
-    },
-    "workspace.case_template.view": {
-        "name": "查看用例模板库",
-        "description": "查看模板库列表与模板用例，并从模板导入到项目用例库",
-        "module": "case_template",
-        "category": "用例模板库",
-        "sort_order": 1,
-    },
-    "workspace.case_template.manage": {
-        "name": "维护用例模板库",
-        "description": "新建/编辑/删除模板库，维护模板用例与模块、标签",
-        "module": "case_template",
-        "category": "用例模板库",
-        "sort_order": 2,
-    },
-    "workspace.case_template.import_export": {
-        "name": "导入/导出模板用例",
-        "description": "导出模板用例；导入还需要「维护用例模板库」",
-        "module": "case_template",
-        "category": "用例模板库",
-        "sort_order": 3,
-    },
-    "workspace.review_template.view": {
-        "name": "查看评审模板库",
-        "description": "查看各研发阶段的评审与评审活动模板",
-        "module": "review_template",
-        "category": "评审模板库",
-        "sort_order": 1,
-    },
-    "workspace.review_template.manage": {
-        "name": "维护评审模板库",
-        "description": "新建/编辑/删除评审与评审活动模板，调整排序与启用状态",
-        "module": "review_template",
-        "category": "评审模板库",
-        "sort_order": 2,
-    },
-    "workspace.dev_mode.view": {
-        "name": "查看研发模式",
-        "description": "查看研发模式列表、组件开关与阶段配置",
-        "module": "dev_mode",
-        "category": "研发模式",
-        "sort_order": 1,
-    },
-    "workspace.dev_mode.manage": {
-        "name": "维护研发模式",
-        "description": "新建/编辑/删除研发模式，维护组件开关、阶段与阶段下勾选的评审节点",
-        "module": "dev_mode",
-        "category": "研发模式",
-        "sort_order": 2,
-    },
-    "project.review_tailoring.view": {
-        "name": "查看裁剪表",
-        "description": "查看本项目的裁剪表与裁剪明细",
-        "module": "project.review_tailoring",
-        "category": "裁剪表",
-        "sort_order": 1,
-    },
-    "project.review_tailoring.manage": {
-        "name": "维护裁剪表",
-        "description": "新建/编辑/删除裁剪表，勾选裁剪项、提交签批与发起修订",
-        "module": "project.review_tailoring",
-        "category": "裁剪表",
-        "sort_order": 2,
-    },
-    "project.stage_review.view": {
-        "name": "查看阶段评审",
-        "description": "查看本项目各阶段的评审、评审活动与执行进度",
-        "module": "project.stage_review",
-        "category": "阶段评审",
-        "sort_order": 1,
-    },
-    "project.stage_review.manage": {
-        "name": "维护阶段评审",
-        "description": "推进评审状态、填写评审结论、维护负责人与附件，手工新建评审",
-        "module": "project.stage_review",
-        "category": "阶段评审",
-        "sort_order": 2,
-    },
-    "project.stage.view": {
-        "name": "查看项目阶段",
-        "description": "查看本项目的阶段列表、子阶段、负责人与进度",
-        "module": "project.stage",
-        "category": "项目阶段",
-        "sort_order": 1,
-    },
-    "project.stage.manage": {
-        "name": "维护项目阶段",
-        "description": "新建/编辑/删除阶段与子阶段，改状态与负责人，从研发模式带出阶段",
-        "module": "project.stage",
-        "category": "项目阶段",
-        "sort_order": 2,
-    },
-    # 自动拼出来是「删除产品设置」「绑定角色产品成员」，不像人话。
-    "product.settings.delete": {"name": "删除产品"},
-    "product.member.bind_role": {"name": "分配产品成员角色"},
-}
-
-
-# 产品权限按 module 归到 4 个分类，角色编辑器左栏才不会是 14 项挤在一个「产品」下。
-# 迁移 0357 有一份副本，改这里要同步。
-PRODUCT_CATEGORY_BY_MODULE = {
-    "product.settings": "产品设置",
-    "product.member": "产品成员与角色",
-    "product.role": "产品成员与角色",
-    "product.requirement": "产品需求",
-    "product.requirement_module": "产品需求",
-    "product.change_request": "产品需求",
-    "product.baseline": "产品需求",
-    "product.test_case_link": "产品需求",
-    "product.project_link": "产品关联",
-}
-
-
-def _scope_for_key(key: str) -> str:
-    if key.startswith("workspace."):
-        return "workspace"
-    if key.startswith("product."):
-        return "product"
-    return "project"
-
-
-def _split_permission_key(key: str) -> tuple[str, str]:
-    if "." not in key:
-        return key, "view"
-    module, action = key.rsplit(".", 1)
-    return module, action
-
-
-def _build_permission_defaults(key: str) -> dict:
-    module, action = _split_permission_key(key)
-    module_root = module.split(".", 1)[0]
-    action_label = ACTION_LABELS.get(action, action)
-    module_label = MODULE_LABELS.get(module, module)
-    defaults = {
-        "name": f"{action_label}{module_label}",
-        "description": f"{action_label}{module_label}",
-        "scope": _scope_for_key(key),
-        "module": module,
-        "action": action,
-        "category": PRODUCT_CATEGORY_BY_MODULE.get(module)
-        or CATEGORY_LABELS.get(module_root, module_label),
-        "sort_order": 100,
-        "is_active": True,
-    }
-    overrides = PERMISSION_OVERRIDES.get(key)
-    if overrides:
-        defaults.update(overrides)
-        defaults["description"] = overrides.get("description", defaults["name"])
-    return defaults
-
-
-def _static_permission_definitions() -> dict[str, dict]:
     return {
-        key: {"key": key, **_build_permission_defaults(key)}
-        for key in dict.fromkeys(PermissionKey.values())
+        definition.key: {
+            "name": definition.name,
+            "description": definition.name,
+            "scope": definition.scope,
+            "module": definition.module,
+            "action": definition.action,
+            "category": definition.group,
+            "sort_order": definition.sort_order,
+        }
+        for definition in PERMISSION_DEFS
     }
 
 
@@ -352,11 +41,7 @@ def _permission_table_exists() -> bool:
 
 
 def ensure_static_permissions(force: bool = False) -> int:
-    """Ensure static PermissionKey enum values exist in the permissions table.
-
-    This is intentionally additive: existing rows are left untouched, and missing
-    rows are inserted with conservative runtime metadata.
-    """
+    """按注册表同步 permissions 表，返回改动行数。"""
     global _STATIC_PERMISSIONS_SYNCED
 
     if _STATIC_PERMISSIONS_SYNCED and not force:
@@ -366,48 +51,34 @@ def ensure_static_permissions(force: bool = False) -> int:
 
     from plane.db.models import Permission
 
-    definitions = _static_permission_definitions()
-    keys = list(definitions)
-
+    definitions = _permission_definitions()
+    manager = Permission.all_objects.using(DEFAULT_DB_ALIAS)
     try:
-        existing_rows = list(
-            Permission.all_objects.using(DEFAULT_DB_ALIAS)
-            .filter(key__in=keys)
-            .values("key", "deleted_at")
-        )
-        active_keys = {
-            row["key"] for row in existing_rows if row["deleted_at"] is None
-        }
-        soft_deleted_keys = {
-            row["key"] for row in existing_rows if row["deleted_at"] is not None
-        }
-        for key in soft_deleted_keys:
-            Permission.all_objects.using(DEFAULT_DB_ALIAS).filter(key=key).update(
-                deleted_at=None,
-                **{
-                    field: value
-                    for field, value in definitions[key].items()
-                    if field != "key"
-                },
-            )
-        missing_permissions = [
-            Permission(**definitions[key])
-            for key in keys
-            if key not in active_keys and key not in soft_deleted_keys
-        ]
-        if missing_permissions:
-            Permission.objects.using(DEFAULT_DB_ALIAS).bulk_create(
-                missing_permissions,
-                batch_size=100,
-                ignore_conflicts=True,
-            )
-        synced_count = len(soft_deleted_keys) + len(missing_permissions)
-        if synced_count:
-            logger.info("Synced %s missing static permissions", synced_count)
+        removed, _ = manager.exclude(key__in=list(definitions)).delete()
+        existing = {row.key: row for row in manager.filter(key__in=list(definitions))}
+        created, updated = [], []
+        for key, values in definitions.items():
+            row = existing.get(key)
+            if row is None:
+                created.append(Permission(key=key, is_active=True, **values))
+                continue
+            dirty = row.deleted_at is not None or any(getattr(row, field) != value for field, value in values.items())
+            if dirty:
+                for field, value in values.items():
+                    setattr(row, field, value)
+                row.deleted_at = None
+                updated.append(row)
+        if created:
+            manager.bulk_create(created, batch_size=200, ignore_conflicts=True)
+        if updated:
+            manager.bulk_update(updated, [*next(iter(definitions.values())).keys(), "deleted_at"])
+        synced = removed + len(created) + len(updated)
+        if synced:
+            logger.info("Synced permissions table: +%s ~%s -%s", len(created), len(updated), removed)
         _STATIC_PERMISSIONS_SYNCED = True
-        return synced_count
+        return synced
     except (OperationalError, ProgrammingError, DatabaseError):
-        logger.exception("Failed to ensure static permissions")
+        logger.exception("Failed to sync permissions table")
         return 0
 
 

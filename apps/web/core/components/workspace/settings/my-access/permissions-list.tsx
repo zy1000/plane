@@ -12,7 +12,6 @@ import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { IWorkspaceMyAccessPermission, IWorkspaceMyAccessPermissionSource } from "@plane/types";
 import { Button, CustomSelect, Input } from "@plane/ui";
 import { cn, copyTextToClipboard } from "@plane/utils";
-import { comparePermissionCategories, comparePermissions } from "@/components/workspace/settings/roles/permission-sort";
 
 type TPermissionSourceFilter = "all" | "direct_role" | "group_role" | "privileged" | "not_granted";
 
@@ -80,13 +79,18 @@ export function MyAccessPermissionsList({ permissions }: Props) {
       const category = permission.category || uncategorized;
       groups.set(category, [...(groups.get(category) ?? []), permission]);
     }
+    // 顺序跟权限组编辑器一致：后端按 registry 播的 sort_order（分组 = category）
     return Array.from(groups.entries())
       .map(([category, categoryPermissions]) => ({
         category,
-        permissions: categoryPermissions.toSorted(comparePermissions),
+        permissions: categoryPermissions.toSorted((a, b) => a.sort_order - b.sort_order),
         grantedCount: categoryPermissions.filter((permission) => permission.is_granted).length,
       }))
-      .toSorted((a, b) => comparePermissionCategories("workspace", a.category, b.category));
+      .toSorted(
+        (a, b) =>
+          Math.min(...a.permissions.map((permission) => permission.sort_order)) -
+          Math.min(...b.permissions.map((permission) => permission.sort_order))
+      );
   }, [filteredPermissions, t]);
 
   const totalGranted = permissions.filter((permission) => permission.is_granted).length;

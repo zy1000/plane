@@ -7,8 +7,8 @@
 import { cloneDeep, set } from "lodash-es";
 import { action, makeObservable, observable, runInAction, computed } from "mobx";
 // plane imports
-import { EUserPermissions, API_BASE_URL } from "@plane/constants";
-import type { IUser, TUserPermissions } from "@plane/types";
+import { API_BASE_URL } from "@plane/constants";
+import type { IUser } from "@plane/types";
 // plane web imports
 import type { RootStore } from "@/plane-web/store/root.store";
 import type { IUserPermissionStore } from "@/plane-web/store/user/permission.store";
@@ -53,7 +53,7 @@ export interface IUserStore {
   signOut: () => Promise<void>;
   // computed
   canPerformAnyCreateAction: boolean;
-  projectsWithCreatePermissions: { [projectId: string]: number } | null;
+  projectsWithCreatePermissions: { [projectId: string]: boolean } | null;
 }
 
 export class UserStore implements IUserStore {
@@ -259,25 +259,14 @@ export class UserStore implements IUserStore {
 
   // helper actions
   /**
-   * @description fetches the projects with write permissions
-   * @returns {{[projectId: string]: number} || null}
+   * @description 能进的项目（成员 / 负责 / 白名单）；具体能不能建东西再看各处的 key
+   * @returns {{[projectId: string]: boolean} || null}
    */
-  fetchProjectsWithCreatePermissions = (): { [key: string]: TUserPermissions } => {
+  fetchProjectsWithCreatePermissions = (): { [projectId: string]: boolean } | null => {
     const { workspaceSlug } = this.store.router;
-
-    const allWorkspaceProjectRoles = this.permission.getProjectRolesByWorkspaceSlug(workspaceSlug || "");
-
-    const userPermissions =
-      (allWorkspaceProjectRoles &&
-        Object.keys(allWorkspaceProjectRoles)
-          .filter((key) => allWorkspaceProjectRoles[key] >= EUserPermissions.MEMBER)
-          .reduce(
-            (res: { [projectId: string]: number }, key: string) => ((res[key] = allWorkspaceProjectRoles[key]), res),
-            {}
-          )) ||
-      null;
-
-    return userPermissions;
+    const projectIds = this.permission.getJoinedProjectIdsByWorkspaceSlug(workspaceSlug || "");
+    if (!projectIds.length) return null;
+    return projectIds.reduce((res: { [projectId: string]: boolean }, projectId) => ((res[projectId] = true), res), {});
   };
 
   /**

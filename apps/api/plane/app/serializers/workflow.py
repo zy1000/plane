@@ -32,19 +32,11 @@ def build_workflow_principal_item(principal):
             "label": member.display_name or member.email or "成员",
             "avatar_url": member.avatar_url,
         }
-    if principal.kind == WorkflowPrincipalKind.ROLE and principal.role_id:
+    if principal.kind == WorkflowPrincipalKind.ROLE and principal.job_role_id:
         return {
             "kind": "role",
-            "id": str(principal.role_id),
-            "label": principal.role.name,
-            "avatar_url": None,
-        }
-    if principal.kind == WorkflowPrincipalKind.ROLE and principal.workspace_role_id:
-        # 角色模板（模式方案的审批人）：展示同角色，运行时解析到项目里由这个模板派生的角色
-        return {
-            "kind": "role",
-            "id": f"template:{principal.workspace_role_id}",
-            "label": principal.workspace_role.name,
+            "id": str(principal.job_role_id),
+            "label": principal.job_role.label,
             "avatar_url": None,
         }
     if principal.kind == WorkflowPrincipalKind.DYNAMIC and principal.dynamic_target:

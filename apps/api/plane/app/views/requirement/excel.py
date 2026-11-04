@@ -359,8 +359,8 @@ class RequirementExcelMixin:
     def validate_excel_import(self, request, *args, **kwargs):
         owner, error = self._owner_or_error(
             permission_key=(
-                PermissionKey.PRODUCT_REQUIREMENT_CREATE,
-                PermissionKey.PRODUCT_REQUIREMENT_EDIT,
+                PermissionKey.PROJECT_REQUIREMENT_CREATE,
+                PermissionKey.PROJECT_REQUIREMENT_EDIT,
             )
         )
         if error is not None:
@@ -390,8 +390,8 @@ class RequirementExcelMixin:
             owner, error = self._owner_or_error(
                 for_update=True,
                 permission_key=(
-                    PermissionKey.PRODUCT_REQUIREMENT_CREATE,
-                    PermissionKey.PRODUCT_REQUIREMENT_EDIT,
+                    PermissionKey.PROJECT_REQUIREMENT_CREATE,
+                    PermissionKey.PROJECT_REQUIREMENT_EDIT,
                 ),
             )
             if error is not None:

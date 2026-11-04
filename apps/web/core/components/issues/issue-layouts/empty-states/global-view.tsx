@@ -6,10 +6,10 @@
 
 import { observer } from "mobx-react";
 // plane imports
-import { EUserPermissionsLevel, WORKSPACE_PROJECT_CREATE_PERMISSION_KEY } from "@plane/constants";
+import { WORKSPACE_PROJECT_CREATE_PERMISSION_KEY } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { EmptyStateDetailed } from "@plane/propel/empty-state";
-import { EIssuesStoreType, EUserWorkspaceRoles } from "@plane/types";
+import { EIssuesStoreType } from "@plane/types";
 // hooks
 import { useCommandPalette } from "@/hooks/store/use-command-palette";
 import { useProject } from "@/hooks/store/use-project";
@@ -21,12 +21,10 @@ export const GlobalViewEmptyState = observer(function GlobalViewEmptyState() {
   // store hooks
   const { workspaceProjectIds } = useProject();
   const { toggleCreateIssueModal, toggleCreateProjectModal } = useCommandPalette();
-  const { allowPermissions, allowWorkspacePermissionKeys } = useUserPermissions();
+  const { isWorkspaceMember, allowWorkspacePermissionKeys } = useUserPermissions();
   // derived values
-  const hasMemberLevelPermission = allowPermissions(
-    [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER],
-    EUserPermissionsLevel.WORKSPACE
-  );
+  // 建工作项的弹窗里再选项目，能不能在某个项目建由那个项目的权限决定
+  const hasMemberLevelPermission = isWorkspaceMember();
   const canCreateProjects = allowWorkspacePermissionKeys([WORKSPACE_PROJECT_CREATE_PERMISSION_KEY]);
 
   if (workspaceProjectIds?.length === 0) {

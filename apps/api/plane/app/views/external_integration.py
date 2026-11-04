@@ -15,7 +15,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from plane.app.permissions import PermissionKey, allow_fine_permission
+from plane.app.permissions import allow_workspace_member, PermissionKey, has_workspace_permission
 from plane.app.views import BaseAPIView
 from plane.bgtasks.external_integration_sync_task import run_external_integration
 from plane.db.models import Workspace
@@ -42,7 +42,7 @@ def _get_workspace(slug):
 
 
 class ExternalIntegrationListAPIView(BaseAPIView):
-    @allow_fine_permission(PermissionKey.WORKSPACE_SETTINGS_VIEW, level="WORKSPACE")
+    @allow_workspace_member
     def get(self, request, slug):
         workspace = _get_workspace(slug)
         if workspace is None:
@@ -53,12 +53,23 @@ class ExternalIntegrationListAPIView(BaseAPIView):
         )
 
 
+#: 部门页「立即同步」触发的人员名单同步，持部门管理权也能点
+DEPARTMENT_SYNC_KEYS = {"mdm_person_info"}
+
+
 class ExternalIntegrationSyncAPIView(BaseAPIView):
-    @allow_fine_permission(PermissionKey.WORKSPACE_SETTINGS_EDIT, level="WORKSPACE")
+    @allow_workspace_member
     def post(self, request, slug, key):
         workspace = _get_workspace(slug)
         if workspace is None:
             return Response({"error": "Workspace not found."}, status=status.HTTP_404_NOT_FOUND)
+        allowed = {PermissionKey.WORKSPACE_INTEGRATION_MANAGE}
+        if key in DEPARTMENT_SYNC_KEYS:
+            allowed.add(PermissionKey.WORKSPACE_DEPARTMENT_MANAGE)
+        if not has_workspace_permission(request.user, slug, *allowed):
+            return Response(
+                {"error": "You don't have the required workspace permissions."}, status=status.HTTP_403_FORBIDDEN
+            )
         spec = get_integration(key)
         if spec is None:
             return Response({"error": "INTEGRATION_NOT_FOUND"}, status=status.HTTP_404_NOT_FOUND)

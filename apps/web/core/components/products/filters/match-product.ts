@@ -84,12 +84,6 @@ const matchCondition = (product: TProduct, condition: TProductFilterCondition, c
       return matchOption(product.model_number, condition.operator, selected);
     case "external_model":
       return matchOption(product.external_model, condition.operator, selected);
-    case "network":
-      return matchOption(
-        product.network === undefined ? undefined : String(product.network),
-        condition.operator,
-        selected
-      );
     case "owner":
       return people([product.owner]);
     case "project_lead":

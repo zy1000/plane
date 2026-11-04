@@ -11,13 +11,12 @@ import { usePopper } from "react-popper";
 import { Loader } from "lucide-react";
 import { Combobox } from "@headlessui/react";
 // plane imports
-import { EUserPermissionsLevel, getRandomLabelColor } from "@plane/constants";
+import { PERMISSION_KEYS, getRandomLabelColor } from "@plane/constants";
 import { useOutsideClickDetector } from "@plane/hooks";
 import { useTranslation } from "@plane/i18n";
 import { CheckIcon, SearchIcon, ChevronDownIcon } from "@plane/propel/icons";
 // types
 import type { IIssueLabel } from "@plane/types";
-import { EUserProjectRoles } from "@plane/types";
 // components
 import { ComboDropDown } from "@plane/ui";
 import { cn, sortBySelectedFirst } from "@plane/utils";
@@ -89,10 +88,10 @@ export function LabelDropdown(props: ILabelDropdownProps) {
   const { fetchProjectLabels, getProjectLabels, createLabel } = useLabel();
   const { isMobile } = usePlatformOS();
   const storeLabels = getProjectLabels(projectId);
-  const { allowPermissions } = useUserPermissions();
+  const { allowProjectPermissionKeys } = useUserPermissions();
 
   const canCreateLabel =
-    projectId && allowPermissions([EUserProjectRoles.ADMIN], EUserPermissionsLevel.PROJECT, workspaceSlug, projectId);
+    projectId && allowProjectPermissionKeys([PERMISSION_KEYS.PROJECT_LABEL_MANAGE], workspaceSlug, projectId);
 
   let projectLabels: IIssueLabel[] = defaultOptions;
   if (storeLabels && storeLabels.length > 0) projectLabels = storeLabels;

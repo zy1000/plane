@@ -36,10 +36,9 @@ from rest_framework.response import Response
 
 # Module imports
 from plane.app.permissions import (
+    allow_project_member,
     ProjectEntityPermission,
-    ProjectLitePermission,
-    allow_permission,
-    ROLE, allow_fine_permission, PermissionKey,
+    ProjectLitePermission, allow_fine_permission, PermissionKey,
 )
 
 from plane.app.serializers import (
@@ -66,6 +65,7 @@ from plane.bgtasks.webhook_task import model_activity
 from .. import BaseAPIView, BaseViewSet
 from plane.bgtasks.recent_visited_task import recent_visited_task
 from plane.utils.host import base_host
+from plane.utils.visibility import visible_projects_q
 
 
 class ModuleViewSet(BaseViewSet):
@@ -291,7 +291,7 @@ class ModuleViewSet(BaseViewSet):
             .order_by("-is_favorite", "-created_at")
         )
 
-    @allow_fine_permission(PermissionKey.MODULES_CREATE)
+    @allow_fine_permission(PermissionKey.PROJECT_MODULE_CREATE)
     def create(self, request, slug, project_id):
         project = Project.objects.get(workspace__slug=slug, pk=project_id)
         serializer = ModuleWriteSerializer(data=request.data, context={"project": project})
@@ -350,7 +350,7 @@ class ModuleViewSet(BaseViewSet):
             return Response(module, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    @allow_fine_permission(PermissionKey.MODULES_VIEW)
+    @allow_fine_permission(PermissionKey.PROJECT_MODULE_VIEW)
     def list(self, request, slug, project_id):
         queryset = self.get_queryset().filter(archived_at__isnull=True)
         if self.fields:
@@ -392,7 +392,7 @@ class ModuleViewSet(BaseViewSet):
             modules = user_timezone_converter(modules, datetime_fields, request.user.user_timezone)
         return Response(modules, status=status.HTTP_200_OK)
 
-    @allow_fine_permission(PermissionKey.MODULES_VIEW)
+    @allow_fine_permission(PermissionKey.PROJECT_MODULE_VIEW)
     def retrieve(self, request, slug, project_id, pk):
         queryset = (
             self.get_queryset()
@@ -648,7 +648,7 @@ class ModuleViewSet(BaseViewSet):
 
         return Response(data, status=status.HTTP_200_OK)
 
-    @allow_fine_permission(PermissionKey.MODULES_EDIT)
+    @allow_fine_permission(PermissionKey.PROJECT_MODULE_EDIT)
     def partial_update(self, request, slug, project_id, pk):
         module_queryset = self.get_queryset().filter(pk=pk)
 
@@ -720,7 +720,7 @@ class ModuleViewSet(BaseViewSet):
             return Response(module, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    @allow_fine_permission(PermissionKey.MODULES_DELETE)
+    @allow_fine_permission(PermissionKey.PROJECT_MODULE_DELETE)
     def destroy(self, request, slug, project_id, pk):
         module = Module.objects.get(workspace__slug=slug, project_id=project_id, pk=pk)
 
@@ -779,8 +779,7 @@ class ModuleLinkViewSet(BaseViewSet):
             .filter(project_id=self.kwargs.get("project_id"))
             .filter(module_id=self.kwargs.get("module_id"))
             .filter(
-                project__project_projectmember__member=self.request.user,
-                project__project_projectmember__is_active=True,
+                visible_projects_q(self.request.user, self.kwargs.get("slug"), "project"),
                 project__archived_at__isnull=True,
             )
             .order_by("-created_at")
@@ -823,7 +822,7 @@ class ModuleFavoriteViewSet(BaseViewSet):
 
 
 class ModuleUserPropertiesEndpoint(BaseAPIView):
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    @allow_project_member
     def patch(self, request, slug, project_id, module_id):
         module_properties = ModuleUserProperties.objects.get(
             user=request.user,
@@ -843,7 +842,7 @@ class ModuleUserPropertiesEndpoint(BaseAPIView):
         serializer = ModuleUserPropertiesSerializer(module_properties)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    @allow_project_member
     def get(self, request, slug, project_id, module_id):
         module_properties, _ = ModuleUserProperties.objects.get_or_create(
             user=request.user,

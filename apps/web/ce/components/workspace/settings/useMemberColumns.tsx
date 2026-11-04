@@ -4,42 +4,48 @@
  * See the LICENSE file for details.
  */
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import useSWR from "swr";
 import {
-  WORKSPACE_GROUP_MANAGE_MEMBER_PERMISSION_KEY,
-  WORKSPACE_GROUP_VIEW_PERMISSION_KEY,
   WORKSPACE_MEMBER_EDIT_PERMISSION_KEY,
   WORKSPACE_MEMBER_LEAVE_PERMISSION_KEY,
   WORKSPACE_MEMBER_REMOVE_PERMISSION_KEY,
-  WORKSPACE_ROLE_VIEW_PERMISSION_KEY,
 } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { renderFormattedDate } from "@plane/utils";
 import { MemberHeaderColumn } from "@/components/project/member-header-column";
 import type { RowData } from "@/components/workspace/settings/member-columns";
 import {
-  CustomRolesColumn,
-  NameColumn,
+  MemberActionsColumn,
   NetworkZoneColumn,
-  TeamsColumn,
+  PermissionGroupsColumn,
 } from "@/components/workspace/settings/member-columns";
+import { JobRoleTags } from "@/components/workspace/settings/permission-groups/job-role-tags";
+import { MemberIdentityCell } from "@/components/workspace/settings/permission-groups/member-identity-cell";
 import { useInstance } from "@/hooks/store/use-instance";
+import { useJobRoles } from "@/hooks/store/use-job-roles";
 import { useMember } from "@/hooks/store/use-member";
-import { useWorkspaceGroups } from "@/hooks/store/use-workspace-groups";
+import { useWorkspace } from "@/hooks/store/use-workspace";
 import { useWorkspaceRoles } from "@/hooks/store/use-workspace-roles";
 import { useUser, useUserPermissions } from "@/hooks/store/user";
 import type { IMemberFilters } from "@/store/member/utils";
 
+/**
+ * 工作区成员表的列（效果图「工作区成员」）：成员 / 工号 / 部门 / 角色 / 权限组 / [大小网] / 加入时间 / 操作。
+ * 列宽合计约 1170px：1536 宽窗口的内容区刚好放下（见 members-virtual-table.tsx）。
+ */
 export const useMemberColumns = () => {
   // states
   const [removeMemberModal, setRemoveMemberModal] = useState<RowData | null>(null);
+  const [editingMember, setEditingMember] = useState<RowData | null>(null);
 
   const { workspaceSlug } = useParams();
+  const slug = workspaceSlug?.toString() ?? "";
 
   const { data: currentUser } = useUser();
   const { allowWorkspacePermissionKeys } = useUserPermissions();
+  const { currentWorkspace } = useWorkspace();
   const {
     workspace: {
       filtersStore: { filters, updateFilters },
@@ -49,22 +55,16 @@ export const useMemberColumns = () => {
   const { config } = useInstance();
 
   // derived values
-  const canEditMember = allowWorkspacePermissionKeys([WORKSPACE_MEMBER_EDIT_PERMISSION_KEY], workspaceSlug);
-  const canRemoveMember = allowWorkspacePermissionKeys([WORKSPACE_MEMBER_REMOVE_PERMISSION_KEY], workspaceSlug);
-  const canLeaveWorkspace = allowWorkspacePermissionKeys([WORKSPACE_MEMBER_LEAVE_PERMISSION_KEY], workspaceSlug);
-  const canViewRoles = allowWorkspacePermissionKeys([WORKSPACE_ROLE_VIEW_PERMISSION_KEY], workspaceSlug);
-  const canViewGroups = allowWorkspacePermissionKeys([WORKSPACE_GROUP_VIEW_PERMISSION_KEY], workspaceSlug);
-  const canManageTeams = allowWorkspacePermissionKeys([WORKSPACE_GROUP_MANAGE_MEMBER_PERMISSION_KEY], workspaceSlug);
-  const { roles, isLoading: isRolesLoading, fetchRoles } = useWorkspaceRoles(workspaceSlug, "workspace");
-  const { groups, isLoading: isGroupsLoading, fetchGroups } = useWorkspaceGroups(workspaceSlug);
-  useSWR(
-    (canViewRoles || canEditMember) && workspaceSlug ? `WORKSPACE_MEMBER_ASSIGNABLE_ROLES_${workspaceSlug}` : null,
-    fetchRoles
-  );
-  useSWR(
-    (canViewGroups || canManageTeams) && workspaceSlug ? `WORKSPACE_MEMBER_GROUPS_${workspaceSlug}` : null,
-    fetchGroups
-  );
+  const canEditMember = allowWorkspacePermissionKeys([WORKSPACE_MEMBER_EDIT_PERMISSION_KEY], slug);
+  const canRemoveMember = allowWorkspacePermissionKeys([WORKSPACE_MEMBER_REMOVE_PERMISSION_KEY], slug);
+  const canLeaveWorkspace = allowWorkspacePermissionKeys([WORKSPACE_MEMBER_LEAVE_PERMISSION_KEY], slug);
+  const ownerId = currentWorkspace?.owner?.id;
+
+  const { roles, fetchRoles } = useWorkspaceRoles(slug);
+  useSWR(slug ? `WORKSPACE_PERMISSION_GROUPS_${slug}` : null, fetchRoles, { revalidateOnFocus: false });
+  const { jobRoles, jobRoleMap, isColored } = useJobRoles(slug);
+
+  const groupMap = useMemo(() => new Map(roles.map((role) => [role.id, role])), [roles]);
 
   const isSuspended = (rowData: RowData) => rowData.is_active === false;
 
@@ -75,10 +75,9 @@ export const useMemberColumns = () => {
 
   const columns = [
     {
-      key: "Full name",
-      content: t("workspace_settings.settings.members.details.full_name"),
-      width: 150,
-      thClassName: "text-left",
+      key: "Member",
+      content: "成员",
+      width: 240,
       thRender: () => (
         <MemberHeaderColumn
           property="full_name"
@@ -86,113 +85,44 @@ export const useMemberColumns = () => {
           handleDisplayFilterUpdate={handleDisplayFilterUpdate}
         />
       ),
-      tdRender: (rowData: RowData) => (
-        <NameColumn
-          rowData={rowData}
-          workspaceSlug={workspaceSlug}
-          canRemoveMember={canRemoveMember}
-          canLeaveWorkspace={canLeaveWorkspace}
-          currentUser={currentUser}
-          setRemoveMemberModal={setRemoveMemberModal}
-        />
-      ),
+      tdRender: (rowData: RowData) => <MemberIdentityCell user={rowData.member} muted={isSuspended(rowData)} />,
     },
-
-    {
-      key: "Display name",
-      content: t("workspace_settings.settings.members.details.display_name"),
-      width: 130,
-      tdRender: (rowData: RowData) => (
-        <div className={`truncate ${isSuspended(rowData) ? "text-placeholder" : ""}`} title={rowData.member.display_name}>
-          {rowData.member.display_name}
-        </div>
-      ),
-      thRender: () => (
-        <MemberHeaderColumn
-          property="display_name"
-          displayFilters={filters}
-          handleDisplayFilterUpdate={handleDisplayFilterUpdate}
-        />
-      ),
-    },
-
-    {
-      key: "Email address",
-      content: t("workspace_settings.settings.members.details.email_address"),
-      width: 174,
-      tdRender: (rowData: RowData) => (
-        <div className={`truncate ${isSuspended(rowData) ? "text-placeholder" : ""}`} title={rowData.member.email}>
-          {rowData.member.email}
-        </div>
-      ),
-      thRender: () => (
-        <MemberHeaderColumn
-          property="email"
-          displayFilters={filters}
-          handleDisplayFilterUpdate={handleDisplayFilterUpdate}
-        />
-      ),
-    },
-
     {
       key: "Employee id",
-      content: t("workspace_settings.settings.members.details.employee_id"),
+      content: "工号",
       width: 90,
       tdRender: (rowData: RowData) => (
-        <div className={`truncate ${isSuspended(rowData) ? "text-placeholder" : ""}`}>{rowData.member.employee_id ?? ""}</div>
+        <div className={`truncate tabular-nums ${isSuspended(rowData) ? "text-placeholder" : ""}`}>
+          {rowData.member.employee_id || "—"}
+        </div>
       ),
     },
-
     {
       key: "Department",
-      content: t("workspace_settings.settings.members.details.department"),
-      width: 146,
+      content: "部门",
+      width: 150,
       tdRender: (rowData: RowData) => (
-        <div className={`truncate ${isSuspended(rowData) ? "text-placeholder" : ""}`} title={rowData.member.department ?? ""}>
-          {rowData.member.department ?? ""}
+        <div
+          className={`truncate ${isSuspended(rowData) ? "text-placeholder" : ""}`}
+          title={rowData.member.department ?? ""}
+        >
+          {rowData.member.department || "—"}
         </div>
       ),
     },
-
     {
-      key: "Leader",
-      content: t("workspace_settings.settings.members.details.leader"),
-      width: 68,
+      key: "Job roles",
+      content: "角色",
+      width: 190,
       tdRender: (rowData: RowData) => (
-        <div className={`truncate ${isSuspended(rowData) ? "text-placeholder" : ""}`}>
-          {rowData.member.leader?.display_name ?? ""}
-        </div>
+        <JobRoleTags jobRoleIds={rowData.job_role_ids} jobRoleMap={jobRoleMap} isColored={isColored} />
       ),
     },
-
     {
-      key: "Custom roles",
-      content: "Role",
-      width: 108,
-      tdRender: (rowData: RowData) => (
-        <CustomRolesColumn
-          rowData={rowData}
-          workspaceSlug={workspaceSlug}
-          roles={roles}
-          isLoading={isRolesLoading}
-          canEditMember={canEditMember}
-        />
-      ),
-    },
-
-    {
-      key: "Teams",
-      content: "Teams",
-      width: 100,
-      tdRender: (rowData: RowData) => (
-        <TeamsColumn
-          rowData={rowData}
-          workspaceSlug={workspaceSlug}
-          groups={groups}
-          isLoading={isGroupsLoading}
-          canManageTeams={canManageTeams}
-        />
-      ),
+      key: "Permission groups",
+      content: "权限组",
+      width: 220,
+      tdRender: (rowData: RowData) => <PermissionGroupsColumn rowData={rowData} groupMap={groupMap} />,
     },
 
     // 大网 / 小网归属：隔离开关开着、且能编辑成员才有这一列（后端只给管理员视图返回归属）
@@ -203,7 +133,7 @@ export const useMemberColumns = () => {
             content: t("network_zone.label"),
             width: 76,
             tdRender: (rowData: RowData) => (
-              <NetworkZoneColumn rowData={rowData} workspaceSlug={workspaceSlug} canEditMember={canEditMember} />
+              <NetworkZoneColumn rowData={rowData} workspaceSlug={slug} canEditMember={canEditMember} />
             ),
           },
         ]
@@ -211,10 +141,12 @@ export const useMemberColumns = () => {
 
     {
       key: "Joining date",
-      content: t("workspace_settings.settings.members.details.joining_date"),
-      width: 124,
+      content: "加入时间",
+      width: 110,
       tdRender: (rowData: RowData) =>
-        isSuspended(rowData) ? null : <div className="truncate">{renderFormattedDate(rowData?.member?.joining_date)}</div>,
+        isSuspended(rowData) ? null : (
+          <div className="truncate tabular-nums">{renderFormattedDate(rowData?.member?.joining_date)}</div>
+        ),
       thRender: () => (
         <MemberHeaderColumn
           property="joining_date"
@@ -223,6 +155,35 @@ export const useMemberColumns = () => {
         />
       ),
     },
+    {
+      key: "Actions",
+      content: "操作",
+      width: 96,
+      thRender: () => <span className="block text-right">操作</span>,
+      tdRender: (rowData: RowData) => (
+        <MemberActionsColumn
+          rowData={rowData}
+          isCurrentUser={rowData.member.id === currentUser?.id}
+          isOwner={Boolean(ownerId && rowData.member.id === ownerId)}
+          canEditMember={canEditMember}
+          canRemoveMember={canRemoveMember}
+          canLeaveWorkspace={canLeaveWorkspace}
+          onEdit={setEditingMember}
+          onRemove={setRemoveMemberModal}
+        />
+      ),
+    },
   ];
-  return { columns, workspaceSlug, removeMemberModal, setRemoveMemberModal };
+
+  return {
+    columns,
+    workspaceSlug: slug,
+    removeMemberModal,
+    setRemoveMemberModal,
+    editingMember,
+    setEditingMember,
+    jobRoles,
+    groups: roles,
+    groupMap,
+  };
 };

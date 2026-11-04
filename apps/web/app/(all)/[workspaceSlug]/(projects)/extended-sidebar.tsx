@@ -9,7 +9,6 @@ import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 // plane imports
 import { WORKSPACE_SIDEBAR_DYNAMIC_NAVIGATION_ITEMS_LINKS } from "@plane/constants";
-import type { EUserWorkspaceRoles } from "@plane/types";
 // hooks
 import { useAppTheme } from "@/hooks/store/use-app-theme";
 import { useUserPermissions } from "@/hooks/store/user";
@@ -68,7 +67,6 @@ export const ExtendedAppSidebar = observer(function ExtendedAppSidebar() {
       key: string;
       labelTranslationKey: string;
       href: string;
-      access: EUserWorkspaceRoles[];
     }[]
   ): number | undefined => {
     if (sourceIndex < 0 || destinationIndex < 0 || navigationList.length <= 0) return undefined;

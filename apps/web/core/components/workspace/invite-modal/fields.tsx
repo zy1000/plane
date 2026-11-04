@@ -92,7 +92,6 @@ export const InvitationFields = observer(function InvitationFields(props: TInvit
               <Controller
                 control={control}
                 name={`emails.${index}.custom_role_ids`}
-                rules={{ validate: (value) => value.length > 0 || "请选择角色" }}
                 render={({ field: { value, onChange } }) => (
                   <WorkspaceRoleMultiSelectField
                     roles={roles}

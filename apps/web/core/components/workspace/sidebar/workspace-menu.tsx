@@ -11,7 +11,7 @@ import { Disclosure, Transition } from "@headlessui/react";
 // plane imports
 import { AnalyticsIcon, CycleIcon, ProjectIcon, ViewsIcon } from "@plane/propel/icons";
 import { Clock } from "lucide-react";
-import { EUserWorkspaceRoles } from "@plane/types";
+import { WORKSPACE_ANALYTICS_VIEW_PERMISSION_KEY } from "@plane/constants";
 // hooks
 import useLocalStorage from "@/hooks/use-local-storage";
 // local imports
@@ -31,35 +31,31 @@ export const SidebarWorkspaceMenu = observer(function SidebarWorkspaceMenu() {
       key: "projects",
       labelTranslationKey: "sidebar.projects",
       href: `/${workspaceSlug}/projects/`,
-      access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER, EUserWorkspaceRoles.GUEST],
       Icon: ProjectIcon,
     },
     {
       key: "views",
       labelTranslationKey: "sidebar.views",
       href: `/${workspaceSlug}/workspace-views/all-issues/`,
-      access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER, EUserWorkspaceRoles.GUEST],
       Icon: ViewsIcon,
     },
     {
       key: "timesheets",
       labelTranslationKey: "timesheets",
       href: `/${workspaceSlug}/timesheets/overview/`,
-      access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER, EUserWorkspaceRoles.GUEST],
       Icon: Clock,
     },
     {
       key: "active-cycles",
       labelTranslationKey: "sidebar.cycles",
       href: `/${workspaceSlug}/active-cycles/`,
-      access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER],
       Icon: CycleIcon,
     },
     {
       key: "analytics",
       labelTranslationKey: "sidebar.analytics",
       href: `/${workspaceSlug}/analytics/`,
-      access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER],
+      permissionKeys: [WORKSPACE_ANALYTICS_VIEW_PERMISSION_KEY],
       Icon: AnalyticsIcon,
     },
   ];

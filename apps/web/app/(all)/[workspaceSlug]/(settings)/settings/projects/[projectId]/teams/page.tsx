@@ -36,7 +36,12 @@ function TeamsSettingsPage({ params }: Route.ComponentProps) {
   const { roles, isLoading: isRolesLoading, fetchRoles } = useProjectRoles(workspaceSlug, projectId);
 
   const canView = allowProjectPermissionKeys(PROJECT_SETTINGS.teams.permissionKeys ?? [], workspaceSlug, projectId);
-  const canEdit = allowProjectPermissionKeys(["project.group_grant.edit"], workspaceSlug, projectId);
+  const canEdit = allowProjectPermissionKeys(PROJECT_SETTINGS.teams.editPermissionKeys ?? [], workspaceSlug, projectId);
+  // 团队只能授予本项目已有的权限组行；模板在本项目还没人用时没有项目行
+  const grantOptions = useMemo(
+    () => roles.filter((role) => role.project_role_id).map((role) => ({ id: role.id, name: role.name })),
+    [roles]
+  );
 
   useSWR(canView ? `PROJECT_GROUPS_${workspaceSlug}_${projectId}` : null, canView ? fetchGroups : null);
   useSWR(
@@ -73,7 +78,7 @@ function TeamsSettingsPage({ params }: Route.ComponentProps) {
       <PageHead title={pageTitle} />
       <SettingsHeading
         title={t("common.teams")}
-        description="将项目角色分配给工作区团队；只有同时属于项目和该团队的成员才会继承角色。"
+        description="把权限组授予工作区团队；只有同时属于项目和该团队的成员才会继承。"
       />
 
       <section className="mt-6">
@@ -98,7 +103,7 @@ function TeamsSettingsPage({ params }: Route.ComponentProps) {
           error={error}
           hasSearch={Boolean(searchQuery.trim())}
           activeGroupId={selectedGroupId}
-          roles={roles}
+          roles={grantOptions}
           isRolesLoading={isRolesLoading}
           canEditRole={canEdit}
           onOpen={(group) => setSelectedGroupId(group.id)}

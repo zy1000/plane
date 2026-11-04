@@ -8,10 +8,10 @@ import { useCallback, useMemo, useState } from "react";
 import { isEqual, cloneDeep } from "lodash-es";
 import { observer } from "mobx-react";
 // plane imports
-import { DEFAULT_GLOBAL_VIEWS_LIST, EUserPermissionsLevel } from "@plane/constants";
+import { DEFAULT_GLOBAL_VIEWS_LIST } from "@plane/constants";
 import { setToast, TOAST_TYPE } from "@plane/propel/toast";
 import type { IWorkspaceView, TWorkItemFilterExpression } from "@plane/types";
-import { EUserProjectRoles, EViewAccess } from "@plane/types";
+import { EViewAccess } from "@plane/types";
 // components
 import { removeNillKeys } from "@/components/issues/issue-layouts/utils";
 import { CreateUpdateWorkspaceViewModal } from "@/components/workspace/views/modal";
@@ -40,18 +40,15 @@ export const WorkspaceLevelWorkItemFiltersHOC = observer(function WorkspaceLevel
   // hooks
   const { getViewDetailsById, updateGlobalView } = useGlobalView();
   const { data: currentUser } = useUser();
-  const { allowPermissions } = useUserPermissions();
+  const { isWorkspaceMember } = useUserPermissions();
   const { joinedProjectIds } = useProject();
   const {
     workspace: { getWorkspaceMemberIds },
   } = useMember();
   const { getWorkspaceLabelIds } = useLabel();
   // derived values
-  const hasWorkspaceMemberLevelPermissions = allowPermissions(
-    [EUserProjectRoles.ADMIN, EUserProjectRoles.MEMBER],
-    EUserPermissionsLevel.WORKSPACE,
-    workspaceSlug
-  );
+  // 存成个人视图 / 改自己的视图：工作区成员就行（公开视图要 workspace.view.manage，后端校验）
+  const hasWorkspaceMemberLevelPermissions = isWorkspaceMember(workspaceSlug);
   const viewDetails = entityId ? getViewDetailsById(entityId) : null;
   const isDefaultView = typeof entityId === "string" && DEFAULT_GLOBAL_VIEWS_LIST.some((view) => view.key === entityId);
   const isViewLocked = viewDetails ? viewDetails?.is_locked : false;

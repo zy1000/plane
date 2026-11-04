@@ -9,7 +9,8 @@ from django.utils import timezone
 from django.core.cache import cache
 from datetime import timedelta
 from plane.app.views.base import BaseAPIView
-from plane.app.permissions import ROLE, PermissionKey, allow_fine_permission, allow_permission
+from plane.app.permissions import PermissionKey, allow_fine_permission
+from plane.app.permissions.registry import PROJECT_VIEW_KEYS
 from plane.db.models import (
     Project,
     Issue,
@@ -300,7 +301,7 @@ class CustomProjectAdvanceAnalyticsEndpoint(ProjectAdvanceAnalyticsBaseView):
             })
         return result
 
-    @allow_fine_permission(PermissionKey.PROJECT_OVERVIEW_VIEW)
+    @allow_fine_permission(*PROJECT_VIEW_KEYS)
     def get(self, request: HttpRequest, slug: str, project_id: str) -> Response:
         self.initialize_workspace(slug, type="analytics")
         query_signature = "&".join(
@@ -410,7 +411,7 @@ class ProjectAdvanceAnalyticsStatsEndpoint(ProjectAdvanceAnalyticsBaseView):
             .order_by("display_name")
         )
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
+    @allow_fine_permission(*PROJECT_VIEW_KEYS)
     def get(self, request: HttpRequest, slug: str, project_id: str) -> Response:
         self.initialize_workspace(slug, type="chart")
         type = request.GET.get("type", "work-items")
@@ -578,7 +579,7 @@ class ProjectAdvanceAnalyticsChartEndpoint(ProjectAdvanceAnalyticsBaseView):
 
         return {"data": data, "schema": schema}
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    @allow_fine_permission(*PROJECT_VIEW_KEYS)
     def get(self, request: HttpRequest, slug: str, project_id: str) -> Response:
         self.initialize_workspace(slug, type="chart")
         type = request.GET.get("type", "projects")
@@ -741,7 +742,7 @@ class ProjectDefectAnalyticsEndpoint(CustomProjectAdvanceAnalyticsEndpoint):
         result.sort(key=lambda item: item["defect_count"], reverse=True)
         return result
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
+    @allow_fine_permission(*PROJECT_VIEW_KEYS)
     def get(self, request: HttpRequest, slug: str, project_id: str) -> Response:
         self.initialize_workspace(slug, type="analytics")
         cache_payload = f"defect:{slug}:{project_id}:{request.user.id}"
@@ -777,7 +778,7 @@ class ProjectDefectQuickCountsEndpoint(BaseAPIView):
     OPEN_STATE_GROUPS = ["backlog", "unstarted", "started"]
     filterset_class = IssueFilterSet
 
-    @allow_fine_permission(PermissionKey.PROJECT_DEFECTS_VIEW)
+    @allow_fine_permission(PermissionKey.PROJECT_DEFECT_VIEW)
     def get(self, request: HttpRequest, slug: str, project_id: str) -> Response:
         user_id = request.user.id
         queryset = Issue.issue_objects.filter(

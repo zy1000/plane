@@ -8,7 +8,7 @@ import { useState } from "react";
 import { observer } from "mobx-react";
 import { Controller, useForm } from "react-hook-form";
 // plane imports
-import { ETabIndices, ISSUE_DISPLAY_FILTERS_BY_PAGE } from "@plane/constants";
+import { ETabIndices, ISSUE_DISPLAY_FILTERS_BY_PAGE, PERMISSION_KEYS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { EmojiPicker, EmojiIconPickerTypes, Logo } from "@plane/propel/emoji-icon-picker";
@@ -28,6 +28,7 @@ import { DisplayFiltersSelection, FiltersDropdown } from "@/components/issues/is
 import { WorkItemFiltersRow } from "@/components/work-item-filters/filters-row";
 // hooks
 import { useProject } from "@/hooks/store/use-project";
+import { useUserPermissions } from "@/hooks/store/user";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 // plane web imports
 import { AccessController } from "@/plane-web/components/views/access-controller";
@@ -69,10 +70,14 @@ export const ProjectViewForm = observer(function ProjectViewForm(props: Props) {
   const [isOpen, setIsOpen] = useState(false);
   // store hooks
   const { getProjectById } = useProject();
+  const { allowProjectPermissionKeys } = useUserPermissions();
   const { isMobile } = usePlatformOS();
+  // 这个表单没有可见范围切换：没有公共视图管理权限的人新建时默认建成个人视图，否则后端会拒绝
+  const canPublish = allowProjectPermissionKeys([PERMISSION_KEYS.PROJECT_VIEW_MANAGE], workspaceSlug, projectId);
   // form info
   const defaultValues = {
     ...DEFAULT_VALUES,
+    ...(canPublish ? {} : { access: EViewAccess.PRIVATE }),
     ...preLoadedData,
     ...data,
   };

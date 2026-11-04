@@ -24,7 +24,9 @@ type TMemberOption = {
 type Props = {
   isOpen: boolean;
   memberOptions: TMemberOption[];
-  existingMembers: IWorkspaceGroupMember[];
+  existingMembers: Pick<IWorkspaceGroupMember, "member">[];
+  /** 加到哪里：「团队」「权限组」，用在提示文案里 */
+  targetLabel?: string;
   onClose: () => void;
   onAdd: (memberIds: string[]) => Promise<{
     succeededIds: string[];
@@ -32,7 +34,7 @@ type Props = {
   }>;
 };
 
-export function AddMemberModal({ isOpen, memberOptions, existingMembers, onClose, onAdd }: Props) {
+export function AddMemberModal({ isOpen, memberOptions, existingMembers, targetLabel = "团队", onClose, onAdd }: Props) {
   const [search, setSearch] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isAdding, setIsAdding] = useState(false);
@@ -93,7 +95,7 @@ export function AddMemberModal({ isOpen, memberOptions, existingMembers, onClose
         setToast({
           type: TOAST_TYPE.SUCCESS,
           title: "成员已添加",
-          message: `已将 ${result.succeededIds.length} 位成员加入团队`,
+          message: `已将 ${result.succeededIds.length} 位成员加入${targetLabel}`,
         });
         onClose();
         return;
@@ -194,7 +196,7 @@ export function AddMemberModal({ isOpen, memberOptions, existingMembers, onClose
                 <path d="M26 26l6 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
               </svg>
               <p className="text-body-sm-regular text-tertiary">
-                {search ? `没有匹配"${search}"的成员` : "所有工作区成员均已在团队中"}
+                {search ? `没有匹配"${search}"的成员` : `所有工作区成员均已在${targetLabel}中`}
               </p>
             </div>
           ) : (
@@ -251,7 +253,7 @@ export function AddMemberModal({ isOpen, memberOptions, existingMembers, onClose
                 </span>
               </>
             ) : (
-              <span className="text-body-sm-regular text-tertiary">请选择要加入团队的成员</span>
+              <span className="text-body-sm-regular text-tertiary">请选择要加入{targetLabel}的成员</span>
             )}
           </div>
 

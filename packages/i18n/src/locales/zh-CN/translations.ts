@@ -4557,7 +4557,6 @@ export default {
       no_description: "暂无描述",
       owner: "负责人",
       product_owner: "产品负责人",
-      visibility: "可见性",
       updated_at: "更新时间",
       actions: "操作",
       code: "项目代号",
@@ -4609,13 +4608,6 @@ export default {
       plan: "计划",
       team: "团队",
     },
-    visibility: {
-      public: "公开",
-      public_description: "当前工作区的所有成员均可查看。",
-      private: "私有",
-      private_description: "仅负责人、产品成员和工作区管理员可查看。",
-      private_access_warning: "保存后你将无法继续访问；如需保留查看权限，请将自己添加为产品成员。",
-    },
     validation: {
       owner_required: "请选择负责人",
       owner_not_member: "负责人必须是该产品的成员，请先在成员设置里添加",
@@ -4652,9 +4644,7 @@ export default {
       back_to_product: "返回产品",
       navigation: {
         general: "常规",
-        members: "成员",
-        teams: "团队",
-        permissions: "权限",
+        teams: "研发团队",
       },
       fields: {
         name: "产品名称",
@@ -4663,7 +4653,6 @@ export default {
           "如 KF01A008：首字母开头，仅限大写字母和数字，最多 12 个字符；同时作为该产品需求编号的前缀。",
         description: "产品描述",
         owner: "负责人",
-        visibility: "可见性",
       },
       validation: {
         name_required: "请输入产品名称。",
@@ -5506,7 +5495,6 @@ export default {
       code_hint: "从数据字典中选择，工作区内唯一",
       dev_mode: "研发模式",
       dev_mode_view: "查看模式配置",
-      network: "可见性",
       business_unit: "所属BU",
       description: "项目描述",
       pms_project_name: "PMS项目名称",
@@ -5545,16 +5533,6 @@ export default {
       dev_mode_required: "请选择研发模式。",
       dev_mode_immutable: "研发模式创建后不可更改。",
       feature_not_allowed_by_dev_mode: "当前研发模式不支持该组件，无法开启。",
-    },
-    network: {
-      private: {
-        title: "私有",
-        description: "仅限邀请访问",
-      },
-      public: {
-        title: "公开",
-        description: "工作区中除访客外的任何人都可以加入",
-      },
     },
     error: {
       permission: "您没有执行此操作的权限。",
@@ -5771,29 +5749,31 @@ export default {
     settings: {
       my_access: {
         title: "我的权限",
-        description: "查看角色与团队如何共同决定你在当前工作区中可以执行的操作。",
+        description: "查看权限组与团队如何共同决定你在当前工作区中可以执行的操作。",
         read_only: "只读",
         loading: "正在加载访问权限",
         identity: {
           workspace: "当前工作区",
           granted_permissions: "已授予权限",
+          job_roles: "我的角色",
+          no_job_roles: "未设置",
           joined: "加入时间",
           unavailable: "暂无信息",
         },
         sources: {
           title: "访问来源",
-          direct_roles: "直接角色",
+          direct_roles: "我的权限组",
           teams: "所属团队",
-          no_direct_roles: "当前没有直接分配的角色，你仍可能通过团队或工作区所有者身份获得权限。",
+          no_direct_roles: "当前没有直接分配的权限组，你仍可能通过团队或工作区所有者身份获得权限。",
           no_teams: "你当前尚未加入任何工作区团队。",
-          no_team_roles: "暂无继承角色",
+          no_team_roles: "团队没有绑定权限组",
         },
         permissions: {
           title: "生效权限",
           search_placeholder: "按权限名称、说明或权限键搜索",
           filters: {
             all: "全部权限",
-            direct_role: "直接角色",
+            direct_role: "我的权限组",
             group_role: "团队继承",
             privileged: "所有者或管理员",
             not_granted: "未授予",
@@ -5812,7 +5792,7 @@ export default {
           clear_filters: "清除筛选",
           uncategorized: "其他权限",
           sources: {
-            direct_role: "直接角色 · {role}",
+            direct_role: "权限组 · {role}",
             group_role: "{group} · {role}",
             workspace_owner: "工作区所有者",
             instance_admin: "实例管理员",
@@ -5890,10 +5870,35 @@ export default {
         title: "团队",
       },
       roles: {
-        title: "权限",
+        title: "权限组",
+        template_flag: "作为项目权限组模板",
+        template_hint: "勾上后，数据权限里白名单内的项目会自动引用这个组，项目经理可以把项目成员绑到它上面。",
+        referenced_projects: "引用项目",
+        data_scope: {
+          title: "数据权限",
+          description:
+            "决定这个组的成员能看到、进入哪些项目和产品（白名单）；组里勾的项目权限也只在白名单里的项目生效。不在任何白名单里的项目，就算拿到链接也打不开。",
+          projects: "项目",
+          products: "产品",
+          projects_hint: "组内成员能看到哪些项目。自己是成员或负责人的项目不受此限制。",
+          products_hint: "组内成员能看到哪些产品。自己负责、评审或关联项目可见的产品不受此限制。",
+          mode_all: "全部",
+          mode_selected: "指定",
+          mode_filter: "按条件",
+          mode_all_hint: "工作区里全部{kind}",
+          mode_selected_hint: "逐个勾选",
+          mode_filter_hint: "满足条件的都算，包括以后新建的",
+          matched: "当前命中 {count} 个{kind}",
+          no_condition: "至少添加一个条件",
+          search: "搜索{kind}",
+          selected_count: "已选 {count} 个",
+          no_match: "没有匹配的结果",
+          archived: "已归档",
+          empty_project_permissions: "这个组的人能进白名单里的项目，但在里面什么都做不了：请在「权限」里勾选项目权限。",
+        },
       },
       templates: {
-        title: "角色",
+        title: "权限组模板",
       },
       exports: {
         title: "导出",
@@ -6841,7 +6846,10 @@ export default {
       label: "工作流",
     },
     roles: {
-      label: "权限",
+      label: "权限组",
+    },
+    products: {
+      label: "研发产品",
     },
     pms_sync: {
       label: "PMS 缺陷同步",

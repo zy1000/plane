@@ -10,7 +10,7 @@ from django.http import HttpRequest
 from django.db.models.functions import TruncMonth
 from django.utils import timezone
 from plane.app.views.base import BaseAPIView
-from plane.app.permissions import PermissionKey, ROLE, allow_fine_permission
+from plane.app.permissions import PermissionKey, allow_fine_permission
 from plane.db.models import (
     WorkspaceMember,
     Project,
@@ -77,9 +77,10 @@ class AdvanceAnalyticsEndpoint(AdvanceAnalyticsBaseView):
 
         return {
             "total_users": self.get_filtered_counts(members_query),
-            "total_admins": self.get_filtered_counts(members_query.filter(role=ROLE.ADMIN.value)),
-            "total_members": self.get_filtered_counts(members_query.filter(role=ROLE.MEMBER.value)),
-            "total_guests": self.get_filtered_counts(members_query.filter(role=ROLE.GUEST.value)),
+            # 整数角色已退役：管理员 / 成员 / 访客不再区分，保留字段兼容旧前端
+            "total_admins": 0,
+            "total_members": self.get_filtered_counts(members_query),
+            "total_guests": 0,
             "total_projects": self.get_filtered_counts(Project.objects.filter(**self.filters["project_filters"])),
             "total_work_items": self.get_filtered_counts(Issue.issue_objects.filter(**self.filters["base_filters"])),
             "total_cycles": self.get_filtered_counts(Cycle.objects.filter(**self.filters["base_filters"])),

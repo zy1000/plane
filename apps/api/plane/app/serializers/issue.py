@@ -229,7 +229,6 @@ class IssueCreateSerializer(BaseSerializer):
                 attrs["assignee_ids"] = list(
                     ProjectMember.objects.filter(
                         project_id=self.context["project_id"],
-                        role__gte=15,
                         is_active=True,
                         member_id__in=attrs["assignee_ids"],
                     ).values_list("member_id", flat=True)
@@ -400,7 +399,6 @@ class IssueCreateSerializer(BaseSerializer):
                     and ProjectMember.objects.filter(
                 member_id=default_assignee_id,
                 project_id=project_id,
-                role__gte=15,
                 is_active=True,
             ).exists()
             ):

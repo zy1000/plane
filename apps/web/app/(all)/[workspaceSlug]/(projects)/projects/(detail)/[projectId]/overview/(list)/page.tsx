@@ -3,7 +3,7 @@
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 // plane imports
-import { PROJECT_OVERVIEW_VIEW_PERMISSION_KEY } from "@plane/constants";
+import { PROJECT_OVERVIEW_VIEW_PERMISSION_KEYS } from "@plane/constants";
 // components
 import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
 import { PageHead } from "@/components/core/page-title";
@@ -27,7 +27,7 @@ const ProjectOverviewPage = observer(() => {
   const workspaceSlugString = workspaceSlug.toString();
   const projectIdString = projectId.toString();
   const canViewOverview = allowProjectPermissionKeys(
-    [PROJECT_OVERVIEW_VIEW_PERMISSION_KEY],
+    PROJECT_OVERVIEW_VIEW_PERMISSION_KEYS,
     workspaceSlugString,
     projectIdString
   );

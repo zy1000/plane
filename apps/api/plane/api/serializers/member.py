@@ -9,7 +9,6 @@ from rest_framework import serializers
 from plane.db.models import ProjectMember, WorkspaceMember
 from .base import BaseSerializer
 from plane.db.models import User
-from plane.utils.permissions import ROLE
 
 
 class ProjectMemberSerializer(BaseSerializer):
@@ -32,12 +31,7 @@ class ProjectMemberSerializer(BaseSerializer):
             raise serializers.ValidationError("Member not found in workspace", code="INVALID_MEMBER")
         return value
 
-    def validate_role(self, value):
-        if value not in [ROLE.ADMIN.value, ROLE.MEMBER.value, ROLE.GUEST.value]:
-            raise serializers.ValidationError("Invalid role", code="INVALID_ROLE")
-        return value
-
     class Meta:
         model = ProjectMember
-        fields = ["id", "member", "role"]
+        fields = ["id", "member"]
         read_only_fields = ["id"]

@@ -5,7 +5,7 @@ from django.views.decorators.gzip import gzip_page
 from rest_framework import status
 from rest_framework.response import Response
 
-from plane.app.permissions import allow_permission, ROLE
+from plane.app.permissions import allow_fine_permission, PermissionKey
 from plane.app.serializers import CycleActivitySerializer
 from plane.db.models import Cycle, CycleActivity
 
@@ -18,7 +18,7 @@ class CycleActivityEndpoint(BaseAPIView):
     use_read_replica = True
 
     @method_decorator(gzip_page)
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    @allow_fine_permission(PermissionKey.PROJECT_CYCLE_VIEW)
     def get(self, request, slug, project_id, cycle_id):
         if not Cycle.all_objects.filter(
             pk=cycle_id,

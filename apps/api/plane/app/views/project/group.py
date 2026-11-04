@@ -6,13 +6,14 @@ from django.db.models import Count, Exists, OuterRef, Prefetch, Q
 from rest_framework import status
 from rest_framework.response import Response
 
-from plane.app.permissions import PermissionKey, allow_fine_permission
+from plane.app.permissions import allow_project_member, PermissionKey, allow_fine_permission
 from plane.app.serializers import (
     ProjectGroupMemberOptionSerializer,
     ProjectGroupRoleSerializer,
     ProjectGroupSummarySerializer,
 )
 from plane.app.views.base import BaseViewSet
+from plane.utils.permission_groups import PermissionGroupError, resolve_project_group_ids
 from plane.db.models import (
     Project,
     ProjectGroupRole,
@@ -22,11 +23,24 @@ from plane.db.models import (
 )
 
 
-PROJECT_GROUP_LOOKUP_PERMISSIONS = (
-    PermissionKey.PROJECT_GROUP_GRANT_VIEW,
-    PermissionKey.PROJECT_GROUP_GRANT_EDIT,
-)
 
+
+
+def _resolve_role_id(project, data):
+    """团队授权的 role 可以是本项目权限组 id，也可以是模板 id（自动建引用行，同成员绑定）。
+    「项目成员」系统模板是隐式的，不能授权给团队。返回 (data, 错误响应)。"""
+    role_id = data.get("role")
+    if not role_id:
+        return data, None
+    try:
+        resolved = resolve_project_group_ids(project, [role_id])
+    except PermissionGroupError as exc:
+        return data, Response({"role": [exc.message]}, status=status.HTTP_400_BAD_REQUEST)
+    if not resolved:
+        return data, Response({"role": ["「项目成员」对每个成员默认生效，不需要授权给团队。"]}, status=status.HTTP_400_BAD_REQUEST)
+    data = data.copy()
+    data["role"] = str(resolved[0])
+    return data, None
 
 class ProjectGroupViewSet(BaseViewSet):
     serializer_class = ProjectGroupSummarySerializer
@@ -90,7 +104,7 @@ class ProjectGroupViewSet(BaseViewSet):
             .order_by("name")
         )
 
-    @allow_fine_permission(*PROJECT_GROUP_LOOKUP_PERMISSIONS)
+    @allow_project_member
     def list(self, request, slug, project_id):
         if not self.get_project():
             return Response({"error": "Project not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -100,7 +114,7 @@ class ProjectGroupViewSet(BaseViewSet):
             group.grants = group.active_project_grants
         return Response(self.get_serializer(groups, many=True).data, status=status.HTTP_200_OK)
 
-    @allow_fine_permission(*PROJECT_GROUP_LOOKUP_PERMISSIONS)
+    @allow_project_member
     def members(self, request, slug, project_id, group_id):
         project = self.get_project()
         group = self.get_group()
@@ -166,15 +180,18 @@ class ProjectGroupRoleViewSet(BaseViewSet):
             .select_related("project", "group", "role")
         )
 
-    @allow_fine_permission(PermissionKey.PROJECT_GROUP_GRANT_EDIT)
+    @allow_fine_permission(PermissionKey.PROJECT_MEMBER_MANAGE)
     def create(self, request, slug, project_id, group_id):
         project = self.get_project()
         group = self.get_group()
         if not project or not group or group.workspace_id != project.workspace_id:
             return Response({"error": "Project group not found."}, status=status.HTTP_404_NOT_FOUND)
 
+        data, error = _resolve_role_id(project, request.data)
+        if error:
+            return error
         serializer = self.get_serializer(
-            data=request.data,
+            data=data,
             context={"project": project, "group": group},
         )
         if serializer.is_valid():
@@ -182,15 +199,18 @@ class ProjectGroupRoleViewSet(BaseViewSet):
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    @allow_fine_permission(PermissionKey.PROJECT_GROUP_GRANT_EDIT)
+    @allow_fine_permission(PermissionKey.PROJECT_MEMBER_MANAGE)
     def partial_update(self, request, slug, project_id, group_id, pk):
         grant = self.get_queryset().filter(pk=pk).first()
         if not grant:
             return Response({"error": "Project group role not found."}, status=status.HTTP_404_NOT_FOUND)
 
+        data, error = _resolve_role_id(grant.project, request.data)
+        if error:
+            return error
         serializer = self.get_serializer(
             grant,
-            data=request.data,
+            data=data,
             partial=True,
             context={"project": grant.project, "group": grant.group},
         )
@@ -199,7 +219,7 @@ class ProjectGroupRoleViewSet(BaseViewSet):
             return Response(serializer.data, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    @allow_fine_permission(PermissionKey.PROJECT_GROUP_GRANT_EDIT)
+    @allow_fine_permission(PermissionKey.PROJECT_MEMBER_MANAGE)
     def destroy(self, request, slug, project_id, group_id, pk):
         grant = self.get_queryset().filter(pk=pk).first()
         if not grant:

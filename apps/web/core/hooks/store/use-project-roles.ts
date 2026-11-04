@@ -5,31 +5,37 @@
  */
 
 import { useCallback, useRef, useState } from "react";
-import type { IPermission, IProjectRole, IProjectRolePermissionData } from "@plane/types";
+import type {
+  TPermissionGroupContent,
+  TProjectInheritedGroup,
+  TProjectPermissionGroup,
+  TProjectPermissionGroupDetail,
+} from "@plane/types";
 import { ProjectRoleService } from "@/services/project/project-role.service";
 
 const projectRoleService = new ProjectRoleService();
 
-type TRolePermissionState = {
-  data: IProjectRolePermissionData | null;
+type TGroupPermissionState = {
+  data: TProjectPermissionGroupDetail | null;
   isLoading: boolean;
   loaded: boolean;
 };
 
-const emptyPermissionState = (): TRolePermissionState => ({
-  data: null,
-  isLoading: false,
-  loaded: false,
-});
+const emptyPermissionState = (): TGroupPermissionState => ({ data: null, isLoading: false, loaded: false });
 
+/**
+ * 项目权限组（设置 › 权限组）。``roles`` 是列表行：引用了本项目的模板组 + 本项目自定义组。
+ * 成员身上的 custom_role_ids 是本项目权限组 id，对应行的 ``id``（有项目行时 id 就是 project_role_id）。
+ */
 export const useProjectRoles = (workspaceSlug: string | undefined, projectId: string | undefined) => {
-  const [roles, setRoles] = useState<IProjectRole[]>([]);
+  const [roles, setRoles] = useState<TProjectPermissionGroup[]>([]);
+  const [inheritedGroups, setInheritedGroups] = useState<TProjectInheritedGroup[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [permissionByRoleId, setPermissionByRoleId] = useState<Record<string, TRolePermissionState>>({});
   const [error, setError] = useState<string | null>(null);
+  const [permissionByGroupId, setPermissionByGroupId] = useState<Record<string, TGroupPermissionState>>({});
 
-  const permissionRef = useRef(permissionByRoleId);
-  permissionRef.current = permissionByRoleId;
+  const permissionRef = useRef(permissionByGroupId);
+  permissionRef.current = permissionByGroupId;
   const inFlightRef = useRef<Set<string>>(new Set());
 
   const fetchRoles = useCallback(async () => {
@@ -38,151 +44,111 @@ export const useProjectRoles = (workspaceSlug: string | undefined, projectId: st
     setError(null);
     try {
       const data = await projectRoleService.list(workspaceSlug, projectId);
-      setRoles(data);
+      setRoles(data.groups);
+      setInheritedGroups(data.inherited_groups ?? []);
     } catch {
-      setError("获取项目角色列表失败");
+      setError("获取项目权限组失败");
     } finally {
       setIsLoading(false);
     }
   }, [workspaceSlug, projectId]);
 
+  /** 列表里某行换成新数据（改名、保存权限后） */
+  const replaceRow = useCallback((previousId: string, row: TProjectPermissionGroup) => {
+    setRoles((prev) => prev.map((item) => (item.id === previousId ? row : item)));
+  }, []);
+
   const loadRolePermissions = useCallback(
-    async (roleId: string) => {
+    async (groupId: string, force = false) => {
       if (!workspaceSlug || !projectId) return;
-      if (inFlightRef.current.has(roleId)) return;
-      inFlightRef.current.add(roleId);
-
-      setPermissionByRoleId((prev) => {
-        const existing = prev[roleId];
-        return {
-          ...prev,
-          [roleId]: { ...(existing ?? emptyPermissionState()), isLoading: !existing?.data },
-        };
-      });
-
+      if (inFlightRef.current.has(groupId)) return;
+      if (!force && permissionRef.current[groupId]?.loaded) return;
+      inFlightRef.current.add(groupId);
+      setPermissionByGroupId((prev) => ({
+        ...prev,
+        [groupId]: { ...(prev[groupId] ?? emptyPermissionState()), isLoading: !prev[groupId]?.data },
+      }));
       try {
-        const data = await projectRoleService.fetchPermissions(workspaceSlug, projectId, roleId);
-        setPermissionByRoleId((prev) => ({
-          ...prev,
-          [roleId]: { data, isLoading: false, loaded: true },
-        }));
+        const data = await projectRoleService.fetchPermissions(workspaceSlug, projectId, groupId);
+        setPermissionByGroupId((prev) => ({ ...prev, [groupId]: { data, isLoading: false, loaded: true } }));
       } catch {
-        setError("获取项目角色权限失败");
-        setPermissionByRoleId((prev) => ({
-          ...prev,
-          [roleId]: { data: null, isLoading: false, loaded: true },
-        }));
+        setError("获取权限组的权限失败");
+        setPermissionByGroupId((prev) => ({ ...prev, [groupId]: { data: null, isLoading: false, loaded: true } }));
       } finally {
-        inFlightRef.current.delete(roleId);
+        inFlightRef.current.delete(groupId);
       }
     },
     [workspaceSlug, projectId]
   );
 
   const getRolePermissionState = useCallback(
-    (roleId: string): TRolePermissionState => permissionByRoleId[roleId] ?? emptyPermissionState(),
-    [permissionByRoleId]
+    (groupId: string): TGroupPermissionState => permissionByGroupId[groupId] ?? emptyPermissionState(),
+    [permissionByGroupId]
   );
 
   const createRole = useCallback(
-    async (data: { name: string; description?: string }): Promise<IProjectRole> => {
+    async (data: { name: string; description?: string; copy_from?: string | null }) => {
       if (!workspaceSlug || !projectId) throw new Error("缺少 workspaceSlug 或 projectId");
-      const newRole = await projectRoleService.create(workspaceSlug, projectId, data);
-      setRoles((prev) => [newRole, ...prev]);
-      return newRole;
+      const row = await projectRoleService.create(workspaceSlug, projectId, data);
+      setRoles((prev) => [...prev, row]);
+      return row;
     },
     [workspaceSlug, projectId]
   );
 
   const updateRole = useCallback(
-    async (roleId: string, data: Partial<{ name: string; description: string }>): Promise<IProjectRole> => {
+    async (groupId: string, data: Partial<{ name: string; description: string }>) => {
       if (!workspaceSlug || !projectId) throw new Error("缺少 workspaceSlug 或 projectId");
-      const updated = await projectRoleService.update(workspaceSlug, projectId, roleId, data);
-      setRoles((prev) => prev.map((r) => (r.id === roleId ? updated : r)));
-      setPermissionByRoleId((prev) => {
-        const cur = prev[roleId];
-        if (!cur?.data) return prev;
-        return { ...prev, [roleId]: { ...cur, data: { ...cur.data, role: updated } } };
+      const row = await projectRoleService.update(workspaceSlug, projectId, groupId, data);
+      replaceRow(groupId, row);
+      setPermissionByGroupId((prev) => {
+        const current = prev[groupId];
+        if (!current?.data) return prev;
+        return { ...prev, [groupId]: { ...current, data: { ...current.data, group: row } } };
       });
-      return updated;
+      return row;
     },
-    [workspaceSlug, projectId]
+    [workspaceSlug, projectId, replaceRow]
   );
 
   const deleteRole = useCallback(
-    async (roleId: string): Promise<void> => {
+    async (groupId: string) => {
       if (!workspaceSlug || !projectId) throw new Error("缺少 workspaceSlug 或 projectId");
-      await projectRoleService.destroy(workspaceSlug, projectId, roleId);
-      setRoles((prev) => prev.filter((r) => r.id !== roleId));
-      setPermissionByRoleId((prev) => {
+      await projectRoleService.destroy(workspaceSlug, projectId, groupId);
+      // 删除引用会把模板从列表里拿掉，删本项目组同理，整表重拉最稳
+      await fetchRoles();
+      setPermissionByGroupId((prev) => {
         const next = { ...prev };
-        delete next[roleId];
+        delete next[groupId];
         return next;
       });
     },
-    [workspaceSlug, projectId]
+    [workspaceSlug, projectId, fetchRoles]
   );
 
-  /** 从工作区角色模板导入（独立副本） */
-  const importFromTemplate = useCallback(
-    async (workspaceRoleId: string): Promise<IProjectRole> => {
+  /** 整份保存权限内容（详情页底部保存条），成功后同步列表行的权限数 */
+  const savePermissions = useCallback(
+    async (groupId: string, content: TPermissionGroupContent) => {
       if (!workspaceSlug || !projectId) throw new Error("缺少 workspaceSlug 或 projectId");
-      const newRole = await projectRoleService.importFromTemplate(workspaceSlug, projectId, {
-        workspace_role_id: workspaceRoleId,
-      });
-      setRoles((prev) => [newRole, ...prev]);
-      return newRole;
+      const saved = await projectRoleService.updatePermissions(workspaceSlug, projectId, groupId, content);
+      setPermissionByGroupId((prev) => ({ ...prev, [groupId]: { data: saved, isLoading: false, loaded: true } }));
+      replaceRow(groupId, saved.group);
+      return saved;
     },
-    [workspaceSlug, projectId]
+    [workspaceSlug, projectId, replaceRow]
   );
 
-  const togglePermission = useCallback(
-    async (roleId: string, permissionKey: string): Promise<void> => {
-      if (!workspaceSlug || !projectId) throw new Error("缺少 workspaceSlug 或 projectId");
-
-      const currentState = permissionRef.current[roleId];
-      if (!currentState?.data) return;
-
-      const currentKeys = currentState.data.permission_keys;
-      const isCurrentlyBound = currentKeys.includes(permissionKey);
-      const newKeys = isCurrentlyBound
-        ? currentKeys.filter((k) => k !== permissionKey)
-        : [...currentKeys, permissionKey];
-
-      // Optimistic update
-      const optimisticPermissions: IPermission[] = currentState.data.permissions.map((p) => ({
-        ...p,
-        is_bound: newKeys.includes(p.key),
-      }));
-      setPermissionByRoleId((prev) => ({
-        ...prev,
-        [roleId]: {
-          ...prev[roleId],
-          data: { ...currentState.data!, permission_keys: newKeys, permissions: optimisticPermissions },
-          isLoading: false,
-          loaded: true,
-        },
-      }));
-
-      try {
-        const updated = await projectRoleService.updatePermissions(workspaceSlug, projectId, roleId, newKeys);
-        setPermissionByRoleId((prev) => ({
-          ...prev,
-          [roleId]: { data: updated, isLoading: false, loaded: true },
-        }));
-      } catch (error) {
-        setPermissionByRoleId((prev) => ({
-          ...prev,
-          [roleId]: { data: currentState.data, isLoading: false, loaded: true },
-        }));
-        throw error;
-      }
+  const fetchMemberIds = useCallback(
+    async (groupId: string) => {
+      if (!workspaceSlug || !projectId) return [];
+      return projectRoleService.fetchMemberIds(workspaceSlug, projectId, groupId);
     },
     [workspaceSlug, projectId]
   );
 
   return {
     roles,
+    inheritedGroups,
     isLoading,
     error,
     fetchRoles,
@@ -191,7 +157,7 @@ export const useProjectRoles = (workspaceSlug: string | undefined, projectId: st
     createRole,
     updateRole,
     deleteRole,
-    importFromTemplate,
-    togglePermission,
+    savePermissions,
+    fetchMemberIds,
   };
 };

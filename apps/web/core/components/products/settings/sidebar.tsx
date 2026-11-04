@@ -1,5 +1,5 @@
 import { usePathname, useSearchParams } from "next/navigation";
-import { ArrowLeft, Settings, ShieldCheck, UserRound, UsersRound } from "lucide-react";
+import { ArrowLeft, Settings, UsersRound } from "lucide-react";
 import { observer } from "mobx-react";
 import { useTranslation } from "@plane/i18n";
 import { IconButton } from "@plane/propel/icon-button";
@@ -8,7 +8,6 @@ import { cn } from "@plane/utils";
 import { SettingsSidebarItem } from "@/components/settings/sidebar/item";
 import { useAppRouter } from "@/hooks/use-app-router";
 import { useProductsContext } from "../context";
-import { hasProductPermission } from "../permissions";
 import {
   getProductSettingsPath,
   getProductSettingsReturnPath,
@@ -19,9 +18,7 @@ import {
 
 const PRODUCT_SETTINGS_ICONS = {
   general: Settings,
-  members: UserRound,
   teams: UsersRound,
-  permissions: ShieldCheck,
 } satisfies Record<TProductSettingsKey, typeof Settings>;
 
 type TProductSettingsSidebarProps = {
@@ -75,17 +72,12 @@ const ProductSettingsSidebarItems = observer(function ProductSettingsSidebarItem
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { t } = useTranslation();
-  const { products } = useProductsContext();
-  const product = products.find(({ id }) => id === productId);
   const settingsSearch = searchParams.toString();
   const normalizedPathname = pathname.replace(/\/+$/, "");
-  const visibleItems = PRODUCT_SETTINGS_ITEMS.filter(
-    (item) => !item.permissionKeys || hasProductPermission(product, ...item.permissionKeys)
-  );
 
   return (
     <div className="mt-4 flex flex-col px-3">
-      {visibleItems.map((item) => {
+      {PRODUCT_SETTINGS_ITEMS.map((item) => {
         const itemHref = getProductSettingsPath(workspaceSlug, productId, item.key);
         const itemHrefWithSearch = settingsSearch ? `${itemHref}?${settingsSearch}` : itemHref;
         const isActive = normalizedPathname === itemHref.replace(/\/+$/, "");

@@ -9,19 +9,15 @@ import { useMemo, useState } from "react";
 import { Check, ChevronDown, UserCog, Users, X } from "lucide-react";
 import { Avatar } from "@plane/ui";
 import { cn } from "@plane/utils";
+import { useJobRoles } from "@/hooks/store/use-job-roles";
 import { useMember } from "@/hooks/store/use-member";
-import { useProjectRoles } from "@/hooks/store/use-project-roles";
-import { useWorkspaceRoles } from "@/hooks/store/use-workspace-roles";
 import { isIssueSchemeScopeKey } from "@/services/project/issue-scheme-scope";
 import {
   WORKFLOW_SPECIAL_APPROVER_OPTIONS,
-  buildRoleTemplateToken,
-  buildRoleToken,
-  getRoleIdFromToken,
-  getRoleTemplateIdFromToken,
+  buildJobRoleToken,
+  getJobRoleIdFromToken,
   getWorkflowApproverLabel,
-  isRoleTemplateToken,
-  isRoleToken,
+  isJobRoleToken,
 } from "./approver-utils";
 import { DropdownPanel } from "./dropdown-panel";
 
@@ -35,6 +31,8 @@ type TPrincipalSelectProps = {
   onChange: (principalIds: string[]) => void;
   disabled?: boolean;
 };
+
+type TSourceTab = "role" | "member" | "dynamic";
 
 type TSelectedPrincipal = {
   id: string;
@@ -56,6 +54,30 @@ const DEFAULT_DESCRIPTION_BY_DIMENSION: Record<TPrincipalSelectDimension, string
   approver: "未配置审批人时默认为直接通过",
 };
 
+const SOURCE_TABS: { key: TSourceTab; label: string; placeholder: string }[] = [
+  { key: "role", label: "按角色", placeholder: "搜索角色" },
+  { key: "member", label: "指定成员", placeholder: "搜索成员" },
+  { key: "dynamic", label: "动态", placeholder: "搜索" },
+];
+
+function CheckBox({ checked }: { checked: boolean }) {
+  return (
+    <span
+      className={cn(
+        "flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center rounded border transition-colors",
+        checked ? "border-accent-primary bg-accent-primary" : "border-secondary bg-transparent"
+      )}
+    >
+      {checked && <Check className="h-2.5 w-2.5 text-white" />}
+    </span>
+  );
+}
+
+/**
+ * 工作流的发起人 / 负责人 / 审批人选择（效果图「审批人按角色」）。
+ * 来源分三类：按角色（数据字典 job_role，运行时矩阵优先找人）、指定成员、动态（工作项负责人 / 创建人）。
+ * 方案作用域（模板中心维护模式方案）没有项目：成员取工作区成员，角色不显示人数。
+ */
 export const PrincipalSelect: FC<TPrincipalSelectProps> = ({
   dimension,
   workspaceSlug,
@@ -66,63 +88,44 @@ export const PrincipalSelect: FC<TPrincipalSelectProps> = ({
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const [tab, setTab] = useState<TSourceTab>("role");
   const [referenceElement, setReferenceElement] = useState<HTMLButtonElement | null>(null);
 
-  // 方案作用域（模板中心维护模式方案）：没有项目，候选成员取工作区成员、角色只能选角色模板
   const isSchemeScope = isIssueSchemeScopeKey(projectId);
   const {
     getUserDetails,
-    project: { getProjectMemberIds, fetchProjectMembers },
+    project: { getProjectMemberIds, getProjectMemberDetails, fetchProjectMembers },
     workspace: { getWorkspaceMemberIds, fetchWorkspaceMembers },
   } = useMember();
-  const {
-    roles: projectRoles,
-    fetchRoles,
-    isLoading: isRolesLoading,
-  } = useProjectRoles(workspaceSlug, isSchemeScope ? undefined : projectId);
-  const { roles: roleTemplates, fetchRoles: fetchRoleTemplates } = useWorkspaceRoles(workspaceSlug, "project_template");
-  const roles = isSchemeScope ? [] : projectRoles;
+  const { jobRoles, jobRoleMap, isLoading: isJobRolesLoading } = useJobRoles(workspaceSlug);
 
   const memberIds = (isSchemeScope ? getWorkspaceMemberIds(workspaceSlug) : getProjectMemberIds(projectId, false)) ?? [];
   const isAllSelected = value.length === 0;
-  const hasSelectedTemplates = value.some(isRoleTemplateToken);
+  const query = search.trim().toLowerCase();
 
-  const roleTokenNameMap = useMemo(
-    () =>
-      roles.reduce<Record<string, string>>((acc, role) => {
-        acc[role.id] = role.name;
-        return acc;
-      }, {}),
-    [roles]
-  );
-  const roleTemplateNameMap = useMemo(
-    () =>
-      roleTemplates.reduce<Record<string, string>>((acc, role) => {
-        acc[role.id] = role.name;
-        return acc;
-      }, {}),
-    [roleTemplates]
-  );
-  // 角色模板候选：方案作用域全部列出；项目作用域只列已选中的（脱离时拷来的），能看见也能去掉
-  const templateOptions = isSchemeScope
-    ? roleTemplates
-    : roleTemplates.filter((role) => value.includes(buildRoleTemplateToken(role.id)));
+  // 项目作用域：每个角色在本项目有几个人挂着（研发矩阵优先的那一层前端拿不到，只数项目成员）
+  const holderCountByRole = useMemo(() => {
+    if (isSchemeScope) return null;
+    const counts = new Map<string, number>();
+    memberIds.forEach((memberId) => {
+      (getProjectMemberDetails(memberId, projectId)?.job_role_ids ?? []).forEach((roleId) =>
+        counts.set(roleId, (counts.get(roleId) ?? 0) + 1)
+      );
+    });
+    return counts;
+  }, [getProjectMemberDetails, isSchemeScope, memberIds, projectId]);
 
+  const filteredRoles = query ? jobRoles.filter((role) => role.label.toLowerCase().includes(query)) : jobRoles;
   const filteredSpecialOptions = WORKFLOW_SPECIAL_APPROVER_OPTIONS.filter((option) =>
-    `${option.label} ${option.description}`.toLowerCase().includes(search.toLowerCase())
+    `${option.label} ${option.description}`.toLowerCase().includes(query)
   );
-  const filteredRoleOptions = search
-    ? roles.filter((role) => role.name.toLowerCase().includes(search.toLowerCase()))
-    : roles;
-  const filteredTemplateOptions = search
-    ? templateOptions.filter((role) => role.name.toLowerCase().includes(search.toLowerCase()))
-    : templateOptions;
-  const filteredMemberIds = search
+  const filteredMemberIds = query
     ? memberIds.filter((id) => {
         const user = getUserDetails(id);
         return (
-          user?.display_name?.toLowerCase().includes(search.toLowerCase()) ||
-          user?.email?.toLowerCase().includes(search.toLowerCase())
+          user?.display_name?.toLowerCase().includes(query) ||
+          user?.email?.toLowerCase().includes(query) ||
+          user?.employee_id?.toLowerCase().includes(query)
         );
       })
     : memberIds;
@@ -131,61 +134,41 @@ export const PrincipalSelect: FC<TPrincipalSelectProps> = ({
     () =>
       value.map((principalId) => {
         const specialOption = WORKFLOW_SPECIAL_APPROVER_OPTIONS.find((option) => option.id === principalId);
-        if (specialOption) {
-          return {
-            id: principalId,
-            type: "dynamic",
-            label: specialOption.label,
-          };
-        }
-
-        if (isRoleTemplateToken(principalId)) {
-          const templateId = getRoleTemplateIdFromToken(principalId);
+        if (specialOption) return { id: principalId, type: "dynamic", label: specialOption.label };
+        if (isJobRoleToken(principalId)) {
+          const jobRoleId = getJobRoleIdFromToken(principalId);
           return {
             id: principalId,
             type: "role",
-            label: templateId ? (roleTemplateNameMap[templateId] ?? "角色模板") : "角色模板",
+            label: (jobRoleId && jobRoleMap.get(jobRoleId)?.label) || "已删除的角色",
           };
         }
-
-        if (isRoleToken(principalId)) {
-          const roleId = getRoleIdFromToken(principalId);
-          return {
-            id: principalId,
-            type: "role",
-            label: roleId ? (roleTokenNameMap[roleId] ?? "项目角色") : "项目角色",
-          };
+        // 旧令牌（role: / role_template:）后端已不认，显示出来让人去掉
+        if (principalId.startsWith("role:") || principalId.startsWith("role_template:")) {
+          return { id: principalId, type: "role", label: "旧角色（请移除）" };
         }
-
         const user = getUserDetails(principalId);
         return {
           id: principalId,
           type: "member",
-          label: getWorkflowApproverLabel(principalId, getUserDetails, (roleId) => roleTokenNameMap[roleId]),
+          label: getWorkflowApproverLabel(principalId, getUserDetails),
           displayName: user?.display_name,
           avatarUrl: user?.avatar_url,
         };
       }),
-    [getUserDetails, roleTokenNameMap, roleTemplateNameMap, value]
+    [getUserDetails, jobRoleMap, value]
   );
 
-  const handleOpen = async () => {
+  const handleOpen = () => {
     if (disabled) return;
     setIsOpen(true);
+    if (value.some((id) => !isJobRoleToken(id) && !id.startsWith("special:"))) setTab("member");
+    else if (value.length > 0 && value.every((id) => id.startsWith("special:"))) setTab("dynamic");
     if (isSchemeScope) {
       if (!getWorkspaceMemberIds(workspaceSlug)?.length) void fetchWorkspaceMembers(workspaceSlug);
-      if (roleTemplates.length === 0) void fetchRoleTemplates();
       return;
     }
-    if (!getProjectMemberIds(projectId, false)) {
-      void fetchProjectMembers(workspaceSlug, projectId);
-    }
-    if (roles.length === 0) {
-      void fetchRoles();
-    }
-    if (hasSelectedTemplates && roleTemplates.length === 0) {
-      void fetchRoleTemplates();
-    }
+    if (!getProjectMemberIds(projectId, false)) void fetchProjectMembers(workspaceSlug, projectId);
   };
 
   const handleClose = () => {
@@ -193,17 +176,12 @@ export const PrincipalSelect: FC<TPrincipalSelectProps> = ({
     setSearch("");
   };
 
-  const handleSelectAll = () => {
-    onChange([]);
-  };
-
   const handleToggle = (principalId: string) => {
     const next = value.includes(principalId) ? value.filter((v) => v !== principalId) : [...value, principalId];
     onChange(next);
   };
 
-  const hasAnyResult =
-    !search || filteredSpecialOptions.length > 0 || filteredRoleOptions.length > 0 || filteredMemberIds.length > 0;
+  const rowClass = "flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm transition-colors hover:bg-layer-1";
 
   return (
     <div className="relative">
@@ -271,155 +249,107 @@ export const PrincipalSelect: FC<TPrincipalSelectProps> = ({
         <ChevronDown className={cn("h-3.5 w-3.5 flex-shrink-0 text-secondary transition-transform", isOpen && "rotate-180")} />
       </button>
 
-      <DropdownPanel isOpen={isOpen} referenceElement={referenceElement} onClose={handleClose} minWidth={260}>
+      <DropdownPanel isOpen={isOpen} referenceElement={referenceElement} onClose={handleClose} minWidth={300}>
         <div>
-          <div className="border-b border-subtle p-2">
+          <div className="flex flex-col gap-2 border-b border-subtle p-2">
+            <div className="inline-flex w-fit rounded-md border border-subtle p-0.5">
+              {SOURCE_TABS.map((item) => (
+                <button
+                  key={item.key}
+                  type="button"
+                  onClick={() => {
+                    setTab(item.key);
+                    setSearch("");
+                  }}
+                  className={cn(
+                    "rounded px-3 py-1 text-xs transition-colors",
+                    tab === item.key ? "bg-accent-primary font-medium text-on-color" : "text-secondary hover:text-primary"
+                  )}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
             <input
               autoFocus
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search members"
+              placeholder={SOURCE_TABS.find((item) => item.key === tab)?.placeholder}
               className="w-full rounded-sm border border-subtle bg-surface-2 px-2 py-1.5 text-xs text-primary placeholder:text-tertiary outline-none focus:border-accent-primary/50"
             />
           </div>
 
           <div className="max-h-72 overflow-y-auto p-2">
-            {!search && (
-              <button
-                type="button"
-                onClick={handleSelectAll}
-                className="flex w-full items-center justify-between rounded-sm px-2 py-1.5 text-sm transition-colors hover:bg-layer-1"
-              >
-                <div className="flex items-center gap-2">
-                  <div
-                    className={cn(
-                      "flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center rounded border transition-colors",
-                      isAllSelected ? "border-accent-primary bg-accent-primary" : "border-secondary bg-transparent"
-                    )}
-                  >
-                    {isAllSelected && <Check className="h-2.5 w-2.5 text-white" />}
-                  </div>
+            {!query && (
+              <button type="button" onClick={() => onChange([])} className={cn(rowClass, "justify-between")}>
+                <span className="flex items-center gap-2">
+                  <CheckBox checked={isAllSelected} />
                   <span className="font-medium text-primary">{DEFAULT_LABEL_BY_DIMENSION[dimension]}</span>
-                </div>
+                </span>
                 <span className="text-xs text-tertiary">{DEFAULT_DESCRIPTION_BY_DIMENSION[dimension]}</span>
               </button>
             )}
 
-            {filteredSpecialOptions.length > 0 && (
-              <p className="px-2 pb-1 pt-2 text-[11px] font-medium uppercase tracking-wide text-tertiary">动态人员</p>
-            )}
-            {filteredSpecialOptions.map((option) => {
-              const isSelected = value.includes(option.id);
-              return (
+            {tab === "role" &&
+              (filteredRoles.length > 0 ? (
+                filteredRoles.map((role) => {
+                  const token = buildJobRoleToken(role.id);
+                  const isSelected = value.includes(token);
+                  const count = holderCountByRole?.get(role.id) ?? 0;
+                  return (
+                    <button key={role.id} type="button" onClick={() => handleToggle(token)} className={rowClass}>
+                      <CheckBox checked={isSelected} />
+                      <span className={cn("min-w-0 flex-1 truncate", isSelected ? "font-medium text-accent-primary" : "text-primary")}>
+                        {role.label}
+                      </span>
+                      {holderCountByRole && (
+                        <span className={cn("shrink-0 text-xs", count === 0 ? "text-placeholder" : "text-tertiary")}>
+                          {count} 人
+                        </span>
+                      )}
+                    </button>
+                  );
+                })
+              ) : (
+                <p className="px-2 py-2 text-center text-xs text-tertiary">
+                  {isJobRolesLoading ? "正在加载角色..." : query ? "无匹配角色" : "工作区还没有角色，请在数据字典「角色」里添加"}
+                </p>
+              ))}
+
+            {tab === "member" &&
+              (filteredMemberIds.length > 0 ? (
+                filteredMemberIds.map((memberId) => {
+                  const user = getUserDetails(memberId);
+                  if (!user) return null;
+                  return (
+                    <button key={memberId} type="button" onClick={() => handleToggle(memberId)} className={rowClass}>
+                      <CheckBox checked={value.includes(memberId)} />
+                      <Avatar name={user.display_name} src={user.avatar_url} size="sm" className="flex-shrink-0" />
+                      <span className="truncate text-primary">{getWorkflowApproverLabel(memberId, getUserDetails)}</span>
+                    </button>
+                  );
+                })
+              ) : (
+                <p className="px-2 py-2 text-center text-xs text-tertiary">无匹配成员</p>
+              ))}
+
+            {tab === "dynamic" &&
+              filteredSpecialOptions.map((option) => (
                 <button
                   key={option.id}
                   type="button"
                   onClick={() => handleToggle(option.id)}
-                  className="flex w-full items-start gap-2 rounded-sm px-2 py-1.5 text-left text-sm transition-colors hover:bg-layer-1"
+                  className={cn(rowClass, "items-start")}
                 >
-                  <div
-                    className={cn(
-                      "mt-0.5 flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center rounded border transition-colors",
-                      isSelected ? "border-accent-primary bg-accent-primary" : "border-secondary bg-transparent"
-                    )}
-                  >
-                    {isSelected && <Check className="h-2.5 w-2.5 text-white" />}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="truncate font-medium text-primary">{option.label}</p>
-                    <p className="text-xs text-secondary">{option.description}</p>
-                  </div>
+                  <span className="mt-0.5">
+                    <CheckBox checked={value.includes(option.id)} />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block truncate font-medium text-primary">{option.label}</span>
+                    <span className="block text-xs text-secondary">{option.description}</span>
+                  </span>
                 </button>
-              );
-            })}
-
-            {filteredRoleOptions.length > 0 && (
-              <p className="px-2 pb-1 pt-2 text-[11px] font-medium uppercase tracking-wide text-tertiary">角色</p>
-            )}
-            {filteredRoleOptions.map((role) => {
-              const token = buildRoleToken(role.id);
-              const isSelected = value.includes(token);
-              return (
-                <button
-                  key={role.id}
-                  type="button"
-                  onClick={() => handleToggle(token)}
-                  className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm transition-colors hover:bg-layer-1"
-                >
-                  <div
-                    className={cn(
-                      "flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center rounded border transition-colors",
-                      isSelected ? "border-accent-primary bg-accent-primary" : "border-secondary bg-transparent"
-                    )}
-                  >
-                    {isSelected && <Check className="h-2.5 w-2.5 text-white" />}
-                  </div>
-                  <span className="truncate text-primary">{role.name}</span>
-                </button>
-              );
-            })}
-
-            {filteredTemplateOptions.length > 0 && (
-              <p className="px-2 pb-1 pt-2 text-[11px] font-medium uppercase tracking-wide text-tertiary">角色模板</p>
-            )}
-            {filteredTemplateOptions.map((role) => {
-              const token = buildRoleTemplateToken(role.id);
-              const isSelected = value.includes(token);
-              return (
-                <button
-                  key={role.id}
-                  type="button"
-                  onClick={() => handleToggle(token)}
-                  className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm transition-colors hover:bg-layer-1"
-                >
-                  <div
-                    className={cn(
-                      "flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center rounded border transition-colors",
-                      isSelected ? "border-accent-primary bg-accent-primary" : "border-secondary bg-transparent"
-                    )}
-                  >
-                    {isSelected && <Check className="h-2.5 w-2.5 text-white" />}
-                  </div>
-                  <span className="truncate text-primary">{role.name}</span>
-                </button>
-              );
-            })}
-
-            {filteredMemberIds.length > 0 && (
-              <p className="px-2 pb-1 pt-2 text-[11px] font-medium uppercase tracking-wide text-tertiary">成员</p>
-            )}
-            {filteredMemberIds.map((memberId) => {
-              const user = getUserDetails(memberId);
-              if (!user) return null;
-              const isSelected = value.includes(memberId);
-              return (
-                <button
-                  key={memberId}
-                  type="button"
-                  onClick={() => handleToggle(memberId)}
-                  className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm transition-colors hover:bg-layer-1"
-                >
-                  <div
-                    className={cn(
-                      "flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center rounded border transition-colors",
-                      isSelected ? "border-accent-primary bg-accent-primary" : "border-secondary bg-transparent"
-                    )}
-                  >
-                    {isSelected && <Check className="h-2.5 w-2.5 text-white" />}
-                  </div>
-                  <Avatar name={user.display_name} src={user.avatar_url} size="sm" className="flex-shrink-0" />
-                  <span className="truncate text-primary">{getWorkflowApproverLabel(memberId, getUserDetails)}</span>
-                </button>
-              );
-            })}
-
-            {isRolesLoading && (
-              <p className="px-2 py-2 text-xs text-tertiary">正在加载成员与角色...</p>
-            )}
-
-            {!hasAnyResult && (
-              <p className="px-2 py-2 text-center text-xs text-tertiary">无匹配对象</p>
-            )}
+              ))}
           </div>
         </div>
       </DropdownPanel>

@@ -1,5 +1,6 @@
 import { observer } from "mobx-react";
 // plane imports
+import { PERMISSION_KEYS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 // components
 import { PageHead } from "@/components/core/page-title";
@@ -16,11 +17,11 @@ import { DataDictionariesWorkspaceSettingsHeader } from "./header";
 const WorkspaceDataDictionariesPage = observer(function WorkspaceDataDictionariesPage({ params }: Route.ComponentProps) {
   const { workspaceSlug } = params;
   const { t } = useTranslation();
-  const { workspaceInfoBySlug } = useUserPermissions();
+  const { allowWorkspacePermissionKeys } = useUserPermissions();
   const { currentWorkspace } = useWorkspace();
 
-  // 后端对工作区成员读写全开；allowPermissions(…, WORKSPACE) 会忽略 roles，这里只看是否是成员
-  const canEdit = Boolean(workspaceSlug && workspaceInfoBySlug(workspaceSlug));
+  // 读对工作区成员全开；增删改与后端同一把 key
+  const canEdit = allowWorkspacePermissionKeys([PERMISSION_KEYS.WORKSPACE_DATA_DICTIONARY_MANAGE], workspaceSlug);
 
   const {
     dictionaries,

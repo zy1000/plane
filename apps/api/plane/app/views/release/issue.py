@@ -15,8 +15,6 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from plane.app.permissions import (
-    allow_permission,
-    ROLE,
     allow_fine_permission,
     PermissionKey,
 )
@@ -103,7 +101,7 @@ class ReleaseIssueViewSet(BaseViewSet):
         ).distinct()
 
     @method_decorator(gzip_page)
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
+    @allow_fine_permission(PermissionKey.PROJECT_RELEASE_VIEW)
     def list(self, request, slug, project_id, release_id):
         filters = issue_filters(request.query_params, "GET")
         issue_queryset = self.get_queryset()
@@ -208,7 +206,7 @@ class ReleaseIssueViewSet(BaseViewSet):
                 ),
             )
 
-    @allow_fine_permission(PermissionKey.RELEASES_ISSUE_MANAGE)
+    @allow_fine_permission(PermissionKey.PROJECT_RELEASE_EDIT)
     def create_release_issues(self, request, slug, project_id, release_id):
         issues = request.data.get("issues", [])
         if not issues:
@@ -261,7 +259,7 @@ class ReleaseIssueViewSet(BaseViewSet):
         )
         return Response({"message": "success"}, status=status.HTTP_201_CREATED)
 
-    @allow_fine_permission(PermissionKey.RELEASES_ISSUE_MANAGE)
+    @allow_fine_permission(PermissionKey.PROJECT_RELEASE_EDIT)
     def create_issue_releases(self, request, slug, project_id, issue_id):
         releases = request.data.get("releases", [])
         removed_releases = request.data.get("removed_releases", [])
@@ -356,7 +354,7 @@ class ReleaseIssueViewSet(BaseViewSet):
 
         return Response({"message": "success"}, status=status.HTTP_201_CREATED)
 
-    @allow_fine_permission(PermissionKey.RELEASES_ISSUE_MANAGE)
+    @allow_fine_permission(PermissionKey.PROJECT_RELEASE_EDIT)
     def destroy(self, request, slug, project_id, release_id, issue_id):
         release_issue = ReleaseIssue.objects.filter(
             workspace__slug=slug,

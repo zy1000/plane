@@ -10,11 +10,10 @@ import { useParams, useRouter } from "next/navigation";
 import { MoreHorizontal, ArchiveIcon, Settings } from "lucide-react";
 import { Disclosure } from "@headlessui/react";
 // plane imports
-import { EUserPermissionsLevel } from "@plane/constants";
+import { WORKSPACE_SETTINGS_VIEW_PERMISSION_KEY } from "@plane/constants";
 import { useOutsideClickDetector } from "@plane/hooks";
 import { useTranslation } from "@plane/i18n";
 import { ChevronRightIcon } from "@plane/propel/icons";
-import { EUserWorkspaceRoles } from "@plane/types";
 import { CustomMenu } from "@plane/ui";
 import { cn } from "@plane/utils";
 // store hooks
@@ -36,14 +35,13 @@ export const SidebarWorkspaceMenuHeader = observer(function SidebarWorkspaceMenu
   // hooks
   const { workspaceSlug } = useParams();
   const router = useRouter();
-  const { allowPermissions } = useUserPermissions();
+  const { allowWorkspacePermissionKeys } = useUserPermissions();
   const { t } = useTranslation();
 
   useOutsideClickDetector(actionSectionRef, () => setIsMenuActive(false));
 
-  // TODO: fix types
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const isAdmin = allowPermissions([EUserWorkspaceRoles.ADMIN] as any, EUserPermissionsLevel.WORKSPACE);
+  // 工作区设置入口：同设置区导航的口径（工作区成员可进，页内按 key 控制能否修改）
+  const isAdmin = allowWorkspacePermissionKeys([WORKSPACE_SETTINGS_VIEW_PERMISSION_KEY]);
 
   return (
     <div className="group/workspace-button mt-2.5 flex rounded-sm bg-surface-1 px-2 hover:bg-surface-2">

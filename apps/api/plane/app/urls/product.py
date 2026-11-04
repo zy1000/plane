@@ -4,14 +4,9 @@
 
 from django.urls import path
 
-from plane.app.views.product import (
-    ProductMemberViewSet,
-    ProductMyPermissionKeysAPIView,
-    ProductRolePermissionAPIView,
-    ProductRoleViewSet,
-    ProductViewSet,
-)
+from plane.app.views.product import ProductMyPermissionKeysAPIView, ProductViewSet
 from plane.app.views.project.product import ProductProjectViewSet, ProjectProductViewSet
+from plane.app.views.project.product_team import ProductTeamAPIView, ProjectProductTeamAPIView
 from plane.app.views.release.product import ProductReleaseViewSet
 
 urlpatterns = [
@@ -32,33 +27,6 @@ urlpatterns = [
         ),
         name="product-detail",
     ),
-    path(
-        "workspaces/<str:slug>/products/member/invite/",
-        ProductMemberViewSet.as_view({"post": "invite"}),
-        name="product-member-invite",
-    ),
-    path(
-        "workspaces/<str:slug>/products/<uuid:product_id>/members/",
-        ProductMemberViewSet.as_view({"get": "list", "post": "invite"}),
-        name="product-members",
-    ),
-    path(
-        "workspaces/<str:slug>/products/<uuid:product_id>/members/<int:pk>/",
-        ProductMemberViewSet.as_view({"get": "retrieve", "delete": "destroy"}),
-        name="product-member-detail",
-    ),
-    path(
-        "workspaces/<str:slug>/products/<uuid:product_id>/members/<int:pk>/custom-roles/",
-        ProductMemberViewSet.as_view(
-            {"put": "assign_roles", "patch": "assign_roles"}
-        ),
-        name="product-member-custom-roles",
-    ),
-    path(
-        "workspaces/<str:slug>/products/<uuid:product_id>/roles/",
-        ProductRoleViewSet.as_view({"get": "list", "post": "create"}),
-        name="product-roles",
-    ),
     # --- 产品 ↔ 项目 ------------------------------------------------------
     path(
         "workspaces/<str:slug>/products/<uuid:product_id>/projects/",
@@ -76,22 +44,16 @@ urlpatterns = [
         ProjectProductViewSet.as_view({"get": "list", "post": "create"}),
         name="project-products",
     ),
+    # --- 研发矩阵（项目 × 产品 × 角色 → 成员） ------------------------------
     path(
-        "workspaces/<str:slug>/products/<uuid:product_id>/roles/<int:pk>/",
-        ProductRoleViewSet.as_view(
-            {
-                "get": "retrieve",
-                "put": "update",
-                "patch": "partial_update",
-                "delete": "destroy",
-            }
-        ),
-        name="product-role-detail",
+        "workspaces/<str:slug>/projects/<uuid:project_id>/product-team/",
+        ProjectProductTeamAPIView.as_view(),
+        name="project-product-team",
     ),
     path(
-        "workspaces/<str:slug>/products/<uuid:product_id>/roles/<int:pk>/permissions/",
-        ProductRolePermissionAPIView.as_view(),
-        name="product-role-permissions",
+        "workspaces/<str:slug>/products/<uuid:product_id>/team/",
+        ProductTeamAPIView.as_view(),
+        name="product-team",
     ),
     path(
         "workspaces/<str:slug>/products/<uuid:product_id>/my-permission-keys/",

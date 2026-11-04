@@ -24,7 +24,7 @@ class AnnouncementAPIView(BaseAPIView):
         serializer = ProjectAnnouncementListSerializer(paginated_queryset, many=True)
         return list_response(data=serializer.data, count=query.count())
 
-    @allow_fine_permission(PermissionKey.PROJECT_ANNOUNCEMENT_CREATE)
+    @allow_fine_permission(PermissionKey.PROJECT_ANNOUNCEMENT_MANAGE)
     def post(self, request, slug: str, project_id: str) -> Response:
         serializer = ProjectAnnouncementCreateSerializer(
             data={**request.data, "project": str(project_id)}
@@ -35,7 +35,7 @@ class AnnouncementAPIView(BaseAPIView):
 
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-    @allow_fine_permission(PermissionKey.PROJECT_ANNOUNCEMENT_DELETE)
+    @allow_fine_permission(PermissionKey.PROJECT_ANNOUNCEMENT_MANAGE)
     def delete(self, request, slug: str, project_id: str) -> Response:
         announcement_ids = request.data.get("ids", [])
         self.queryset.filter(

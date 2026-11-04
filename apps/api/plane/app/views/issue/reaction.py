@@ -16,10 +16,11 @@ from rest_framework import status
 # Module imports
 from .. import BaseViewSet
 from plane.app.serializers import IssueReactionSerializer
-from plane.app.permissions import allow_permission, ROLE, allow_fine_permission, PermissionKey
+from plane.app.permissions import allow_project_member, allow_fine_permission, PermissionKey
 from plane.db.models import IssueReaction
 from plane.bgtasks.issue_activities_task import issue_activity
 from plane.utils.host import base_host
+from plane.utils.visibility import visible_projects_q
 
 
 class IssueReactionViewSet(BaseViewSet):
@@ -34,15 +35,14 @@ class IssueReactionViewSet(BaseViewSet):
             .filter(project_id=self.kwargs.get("project_id"))
             .filter(issue_id=self.kwargs.get("issue_id"))
             .filter(
-                project__project_projectmember__member=self.request.user,
-                project__project_projectmember__is_active=True,
+                visible_projects_q(self.request.user, self.kwargs.get("slug"), "project"),
                 project__archived_at__isnull=True,
             )
             .order_by("-created_at")
             .distinct()
         )
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    @allow_project_member
     def create(self, request, slug, project_id, issue_id):
         serializer = IssueReactionSerializer(data=request.data)
         if serializer.is_valid():
@@ -61,7 +61,7 @@ class IssueReactionViewSet(BaseViewSet):
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    @allow_project_member
     def destroy(self, request, slug, project_id, issue_id, reaction_code):
         issue_reaction = IssueReaction.objects.get(
             workspace__slug=slug,

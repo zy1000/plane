@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { observer } from "mobx-react";
 import { AlertTriangle } from "lucide-react";
@@ -7,12 +7,10 @@ import { PRODUCT_SETTINGS_EDIT_PERMISSION_KEY } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { CloseIcon } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import { EUserWorkspaceRoles } from "@plane/types";
 import type {
   TCreateProductPayload,
   TLogoProps,
   TProduct,
-  TProductNetwork,
   TUpdateProductPayload,
 } from "@plane/types";
 import { EModalPosition, EModalWidth, Loader, ModalCore } from "@plane/ui";
@@ -20,8 +18,7 @@ import { isValidIdentifier } from "@/components/common/identifier-input";
 import { RichTextEditor } from "@/components/editor/rich-text";
 import { useDataDictionaries } from "@/hooks/store/use-data-dictionaries";
 import { useProductEditorAssets } from "@/hooks/use-product-editor-assets";
-import { useProductMembers } from "@/hooks/store/use-product-members";
-import { useUser, useUserPermissions } from "@/hooks/store/user";
+import { useUser } from "@/hooks/store/user";
 import { useWorkspace } from "@/hooks/store/use-workspace";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 import { WorkspaceService } from "@/services/workspace.service";
@@ -86,16 +83,13 @@ export const ProductModalCore = observer(function ProductModalCore(props: TProdu
   const { t } = useTranslation();
   const { getWorkspaceBySlug } = useWorkspace();
   const { data: currentUser } = useUser();
-  const { workspaceInfoBySlug, hasAllWorkspacePermissions } = useUserPermissions();
   const workspaceId = getWorkspaceBySlug(workspaceSlug)?.id?.toString();
-  const workspaceInfo = workspaceInfoBySlug(workspaceSlug);
 
   const [name, setName] = useState("");
   const [identifier, setIdentifier] = useState("");
   const [identifierError, setIdentifierError] = useState<string | null>(null);
   const [descriptionHTML, setDescriptionHTML] = useState(EMPTY_DESCRIPTION);
   const [ownerId, setOwnerId] = useState<string | null>(null);
-  const [network, setNetwork] = useState<TProductNetwork>(2);
   const [logoProps, setLogoProps] = useState<TLogoProps | undefined>(undefined);
   const [isSaving, setIsSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -115,7 +109,6 @@ export const ProductModalCore = observer(function ProductModalCore(props: TProdu
   const { isLoading: isDictionaryLoading, getDictionaryByKey } = useDataDictionaries(workspaceSlug, {
     autoFetch: isOpen && editable,
   });
-  const isPrivateProduct = network === 0;
   const editorEntityId = mode === "create" ? draftEntityId.current : (product?.id ?? "product");
   const {
     bindActiveSessionAssets,
@@ -127,31 +120,8 @@ export const ProductModalCore = observer(function ProductModalCore(props: TProdu
     resetAssets,
   } = useProductEditorAssets({ entityId: editorEntityId, workspaceSlug });
   const { isMobile } = usePlatformOS();
-  // 编辑态才按产品成员收窄负责人候选；创建态产品还不存在、成员表为空，
-  // 只能从工作区成员里选，后端会把选中的人落成首个产品成员。
-  const ownerScopeProductId = isOpen && editable && mode !== "create" ? product?.id : undefined;
-  const { members: productMembers } = useProductMembers(workspaceSlug, ownerScopeProductId);
-  const ownerCandidateIds = useMemo(() => {
-    if (!ownerScopeProductId) return undefined;
-    const ids = productMembers.map((membership) => membership.member);
-    // 成员还在加载时先兜住当前负责人，否则下拉会短暂空掉
-    if (product?.owner && !ids.includes(product.owner)) ids.unshift(product.owner);
-    return ids;
-  }, [ownerScopeProductId, product?.owner, productMembers]);
-  const hasWorkspaceAdminAccess =
-    workspaceInfo?.role === EUserWorkspaceRoles.ADMIN || hasAllWorkspacePermissions(workspaceSlug);
+  // 负责人候选一律取工作区成员（产品没有成员表了，owner.memberIds 不传），资格由后端校验
   const canManageProduct = hasProductPermission(product, PRODUCT_SETTINGS_EDIT_PERMISSION_KEY);
-  const isProductMember = Boolean(
-    currentUser?.id && productMembers.some((membership) => membership.member === currentUser.id)
-  );
-  const willLosePrivateAccess = Boolean(
-    editable &&
-    isPrivateProduct &&
-    ownerId &&
-    ownerId !== currentUser?.id &&
-    !isProductMember &&
-    !hasWorkspaceAdminAccess
-  );
 
   useEffect(() => {
     if (!isOpen) return;
@@ -159,7 +129,6 @@ export const ProductModalCore = observer(function ProductModalCore(props: TProdu
     setIdentifier(product?.identifier ?? "");
     setDescriptionHTML(product?.description_html?.trim() ? product.description_html : EMPTY_DESCRIPTION);
     setOwnerId(product?.owner ?? currentUser?.id ?? null);
-    setNetwork(product?.network ?? 2);
     extended.reset(product);
     // 老产品可能没有 logo：不注入随机默认，展示层用 PackageOpen 兜底
     setLogoProps(
@@ -214,7 +183,6 @@ export const ProductModalCore = observer(function ProductModalCore(props: TProdu
       name: trimmedName,
       identifier,
       description_html: descriptionHTML,
-      network,
       owner: ownerId,
       ...(logoProps ? { logo_props: logoProps } : {}),
       ...extended.getPayload(),
@@ -398,8 +366,6 @@ export const ProductModalCore = observer(function ProductModalCore(props: TProdu
                   setIdentifierError(null);
                 }}
                 identifierError={identifierError}
-                network={network}
-                onNetworkChange={setNetwork}
                 logoProps={logoProps}
                 onLogoChange={setLogoProps}
                 isMobile={isMobile}
@@ -446,8 +412,6 @@ export const ProductModalCore = observer(function ProductModalCore(props: TProdu
                   setOwnerError(null);
                 },
                 error: ownerError,
-                memberIds: ownerCandidateIds,
-                warning: willLosePrivateAccess ? t("workspace_products.visibility.private_access_warning") : null,
               }}
             />
           </div>

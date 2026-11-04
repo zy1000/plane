@@ -1,26 +1,18 @@
-import { PRODUCT_MEMBER_MANAGE_PERMISSION_KEYS } from "@plane/constants";
-
-export type TProductSettingsKey = "general" | "members" | "teams" | "permissions";
+export type TProductSettingsKey = "general" | "teams";
 
 export const PRODUCT_SETTINGS_RETURN_TO_PARAM = "returnTo";
 
+/**
+ * 产品设置只剩两页：常规（写操作按 workspace.product.* 禁用）、研发团队（只读，读各关联项目的研发矩阵）。
+ * 产品成员 / 产品角色已下线：产品内容按关联项目的项目权限判。
+ */
 export const PRODUCT_SETTINGS_ITEMS: Array<{
   key: TProductSettingsKey;
   href: string;
   i18nKey: string;
-  /** 给出时，持有其中任一 product.* key 才在侧栏显示；不给就是「能看见产品的人都能看」 */
-  permissionKeys?: readonly string[];
 }> = [
-  // 常规 / 成员 / 权限三页对能看见产品的人只读开放，写操作在各页按 key 禁用
   { key: "general", href: "", i18nKey: "workspace_products.settings.navigation.general" },
-  { key: "members", href: "/members", i18nKey: "workspace_products.settings.navigation.members" },
-  {
-    key: "teams",
-    href: "/teams",
-    i18nKey: "workspace_products.settings.navigation.teams",
-    permissionKeys: PRODUCT_MEMBER_MANAGE_PERMISSION_KEYS,
-  },
-  { key: "permissions", href: "/permissions", i18nKey: "workspace_products.settings.navigation.permissions" },
+  { key: "teams", href: "/teams", i18nKey: "workspace_products.settings.navigation.teams" },
 ];
 
 export const getProductSettingsPath = (

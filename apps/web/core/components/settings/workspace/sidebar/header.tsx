@@ -7,7 +7,7 @@
 import { ArrowLeft } from "lucide-react";
 import { observer } from "mobx-react";
 // plane imports
-import { ROLE_DETAILS } from "@plane/constants";
+import { PERMISSION_KEYS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { IconButton } from "@plane/propel/icon-button";
 // components
@@ -19,20 +19,24 @@ import { useWorkspace } from "@/hooks/store/use-workspace";
 // plane web imports
 import { SubscriptionPill } from "@/plane-web/components/common/subscription/subscription-pill";
 
+const WORKSPACE_KEYS = Object.values(PERMISSION_KEYS).filter((key) => key.startsWith("workspace."));
+
 export const WorkspaceSettingsSidebarHeader = observer(function WorkspaceSettingsSidebarHeader() {
   // router
   const router = useAppRouter();
   // store hooks
-  const { getWorkspaceRoleByWorkspaceSlug } = useUserPermissions();
+  const { workspaceInfoBySlug, isWorkspaceOwner, getWorkspacePermissionKeysByWorkspaceSlug } = useUserPermissions();
   const { currentWorkspace } = useWorkspace();
-  // derived values
-  const currentWorkspaceRole = currentWorkspace?.slug
-    ? getWorkspaceRoleByWorkspaceSlug(currentWorkspace.slug)
-    : undefined;
+  // derived values：身份说法只是展示，按「所有者 / 工作区 key 全有 / 其他」三档
+  const slug = currentWorkspace?.slug ?? "";
+  const isMember = Boolean(slug && workspaceInfoBySlug(slug));
+  const heldKeys = getWorkspacePermissionKeysByWorkspaceSlug(slug);
+  const isAdmin = WORKSPACE_KEYS.every((key) => heldKeys.includes(key));
+  const identityLabel = isWorkspaceOwner(slug) ? "所有者" : isAdmin ? "管理员" : "成员";
   // translation
   const { t } = useTranslation();
 
-  if (!currentWorkspaceRole) return null;
+  if (!isMember) return null;
 
   return (
     <div className="shrink-0">
@@ -43,7 +47,7 @@ export const WorkspaceSettingsSidebarHeader = observer(function WorkspaceSetting
           icon={ArrowLeft}
           onClick={() => router.push(`/${currentWorkspace?.slug}/`)}
         />
-        <p>Workspace settings</p>
+        <p>{t("workspace_settings.label")}</p>
       </div>
       <div className="mt-1.5 flex items-center justify-between gap-2 px-5 py-0.5">
         <div className="flex items-center gap-2 truncate">
@@ -54,7 +58,7 @@ export const WorkspaceSettingsSidebarHeader = observer(function WorkspaceSetting
           />
           <div className="truncate">
             <p className="truncate text-body-sm-medium">{currentWorkspace?.name}</p>
-            <p className="truncate text-caption-md-regular">{t(ROLE_DETAILS[currentWorkspaceRole].i18n_title)}</p>
+            <p className="truncate text-caption-md-regular">{identityLabel}</p>
           </div>
         </div>
         <div className="shrink-0">

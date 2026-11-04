@@ -27,7 +27,6 @@ import {
   LinkIcon,
   ArchiveIcon,
   CycleIcon,
-  GlobeIcon,
   DueDatePropertyIcon,
   EstimatePropertyIcon,
   GridLayoutIcon,
@@ -63,7 +62,6 @@ export const iconsMap: ActivityIconMap = {
   cycle: CycleIcon,
   module: ModuleIcon,
   page: FileText,
-  network: GlobeIcon,
   identifier: Hash,
   timezone: Clock,
   is_project_updates_enabled: Bell,
@@ -232,10 +230,6 @@ export const messages = (activity: TProjectActivity): { message: string | ReactN
             <span className="font-medium text-primary">{newValue || oldValue || "Untitled page"}</span>
           </>
         ),
-      };
-    case "network":
-      return {
-        message: <>{newValue ? "enabled" : "disabled"} network access</>,
       };
     case "identifier":
       return {

@@ -8,12 +8,15 @@ import { useCallback } from "react";
 import { useParams } from "next/navigation";
 import { Star, StarOff, Users } from "lucide-react";
 // plane imports
-import { EUserPermissionsLevel, PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
+import {
+  PROJECT_ERROR_MESSAGES,
+  PROJECT_MODULES_EDIT_PERMISSION_KEY,
+  isProjectPermissionError,
+} from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { LinkIcon, ModuleStatusIcon } from "@plane/propel/icons";
 import { setToast, TOAST_TYPE } from "@plane/propel/toast";
 import type { IModule, TModuleStatus } from "@plane/types";
-import { EUserPermissions } from "@plane/types";
 import { copyTextToClipboard } from "@plane/utils";
 // components
 import type { TPowerKCommandConfig } from "@/components/power-k/core/types";
@@ -26,7 +29,7 @@ export const usePowerKModuleContextBasedActions = (): TPowerKCommandConfig[] => 
   const { workspaceSlug, projectId, moduleId } = useParams();
   // store
   const {
-    permission: { allowPermissions },
+    permission: { allowProjectPermissionKeys, isProjectMember },
   } = useUser();
   const { getModuleById, addModuleToFavorites, removeModuleFromFavorites, updateModuleDetails } = useModule();
   // derived values
@@ -34,8 +37,9 @@ export const usePowerKModuleContextBasedActions = (): TPowerKCommandConfig[] => 
   const isFavorite = !!moduleDetails?.is_favorite;
   // permission
   const isEditingAllowed =
-    allowPermissions([EUserPermissions.ADMIN, EUserPermissions.MEMBER], EUserPermissionsLevel.PROJECT) &&
-    !moduleDetails?.archived_at;
+    allowProjectPermissionKeys([PROJECT_MODULES_EDIT_PERMISSION_KEY]) && !moduleDetails?.archived_at;
+  // 收藏是个人行为，项目成员就行
+  const canFavorite = isProjectMember() && !moduleDetails?.archived_at;
   // translation
   const { t } = useTranslation();
 
@@ -155,8 +159,8 @@ export const usePowerKModuleContextBasedActions = (): TPowerKCommandConfig[] => 
       type: "action",
       action: toggleFavorite,
       modifierShortcut: "shift+f",
-      isEnabled: () => isEditingAllowed,
-      isVisible: () => isEditingAllowed,
+      isEnabled: () => canFavorite,
+      isVisible: () => canFavorite,
       closeOnSelect: true,
     },
     {

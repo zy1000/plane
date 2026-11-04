@@ -6,10 +6,11 @@
 from rest_framework import status
 from rest_framework.response import Response
 
-from plane.app.permissions import allow_permission, ROLE
+from plane.app.permissions import allow_fine_permission, PermissionKey
 from plane.app.serializers import ExporterHistorySerializer
 from plane.bgtasks.export_task import issue_export_task
 from plane.db.models import ExporterHistory, Project, Workspace
+from plane.utils.visibility import visible_projects_q
 
 # Module imports
 from .. import BaseAPIView
@@ -19,7 +20,7 @@ class ExportIssuesEndpoint(BaseAPIView):
     model = ExporterHistory
     serializer_class = ExporterHistorySerializer
 
-    @allow_permission(allowed_roles=[ROLE.ADMIN, ROLE.MEMBER], level="WORKSPACE")
+    @allow_fine_permission(PermissionKey.WORKSPACE_EXPORT_MANAGE, level="WORKSPACE")
     def post(self, request, slug):
         # Get the workspace
         workspace = Workspace.objects.get(slug=slug)
@@ -31,9 +32,8 @@ class ExportIssuesEndpoint(BaseAPIView):
         if provider in ["csv", "xlsx", "json"]:
             if not project_ids:
                 project_ids = Project.objects.filter(
+                    visible_projects_q(request.user, slug, None),
                     workspace__slug=slug,
-                    project_projectmember__member=request.user,
-                    project_projectmember__is_active=True,
                     archived_at__isnull=True,
                 ).values_list("id", flat=True)
                 project_ids = [str(project_id) for project_id in project_ids]
@@ -64,7 +64,7 @@ class ExportIssuesEndpoint(BaseAPIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-    @allow_permission(allowed_roles=[ROLE.ADMIN, ROLE.MEMBER], level="WORKSPACE")
+    @allow_fine_permission(PermissionKey.WORKSPACE_EXPORT_MANAGE, level="WORKSPACE")
     def get(self, request, slug):
         exporter_history = ExporterHistory.objects.filter(workspace__slug=slug, type="issue_exports").select_related(
             "workspace", "initiated_by"

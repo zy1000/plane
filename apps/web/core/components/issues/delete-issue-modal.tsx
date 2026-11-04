@@ -10,8 +10,6 @@ import { useParams } from "next/navigation";
 // types
 import {
   PROJECT_ERROR_MESSAGES,
-  EUserPermissions,
-  EUserPermissionsLevel,
   isWorkItemDeletePermissionError,
 } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
@@ -23,7 +21,9 @@ import { AlertModalCore } from "@plane/ui";
 // hooks
 import { useIssues } from "@/hooks/store/use-issues";
 import { useProject } from "@/hooks/store/use-project";
-import { useUser, useUserPermissions } from "@/hooks/store/user";
+import { useUserPermissions } from "@/hooks/store/user";
+// local imports
+import { getIssueTypeForPermission } from "./issue-permission";
 // plane-web
 
 type Props = {
@@ -44,10 +44,9 @@ export const DeleteIssueModal = observer(function DeleteIssueModal(props: Props)
   const { workspaceSlug } = useParams();
   const { issueMap } = useIssues();
   const { getProjectById } = useProject();
-  const { allowPermissions } = useUserPermissions();
+  const { allowIssuePermission } = useUserPermissions();
   const { t } = useTranslation();
 
-  const { data: currentUser } = useUser();
 
   useEffect(() => {
     setIsDeleting(false);
@@ -58,16 +57,13 @@ export const DeleteIssueModal = observer(function DeleteIssueModal(props: Props)
   // derived values
   const issue = data ? data : issueMap[dataId!];
   const projectDetails = getProjectById(issue?.project_id);
-  const isIssueCreator = issue?.created_by === currentUser?.id;
-
-  const canPerformProjectAdminActions = allowPermissions(
-    [EUserPermissions.ADMIN],
-    EUserPermissionsLevel.PROJECT,
+  // 与后端 IssueViewSet.destroy 一致：按类型选 project.issue / project.defect 的删除 key，再看类型限定
+  const authorized = allowIssuePermission(
+    "delete",
+    getIssueTypeForPermission(issue?.project_id, issue?.type_id),
     workspaceSlug?.toString(),
     projectDetails?.id
   );
-
-  const authorized = isIssueCreator || canPerformProjectAdminActions;
 
   const onClose = () => {
     setIsDeleting(false);

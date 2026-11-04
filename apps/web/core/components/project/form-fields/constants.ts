@@ -32,7 +32,6 @@ export type TProjectFormFieldKey =
   | "name"
   | "identifier"
   | "code"
-  | "network"
   | "description"
   | "description_html"
   | "pms_project_name"
@@ -47,7 +46,6 @@ export const PROJECT_FORM_FIELD_KEYS: TProjectFormFieldKey[] = [
   "identifier",
   "code",
   "dev_mode",
-  "network",
   "business_unit",
   "description",
   "description_html",

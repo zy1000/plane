@@ -7,12 +7,11 @@
 import type { MutableRefObject, ReactNode } from "react";
 import { useTranslation } from "@plane/i18n";
 import { Tooltip } from "@plane/propel/tooltip";
-import type { TLogoProps, TProductNetwork } from "@plane/types";
+import type { TLogoProps } from "@plane/types";
 import { cn } from "@plane/utils";
 import { ModalInlineError } from "@/components/common/form-modal";
 import { IDENTIFIER_MAX_LENGTH, sanitizeIdentifier } from "@/components/common/identifier-input";
 import { ProductLogoHeader } from "./logo-header";
-import { ProductNetworkSegmented } from "./network-segmented";
 
 type Props = {
   /** 左上角的小标题：创建产品 / 编辑产品 / 产品详情 */
@@ -26,8 +25,6 @@ type Props = {
   identifier: string;
   onIdentifierChange: (value: string) => void;
   identifierError: string | null;
-  network: TProductNetwork;
-  onNetworkChange: (value: TProductNetwork) => void;
   logoProps: TLogoProps | undefined;
   onLogoChange: (value: TLogoProps) => void;
   isMobile?: boolean;
@@ -37,7 +34,7 @@ type Props = {
 };
 
 /**
- * 产品弹窗左栏顶部的身份区：logo 大块 + 大字产品名 + 开发编号芯片 + 可见性开关。
+ * 产品弹窗左栏顶部的身份区：logo 大块 + 大字产品名 + 开发编号芯片。
  * 开发编号不随名称自动生成，由用户手填。
  */
 export function ProductModalIdentity(props: Props) {
@@ -51,8 +48,6 @@ export function ProductModalIdentity(props: Props) {
     identifier,
     onIdentifierChange,
     identifierError,
-    network,
-    onNetworkChange,
     logoProps,
     onLogoChange,
     isMobile = false,
@@ -147,14 +142,6 @@ export function ProductModalIdentity(props: Props) {
                 )}
               </label>
             </Tooltip>
-            {editable ? (
-              <ProductNetworkSegmented
-                value={network}
-                onChange={onNetworkChange}
-                className="ml-auto"
-                isMobile={isMobile}
-              />
-            ) : null}
           </div>
           {identifierError ? <ModalInlineError message={identifierError} /> : null}
         </div>

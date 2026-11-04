@@ -7,7 +7,7 @@
 import { useEffect, useState } from "react";
 import { observer } from "mobx-react";
 import useSWR from "swr";
-import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import { PERMISSION_KEYS } from "@plane/constants";
 import type { TNameDescriptionLoader } from "@plane/types";
 // components
 import { ContentWrapper } from "@plane/ui";
@@ -47,7 +47,7 @@ export const InboxContentRoot = observer(function InboxContentRoot(props: TInbox
   const { data: currentUser } = useUser();
   const { currentTab, fetchInboxIssueById, getIssueInboxByIssueId, getIsIssueAvailable } = useProjectInbox();
   const inboxIssue = getIssueInboxByIssueId(inboxIssueId);
-  const { allowPermissions, getProjectRoleByWorkspaceSlugAndProjectId } = useUserPermissions();
+  const { allowProjectPermissionKeys } = useUserPermissions();
 
   // derived values
   const isIssueAvailable = getIsIssueAvailable(inboxIssueId?.toString() || "");
@@ -72,13 +72,10 @@ export const InboxContentRoot = observer(function InboxContentRoot(props: TInbox
     }
   );
 
+  // 与后端 IntakeIssueViewSet.partial_update 一致：有收件箱管理权，或者是自己投递的
   const isEditable =
-    allowPermissions([EUserPermissions.ADMIN], EUserPermissionsLevel.PROJECT, workspaceSlug, projectId) ||
+    allowProjectPermissionKeys([PERMISSION_KEYS.PROJECT_INTAKE_MANAGE], workspaceSlug, projectId) ||
     inboxIssue?.issue.created_by === currentUser?.id;
-
-  const isGuest = getProjectRoleByWorkspaceSlugAndProjectId(workspaceSlug, projectId) === EUserPermissions.GUEST;
-  const isOwner = inboxIssue?.issue.created_by === currentUser?.id;
-  const readOnly = !isOwner && isGuest;
 
   if (!inboxIssue) return <></>;
 
@@ -104,7 +101,7 @@ export const InboxContentRoot = observer(function InboxContentRoot(props: TInbox
             workspaceSlug={workspaceSlug}
             projectId={projectId}
             inboxIssue={inboxIssue}
-            isEditable={isEditable && !isIssueDisabled && !readOnly}
+            isEditable={isEditable && !isIssueDisabled}
             isSubmitting={isSubmitting}
             setIsSubmitting={setIsSubmitting}
           />

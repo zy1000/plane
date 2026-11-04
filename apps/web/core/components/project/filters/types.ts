@@ -10,7 +10,6 @@ export const PROJECT_FILTER_PROPERTY_KEYS = [
   "lead",
   "product_manager",
   "members",
-  "network",
   "start_date",
   "end_date",
   "created_at",

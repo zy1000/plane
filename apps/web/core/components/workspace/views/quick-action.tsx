@@ -7,7 +7,7 @@
 import { useState } from "react";
 import { observer } from "mobx-react";
 // plane imports
-import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import { PERMISSION_KEYS } from "@plane/constants";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { IWorkspaceView } from "@plane/types";
 import { CustomMenu } from "@plane/ui";
@@ -32,10 +32,10 @@ export const WorkspaceViewQuickActions = observer(function WorkspaceViewQuickAct
   const [deleteViewModal, setDeleteViewModal] = useState(false);
   // store hooks
   const { data } = useUser();
-  const { allowPermissions } = useUserPermissions();
+  const { allowWorkspacePermissionKeys } = useUserPermissions();
   // auth
   const isOwner = view?.owned_by === data?.id;
-  const isAdmin = allowPermissions([EUserPermissions.ADMIN], EUserPermissionsLevel.WORKSPACE);
+  const isAdmin = allowWorkspacePermissionKeys([PERMISSION_KEYS.WORKSPACE_VIEW_MANAGE]);
 
   const viewLink = `${workspaceSlug}/workspace-views/${view.id}`;
   const handleCopyText = async () => {

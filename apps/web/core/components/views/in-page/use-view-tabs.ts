@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cloneDeep, isEqual } from "lodash-es";
 import useSWR from "swr";
-import { EUserPermissions, EUserPermissionsLevel, PROJECT_VIEWS_CREATE_PERMISSION_KEY } from "@plane/constants";
+import { PERMISSION_KEYS, PROJECT_VIEWS_CREATE_PERMISSION_KEY } from "@plane/constants";
 import { setToast, TOAST_TYPE } from "@plane/propel/toast";
 import { EViewAccess } from "@plane/types";
 import type { IProjectView } from "@plane/types";
@@ -76,7 +76,7 @@ export const useViewTabs = (params: TViewTabsParams) => {
   // store hooks
   const { getScopedProjectViews, fetchViews, createView, updateView, deleteView } = useProjectView();
   const { data: currentUser } = useUser();
-  const { allowPermissions, allowProjectPermissionKeys } = useUserPermissions();
+  const { allowProjectPermissionKeys } = useUserPermissions();
   const preferences = useViewTabPreferences(workspaceSlug, projectId, scope);
   const mode = useModeViewContext(workspaceSlug, projectId);
   // state
@@ -196,12 +196,8 @@ export const useViewTabs = (params: TViewTabsParams) => {
   );
 
   // permissions
-  const isProjectAdmin = allowPermissions(
-    [EUserPermissions.ADMIN],
-    EUserPermissionsLevel.PROJECT,
-    workspaceSlug,
-    projectId
-  );
+  // 管理别人建的公共视图：project.view.manage（同后端 IssueViewViewSet._is_project_admin）
+  const isProjectAdmin = allowProjectPermissionKeys([PERMISSION_KEYS.PROJECT_VIEW_MANAGE], workspaceSlug, projectId);
   const canCreate = allowProjectPermissionKeys([PROJECT_VIEWS_CREATE_PERMISSION_KEY], workspaceSlug, projectId);
   // 研发模式视图在项目里不能改名、改可见范围、删除（去模板中心），只有研发模式维护人能把改动更新上去
   const canEditView = useCallback(
@@ -366,6 +362,8 @@ export const useViewTabs = (params: TViewTabsParams) => {
     isDirty,
     changedParts,
     canCreate,
+    /** 建公共视图 / 把个人视图改成公开要 project.view.manage，口径同后端 */
+    canPublish: isProjectAdmin,
     canEditView,
     canDeleteView,
     canUpdateModeView,

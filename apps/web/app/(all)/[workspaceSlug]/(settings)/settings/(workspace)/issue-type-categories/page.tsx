@@ -7,7 +7,7 @@
 import { observer } from "mobx-react";
 import useSWR from "swr";
 // plane imports
-import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import { PERMISSION_KEYS } from "@plane/constants";
 // components
 import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
 import { PageHead } from "@/components/core/page-title";
@@ -26,14 +26,12 @@ const WorkspaceIssueTypeCategoriesPage = observer(function WorkspaceIssueTypeCat
 }: Route.ComponentProps) {
   const { workspaceSlug } = params;
 
-  const { workspaceUserInfo, allowPermissions } = useUserPermissions();
+  const { workspaceUserInfo, isWorkspaceMember, allowWorkspacePermissionKeys } = useUserPermissions();
   const { currentWorkspace } = useWorkspace();
 
-  const isAdmin = allowPermissions([EUserPermissions.ADMIN], EUserPermissionsLevel.WORKSPACE);
-  const canView = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.WORKSPACE
-  );
+  // 读 = 工作区成员，写 = workspace.issue_scheme.manage（后端 WorkspaceIssueSchemeConfigPermission）
+  const isAdmin = allowWorkspacePermissionKeys([PERMISSION_KEYS.WORKSPACE_ISSUE_SCHEME_MANAGE], workspaceSlug);
+  const canView = isWorkspaceMember(workspaceSlug);
 
   const { categories, isLoading, fetchCategories, createCategory, updateCategory, deleteCategory } =
     useIssueTypeCategories(workspaceSlug);

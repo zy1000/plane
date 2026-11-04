@@ -17,7 +17,6 @@ export const getProjectFormValues = (projectLead?: string | null): Partial<IProj
   },
   identifier: "",
   name: "",
-  network: 0,
   project_lead: projectLead ?? null,
   /** 0348 扩展字段：不在 defaultValues 里的键不会进 formData，RHF 的校验也不会跑 */
   code: "",

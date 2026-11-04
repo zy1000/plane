@@ -8,7 +8,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 // plane imports
-import { ALL_ISSUES, EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import { ALL_ISSUES, PERMISSION_KEYS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { EIssuesStoreType, IBlockUpdateData, TIssue } from "@plane/types";
@@ -55,7 +55,7 @@ export const BaseGanttRoot = observer(function BaseGanttRoot(props: IBaseGanttRo
   const { fetchIssues, fetchNextIssues, updateIssue } = useIssuesActions(storeType);
   const { initGantt } = useTimeLineChart(GANTT_TIMELINE_TYPE.ISSUE);
   // store hooks
-  const { allowPermissions } = useUserPermissions();
+  const { allowProjectPermissionKeys } = useUserPermissions();
   const { subIssues: subIssuesStore, issue: issueDetailStore } = useIssueDetail(
     isEpic ? EIssueServiceType.EPICS : EIssueServiceType.ISSUES
   );
@@ -158,7 +158,8 @@ export const BaseGanttRoot = observer(function BaseGanttRoot(props: IBaseGanttRo
     updateIssue && (await updateIssue(issue.project_id, issue.id, payload));
   };
 
-  const isAllowed = allowPermissions([EUserPermissions.ADMIN, EUserPermissions.MEMBER], EUserPermissionsLevel.PROJECT);
+  // 拖动 / 拉伸 / 排序都是改工作项（单条的类型限定以后端为准）
+  const isAllowed = allowProjectPermissionKeys([PERMISSION_KEYS.PROJECT_ISSUE_EDIT, PERMISSION_KEYS.PROJECT_DEFECT_EDIT]);
   const updateBlockDates = useCallback(
     (
       updates: {

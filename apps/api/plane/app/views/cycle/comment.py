@@ -9,6 +9,7 @@ from plane.app.permissions import allow_fine_permission, PermissionKey
 from plane.app.serializers import CycleCommentSerializer
 from plane.bgtasks.cycle_activities_task import cycle_activity as cycle_activity_task
 from plane.db.models import CycleComment
+from plane.utils.visibility import visible_projects_q
 
 
 class CycleCommentViewSet(BaseViewSet):
@@ -25,15 +26,14 @@ class CycleCommentViewSet(BaseViewSet):
             .filter(project_id=self.kwargs.get("project_id"))
             .filter(cycle_id=self.kwargs.get("cycle_id"))
             .filter(
-                project__project_projectmember__member=self.request.user,
-                project__project_projectmember__is_active=True,
+                visible_projects_q(self.request.user, self.kwargs.get("slug"), "project"),
                 project__archived_at__isnull=True,
             )
             .select_related("project", "workspace", "cycle", "actor")
             .distinct()
         )
 
-    @allow_fine_permission(PermissionKey.SPRINTS_COMMENT_CREATE)
+    @allow_fine_permission(PermissionKey.PROJECT_CYCLE_VIEW)
     def create(self, request, slug, project_id, cycle_id):
         serializer = CycleCommentSerializer(data=request.data)
         if serializer.is_valid():

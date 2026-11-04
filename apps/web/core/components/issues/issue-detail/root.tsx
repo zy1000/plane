@@ -7,7 +7,7 @@
 import { useContext, useMemo, useRef, useState } from "react";
 import { observer } from "mobx-react";
 // plane imports
-import { EUserPermissions, EUserPermissionsLevel, PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
+import { PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
 import type { EditorRefApi } from "@plane/editor";
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setPromiseToast, setToast } from "@plane/propel/toast";
@@ -21,11 +21,11 @@ import { EmptyState } from "@/components/common/empty-state";
 import { useAppTheme } from "@/hooks/store/use-app-theme";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useIssues } from "@/hooks/store/use-issues";
-import { useUserPermissions } from "@/hooks/store/user";
 import { useAppRouter } from "@/hooks/use-app-router";
 import { useIssueEditSession } from "@/hooks/use-issue-edit-session";
 // store
 import { StoreContext } from "@/lib/store-context";
+import { useIssuePermission } from "../issue-permission";
 // local components
 import { IssuePeekOverview } from "../peek-overview";
 import { PeekOverviewProperties } from "../peek-overview/properties";
@@ -97,7 +97,7 @@ export const IssueDetailRoot = observer(function IssueDetailRoot(props: TIssueDe
   const {
     issues: { removeIssue: removeArchivedIssue },
   } = useIssues(EIssuesStoreType.ARCHIVED);
-  const { allowPermissions } = useUserPermissions();
+  const allowIssueAction = useIssuePermission();
   const { issueDetailSidebarCollapsed } = useAppTheme();
   const issueStore = useContext(StoreContext).issue.issues;
   // 标题 / 描述的编辑器与保存状态提到这里，编辑会话保存时要读编辑器内容
@@ -296,13 +296,8 @@ export const IssueDetailRoot = observer(function IssueDetailRoot(props: TIssueDe
 
   // issue details
   const issue = getIssueById(issueId);
-  // checking if issue is editable, based on user role
-  const isEditable = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.PROJECT,
-    workspaceSlug,
-    projectId
-  );
+  // 按类型的编辑权限（负责人本人直接放行），口径同后端
+  const isEditable = allowIssueAction("edit", issue, workspaceSlug, projectId);
   const canEdit = isEditable && !is_archived;
   // 点「编辑」才可改，改动暂存本地，保存时一次提交
   const session = useIssueEditSession({

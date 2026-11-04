@@ -10,7 +10,7 @@ import { observer } from "mobx-react";
 import { useParams, usePathname } from "next/navigation";
 import { Ellipsis } from "lucide-react";
 // plane imports
-import { ARCHIVABLE_STATE_GROUPS, EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import { ARCHIVABLE_STATE_GROUPS } from "@plane/constants";
 import type { TIssue } from "@plane/types";
 import { EIssuesStoreType } from "@plane/types";
 import { ContextMenu, CustomMenu } from "@plane/ui";
@@ -19,12 +19,12 @@ import { cn } from "@plane/utils";
 import { useIssues } from "@/hooks/store/use-issues";
 import { useProject } from "@/hooks/store/use-project";
 import { useProjectState } from "@/hooks/store/use-project-state";
-import { useUserPermissions } from "@/hooks/store/user";
 // plane-web components
 import { DuplicateWorkItemModal } from "@/plane-web/components/issues/issue-layouts/quick-action-dropdowns/duplicate-modal";
 // helper
 import { ArchiveIssueModal } from "../../archive-issue-modal";
 import { DeleteIssueModal } from "../../delete-issue-modal";
+import { useIssuePermission } from "../../issue-permission";
 import { CreateUpdateIssueModal } from "../../issue-modal/modal";
 import type { IQuickActionProps } from "../list/list-view-types";
 import type { MenuItemFactoryProps } from "./helper";
@@ -68,7 +68,7 @@ export const WorkItemDetailQuickActions = observer(function WorkItemDetailQuickA
   const [archiveIssueModal, setArchiveIssueModal] = useState(false);
   const [duplicateWorkItemModal, setDuplicateWorkItemModal] = useState(false);
   // store hooks
-  const { allowPermissions } = useUserPermissions();
+  const allowIssueAction = useIssuePermission();
   const { issuesFilter } = useIssues(EIssuesStoreType.PROJECT);
   const { getStateById } = useProjectState();
   const { getProjectIdentifierById } = useProject();
@@ -77,19 +77,14 @@ export const WorkItemDetailQuickActions = observer(function WorkItemDetailQuickA
   const stateDetails = getStateById(issue.state_id);
   const projectIdentifier = getProjectIdentifierById(issue?.project_id);
   // auth
-  const isEditingAllowed =
-    allowPermissions(
-      [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-      EUserPermissionsLevel.PROJECT,
-      workspaceSlug?.toString(),
-      issue.project_id ?? undefined
-    ) && !readOnly;
-
-  const isArchivingAllowed = !issue.archived_at && isEditingAllowed;
+  const isEditingAllowed = allowIssueAction("edit", issue, workspaceSlug?.toString()) && !readOnly;
+  // 归档与恢复归档同一把 key
+  const canArchive = allowIssueAction("archive", issue, workspaceSlug?.toString()) && !readOnly;
+  const isArchivingAllowed = !issue.archived_at && canArchive;
   const isInArchivableGroup = !!stateDetails && ARCHIVABLE_STATE_GROUPS.includes(stateDetails?.group);
-  const isRestoringAllowed = !!issue.archived_at && isEditingAllowed;
+  const isRestoringAllowed = !!issue.archived_at && canArchive;
 
-  const isDeletingAllowed = isEditingAllowed;
+  const isDeletingAllowed = allowIssueAction("delete", issue, workspaceSlug?.toString()) && !readOnly;
 
   const duplicateIssuePayload = omit(
     {

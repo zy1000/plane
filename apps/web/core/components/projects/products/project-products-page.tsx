@@ -13,6 +13,7 @@ import { observer } from "mobx-react";
 import { FolderKanban, Link2, Package } from "lucide-react";
 import { useParams } from "react-router";
 import {
+  PERMISSION_KEYS,
   PROJECT_PRODUCT_LINK_MANAGE_PERMISSION_KEY,
   PROJECT_REQUIREMENT_LINK_VIEW_PERMISSION_KEY,
 } from "@plane/constants";
@@ -20,7 +21,6 @@ import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Tooltip } from "@plane/propel/tooltip";
-import { EUserWorkspaceRoles } from "@plane/types";
 import type { TProduct, TProductProject } from "@plane/types";
 import { AlertModalCore, Breadcrumbs, CustomMenu, Header, Loader } from "@plane/ui";
 import { renderFormattedDate } from "@plane/utils";
@@ -52,8 +52,7 @@ export const ProjectProductsPage = observer(function ProjectProductsPage() {
   const project = projectId?.toString() ?? "";
 
   const { getProjectById, loader } = useProject();
-  const { allowProjectPermissionKeys, workspaceUserInfo, workspaceInfoBySlug, hasAllWorkspacePermissions } =
-    useUserPermissions();
+  const { allowProjectPermissionKeys, allowWorkspacePermissionKeys, workspaceUserInfo } = useUserPermissions();
 
   // 与后端 ProjectProductViewSet 同一组 key：list 放行 view / manage 任一，create 只认 manage
   const canView = allowProjectPermissionKeys(
@@ -62,14 +61,9 @@ export const ProjectProductsPage = observer(function ProjectProductsPage() {
     project
   );
   const canManage = allowProjectPermissionKeys([PROJECT_PRODUCT_LINK_MANAGE_PERMISSION_KEY], slug, project);
-  // 建产品是工作区级动作，与产品列表页同一条判定（后端 can_create_product：成员及以上）；
-  // 建完要挂到本项目，所以还得有关联权限
-  const workspaceInfo = workspaceInfoBySlug(slug);
+  // 建产品是工作区级动作（workspace.product.create，与产品列表页同一条判定）；建完要挂到本项目，所以还得有关联权限
   const canCreateProduct =
-    canManage &&
-    (workspaceInfo?.role === EUserWorkspaceRoles.ADMIN ||
-      workspaceInfo?.role === EUserWorkspaceRoles.MEMBER ||
-      hasAllWorkspacePermissions(slug));
+    canManage && allowWorkspacePermissionKeys([PERMISSION_KEYS.WORKSPACE_PRODUCT_CREATE], slug);
 
   const {
     links,

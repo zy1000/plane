@@ -8,10 +8,8 @@ import type { FC } from "react";
 import React, { useEffect } from "react";
 import { observer } from "mobx-react";
 import { useParams, useLocation, Link, useNavigate } from "react-router";
-import { EUserPermissions } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { TabNavigationList, TabNavigationItem } from "@plane/propel/tab-navigation";
-import type { EUserProjectRoles } from "@plane/types";
 // hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useProject } from "@/hooks/store/use-project";
@@ -32,8 +30,7 @@ export type TNavigationItem = {
   name: string;
   href: string;
   icon: React.ElementType;
-  access: EUserPermissions[] | EUserProjectRoles[];
-  /** 若存在，需同时具备其中至少一项细粒度权限（如 project.analytics.view） */
+  /** 需具备其中至少一项（细粒度 key 或 PROJECT_MEMBER_ACCESS 等访问条件）；不填 = 项目成员即可 */
   permissionKeys?: string[];
   shouldRender: boolean;
   sortOrder: number;
@@ -56,7 +53,7 @@ export const TabNavigationRoot = observer(function TabNavigationRoot(props: TTab
 
   // Store hooks
   const { getPartialProjectById } = useProject();
-  const { allowPermissions, allowProjectPermissionKeys } = useUserPermissions();
+  const { allowProjectPermissionKeys } = useUserPermissions();
   const {
     issue: { getIssueIdByIdentifier, getIssueById },
   } = useIssueDetail();
@@ -79,7 +76,6 @@ export const TabNavigationRoot = observer(function TabNavigationRoot(props: TTab
     workspaceSlug,
     projectId,
     project,
-    allowPermissions,
     allowProjectPermissionKeys,
   });
 

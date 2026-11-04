@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { format } from "date-fns";
 import { observer } from "mobx-react";
-import { EUserPermissions, EUserPermissionsLevel, PROJECT_SPRINTS_EDIT_PERMISSION_KEY } from "@plane/constants";
+import { PERMISSION_KEYS, PROJECT_SPRINTS_EDIT_PERMISSION_KEY } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TProjectStage } from "@plane/types";
@@ -38,7 +38,7 @@ export const ProjectPlan = observer(function ProjectPlan({
 }) {
   const { t } = useTranslation();
   const { canManage } = useProjectStagePermissions(workspaceSlug, projectId);
-  const { allowProjectPermissionKeys, allowPermissions } = useUserPermissions();
+  const { allowProjectPermissionKeys } = useUserPermissions();
   const { stageTypes } = useStageTypes(workspaceSlug);
   const stageState = useProjectStages(workspaceSlug, projectId);
   const { stages, createStage, updateStage, workloadTotal } = stageState;
@@ -59,9 +59,9 @@ export const ProjectPlan = observer(function ProjectPlan({
   const canEdit = {
     stage: canManage,
     cycle: allowProjectPermissionKeys([PROJECT_SPRINTS_EDIT_PERMISSION_KEY], workspaceSlug, projectId),
-    issue: allowPermissions(
-      [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-      EUserPermissionsLevel.PROJECT,
+    // 一行一个工作项，类型各不相同：持工作项或缺陷编辑权任一即可拖，具体类型由后端按类型限定兜底
+    issue: allowProjectPermissionKeys(
+      [PERMISSION_KEYS.PROJECT_ISSUE_EDIT, PERMISSION_KEYS.PROJECT_DEFECT_EDIT],
       workspaceSlug,
       projectId
     ),

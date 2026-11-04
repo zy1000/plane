@@ -7,10 +7,9 @@
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 // plane imports
-import { EUserPermissionsLevel } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { EmptyStateDetailed } from "@plane/propel/empty-state";
-import { EIssuesStoreType, EUserProjectRoles } from "@plane/types";
+import { EIssuesStoreType } from "@plane/types";
 // hooks
 import { useCommandPalette } from "@/hooks/store/use-command-palette";
 import { useUserPermissions } from "@/hooks/store/user";
@@ -24,14 +23,12 @@ export const ProjectEmptyState = observer(function ProjectEmptyState() {
   const { t } = useTranslation();
   // store hooks
   const { toggleCreateIssueModal } = useCommandPalette();
-  const { allowPermissions } = useUserPermissions();
+  const { isProjectMember, allowIssuePermission } = useUserPermissions();
   // derived values
   const projectWorkItemFilter = useWorkItemFilterInstance(EIssuesStoreType.PROJECT, projectId);
 
-  const canPerformEmptyStateActions = allowPermissions(
-    [EUserProjectRoles.ADMIN, EUserProjectRoles.MEMBER],
-    EUserPermissionsLevel.PROJECT
-  );
+  const canClearFilters = isProjectMember(undefined, projectId);
+  const canCreateIssue = allowIssuePermission("create", undefined, undefined, projectId);
 
   return (
     <div className="relative h-full w-full overflow-y-auto">
@@ -44,7 +41,7 @@ export const ProjectEmptyState = observer(function ProjectEmptyState() {
             {
               label: t("project_issues.empty_state.issues_empty_filter.secondary_button.text"),
               onClick: projectWorkItemFilter?.clearFilters,
-              disabled: !canPerformEmptyStateActions || !projectWorkItemFilter,
+              disabled: !canClearFilters || !projectWorkItemFilter,
               variant: "secondary",
             },
           ]}
@@ -60,7 +57,7 @@ export const ProjectEmptyState = observer(function ProjectEmptyState() {
               onClick: () => {
                 toggleCreateIssueModal(true, EIssuesStoreType.PROJECT);
               },
-              disabled: !canPerformEmptyStateActions,
+              disabled: !canCreateIssue,
               variant: "primary",
             },
           ]}

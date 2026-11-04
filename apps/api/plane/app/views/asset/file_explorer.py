@@ -277,7 +277,7 @@ class FilestoreExplorerViewSet(BaseViewSet):
             counter += 1
 
     @action(detail=False, methods=["post"], url_path="ensure-root")
-    @allow_fine_permission(PermissionKey.PROJECT_ASSET_VIEW)
+    @allow_fine_permission(PermissionKey.PROJECT_FILESTORE_VIEW)
     def ensure_root(self, request, slug, project_id):
         project, root = self._root_folder(slug=slug, project_id=project_id)
         storage = S3Storage(request=request)
@@ -296,7 +296,7 @@ class FilestoreExplorerViewSet(BaseViewSet):
         )
 
     @action(detail=False, methods=["get"], url_path="list")
-    @allow_fine_permission(PermissionKey.PROJECT_ASSET_VIEW)
+    @allow_fine_permission(PermissionKey.PROJECT_FILESTORE_VIEW)
     def list_folder(self, request, slug, project_id):
         query_serializer = FolderListQuerySerializer(data=request.query_params)
         query_serializer.is_valid(raise_exception=True)
@@ -343,13 +343,13 @@ class FilestoreExplorerViewSet(BaseViewSet):
         )
 
     @action(detail=False, methods=["get"], url_path="tree")
-    @allow_fine_permission(PermissionKey.PROJECT_ASSET_VIEW)
+    @allow_fine_permission(PermissionKey.PROJECT_FILESTORE_VIEW)
     def folder_tree(self, request, slug, project_id):
         _, root = self._root_folder(slug=slug, project_id=project_id)
         return Response({"tree": self._serialize_tree(root)}, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=["get"], url_path="breadcrumb")
-    @allow_fine_permission(PermissionKey.PROJECT_ASSET_VIEW)
+    @allow_fine_permission(PermissionKey.PROJECT_FILESTORE_VIEW)
     def breadcrumb(self, request, slug, project_id):
         query_serializer = FolderBreadcrumbQuerySerializer(data=request.query_params)
         query_serializer.is_valid(raise_exception=True)
@@ -390,7 +390,7 @@ class FilestoreExplorerViewSet(BaseViewSet):
         )
 
     @action(detail=False, methods=["get"], url_path="folder-stats")
-    @allow_fine_permission(PermissionKey.PROJECT_ASSET_VIEW)
+    @allow_fine_permission(PermissionKey.PROJECT_FILESTORE_VIEW)
     def folder_stats(self, request, slug, project_id):
         """
         Recursive size + direct/recursive object counts for a folder.
@@ -451,7 +451,7 @@ class FilestoreExplorerViewSet(BaseViewSet):
         )
 
     @action(detail=False, methods=["post"], url_path="folder")
-    @allow_fine_permission(PermissionKey.PROJECT_ASSET_UPLOAD)
+    @allow_fine_permission(PermissionKey.PROJECT_FILESTORE_EDIT)
     def create_folder(self, request, slug, project_id):
         serializer = FolderCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -477,7 +477,7 @@ class FilestoreExplorerViewSet(BaseViewSet):
             status=status.HTTP_201_CREATED,
         )
 
-    @allow_fine_permission(PermissionKey.PROJECT_ASSET_UPLOAD)
+    @allow_fine_permission(PermissionKey.PROJECT_FILESTORE_EDIT)
     def rename_folder(self, request, slug, project_id, folder_id):
         serializer = FolderRenameSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -521,7 +521,7 @@ class FilestoreExplorerViewSet(BaseViewSet):
             {"folder": _serialize_folder(folder)}, status=status.HTTP_200_OK
         )
 
-    @allow_fine_permission(PermissionKey.PROJECT_ASSET_DELETE)
+    @allow_fine_permission(PermissionKey.PROJECT_FILESTORE_DELETE)
     def delete_folder(self, request, slug, project_id, folder_id):
         folder = FilePath.objects.filter(pk=folder_id).first()
         if folder is None:
@@ -555,7 +555,7 @@ class FilestoreExplorerViewSet(BaseViewSet):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(detail=False, methods=["post"], url_path="upload")
-    @allow_fine_permission(PermissionKey.PROJECT_ASSET_UPLOAD)
+    @allow_fine_permission(PermissionKey.PROJECT_FILESTORE_EDIT)
     def upload(self, request, slug, project_id):
         serializer = UploadAssetSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -606,7 +606,7 @@ class FilestoreExplorerViewSet(BaseViewSet):
         )
 
     @action(detail=False, methods=["patch"], url_path="(?P<asset_id>[^/.]+)/uploaded")
-    @allow_fine_permission(PermissionKey.PROJECT_ASSET_UPLOAD)
+    @allow_fine_permission(PermissionKey.PROJECT_FILESTORE_EDIT)
     def mark_uploaded(self, request, slug, project_id, asset_id):
         serializer = MarkUploadedSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -663,7 +663,7 @@ class FilestoreExplorerViewSet(BaseViewSet):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(detail=False, methods=["patch"], url_path="(?P<asset_id>[^/.]+)/rename")
-    @allow_fine_permission(PermissionKey.PROJECT_ASSET_EDIT)
+    @allow_fine_permission(PermissionKey.PROJECT_FILESTORE_EDIT)
     def rename_asset(self, request, slug, project_id, asset_id):
         serializer = AssetRenameSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -718,7 +718,7 @@ class FilestoreExplorerViewSet(BaseViewSet):
         return Response({"asset": _serialize_asset(asset)}, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=["post"], url_path="batch-delete")
-    @allow_fine_permission(PermissionKey.PROJECT_ASSET_DELETE)
+    @allow_fine_permission(PermissionKey.PROJECT_FILESTORE_DELETE)
     def batch_delete(self, request, slug, project_id):
         serializer = BatchDeleteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -763,7 +763,7 @@ class FilestoreExplorerViewSet(BaseViewSet):
         return Response({"deleted_ids": deleted_ids}, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=["post"], url_path="batch-copy")
-    @allow_fine_permission(PermissionKey.PROJECT_ASSET_UPLOAD)
+    @allow_fine_permission(PermissionKey.PROJECT_FILESTORE_EDIT)
     def batch_copy(self, request, slug, project_id):
         serializer = BatchCopySerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -808,7 +808,7 @@ class FilestoreExplorerViewSet(BaseViewSet):
         return Response(result, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=["post"], url_path="batch-move")
-    @allow_fine_permission(PermissionKey.PROJECT_ASSET_UPLOAD)
+    @allow_fine_permission(PermissionKey.PROJECT_FILESTORE_EDIT)
     def batch_move(self, request, slug, project_id):
         serializer = BatchMoveSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -876,7 +876,7 @@ class FilestoreExplorerViewSet(BaseViewSet):
         return Response(result, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=["get"], url_path="batch-download")
-    @allow_fine_permission(PermissionKey.PROJECT_ASSET_DOWNLOAD)
+    @allow_fine_permission(PermissionKey.PROJECT_FILESTORE_VIEW)
     def batch_download(self, request, slug, project_id):
         project, root = self._root_folder(slug=slug, project_id=project_id)
 
@@ -988,7 +988,7 @@ class FilestoreExplorerViewSet(BaseViewSet):
         return response
 
     @action(detail=False, methods=["get"], url_path="../search")
-    @allow_fine_permission(PermissionKey.PROJECT_ASSET_VIEW)
+    @allow_fine_permission(PermissionKey.PROJECT_FILESTORE_VIEW)
     def search(self, request, slug, project_id):
         query_serializer = FilestoreSearchQuerySerializer(data=request.query_params)
         query_serializer.is_valid(raise_exception=True)

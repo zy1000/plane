@@ -32,7 +32,7 @@ class WorkflowPrincipalDimension(models.TextChoices):
 
 class WorkflowPrincipalKind(models.TextChoices):
     MEMBER = "member", "指定成员"
-    ROLE = "role", "项目角色"
+    ROLE = "role", "角色"
     DYNAMIC = "dynamic", "动态对象"
 
 
@@ -221,8 +221,8 @@ class WorkflowTransitionPrincipal(BaseModel):
     """
     工作流流转边上"被选中的对象"，统一承载发起人 / 目标负责人 / 审批人三个维度。
     - dimension 区分维度（initiator / assignee / approver）。
-    - kind 区分对象类型（member 指定成员 / role 项目角色 / dynamic 动态对象），
-      并与 member / role / dynamic_target 三列严格一一对应（恰好一列有值）。
+    - kind 区分对象类型（member 指定成员 / role 角色 / dynamic 动态对象），
+      并与 member / job_role / dynamic_target 三列严格一一对应（恰好一列有值）。
     方案作用域经 transition 间接获得，无需独立的 scheme/workspace 冗余字段。
     启用/停用配置请使用软删除（deleted_at）。
     """
@@ -251,32 +251,22 @@ class WorkflowTransitionPrincipal(BaseModel):
         related_name="workflow_transition_principals",
         verbose_name="指定成员",
     )
-    role = models.ForeignKey(
-        "db.ProjectRole",
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name="workflow_transition_principals",
-        verbose_name="项目角色",
-    )
-    # 工作区角色模板。模式方案没有项目、选不了 ProjectRole，只能指模板，运行时按
-    # 「本项目里 source_template 等于它的角色」解析（需求 4.4）。kind=role 时与 role 恰好一列有值：
-    # 模式方案只用它；项目方案自己配的用 role，脱离时从模式方案拷过来的仍是它。
-    # CASCADE 同 role：删模板就去掉引用它的审批人行（SET_NULL 会撞上面的二选一约束）。
-    workspace_role = models.ForeignKey(
-        "db.WorkspaceRole",
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name="workflow_transition_principals",
-        verbose_name="角色模板",
-    )
     dynamic_target = models.CharField(
         max_length=20,
         choices=WorkflowApproverTarget.choices,
         null=True,
         blank=True,
         verbose_name="动态对象",
+    )
+    # 角色（数据字典 job_role 的值）。kind=role 时运行时找「本项目挂了这个角色的活跃成员」，
+    # 项目×产品的研发矩阵里填了人时先按矩阵找。模式方案与项目方案都用它（角色是工作区级字典，不分项目）。
+    job_role = models.ForeignKey(
+        "db.DataDictionaryItem",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="workflow_transition_principals",
+        verbose_name="角色",
     )
 
     class Meta:
@@ -288,14 +278,9 @@ class WorkflowTransitionPrincipal(BaseModel):
             # kind 与三列严格一致（恰好一列有值）
             models.CheckConstraint(
                 check=(
-                    Q(kind="member", member__isnull=False, role__isnull=True, workspace_role__isnull=True,
-                      dynamic_target__isnull=True)
-                    | Q(kind="role", member__isnull=True, role__isnull=False, workspace_role__isnull=True,
-                        dynamic_target__isnull=True)
-                    | Q(kind="role", member__isnull=True, role__isnull=True, workspace_role__isnull=False,
-                        dynamic_target__isnull=True)
-                    | Q(kind="dynamic", member__isnull=True, role__isnull=True, workspace_role__isnull=True,
-                        dynamic_target__isnull=False)
+                    Q(kind="member", member__isnull=False, job_role__isnull=True, dynamic_target__isnull=True)
+                    | Q(kind="role", member__isnull=True, job_role__isnull=False, dynamic_target__isnull=True)
+                    | Q(kind="dynamic", member__isnull=True, job_role__isnull=True, dynamic_target__isnull=False)
                 ),
                 name="wf_principal_kind_coherent",
             ),
@@ -306,14 +291,9 @@ class WorkflowTransitionPrincipal(BaseModel):
                 name="wf_principal_uniq_member",
             ),
             models.UniqueConstraint(
-                fields=["transition", "dimension", "role"],
-                condition=Q(role__isnull=False, deleted_at__isnull=True),
-                name="wf_principal_uniq_role",
-            ),
-            models.UniqueConstraint(
-                fields=["transition", "dimension", "workspace_role"],
-                condition=Q(workspace_role__isnull=False, deleted_at__isnull=True),
-                name="wf_principal_uniq_workspace_role",
+                fields=["transition", "dimension", "job_role"],
+                condition=Q(job_role__isnull=False, deleted_at__isnull=True),
+                name="wf_principal_uniq_job_role",
             ),
             models.UniqueConstraint(
                 fields=["transition", "dimension", "dynamic_target"],
@@ -323,7 +303,7 @@ class WorkflowTransitionPrincipal(BaseModel):
         ]
 
     def __str__(self):
-        target = self.member_id or self.role_id or self.workspace_role_id or self.dynamic_target
+        target = self.member_id or self.job_role_id or self.dynamic_target
         return f"[{self.dimension}/{self.kind}] {target} → {self.transition}"
 
     def clean(self):
@@ -332,11 +312,9 @@ class WorkflowTransitionPrincipal(BaseModel):
         from .workspace import WorkspaceMember
 
         # 1) kind 与三列一致性兜底（数据库 CheckConstraint 的应用层镜像）
-        if self.role_id is not None and self.workspace_role_id is not None:
-            raise ValidationError("项目角色与角色模板只能填写其中一项。")
         populated = {
             WorkflowPrincipalKind.MEMBER: self.member_id is not None,
-            WorkflowPrincipalKind.ROLE: self.role_id is not None or self.workspace_role_id is not None,
+            WorkflowPrincipalKind.ROLE: self.job_role_id is not None,
             WorkflowPrincipalKind.DYNAMIC: bool(self.dynamic_target),
         }
         if sum(1 for is_set in populated.values() if is_set) != 1:
@@ -373,30 +351,7 @@ class WorkflowTransitionPrincipal(BaseModel):
                     }
                 )
 
-        # 3) role：项目角色只能用在它所属项目的项目方案里（模式方案只能选角色模板，批次 4）
-        if (
-            self.kind == WorkflowPrincipalKind.ROLE
-            and self.role_id
-            and self.transition_id
-        ):
-            if str(self.role.project_id) != str(self.transition.scheme.project_id):
-                raise ValidationError({"role": "该角色不属于当前项目。"})
-
-        # 3b) 角色模板：须是本工作区的项目角色模板
-        if (
-            self.kind == WorkflowPrincipalKind.ROLE
-            and self.workspace_role_id
-            and self.transition_id
-        ):
-            from .workspace import WorkspaceRole
-
-            if (
-                str(self.workspace_role.workspace_id) != str(self.transition.scheme.workspace_id)
-                or self.workspace_role.type != WorkspaceRole.RoleType.PROJECT_TEMPLATE
-            ):
-                raise ValidationError({"workspace_role": "该角色模板不属于当前工作区。"})
-
-        # 4) dynamic_target 必须是受支持的动态对象类型
+        # 3) dynamic_target 必须是受支持的动态对象类型
         if (
             self.kind == WorkflowPrincipalKind.DYNAMIC
             and self.dynamic_target not in WorkflowApproverTarget.values

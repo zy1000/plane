@@ -623,6 +623,11 @@ export const coreRoutes: RouteConfigEntry[] = [
             ":workspaceSlug/settings/roles",
             "./(all)/[workspaceSlug]/(settings)/settings/(workspace)/roles/page.tsx"
           ),
+          // 权限组详情（工作区权限组 / 项目权限组模板）
+          route(
+            ":workspaceSlug/settings/roles/:roleId",
+            "./(all)/[workspaceSlug]/(settings)/settings/(workspace)/roles/[roleId]/page.tsx"
+          ),
           route(
             ":workspaceSlug/settings/templates",
             "./(all)/[workspaceSlug]/(settings)/settings/(workspace)/templates/page.tsx"
@@ -701,10 +706,19 @@ export const coreRoutes: RouteConfigEntry[] = [
               ":workspaceSlug/settings/projects/:projectId/teams",
               "./(all)/[workspaceSlug]/(settings)/settings/projects/[projectId]/teams/page.tsx"
             ),
-            // Project Roles
+            // Project permission groups（权限组列表 / 详情）
             route(
               ":workspaceSlug/settings/projects/:projectId/roles",
               "./(all)/[workspaceSlug]/(settings)/settings/projects/[projectId]/roles/page.tsx"
+            ),
+            route(
+              ":workspaceSlug/settings/projects/:projectId/roles/:groupId",
+              "./(all)/[workspaceSlug]/(settings)/settings/projects/[projectId]/roles/[groupId]/page.tsx"
+            ),
+            // Project products（研发产品：产品研发矩阵）
+            route(
+              ":workspaceSlug/settings/projects/:projectId/products",
+              "./(all)/[workspaceSlug]/(settings)/settings/projects/[projectId]/products/page.tsx"
             ),
             // Project Features
             route(
@@ -790,16 +804,8 @@ export const coreRoutes: RouteConfigEntry[] = [
             "./(all)/[workspaceSlug]/(settings)/settings/products/[productId]/page.tsx"
           ),
           route(
-            ":workspaceSlug/settings/products/:productId/members",
-            "./(all)/[workspaceSlug]/(settings)/settings/products/[productId]/members/page.tsx"
-          ),
-          route(
             ":workspaceSlug/settings/products/:productId/teams",
             "./(all)/[workspaceSlug]/(settings)/settings/products/[productId]/teams/page.tsx"
-          ),
-          route(
-            ":workspaceSlug/settings/products/:productId/permissions",
-            "./(all)/[workspaceSlug]/(settings)/settings/products/[productId]/permissions/page.tsx"
           ),
         ]),
       ]),

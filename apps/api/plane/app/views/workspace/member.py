@@ -40,9 +40,9 @@ from plane.db.models import (
     Workspace,
     WorkspaceGroupMember,
     WorkspaceGroupRole,
-    WorkspaceRole,
 )
 from plane.utils.cache import invalidate_cache
+from plane.utils.job_role import member_job_role_map
 from plane.utils.workspace_access import build_workspace_my_access
 
 from .. import BaseViewSet
@@ -50,25 +50,17 @@ from .. import BaseViewSet
 
 WORKSPACE_MEMBER_LOOKUP_PERMISSIONS = (
     PermissionKey.WORKSPACE_MEMBER_VIEW,
-    PermissionKey.WORKSPACE_MEMBER_INVITE,
-    PermissionKey.WORKSPACE_MEMBER_EDIT,
-    PermissionKey.WORKSPACE_MEMBER_REMOVE,
-    PermissionKey.WORKSPACE_GROUP_MANAGE_MEMBER,
+    PermissionKey.WORKSPACE_MEMBER_MANAGE,
+    PermissionKey.WORKSPACE_TEAM_MANAGE,
 )
 
-WORKSPACE_MEMBER_ADMIN_DETAIL_PERMISSIONS = {
-    PermissionKey.WORKSPACE_MEMBER_INVITE.value,
-    PermissionKey.WORKSPACE_MEMBER_EDIT.value,
-    PermissionKey.WORKSPACE_MEMBER_REMOVE.value,
-}
+WORKSPACE_MEMBER_ADMIN_DETAIL_PERMISSIONS = {PermissionKey.WORKSPACE_MEMBER_MANAGE.value}
 
 ACTIVE_WORKSPACE_MEMBER_ROLES_PREFETCH = Prefetch(
     "member_roles",
     queryset=WorkspaceMemberRole.objects.filter(
         deleted_at__isnull=True,
         role__deleted_at__isnull=True,
-        role__legacy_role__isnull=True,
-        role__type=WorkspaceRole.RoleType.WORKSPACE,
     ).select_related("role"),
     to_attr="active_member_roles",
 )
@@ -105,7 +97,6 @@ class WorkSpaceMemberViewSet(BaseViewSet):
                 deleted_at__isnull=True,
                 role__workspace_id=workspace_id,
                 role__deleted_at__isnull=True,
-                role__type=WorkspaceRole.RoleType.WORKSPACE,
             )
             .values_list("group__group_members__member_id", "role_id")
             .distinct()
@@ -171,10 +162,10 @@ class WorkSpaceMemberViewSet(BaseViewSet):
             fields=(
                 "id",
                 "member",
-                "role",
                 "custom_role_ids",
                 "group_role_ids",
                 "group_ids",
+                "job_role_ids",
                 "is_active",
                 "employee_id",
                 "department",
@@ -187,6 +178,9 @@ class WorkSpaceMemberViewSet(BaseViewSet):
                 ),
                 "group_ids_by_member": self._get_group_ids_by_member(workspace_members),
                 "extra_info_by_user": self._get_extra_info_by_user(workspace_members),
+                "job_role_ids_by_member": member_job_role_map(
+                    [workspace_member.id for workspace_member in workspace_members]
+                ),
             },
         )
         return Response(serializer.data, status=status.HTTP_200_OK)
@@ -209,11 +203,11 @@ class WorkSpaceMemberViewSet(BaseViewSet):
         )
         serializer = serializer_class(
             member,
-            fields=("id", "member", "role", "custom_role_ids", "group_role_ids", "group_ids"),
+            fields=("id", "member", "custom_role_ids", "group_role_ids", "group_ids", "job_role_ids"),
         )
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    @allow_fine_permission(PermissionKey.WORKSPACE_MEMBER_EDIT, level="WORKSPACE")
+    @allow_fine_permission(PermissionKey.WORKSPACE_MEMBER_MANAGE, level="WORKSPACE")
     def partial_update(self, request, slug, pk):
         workspace_member = WorkspaceMember.objects.get(
             pk=pk, workspace__slug=slug, member__is_bot=False, is_active=True
@@ -231,7 +225,7 @@ class WorkSpaceMemberViewSet(BaseViewSet):
             return Response(serializer.data, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    @allow_fine_permission(PermissionKey.WORKSPACE_MEMBER_REMOVE, level="WORKSPACE")
+    @allow_fine_permission(PermissionKey.WORKSPACE_MEMBER_MANAGE, level="WORKSPACE")
     def destroy(self, request, slug, pk):
         # Check the user role who is deleting the user
         workspace_member = WorkspaceMember.objects.get(
@@ -257,7 +251,6 @@ class WorkSpaceMemberViewSet(BaseViewSet):
                     "project_projectmember",
                     filter=Q(
                         project_projectmember__member_id=workspace_member.member_id,
-                        project_projectmember__role=20,
                     ),
                 ),
             )
@@ -288,7 +281,7 @@ class WorkSpaceMemberViewSet(BaseViewSet):
     )
     @invalidate_cache(path="/api/users/me/settings/")
     @invalidate_cache(path="api/users/me/workspaces/", user=False, multiple=True)
-    @allow_fine_permission(PermissionKey.WORKSPACE_MEMBER_LEAVE, level="WORKSPACE")
+    @allow_workspace_member
     def leave(self, request, slug):
         workspace_member = WorkspaceMember.objects.get(workspace__slug=slug, member=request.user, is_active=True)
 
@@ -305,7 +298,6 @@ class WorkSpaceMemberViewSet(BaseViewSet):
                     "project_projectmember",
                     filter=Q(
                         project_projectmember__member_id=request.user.id,
-                        project_projectmember__role=20,
                     ),
                 ),
             )
@@ -390,12 +382,17 @@ class WorkspaceMemberCustomRolesAPIView(BaseAPIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
         return Response(
-            {"custom_role_ids": [str(role.role_id) for role in workspace_member.active_member_roles]},
+            {
+                "custom_role_ids": [str(role.role_id) for role in workspace_member.active_member_roles],
+                "job_role_ids": [
+                    str(value) for value in workspace_member.job_role_links.values_list("job_role_id", flat=True)
+                ],
+            },
             status=status.HTTP_200_OK,
         )
 
     @transaction.atomic
-    @allow_fine_permission(PermissionKey.WORKSPACE_MEMBER_EDIT, level="WORKSPACE")
+    @allow_fine_permission(PermissionKey.WORKSPACE_MEMBER_MANAGE, level="WORKSPACE")
     def put(self, request, slug, pk):
         workspace_member = self.get_member(slug, pk)
         if not workspace_member:
@@ -457,7 +454,7 @@ class WorkspaceMemberGroupsAPIView(BaseAPIView):
         return Response({"group_ids": group_ids}, status=status.HTTP_200_OK)
 
     @transaction.atomic
-    @allow_fine_permission(PermissionKey.WORKSPACE_GROUP_MANAGE_MEMBER, level="WORKSPACE")
+    @allow_fine_permission(PermissionKey.WORKSPACE_TEAM_MANAGE, level="WORKSPACE")
     def put(self, request, slug, pk):
         workspace_member = self.get_member(slug, pk)
         if not workspace_member:
@@ -547,7 +544,7 @@ class WorkspaceProjectMemberEndpoint(BaseAPIView):
 class WorkspaceMemberNetworkZoneAPIView(BaseAPIView):
     """管理员改成员的大网 / 小网归属（docs/network-zone/plan.md）。改完踢掉此人全部会话。"""
 
-    @allow_fine_permission(PermissionKey.WORKSPACE_MEMBER_EDIT, level="WORKSPACE")
+    @allow_fine_permission(PermissionKey.WORKSPACE_MEMBER_MANAGE, level="WORKSPACE")
     def patch(self, request, slug, pk):
         from plane.db.models import NetworkZone
         from plane.utils.network_zone import set_user_zone

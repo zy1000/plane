@@ -11,7 +11,7 @@ import { observer } from "mobx-react";
 import { useParams, useRouter } from "next/navigation";
 import { Ellipsis } from "lucide-react";
 // plane imports
-import { EUserPermissions, EUserPermissionsLevel, PROJECT_TRACKER_ELEMENTS } from "@plane/constants";
+import { PROJECT_TRACKER_ELEMENTS, WORKSPACE_PROJECT_CREATE_PERMISSION_KEY } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Loader } from "@plane/ui";
@@ -39,7 +39,7 @@ export const SidebarProjectsList = observer(function SidebarProjectsList() {
   const tRef = useRef(t);
   tRef.current = t;
   const { toggleCreateProjectModal } = useCommandPalette();
-  const { allowPermissions } = useUserPermissions();
+  const { allowWorkspacePermissionKeys } = useUserPermissions();
   const { preferences: projectPreferences } = useProjectNavigationPreferences();
   const { isExtendedProjectSidebarOpened, toggleExtendedProjectSidebar } = useAppTheme();
 
@@ -52,10 +52,8 @@ export const SidebarProjectsList = observer(function SidebarProjectsList() {
   const navigateTo = useCallback((to: string) => routerRef.current.push(to), []);
 
   // auth
-  const isAuthorizedUser = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.WORKSPACE
-  );
+  // 侧栏「添加项目」：与后端 ProjectBasePermission 的 POST 同一把 key
+  const isAuthorizedUser = allowWorkspacePermissionKeys([WORKSPACE_PROJECT_CREATE_PERMISSION_KEY]);
 
   // Compute limited projects for main sidebar
   const displayedProjects = projectPreferences.showLimitedProjects

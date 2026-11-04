@@ -393,8 +393,9 @@ export interface IUserProfileProjectSegregation {
   };
 }
 
+/** 当前用户在工作区里能进的项目：accessible 恒为 true（成员 / 负责 / 白名单），member = 是不是成员表里的人 */
 export interface IUserProjectsRole {
-  [projectId: string]: TUserPermissions;
+  [projectId: string]: { accessible: boolean; member: boolean };
 }
 
 export interface IUserEmailNotificationSettings {

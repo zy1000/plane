@@ -35,7 +35,7 @@ from django.core.serializers.json import DjangoJSONEncoder
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from plane.app.permissions import allow_permission, ROLE, allow_fine_permission, PermissionKey
+from plane.app.permissions import allow_project_member, allow_fine_permission, PermissionKey
 from plane.app.serializers import (
     CycleOverdueRecordSerializer,
     CycleSerializer,
@@ -61,7 +61,6 @@ from plane.db.models import (
     Label,
     User,
     Project,
-    ProjectMember,
     UserRecentVisit,
     TestPlan,
 )
@@ -87,6 +86,7 @@ from plane.utils.cycle.overdue_strategy import (
     sync_overdue_on_status_change,
 )
 from plane.utils.timezone_converter import convert_to_utc, user_timezone_converter
+from plane.utils.visibility import can_access_project, visible_projects_q
 
 
 class CycleViewSet(BaseViewSet):
@@ -149,8 +149,7 @@ class CycleViewSet(BaseViewSet):
             .filter(workspace__slug=self.kwargs.get("slug"))
             .filter(project_id=self.kwargs.get("project_id"))
             .filter(
-                project__project_projectmember__member=self.request.user,
-                project__project_projectmember__is_active=True,
+                visible_projects_q(self.request.user, self.kwargs.get("slug"), "project"),
             )
             .filter(project__archived_at__isnull=True)
             .select_related("project", "workspace", "owned_by")
@@ -328,7 +327,7 @@ class CycleViewSet(BaseViewSet):
             ]
         return data
 
-    @allow_fine_permission(PermissionKey.SPRINTS_VIEW)
+    @allow_fine_permission(PermissionKey.PROJECT_CYCLE_VIEW)
     def list(self, request, slug, project_id):
         cycle_status = request.query_params.getlist('status')
         cycle_view = request.GET.get("cycle_view", "all")
@@ -387,7 +386,7 @@ class CycleViewSet(BaseViewSet):
         data = self._enrich_cycles_with_plans(data)
         return Response(data, status=status.HTTP_200_OK)
 
-    @allow_fine_permission(PermissionKey.SPRINTS_CREATE)
+    @allow_fine_permission(PermissionKey.PROJECT_CYCLE_CREATE)
     def create(self, request, slug, project_id):
         if request.data.get("end_date", None) is not None:
             serializer = CycleWriteSerializer(
@@ -482,7 +481,7 @@ class CycleViewSet(BaseViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-    @allow_fine_permission(PermissionKey.SPRINTS_EDIT)
+    @allow_fine_permission(PermissionKey.PROJECT_CYCLE_EDIT)
     def partial_update(self, request, slug, project_id, pk):
         queryset = self.get_queryset().filter(workspace__slug=slug, project_id=project_id, pk=pk)
         cycle = queryset.first()
@@ -637,7 +636,7 @@ class CycleViewSet(BaseViewSet):
             return Response(cycle, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    @allow_fine_permission(PermissionKey.SPRINTS_VIEW)
+    @allow_fine_permission(PermissionKey.PROJECT_CYCLE_VIEW)
     def retrieve(self, request, slug, project_id, pk):
         queryset = self.get_queryset().filter(archived_at__isnull=True).filter(pk=pk)
 
@@ -718,7 +717,7 @@ class CycleViewSet(BaseViewSet):
         )
         return Response(data, status=status.HTTP_200_OK)
 
-    @allow_fine_permission(PermissionKey.SPRINTS_VIEW)
+    @allow_fine_permission(PermissionKey.PROJECT_CYCLE_VIEW)
     def overdues(self, request, slug, project_id, pk):
         if not Cycle.objects.filter(
             workspace__slug=slug,
@@ -736,7 +735,7 @@ class CycleViewSet(BaseViewSet):
         serializer = CycleOverdueRecordSerializer(records, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    @allow_fine_permission(PermissionKey.SPRINTS_DELETE)
+    @allow_fine_permission(PermissionKey.PROJECT_CYCLE_DELETE)
     def destroy(self, request, slug, project_id, pk):
         cycle = Cycle.objects.get(workspace__slug=slug, project_id=project_id, pk=pk)
 
@@ -792,7 +791,7 @@ class CycleViewSet(BaseViewSet):
 
 
 class CycleDateCheckEndpoint(BaseAPIView):
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
+    @allow_fine_permission(PermissionKey.PROJECT_CYCLE_CREATE, PermissionKey.PROJECT_CYCLE_EDIT)
     def post(self, request, slug, project_id):
         start_date = request.data.get("start_date", False)
         end_date = request.data.get("end_date", False)
@@ -842,7 +841,7 @@ class CycleFavoriteViewSet(BaseViewSet):
             .select_related("cycle", "cycle__owned_by")
         )
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
+    @allow_project_member
     def create(self, request, slug, project_id):
         _ = UserFavorite.objects.create(
             project_id=project_id,
@@ -852,7 +851,7 @@ class CycleFavoriteViewSet(BaseViewSet):
         )
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
+    @allow_project_member
     def destroy(self, request, slug, project_id, cycle_id):
         cycle_favorite = UserFavorite.objects.get(
             project=project_id,
@@ -866,7 +865,7 @@ class CycleFavoriteViewSet(BaseViewSet):
 
 
 class TransferCycleIssueEndpoint(BaseAPIView):
-    @allow_fine_permission(PermissionKey.SPRINTS_ISSUE_MANAGE)
+    @allow_fine_permission(PermissionKey.PROJECT_CYCLE_EDIT)
     def post(self, request, slug, project_id, cycle_id):
         new_cycle_id = request.data.get("new_cycle_id", False)
 
@@ -897,7 +896,7 @@ class TransferCycleIssueEndpoint(BaseAPIView):
 
 
 class CycleUserPropertiesEndpoint(BaseAPIView):
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    @allow_project_member
     def patch(self, request, slug, project_id, cycle_id):
         cycle_properties = CycleUserProperties.objects.get(
             user=request.user,
@@ -917,7 +916,7 @@ class CycleUserPropertiesEndpoint(BaseAPIView):
         serializer = CycleUserPropertiesSerializer(cycle_properties)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    @allow_project_member
     def get(self, request, slug, project_id, cycle_id):
         cycle_properties, _ = CycleUserProperties.objects.get_or_create(
             user=request.user,
@@ -930,7 +929,7 @@ class CycleUserPropertiesEndpoint(BaseAPIView):
 
 
 class CycleProgressEndpoint(BaseAPIView):
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    @allow_fine_permission(PermissionKey.PROJECT_CYCLE_VIEW)
     def get(self, request, slug, project_id, cycle_id):
         cycle = Cycle.objects.filter(workspace__slug=slug, project_id=project_id, id=cycle_id).first()
         if not cycle:
@@ -1058,7 +1057,7 @@ class CycleProgressEndpoint(BaseAPIView):
 
 
 class CycleAnalyticsEndpoint(BaseAPIView):
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    @allow_fine_permission(PermissionKey.PROJECT_CYCLE_VIEW)
     def get(self, request, slug, project_id, cycle_id):
         analytic_type = request.GET.get("type", "issues")
         cycle = (
@@ -1336,14 +1335,9 @@ class CycleOverdueByAssigneeEndpoint(BaseAPIView):
     响应结构与项目统计中的 overdue_by_assignee 保持一致，便于前端复用 UI。
     """
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    @allow_fine_permission(PermissionKey.PROJECT_CYCLE_VIEW)
     def get(self, request, slug, project_id, cycle_id):
-        if not ProjectMember.objects.filter(
-            workspace__slug=slug,
-            project_id=project_id,
-            member_id=request.user.id,
-            is_active=True,
-        ).exists():
+        if not can_access_project(request.user, slug, project_id):
             return Response({"error": "forbidden"}, status=status.HTTP_403_FORBIDDEN)
 
         today = timezone.now().date()
@@ -1430,14 +1424,9 @@ class CycleIssueTypeDistributionEndpoint(BaseAPIView):
     返回指定迭代中按工作项类型聚合的分布数据。
     """
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    @allow_fine_permission(PermissionKey.PROJECT_CYCLE_VIEW)
     def get(self, request, slug, project_id, cycle_id):
-        if not ProjectMember.objects.filter(
-            workspace__slug=slug,
-            project_id=project_id,
-            member_id=request.user.id,
-            is_active=True,
-        ).exists():
+        if not can_access_project(request.user, slug, project_id):
             return Response({"error": "forbidden"}, status=status.HTTP_403_FORBIDDEN)
 
         issue_type_rows = list(
@@ -1475,7 +1464,7 @@ class CycleIssueTypeDistributionEndpoint(BaseAPIView):
 class CyclePlansEndpoint(BaseAPIView):
     """返回当前迭代已关联的测试计划列表。"""
 
-    @allow_fine_permission(PermissionKey.SPRINTS_VIEW)
+    @allow_fine_permission(PermissionKey.PROJECT_CYCLE_VIEW)
     def get(self, request, slug, project_id, cycle_id):
         plans_qs = (
             TestPlan.objects.filter(
@@ -1495,7 +1484,7 @@ class CyclePlansEndpoint(BaseAPIView):
 class CycleSelectablePlansEndpoint(BaseAPIView):
     """返回指定项目下尚未关联到任何迭代的测试计划，用于"迭代 -> 关联测试计划"弹窗选择。"""
 
-    @allow_fine_permission(PermissionKey.SPRINTS_PLAN_MANAGE)
+    @allow_fine_permission(PermissionKey.PROJECT_CYCLE_EDIT)
     def get(self, request, slug, project_id, cycle_id):
         if not Cycle.objects.filter(
             workspace__slug=slug, project_id=project_id, id=cycle_id
@@ -1520,7 +1509,7 @@ class CycleSelectablePlansEndpoint(BaseAPIView):
 class CycleAssociatePlansEndpoint(BaseAPIView):
     """将一组测试计划的 cycle 字段批量更新为当前迭代。"""
 
-    @allow_fine_permission(PermissionKey.SPRINTS_PLAN_MANAGE)
+    @allow_fine_permission(PermissionKey.PROJECT_CYCLE_EDIT)
     def post(self, request, slug, project_id, cycle_id):
         plan_ids = request.data.get("plan_ids") or []
         if not isinstance(plan_ids, list) or len(plan_ids) == 0:
@@ -1549,7 +1538,7 @@ class CycleAssociatePlansEndpoint(BaseAPIView):
 class CycleCancelPlanAssociationEndpoint(BaseAPIView):
     """解除一组测试计划与当前迭代的关联关系（仅当它们当前归属该迭代时）。"""
 
-    @allow_fine_permission(PermissionKey.SPRINTS_PLAN_MANAGE)
+    @allow_fine_permission(PermissionKey.PROJECT_CYCLE_EDIT)
     def post(self, request, slug, project_id, cycle_id):
         plan_ids = request.data.get("plan_ids") or []
         if not isinstance(plan_ids, list) or len(plan_ids) == 0:

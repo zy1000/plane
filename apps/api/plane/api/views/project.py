@@ -7,7 +7,7 @@ import json
 
 # Django imports
 from django.db import IntegrityError
-from django.db.models import Exists, F, Func, OuterRef, Prefetch, Q, Subquery, Count
+from django.db.models import Exists, F, Func, OuterRef, Prefetch, Subquery, Count
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 from django.core.serializers.json import DjangoJSONEncoder
@@ -40,13 +40,20 @@ from plane.db.models import (
 from plane.bgtasks.webhook_task import model_activity, webhook_activity
 from .base import BaseAPIView
 from plane.utils.host import base_host
+from plane.utils.project.member import add_project_admins
 from plane.utils.project_stage import copy_stages_from_dev_mode
 from plane.api.serializers import (
     ProjectSerializer,
     ProjectCreateSerializer,
     ProjectUpdateSerializer,
 )
-from plane.app.permissions import ProjectBasePermission, PermissionKey, allow_fine_permission
+from plane.app.permissions import (
+    allow_project_member,
+    ProjectBasePermission,
+    ProjectEntityPermission,
+    PermissionKey,
+    allow_fine_permission,
+)
 from plane.utils.openapi import (
     project_docs,
     PROJECT_ID_PARAMETER,
@@ -69,6 +76,7 @@ from plane.utils.openapi import (
     ARCHIVED_RESPONSE,
     UNARCHIVED_RESPONSE,
 )
+from plane.utils.visibility import visible_projects_q
 
 
 class ProjectListCreateAPIEndpoint(BaseAPIView):
@@ -83,13 +91,7 @@ class ProjectListCreateAPIEndpoint(BaseAPIView):
     def get_queryset(self):
         return (
             Project.objects.filter(workspace__slug=self.kwargs.get("slug"))
-            .filter(
-                Q(
-                    project_projectmember__member=self.request.user,
-                    project_projectmember__is_active=True,
-                )
-                | Q(network=2)
-            )
+            .filter(visible_projects_q(self.request.user, self.kwargs.get("slug"), None))
             .select_related("project_lead")
             .annotate(
                 is_member=Exists(
@@ -122,11 +124,13 @@ class ProjectListCreateAPIEndpoint(BaseAPIView):
                 .values("count")
             )
             .annotate(
-                member_role=ProjectMember.objects.filter(
-                    project_id=OuterRef("pk"),
-                    member_id=self.request.user.id,
-                    is_active=True,
-                ).values("role")
+                is_member=Exists(
+                    ProjectMember.objects.filter(
+                        project_id=OuterRef("pk"),
+                        member_id=self.request.user.id,
+                        is_active=True,
+                    )
+                )
             )
             .annotate(
                 is_deployed=Exists(
@@ -226,17 +230,13 @@ class ProjectListCreateAPIEndpoint(BaseAPIView):
             if serializer.is_valid():
                 serializer.save()
 
-                # Add the user as Administrator to the project
-                _ = ProjectMember.objects.create(project_id=serializer.instance.id, member=request.user, role=20)
-
+                # 创建人与负责人加为项目成员并绑定「项目管理员」（与 app 侧 setup_new_project 一致）
+                admin_ids = [request.user.id]
                 if serializer.instance.project_lead is not None and str(serializer.instance.project_lead) != str(
                     request.user.id
                 ):
-                    ProjectMember.objects.create(
-                        project_id=serializer.instance.id,
-                        member_id=serializer.instance.project_lead,
-                        role=20,
-                    )
+                    admin_ids.append(serializer.instance.project_lead_id)
+                add_project_admins(serializer.instance, admin_ids)
 
                 # 工作项配置：默认跟随研发模式，共用模式方案（不再给项目自建一套无类型的默认状态）
                 prepare_project_issue_scheme(serializer.instance, creator=request.user)
@@ -288,13 +288,7 @@ class ProjectDetailAPIEndpoint(BaseAPIView):
     def get_queryset(self):
         return (
             Project.objects.filter(workspace__slug=self.kwargs.get("slug"))
-            .filter(
-                Q(
-                    project_projectmember__member=self.request.user,
-                    project_projectmember__is_active=True,
-                )
-                | Q(network=2)
-            )
+            .filter(visible_projects_q(self.request.user, self.kwargs.get("slug"), None))
             .select_related("workspace", "workspace__owner", "default_assignee", "project_lead")
             .annotate(
                 is_member=Exists(
@@ -327,11 +321,13 @@ class ProjectDetailAPIEndpoint(BaseAPIView):
                 .values("count")
             )
             .annotate(
-                member_role=ProjectMember.objects.filter(
-                    project_id=OuterRef("pk"),
-                    member_id=self.request.user.id,
-                    is_active=True,
-                ).values("role")
+                is_member=Exists(
+                    ProjectMember.objects.filter(
+                        project_id=OuterRef("pk"),
+                        member_id=self.request.user.id,
+                        is_active=True,
+                    )
+                )
             )
             .annotate(
                 is_deployed=Exists(
@@ -497,7 +493,9 @@ class ProjectDetailAPIEndpoint(BaseAPIView):
 class ProjectArchiveUnarchiveAPIEndpoint(BaseAPIView):
     """Project Archive and Unarchive Endpoint"""
 
-    permission_classes = [ProjectBasePermission]
+    # 归档 / 恢复看 project.settings.archive（方法上的装饰器）；ProjectBasePermission 会按 POST=建项目、
+    # DELETE=删项目去判，和这个接口的语义对不上
+    permission_classes = [ProjectEntityPermission]
 
     @project_docs(
         operation_id="archive_project",
@@ -511,6 +509,7 @@ class ProjectArchiveUnarchiveAPIEndpoint(BaseAPIView):
             204: ARCHIVED_RESPONSE,
         },
     )
+    @allow_fine_permission(PermissionKey.PROJECT_SETTINGS_ARCHIVE)
     def post(self, request, slug, project_id):
         """Archive project
 
@@ -535,6 +534,7 @@ class ProjectArchiveUnarchiveAPIEndpoint(BaseAPIView):
             204: UNARCHIVED_RESPONSE,
         },
     )
+    @allow_fine_permission(PermissionKey.PROJECT_SETTINGS_ARCHIVE)
     def delete(self, request, slug, project_id):
         """Unarchive project
 
@@ -562,7 +562,7 @@ ALLOWED_PROJECT_SUMMARY_FIELDS = [
 class ProjectSummaryAPIEndpoint(BaseAPIView):
     use_read_replica = True
 
-    @allow_fine_permission(PermissionKey.PROJECT_OVERVIEW_VIEW)
+    @allow_project_member
     def get(self, request, slug, project_id):
         """Get project summary
 

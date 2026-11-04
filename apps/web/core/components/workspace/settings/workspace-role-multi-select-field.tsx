@@ -23,7 +23,7 @@ type Props = {
   optionsContainerClassName?: string;
 };
 
-/** 工作区自定义角色多选（受控、无副作用），系统角色不在候选中 */
+/** 工作区权限组多选（受控、无副作用）。「工作区成员」每人隐式都有，不在候选中；「管理员」要绑定，在候选中 */
 export function WorkspaceRoleMultiSelectField(props: Props) {
   const {
     roles,
@@ -38,23 +38,19 @@ export function WorkspaceRoleMultiSelectField(props: Props) {
     optionsContainerClassName = "w-52",
   } = props;
 
-  const customRoles = useMemo(() => roles.filter((role) => !role.is_system), [roles]);
-  const options: TWorkspaceRoleOption[] = useMemo(
-    () => customRoles.map((role) => ({ value: role.id, data: role })),
-    [customRoles]
-  );
+  const options: TWorkspaceRoleOption[] = useMemo(() => roles.map((role) => ({ value: role.id, data: role })), [roles]);
 
   const buttonLabel = useMemo(() => {
     if (isLoading) return <span className="text-placeholder">加载中...</span>;
-    const selectedNames = customRoles.filter((role) => value.includes(role.id)).map((role) => role.name);
-    if (selectedNames.length === 0) return <span className="text-placeholder">选择角色</span>;
+    const selectedNames = roles.filter((role) => value.includes(role.id)).map((role) => role.name);
+    if (selectedNames.length === 0) return <span className="text-placeholder">选择权限组</span>;
     if (selectedNames.length === 1) return <span className="truncate">{selectedNames[0]}</span>;
     return (
       <span className="truncate">
         {selectedNames[0]} +{selectedNames.length - 1}
       </span>
     );
-  }, [customRoles, isLoading, value]);
+  }, [roles, isLoading, value]);
 
   return (
     <MultiSelectDropdown
@@ -65,7 +61,7 @@ export function WorkspaceRoleMultiSelectField(props: Props) {
       disableSorting
       keyExtractor={(option) => option.data.id}
       queryArray={["name"]}
-      inputPlaceholder="搜索角色..."
+      inputPlaceholder="搜索权限组..."
       buttonContent={() => (
         <div
           className={cn(

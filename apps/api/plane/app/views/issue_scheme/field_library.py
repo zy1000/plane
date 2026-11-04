@@ -14,7 +14,8 @@ from plane.app.serializers.issue_type import IssueFieldDefinitionSerializer
 from plane.app.views.base import BaseViewSet
 from plane.db.models import IssueFieldDefinition, IssueScheme, TypeExtraField, Workspace
 
-DEV_MODE_READ_KEYS = (PermissionKey.WORKSPACE_DEV_MODE_VIEW, PermissionKey.WORKSPACE_DEV_MODE_MANAGE)
+#: 读工作项方案（类型库、字段库）：查看或维护任一即可
+DEV_MODE_READ_KEYS = (PermissionKey.WORKSPACE_ISSUE_SCHEME_VIEW, PermissionKey.WORKSPACE_ISSUE_SCHEME_MANAGE)
 
 #: 删除仍被类型绑定的库字段
 ISSUE_FIELD_IN_USE = "ISSUE_FIELD_IN_USE"
@@ -83,7 +84,7 @@ class IssueFieldDefinitionViewSet(BaseViewSet):
             return Response({"error": "字段不存在"}, status=status.HTTP_404_NOT_FOUND)
         return Response(self._with_usage([definition])[0], status=status.HTTP_200_OK)
 
-    @allow_fine_permission(PermissionKey.WORKSPACE_DEV_MODE_MANAGE, level="WORKSPACE")
+    @allow_fine_permission(PermissionKey.WORKSPACE_ISSUE_SCHEME_MANAGE, level="WORKSPACE")
     def create(self, request, slug):
         workspace = self._workspace()
         if workspace is None:
@@ -95,7 +96,7 @@ class IssueFieldDefinitionViewSet(BaseViewSet):
         definition = serializer.save(workspace_id=workspace.id, sort_order=last + 10000)
         return Response(self._with_usage([definition])[0], status=status.HTTP_201_CREATED)
 
-    @allow_fine_permission(PermissionKey.WORKSPACE_DEV_MODE_MANAGE, level="WORKSPACE")
+    @allow_fine_permission(PermissionKey.WORKSPACE_ISSUE_SCHEME_MANAGE, level="WORKSPACE")
     def partial_update(self, request, slug, pk):
         definition = IssueFieldDefinition.objects.filter(workspace__slug=slug, pk=pk).first()
         if definition is None:
@@ -109,7 +110,7 @@ class IssueFieldDefinitionViewSet(BaseViewSet):
         definition = serializer.save()
         return Response(self._with_usage([definition])[0], status=status.HTTP_200_OK)
 
-    @allow_fine_permission(PermissionKey.WORKSPACE_DEV_MODE_MANAGE, level="WORKSPACE")
+    @allow_fine_permission(PermissionKey.WORKSPACE_ISSUE_SCHEME_MANAGE, level="WORKSPACE")
     def destroy(self, request, slug, pk):
         definition = IssueFieldDefinition.objects.filter(workspace__slug=slug, pk=pk).first()
         if definition is None:

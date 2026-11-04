@@ -73,13 +73,14 @@ from plane.utils.review_tailoring import (
     update_header,
     withdraw,
 )
+from plane.utils.visibility import visible_projects_q
 
 #: 读裁剪表：查看或维护任一即可（只配了维护的角色不该被读挡住，口径同评审模板库）
 TAILORING_READ_KEYS = (
     PermissionKey.PROJECT_REVIEW_TAILORING_VIEW,
-    PermissionKey.PROJECT_REVIEW_TAILORING_MANAGE,
+    PermissionKey.PROJECT_REVIEW_TAILORING_EDIT,
 )
-TAILORING_MANAGE_KEY = PermissionKey.PROJECT_REVIEW_TAILORING_MANAGE
+TAILORING_MANAGE_KEY = PermissionKey.PROJECT_REVIEW_TAILORING_EDIT
 
 #: 这些错误是「当前状态不允许」而不是「请求写错了」，回 409 让前端能区分对待
 CONFLICT_CODES = {
@@ -130,8 +131,7 @@ class ReviewTailoringViewSet(BaseViewSet):
             .filter(workspace__slug=self.kwargs.get("slug"))
             .filter(project_id=self.kwargs.get("project_id"))
             .filter(
-                project__project_projectmember__member=self.request.user,
-                project__project_projectmember__is_active=True,
+                visible_projects_q(self.request.user, self.kwargs.get("slug"), "project"),
                 project__archived_at__isnull=True,
             )
             .select_related("created_by", "submitted_by", "project", "stage")
@@ -634,8 +634,7 @@ class ReviewTailoringCommentViewSet(BaseViewSet):
             .filter(project_id=self.kwargs.get("project_id"))
             .filter(tailoring_id=self.kwargs.get("tailoring_id"))
             .filter(
-                project__project_projectmember__member=self.request.user,
-                project__project_projectmember__is_active=True,
+                visible_projects_q(self.request.user, self.kwargs.get("slug"), "project"),
                 project__archived_at__isnull=True,
             )
             .select_related("project", "workspace", "tailoring", "actor")

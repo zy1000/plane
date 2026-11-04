@@ -30,9 +30,9 @@ const REPORT_TYPE_CLASS: Record<string, string> = {
   对外报告: "bg-warning-subtle text-warning-primary",
 };
 
-const QA_REPORT_VIEW_PERMISSION_KEY = "qa.report.view" as const;
-const QA_REPORT_EDIT_PERMISSION_KEY = "qa.report.edit" as const;
-const QA_REPORT_EXPORT_PERMISSION_KEY = "qa.report.export" as const;
+const QA_REPORT_VIEW_PERMISSION_KEY = "project.test_report.view" as const;
+const QA_REPORT_EDIT_PERMISSION_KEY = "project.test_report.edit" as const;
+const QA_REPORT_EXPORT_PERMISSION_KEY = "project.test_report.view" as const;
 
 const waitForPaint = () =>
   new Promise<void>((resolve) => {
