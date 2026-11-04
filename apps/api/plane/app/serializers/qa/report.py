@@ -1,4 +1,4 @@
-from django.db.models import Count
+from django.db.models import Count, Q
 from rest_framework import serializers
 from rest_framework.serializers import ModelSerializer
 
@@ -212,22 +212,32 @@ def build_report_plan_stats(report):
         ):
             per_plan[row["plan_id"]]["assignee_count"] = row["count"]
 
-    # 计划产生的缺陷 = 来源测试计划（Issue.test_plan）是报告内计划的缺陷类工作项
+    # 计划产生的缺陷 = 来源测试计划（Issue.test_plan）是报告内计划的缺陷类工作项；
+    # 没填来源计划的缺陷（字段上线前的老数据）按挂在计划用例上算，填了的只认来源计划
     from plane.app.permissions.base import DEFECT_CATEGORY_NAME
 
-    defects = Issue.objects.filter(
-        test_plan_id__in=plan_ids,
-        type__category__name=DEFECT_CATEGORY_NAME,
-        deleted_at__isnull=True,
+    defect_base = Issue.objects.filter(type__category__name=DEFECT_CATEGORY_NAME, deleted_at__isnull=True)
+    defects = defect_base.filter(
+        Q(test_plan_id__in=plan_ids) | Q(test_plan__isnull=True, id__in=base_qs.values("case__issues"))
     )
-    defect_count_by_plan = (
-        {
-            row["test_plan_id"]: row["count"]
-            for row in defects.order_by().values("test_plan_id").annotate(count=Count("id"))
-        }
-        if plan_ids
-        else {}
-    )
+    defect_count_by_plan = {}
+    if plan_ids:
+        for row in defects.filter(test_plan_id__in=plan_ids).order_by().values("test_plan_id").annotate(
+            count=Count("id")
+        ):
+            defect_count_by_plan[row["test_plan_id"]] = row["count"]
+        for row in (
+            defect_base.filter(
+                test_plan__isnull=True,
+                cases__plan_cases__plan_id__in=plan_ids,
+                cases__plan_cases__deleted_at__isnull=True,
+            )
+            .order_by()
+            .values("cases__plan_cases__plan_id")
+            .annotate(count=Count("id", distinct=True))
+        ):
+            plan_id = row["cases__plan_cases__plan_id"]
+            defect_count_by_plan[plan_id] = defect_count_by_plan.get(plan_id, 0) + row["count"]
 
     plan_rows = []
     for plan in plans:
