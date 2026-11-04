@@ -51,10 +51,10 @@ export const PROJECT_SETTINGS: Record<TProjectSettingsTabs, TProjectSettingsItem
   roles: {
     key: "roles",
     i18n_label: "project_settings.roles.label",
-    href: `/roles`,
+    href: `/permission-groups`,
     permissionKeys: [PROJECT_MEMBER_ACCESS],
     editPermissionKeys: ["project.permission_group.manage"],
-    highlight: (pathname: string, baseUrl: string) => pathname.startsWith(`${baseUrl}/roles/`),
+    highlight: (pathname: string, baseUrl: string) => pathname.startsWith(`${baseUrl}/permission-groups/`),
   },
   products: {
     key: "products",

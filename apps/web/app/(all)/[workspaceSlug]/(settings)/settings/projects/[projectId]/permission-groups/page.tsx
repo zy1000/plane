@@ -62,7 +62,7 @@ function ProjectPermissionGroupsPage({ params }: Route.ComponentProps) {
   const templateCount = groups.filter((group) => group.source === "template").length;
 
   const openDetail = (group: TProjectPermissionGroup) =>
-    router.push(`/${workspaceSlug}/settings/projects/${projectId}/roles/${group.id}/`);
+    router.push(`/${workspaceSlug}/settings/projects/${projectId}/permission-groups/${group.id}/`);
 
   const handlePendingConfirm = async () => {
     if (!pending) return;

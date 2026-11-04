@@ -28,10 +28,10 @@ export const formatScopeSummary = (summary: TDataScopeSummary[keyof TDataScopeSu
 /** 白名单是不是「全部」（用来判断「配了白名单却没勾项目权限」的提示） */
 export const isScopeEntryAll = (entry: TDataScopeEntry | undefined) => !entry || entry.mode === "all";
 
-export const getPermissionGroupsPath = (workspaceSlug: string) => `/${workspaceSlug}/settings/roles/`;
+export const getPermissionGroupsPath = (workspaceSlug: string) => `/${workspaceSlug}/settings/permission-groups/`;
 
 export const getPermissionGroupDetailPath = (workspaceSlug: string, roleId: string, tab?: string) =>
-  `/${workspaceSlug}/settings/roles/${roleId}/${tab ? `?tab=${tab}` : ""}`;
+  `/${workspaceSlug}/settings/permission-groups/${roleId}/${tab ? `?tab=${tab}` : ""}`;
 
 /** 后端错误体 → 一句人话 */
 export const getPermissionGroupErrorMessage = (error: unknown, fallback: string) => {

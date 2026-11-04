@@ -78,7 +78,7 @@ export function TemplateProjectsPanel({ workspaceSlug, projects, isLoading, canM
                 className={cn(GRID, "h-11 border-b border-subtle text-13 last:border-b-0 hover:bg-layer-1-hover")}
               >
                 <Link
-                  to={`/${workspaceSlug}/settings/projects/${project.id}/roles/`}
+                  to={`/${workspaceSlug}/settings/projects/${project.id}/permission-groups/`}
                   className={cn("truncate text-accent-primary hover:underline", project.excluded && "text-secondary")}
                 >
                   {project.name}

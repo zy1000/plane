@@ -620,13 +620,13 @@ export const coreRoutes: RouteConfigEntry[] = [
             "./(all)/[workspaceSlug]/(settings)/settings/(workspace)/groups/page.tsx"
           ),
           route(
-            ":workspaceSlug/settings/roles",
-            "./(all)/[workspaceSlug]/(settings)/settings/(workspace)/roles/page.tsx"
+            ":workspaceSlug/settings/permission-groups",
+            "./(all)/[workspaceSlug]/(settings)/settings/(workspace)/permission-groups/page.tsx"
           ),
           // 权限组详情（工作区权限组 / 项目权限组模板）
           route(
-            ":workspaceSlug/settings/roles/:roleId",
-            "./(all)/[workspaceSlug]/(settings)/settings/(workspace)/roles/[roleId]/page.tsx"
+            ":workspaceSlug/settings/permission-groups/:roleId",
+            "./(all)/[workspaceSlug]/(settings)/settings/(workspace)/permission-groups/[roleId]/page.tsx"
           ),
           route(
             ":workspaceSlug/settings/templates",
@@ -708,12 +708,12 @@ export const coreRoutes: RouteConfigEntry[] = [
             ),
             // Project permission groups（权限组列表 / 详情）
             route(
-              ":workspaceSlug/settings/projects/:projectId/roles",
-              "./(all)/[workspaceSlug]/(settings)/settings/projects/[projectId]/roles/page.tsx"
+              ":workspaceSlug/settings/projects/:projectId/permission-groups",
+              "./(all)/[workspaceSlug]/(settings)/settings/projects/[projectId]/permission-groups/page.tsx"
             ),
             route(
-              ":workspaceSlug/settings/projects/:projectId/roles/:groupId",
-              "./(all)/[workspaceSlug]/(settings)/settings/projects/[projectId]/roles/[groupId]/page.tsx"
+              ":workspaceSlug/settings/projects/:projectId/permission-groups/:groupId",
+              "./(all)/[workspaceSlug]/(settings)/settings/projects/[projectId]/permission-groups/[groupId]/page.tsx"
             ),
             // Project products（研发产品：产品研发矩阵）
             route(

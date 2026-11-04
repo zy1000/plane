@@ -40,7 +40,7 @@ export const RolesProjectSettingsHeader = observer(function RolesProjectSettings
               component={
                 <BreadcrumbLink
                   label={t(settingsDetails.i18n_label)}
-                  href={currentLabel ? `/${workspaceSlug}/settings/projects/${projectId}/roles/` : undefined}
+                  href={currentLabel ? `/${workspaceSlug}/settings/projects/${projectId}/permission-groups/` : undefined}
                   icon={<Icon className="size-4 text-tertiary" />}
                   isLast={!currentLabel}
                 />
