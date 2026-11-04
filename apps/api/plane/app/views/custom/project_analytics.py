@@ -18,6 +18,9 @@ from plane.db.models import (
     Module,
     CycleIssue,
     ModuleIssue,
+    IssueAssignee,
+    IssueLabel,
+    ReleaseIssue,
     TimeSheet,
     ProjectMember,
     RequirementProject,
@@ -772,11 +775,60 @@ class ProjectDefectQuickCountsEndpoint(BaseAPIView):
 
     支持和列表接口同样的 ``filters`` 富筛选参数（当前视图 + 筛选条的用户条件），
     这样左栏数字和点进去看到的行数一致。
+
+    传 ``group_by`` 时改为按该维度逐值计数（「显示 › 分组方式」切到状态 / 负责人 / 产品等时用，取值同工作项分组），
+    返回 ``{"all": 总数, "groups": {值: 数量}}``；没有值的一组键为 ``"None"``，
+    状态按名字合并（同名状态分属不同缺陷类型），和前端分组列的 id 一致。
     """
 
     DEFECT_CATEGORY_NAME = "缺陷"
     OPEN_STATE_GROUPS = ["backlog", "unstarted", "started"]
     filterset_class = IssueFilterSet
+
+    # 单值字段：直接按列分组
+    FIELD_GROUPS = {
+        "state": "state__name",
+        "state_detail.group": "state__group",
+        "priority": "priority",
+        "created_by": "created_by_id",
+        "product": "product_id",
+        "product_module": "product_module_id",
+        "stage": "stage_id",
+    }
+    # 多对多：按关联表计数（一个缺陷可落在多组），「没有值」与 *_id__isnull 筛选口径一致
+    RELATION_GROUPS = {
+        "assignees": (IssueAssignee, "assignee_id"),
+        "cycle": (CycleIssue, "cycle_id"),
+        "module": (ModuleIssue, "module_id"),
+        "release": (ReleaseIssue, "release_id"),
+        "labels": (IssueLabel, "label_id"),
+    }
+
+    def _group_counts(self, queryset: QuerySet, group_by: str) -> Dict[str, int]:
+        groups: Dict[str, int] = {}
+        if group_by in self.FIELD_GROUPS:
+            field = self.FIELD_GROUPS[group_by]
+            rows = queryset.order_by().values(field).annotate(count=Count("id", distinct=True))
+            for row in rows:
+                key = row[field]
+                groups["None" if key is None else str(key)] = row["count"]
+            return groups
+
+        through_model, value_field = self.RELATION_GROUPS[group_by]
+        issue_ids = queryset.values("id")
+        rows = (
+            through_model.objects.filter(issue_id__in=issue_ids, deleted_at__isnull=True)
+            .values(value_field)
+            .annotate(count=Count("issue_id", distinct=True))
+        )
+        for row in rows:
+            groups[str(row[value_field])] = row["count"]
+        groups["None"] = (
+            queryset.exclude(id__in=through_model.objects.filter(deleted_at__isnull=True).values("issue_id"))
+            .distinct()
+            .count()
+        )
+        return groups
 
     @allow_fine_permission(PermissionKey.PROJECT_DEFECT_VIEW)
     def get(self, request: HttpRequest, slug: str, project_id: str) -> Response:
@@ -787,6 +839,19 @@ class ProjectDefectQuickCountsEndpoint(BaseAPIView):
             type__category__name=self.DEFECT_CATEGORY_NAME,
         )
         queryset = IssueComplexFilterBackend().filter_queryset(request, queryset, self)
+
+        group_by = request.GET.get("group_by")
+        if group_by:
+            if group_by not in self.FIELD_GROUPS and group_by not in self.RELATION_GROUPS:
+                return Response({"error": "不支持的分组维度"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {
+                    "all": queryset.distinct().count(),
+                    "groups": self._group_counts(queryset, group_by),
+                },
+                status=status.HTTP_200_OK,
+            )
+
         counts = queryset.aggregate(
             all=Count("id", distinct=True),
             open=Count("id", filter=Q(state__group__in=self.OPEN_STATE_GROUPS), distinct=True),

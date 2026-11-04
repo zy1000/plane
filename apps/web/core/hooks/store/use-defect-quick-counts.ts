@@ -10,9 +10,23 @@ import { PROJECT_DEFECTS_REFRESH_EVENT } from "./use-project-defects";
 
 const projectService = new ProjectService();
 
-/** 影响九个计数口径的字段：状态、负责人、提交人 */
+type TDefectGroupCounts = { all: number; groups: Record<string, number> };
+
+/** 影响左栏计数的字段：快捷筛选看状态 / 负责人 / 提交人，分组模式还会看其它分组维度 */
 const issueSignature = (issue: TIssue) =>
-  `${issue.state_id}|${(issue.assignee_ids ?? []).join(",")}|${issue.created_by}`;
+  [
+    issue.state_id,
+    (issue.assignee_ids ?? []).join(","),
+    issue.created_by,
+    issue.priority,
+    issue.product_id,
+    issue.product_module_id,
+    issue.stage_id,
+    issue.cycle_id,
+    (issue.module_ids ?? []).join(","),
+    (issue.release_ids ?? []).join(","),
+    (issue.label_ids ?? []).join(","),
+  ].join("|");
 
 /** 把分组 / 子分组形态的 id 结构摊平成一维 */
 function collectLoadedIssueIds(grouped: unknown): string[] {
@@ -30,8 +44,9 @@ function collectLoadedIssueIds(grouped: unknown): string[] {
 }
 
 /**
- * 缺陷页左侧快捷筛选的计数，在 `userFilters`（当前视图 + 筛选条的用户条件）范围内算，
+ * 缺陷页左栏的计数，在 `userFilters`（当前视图 + 筛选条的用户条件）范围内算，
  * 让左栏数字和点进去看到的行数一致。
+ * 不传 `groupBy` 返回九个快捷筛选口径；传了返回 `{ all, groups }`（按该维度逐值计数）。
  *
  * 刷新时机：进页、用户条件变化、窗口重新聚焦、新建缺陷后的刷新事件，以及列表里就地改了
  * 已加载工作项的状态 / 负责人（翻页新增的工作项不算变化）。
@@ -40,7 +55,8 @@ function collectLoadedIssueIds(grouped: unknown): string[] {
 export function useDefectQuickCounts(
   workspaceSlug: string | undefined,
   projectId: string | undefined,
-  userFilters: TWorkItemFilterExpression
+  userFilters: TWorkItemFilterExpression,
+  groupBy?: string | null
 ) {
   const { issues, issueMap } = useIssues(EIssuesStoreType.PROJECT);
   const { getProjectStateNameToIdsMap } = useProjectState();
@@ -54,11 +70,12 @@ export function useDefectQuickCounts(
 
   const { data, error, isLoading, mutate } = useSWR(
     workspaceSlug && projectId
-      ? `PROJECT_DEFECT_QUICK_COUNTS_${workspaceSlug}_${projectId}_${filtersParam ?? ""}`
+      ? `PROJECT_DEFECT_QUICK_COUNTS_${workspaceSlug}_${projectId}_${groupBy ?? ""}_${filtersParam ?? ""}`
       : null,
     () =>
       projectService.getProjectDefectQuickCounts(workspaceSlug as string, projectId as string, {
         filters: filtersParam,
+        group_by: groupBy ?? undefined,
       }),
     { revalidateOnFocus: true, dedupingInterval: 2000, keepPreviousData: true }
   );
@@ -90,8 +107,11 @@ export function useDefectQuickCounts(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [signatureKey, mutate]);
 
+  const groupData = groupBy ? (data as TDefectGroupCounts | undefined) : undefined;
   return {
-    counts: data as Record<string, number> | undefined,
+    counts: groupBy ? undefined : (data as Record<string, number> | undefined),
+    groupCounts: groupData?.groups,
+    groupTotal: groupData?.all,
     error,
     isLoading,
     refetch: mutate,

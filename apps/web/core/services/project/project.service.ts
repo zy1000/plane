@@ -114,12 +114,13 @@ export class ProjectService extends APIService {
   /**
    * 缺陷页左侧快捷筛选的计数，键与 defects/defect-presets.ts 的预设 key 一致。
    * `filters` 与列表接口同格式（JSON 字符串的富筛选表达式），传了就在该范围内计数。
+   * 传 `group_by`（左栏切到状态 / 负责人等分组）时返回 `{ all, groups: { 值: 数量 } }`。
    */
   async getProjectDefectQuickCounts(
     workspaceSlug: string,
     projectId: string,
-    params?: { filters?: string }
-  ): Promise<Record<string, number>> {
+    params?: { filters?: string; group_by?: string }
+  ): Promise<Record<string, number> | { all: number; groups: Record<string, number> }> {
     return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/defect-quick-counts/`, { params })
       .then((response) => response?.data)
       .catch((error) => {

@@ -32,6 +32,8 @@ type Props = {
   cycleViewDisabled?: boolean;
   moduleViewDisabled?: boolean;
   isEpic?: boolean;
+  /** 页面自己的「分组方式」，替换默认的分组方式区块（如缺陷页按维度切换左栏） */
+  groupBySection?: React.ReactNode;
 };
 
 export const DisplayFiltersSelection = observer(function DisplayFiltersSelection(props: Props) {
@@ -45,6 +47,7 @@ export const DisplayFiltersSelection = observer(function DisplayFiltersSelection
     cycleViewDisabled = false,
     moduleViewDisabled = false,
     isEpic = false,
+    groupBySection,
   } = props;
 
   const isDisplayFilterEnabled = (displayFilter: keyof IIssueDisplayFilterOptions) =>
@@ -75,7 +78,9 @@ export const DisplayFiltersSelection = observer(function DisplayFiltersSelection
       )}
 
       {/* group by */}
-      {isDisplayFilterEnabled("group_by") && (
+      {groupBySection ? (
+        <div className="py-2">{groupBySection}</div>
+      ) : isDisplayFilterEnabled("group_by") && (
         <div className="py-2">
           <FilterGroupBy
             displayFilters={displayFilters}

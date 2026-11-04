@@ -4,7 +4,7 @@ import { useParams } from "next/navigation";
 import { PERMISSION_KEYS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
-import { EIssuesStoreType } from "@plane/types";
+import { EIssueLayoutTypes, EIssuesStoreType } from "@plane/types";
 import { HeaderFilters } from "@/components/issues/filters";
 import { HeaderMoreMenu } from "@/components/issues/header-more-menu";
 import { IssueExportModal } from "@/components/issues/export/export-modal";
@@ -21,6 +21,7 @@ import { useWorkflowApprovals } from "@/hooks/store/use-workflow-approvals";
 import { useMultipleSelectStore } from "@/hooks/store/use-multiple-select-store";
 import { DefectAnalysisModal } from "./defect-analysis-modal";
 import { PROJECT_DEFECT_FILTER_TOGGLE_EVENT } from "./defect-filter-events";
+import { DefectRailGroupByOption } from "./defect-rail-group-by-option";
 
 /**
  * 缺陷页的工具栏：搜索 / 布局 / 筛选 / 显示 · 审批 · 新增缺陷 · ⋯。
@@ -68,6 +69,9 @@ export const ProjectDefectsToolbar = observer(function ProjectDefectsToolbar() {
     projectIdValue
   );
   const isMemberOfProject = isProjectMember(workspaceSlugValue, projectIdValue);
+  const activeLayout = projectIdValue
+    ? issuesFilter?.getIssueFilters(projectIdValue, "defects")?.displayFilters?.layout
+    : undefined;
   // 缺陷没有单独的导出 key，跟工作项导出走
   const canExportDefects = allowProjectPermissionKeys(
     [PERMISSION_KEYS.PROJECT_ISSUE_EXPORT],
@@ -95,6 +99,12 @@ export const ProjectDefectsToolbar = observer(function ProjectDefectsToolbar() {
           currentProjectDetails={currentProjectDetails}
           scope="defects"
           onFilterToggle={handleFilterToggle}
+          displayGroupBySection={
+            // 看板的分组方式决定列，保留原样；其余布局的分组方式改为切换左栏
+            activeLayout === EIssueLayoutTypes.KANBAN ? undefined : (
+              <DefectRailGroupByOption workspaceSlug={workspaceSlugValue} projectId={projectIdValue} />
+            )
+          }
         />
       </div>
       {isMemberOfProject ? (

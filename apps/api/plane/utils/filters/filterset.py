@@ -8,7 +8,7 @@ from django.db import models
 from django.db.models import Q
 from django_filters import FilterSet, filters
 
-from plane.db.models import Issue
+from plane.db.models import CycleIssue, Issue, IssueAssignee, IssueLabel, ModuleIssue, ReleaseIssue
 
 
 class UUIDInFilter(filters.BaseInFilter, filters.UUIDFilter):
@@ -182,6 +182,16 @@ class IssueFilterSet(BaseFilterSet):
     subscriber_id = filters.UUIDFilter(method="filter_subscriber_id")
     subscriber_id__in = UUIDInFilter(method="filter_subscriber_id_in", lookup_expr="in")
 
+    # 「没有 xx」：缺陷页左栏分组里「未指派 / 无产品」等项用，传 true 取没有值的工作项
+    assignee_id__isnull = filters.BooleanFilter(method="filter_assignee_id_isnull")
+    cycle_id__isnull = filters.BooleanFilter(method="filter_cycle_id_isnull")
+    module_id__isnull = filters.BooleanFilter(method="filter_module_id_isnull")
+    release_id__isnull = filters.BooleanFilter(method="filter_release_id_isnull")
+    label_id__isnull = filters.BooleanFilter(method="filter_label_id_isnull")
+    product_id__isnull = filters.BooleanFilter(field_name="product_id", lookup_expr="isnull")
+    product_module_id__isnull = filters.BooleanFilter(field_name="product_module_id", lookup_expr="isnull")
+    stage_id__isnull = filters.BooleanFilter(field_name="stage_id", lookup_expr="isnull")
+
     class Meta:
         model = Issue
         fields = {
@@ -303,3 +313,25 @@ class IssueFilterSet(BaseFilterSet):
             issue_subscribers__subscriber_id__in=value,
             issue_subscribers__deleted_at__isnull=True,
         )
+
+    # 多对多关系的「没有值」：没有一条未软删的关联行。和上面 *_id__in 的口径一致（只看关联行本身的 deleted_at）
+
+    @staticmethod
+    def _relation_isnull_q(through_model, value):
+        has_relation = Q(pk__in=through_model.objects.filter(deleted_at__isnull=True).values("issue_id"))
+        return ~has_relation if value else has_relation
+
+    def filter_assignee_id_isnull(self, queryset, name, value):
+        return self._relation_isnull_q(IssueAssignee, value)
+
+    def filter_cycle_id_isnull(self, queryset, name, value):
+        return self._relation_isnull_q(CycleIssue, value)
+
+    def filter_module_id_isnull(self, queryset, name, value):
+        return self._relation_isnull_q(ModuleIssue, value)
+
+    def filter_release_id_isnull(self, queryset, name, value):
+        return self._relation_isnull_q(ReleaseIssue, value)
+
+    def filter_label_id_isnull(self, queryset, name, value):
+        return self._relation_isnull_q(IssueLabel, value)

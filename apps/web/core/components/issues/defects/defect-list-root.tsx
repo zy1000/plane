@@ -8,7 +8,6 @@ import { EIssueFilterType, ISSUE_DISPLAY_FILTERS_BY_PAGE, PROJECT_VIEW_TRACKER_E
 import type { IWorkItemFilterInstance } from "@plane/shared-state";
 import { EIssueLayoutTypes, EIssuesStoreType, LOGICAL_OPERATOR } from "@plane/types";
 import type {
-  IIssueDisplayFilterOptions,
   IIssueFilters,
   TIssueKanbanFilters,
   TWorkItemFilterExpression,
@@ -40,6 +39,14 @@ import { PROJECT_DEFECT_FILTER_TOGGLE_EVENT } from "./defect-filter-events";
 import { DEFECT_PRESET_PARAM, DEFECT_PRESET_STATE_NAMES, getDefectPreset } from "./defect-presets";
 import type { TDefectPreset } from "./defect-presets";
 import { DefectQuickFilterRail } from "./defect-quick-filter-rail";
+import {
+  DEFECT_GROUP_VALUE_PARAM,
+  DEFECT_RAIL_GROUP_KEY,
+  decodeGroupValue,
+  getDefectRailGroupBy,
+  getGroupValueConditions,
+} from "./defect-rail-group";
+import type { TDefectDisplayFilters } from "./defect-rail-group";
 import { ProjectDefectsToolbar } from "./project-defects-toolbar";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -51,7 +58,7 @@ const DEFECT_SCOPE = "defects" as TProjectIssueScope;
 /** 未完成（待处理）的状态组：不含 已完成 / 已取消 */
 const OPEN_STATE_GROUPS = "backlog,unstarted,started";
 
-const INITIAL_DEFECT_DISPLAY_FILTERS: IIssueDisplayFilterOptions = {
+const INITIAL_DEFECT_DISPLAY_FILTERS: TDefectDisplayFilters = {
   calendar: { show_weekends: false, layout: "month" },
   group_by: null,
   sub_group_by: null,
@@ -59,6 +66,8 @@ const INITIAL_DEFECT_DISPLAY_FILTERS: IIssueDisplayFilterOptions = {
   order_by: "sort_order",
   show_empty_groups: false,
   sub_issue: false,
+  // 左栏默认是快捷筛选；restoreLocalDisplayFilters 是合并写入，要显式清掉上次的分组维度
+  [DEFECT_RAIL_GROUP_KEY]: null,
 };
 
 const INITIAL_DEFECT_KANBAN_FILTERS: TIssueKanbanFilters = {
@@ -263,6 +272,9 @@ export const DefectListRoot = observer(function DefectListRoot() {
   const storeFilters = projectId ? issuesFilter?.getIssueFilters(projectId, scope) : undefined;
   const areStoreFiltersReady = Boolean(storeFilters);
   const activeLayout = storeFilters?.displayFilters?.layout;
+  // 左栏分组维度（「显示 › 分组方式」里选，随视图保存）；null 为快捷筛选。分组模式下选中的值在 URL `?group=`
+  const railGroupBy = getDefectRailGroupBy(storeFilters?.displayFilters);
+  const railGroupValue = decodeGroupValue(searchParams.get(DEFECT_GROUP_VALUE_PARAM), railGroupBy);
   const areDefectFiltersInitialized = initializedFilterProjectId === projectId;
 
   // 缺陷页筛选不落后端；每次重新进入都从固定缺陷类别重新开始，再由视图页签把记住的视图应用上来。
@@ -286,25 +298,31 @@ export const DefectListRoot = observer(function DefectListRoot() {
     setInitializedFilterProjectId(projectId);
   }, [workspaceSlug, projectId, issuesFilter, areStoreFiltersReady, deleteFilter, scope]);
 
-  // ── 三层条件：用户(视图 + 筛选条) + 固定缺陷类别 + 左栏预设(状态/负责人/提交人) ─────────
-  // 「待我验证 / 待确认驳回 / 重新打开」按状态名解析 state_id，只看缺陷类型（或未绑定类型）的状态
+  // ── 三层条件：用户(视图 + 筛选条) + 固定缺陷类别 + 左栏选中项(快捷筛选预设或分组值) ─────────
+  // 只看缺陷类型（或未绑定类型）的状态：预设和「按状态分组」都按状态名解析 state_id
+  const defectStates = useMemo(
+    () => (projectStates ?? []).filter((state) => !state.issue_type_id || fixedTypeIds.includes(state.issue_type_id)),
+    [projectStates, fixedTypeIds]
+  );
+  // 「待我验证 / 待确认驳回 / 重新打开」
   const presetStateIds = useMemo<TPresetStateIds>(() => {
-    const candidates = (projectStates ?? []).filter(
-      (state) => !state.issue_type_id || fixedTypeIds.includes(state.issue_type_id)
-    );
     const result: TPresetStateIds = {};
     (Object.entries(DEFECT_PRESET_STATE_NAMES) as [TDefectPreset, string][]).forEach(([key, name]) => {
       const lowered = name.toLowerCase();
-      result[key] = candidates
+      result[key] = defectStates
         .filter((state) => state.name.trim().toLowerCase() === lowered)
         .map((state) => state.id);
     });
     return result;
-  }, [projectStates, fixedTypeIds]);
-  const presetConditions = useMemo(
-    () => getPresetConditions(preset, myId, presetStateIds),
-    [preset, myId, presetStateIds]
-  );
+  }, [defectStates]);
+  // 左栏注入的条件：快捷筛选模式取预设口径，分组模式取选中的那一组（没选 = 全部）
+  const presetConditions = useMemo(() => {
+    if (!railGroupBy) return getPresetConditions(preset, myId, presetStateIds);
+    if (!railGroupValue) return [];
+    return getGroupValueConditions(railGroupBy, railGroupValue, (name) =>
+      defectStates.filter((state) => state.name === name).map((state) => state.id)
+    );
+  }, [railGroupBy, railGroupValue, preset, myId, presetStateIds, defectStates]);
   const lastAppliedPresetConditionsRef = useRef<TConditionItem[]>([]);
   const previousPresetConditions = lastAppliedPresetConditionsRef.current;
 
@@ -407,12 +425,19 @@ export const DefectListRoot = observer(function DefectListRoot() {
         // 筛选条显隐跟着视图走：带条件就展开（不然看不出视图生效），没条件就收起
         filterInstance.toggleVisibility(filterInstance.hasActiveFilters);
       }
+      // 视图没存分组方式（旧视图 / 存的是快捷筛选）时显式回到快捷筛选，否则会沿用切换前的维度
+      const displayFilters = snapshot
+        ? ({
+            ...snapshot.display_filters,
+            [DEFECT_RAIL_GROUP_KEY]: getDefectRailGroupBy(snapshot.display_filters),
+          } as TDefectDisplayFilters)
+        : undefined;
       void issuesFilter.applyViewSnapshot(
         workspaceSlug,
         projectId,
         {
           richFilters: mergeWithManaged(userFilters),
-          displayFilters: snapshot?.display_filters,
+          displayFilters,
           displayProperties: snapshot?.display_properties,
         },
         scope
@@ -481,6 +506,9 @@ export const DefectListRoot = observer(function DefectListRoot() {
                   workspaceSlug={workspaceSlug}
                   projectId={projectId}
                   userFilters={userVisibleFilters}
+                  groupBy={railGroupBy}
+                  selectedGroupId={railGroupValue}
+                  issueTypeIds={fixedTypeIds}
                 />
                 <div className="relative flex h-full min-w-0 flex-1 flex-col overflow-hidden">
                   {typedPageFilter && <DefectFiltersRow entityId={filterEntityId} filter={typedPageFilter} />}

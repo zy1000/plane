@@ -5,6 +5,7 @@
  */
 
 import { useCallback } from "react";
+import type { ReactNode } from "react";
 import { observer } from "mobx-react";
 import { usePathname } from "next/navigation";
 // plane imports
@@ -30,6 +31,8 @@ type Props = {
   storeType?: EIssuesStoreType.PROJECT | EIssuesStoreType.EPIC;
   scope?: TProjectIssueScope;
   onFilterToggle?: () => void;
+  /** 页面自己的「分组方式」，替换「显示」里默认的分组方式 */
+  displayGroupBySection?: ReactNode;
 };
 const LAYOUTS = [
   EIssueLayoutTypes.LIST,
@@ -51,6 +54,7 @@ export const HeaderFilters = observer(function HeaderFilters(props: Props) {
     storeType = EIssuesStoreType.PROJECT,
     scope: scopeProp,
     onFilterToggle,
+    displayGroupBySection,
   } = props;
   // i18n
   const { t } = useTranslation();
@@ -123,6 +127,7 @@ export const HeaderFilters = observer(function HeaderFilters(props: Props) {
           cycleViewDisabled={!currentProjectDetails?.cycle_view}
           moduleViewDisabled={!currentProjectDetails?.module_view}
           isEpic={storeType === EIssuesStoreType.EPIC}
+          groupBySection={displayGroupBySection}
         />
       </FiltersDropdown>
     </>
