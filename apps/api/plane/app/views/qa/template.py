@@ -18,6 +18,7 @@ from plane.app.views.qa.case import (
     enqueue_case_asset_copy,
     sync_case_labels_by_name,
 )
+from plane.app.views.qa.case_scope import CASE_IMPORT, TEMPLATE_MANAGE, case_scope_error
 from plane.app.views.qa.plan import NumericSuffixCodeOrderingFilter
 from plane.app.views.qa.template_permissions import CASE_TEMPLATE_READ_KEYS
 from plane.app.views.qa.utils import build_case_activity_snapshot, build_module_filter_q
@@ -246,6 +247,16 @@ class TemplateCaseImportAPIView(BaseAPIView):
             id=target_repository_id,
             workspace__slug=slug,
         )
+        # 写入目标库：产品库要导入用例权限，模板库要模板维护权限（源模板库的读权限由装饰器查）
+        error = case_scope_error(
+            request,
+            slug,
+            keys=CASE_IMPORT,
+            template_keys=TEMPLATE_MANAGE,
+            repository_ids=[target_repository.id],
+        )
+        if error is not None:
+            return error
 
         source_cases = list(
             TestCase.objects.filter(

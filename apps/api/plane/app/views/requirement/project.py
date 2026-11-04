@@ -680,7 +680,7 @@ class RequirementProjectsViewSet(BaseViewSet):
                 {"error": "Product not found."}, status=status.HTTP_404_NOT_FOUND
             )
         if not has_product_permission(
-            request.user, product, PermissionKey.WORKSPACE_PRODUCT_EDIT
+            request.user, product, PermissionKey.PROJECT_REQUIREMENT_EDIT
         ):
             return Response(
                 {"error": "You do not have permission to maintain product requirements."},

@@ -263,6 +263,8 @@ export type TRequirementTypeSchema = {
  * 评审人与通过规则不在这里 —— 它们随每次提交评审在弹窗里给定，只对那一张变更单有效。
  */
 export type TRequirementConfiguration = {
+  /** 产品侧：有没有「需求 · 查看」。false 时其余字段全空，页面显示无权限；项目侧不返回 */
+  can_view?: boolean;
   /** 能不能录入/修改需求条目；项目侧恒为 false（写入权在产品上） */
   can_edit: boolean;
   /** 以下按动作拆开，来自产品角色的权限；项目侧恒为 false */

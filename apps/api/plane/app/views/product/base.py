@@ -12,6 +12,7 @@ from plane.app.views.base import BaseAPIView, BaseViewSet
 from plane.db.models import PlanCase, Product, Workspace
 from plane.utils.product import (
     can_create_product,
+    can_view_product,
     filter_visible_products,
 )
 
@@ -183,7 +184,8 @@ class ProductMyPermissionKeysAPIView(BaseAPIView):
     @allow_workspace_member
     def get(self, request, slug, product_id):
         product = Product.objects.filter(pk=product_id, workspace__slug=slug).select_related("workspace").first()
-        if product is None:
+        # 看不到的产品当作不存在（白名单是硬门禁），不能借这个接口探别的产品
+        if product is None or not can_view_product(request.user, product):
             return Response({"error": "Product not found."}, status=status.HTTP_404_NOT_FOUND)
         keys = _get_user_product_permission_keys(request.user, product)
         return Response({"permission_keys": sorted(keys)}, status=status.HTTP_200_OK)

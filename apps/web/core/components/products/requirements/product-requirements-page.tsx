@@ -8,6 +8,7 @@ import { EmptyStateDetailed } from "@plane/propel/empty-state";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TRequirementBatchSavePayload, TRequirementItemStatus } from "@plane/types";
 import { cn } from "@plane/utils";
+import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
 import { ContentWrapper } from "@/components/core/content-wrapper";
 import { PageHead } from "@/components/core/page-title";
 import {
@@ -291,6 +292,8 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
   });
 
   const isLoading = store.isConfigurationLoading || !store.configuration;
+  // 能看到产品但没有「需求 · 查看」（2026-11-04）：整页显示无权限，不再出通用报错卡片
+  const isNotAuthorized = store.configuration?.can_view === false;
 
   /**
    * 网格状态格的写入口。只在有页面级写权限时给 —— 状态格刻意不跟行级 is_locked / closed
@@ -299,6 +302,8 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
   const onStatusChange = canEdit
     ? (requirementId: string, status: TRequirementItemStatus) => void store.updateStatus(requirementId, status)
     : undefined;
+
+  if (isNotAuthorized) return <NotAuthorizedView section="general" className="h-full" />;
 
   return (
     <>

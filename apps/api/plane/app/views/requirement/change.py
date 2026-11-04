@@ -32,6 +32,7 @@ from plane.app.serializers import (
 from plane.app.views.base import BaseAPIView, BaseViewSet
 from plane.app.permissions.keys import PermissionKey
 from plane.app.views.requirement.mixins import (
+    can_view_requirements,
     can_write_requirements,
     get_requirement_scope,
 )
@@ -142,6 +143,28 @@ class ProductScopedMixin:
             {"error": "Product not found."}, status=status.HTTP_404_NOT_FOUND
         )
 
+    def read_scope(self, *, change_request_id=None):
+        """读接口用：返回 (product, scope, error)。要产品可见 + 「需求 · 查看」；
+        变更单的审批人 / 提交人看自己那张单（详情、明细）不受 view 限制，否则审批不了。"""
+        product, scope = self.resolve_scope()
+        if scope is None:
+            return None, None, self.not_found()
+        user = self.request.user
+        if can_view_requirements(user, product):
+            return product, scope, None
+        if (
+            change_request_id
+            and RequirementChangeRequest.objects.filter(
+                Q(approvals__approver=user) | Q(created_by=user),
+                id=change_request_id,
+                product_id=product.id,
+            ).exists()
+        ):
+            return product, scope, None
+        return None, None, Response(
+            {"error": "您没有查看需求的权限。"}, status=status.HTTP_403_FORBIDDEN
+        )
+
     @staticmethod
     def forbidden():
         return Response(
@@ -191,9 +214,15 @@ class RequirementChangeRequestViewSet(ProductScopedMixin, BaseViewSet):
         )
 
     def list(self, request, slug, product_id):
-        if self.resolve_scope()[1] is None:
+        product, scope = self.resolve_scope()
+        if scope is None:
             return self.not_found()
         queryset = self.get_queryset()
+        if not can_view_requirements(request.user, product):
+            # 没有「需求 · 查看」：只列自己提交的、自己是审批人的单
+            queryset = queryset.filter(
+                Q(created_by=request.user) | Q(approvals__approver=request.user)
+            ).distinct()
 
         change_status = request.query_params.get("status")
         if change_status:
@@ -231,8 +260,8 @@ class RequirementChangeRequestViewSet(ProductScopedMixin, BaseViewSet):
         )
 
     def retrieve(self, request, slug, product_id, pk):
-        if self.resolve_scope()[1] is None:
-            return self.not_found()
+        if (error := self.read_scope(change_request_id=pk)[2]) is not None:
+            return error
         change_request = self.get_queryset().filter(id=pk).first()
         if change_request is None:
             return Response(
@@ -363,9 +392,9 @@ class RequirementChangeItemViewSet(ProductScopedMixin, BaseViewSet):
     serializer_class = RequirementChangeItemSerializer
 
     def list(self, request, slug, product_id, pk):
-        _, scope = self.resolve_scope()
-        if scope is None:
-            return self.not_found()
+        _, scope, error = self.read_scope(change_request_id=pk)
+        if error is not None:
+            return error
         queryset = (
             RequirementChangeItem.objects.filter(
                 change_request_id=pk,
@@ -404,9 +433,9 @@ class RequirementVersionViewSet(ProductScopedMixin, BaseViewSet):
     serializer_class = RequirementVersionSerializer
 
     def list(self, request, slug, product_id, requirement_id):
-        _, scope = self.resolve_scope()
-        if scope is None:
-            return self.not_found()
+        _, scope, error = self.read_scope()
+        if error is not None:
+            return error
         queryset = (
             RequirementVersion.objects.filter(
                 target_id=requirement_id, product_id=product_id
@@ -437,8 +466,8 @@ class RequirementChangeTrailViewSet(ProductScopedMixin, BaseViewSet):
     serializer_class = RequirementChangeItemSerializer
 
     def list(self, request, slug, product_id, requirement_id):
-        if self.resolve_scope()[1] is None:
-            return self.not_found()
+        if (error := self.read_scope()[2]) is not None:
+            return error
         requirement = Requirement.objects.filter(
             id=requirement_id, product_id=product_id
         ).first()
@@ -571,8 +600,8 @@ class RequirementBaselineViewSet(ProductScopedMixin, BaseViewSet):
         ).select_related("created_by")
 
     def list(self, request, slug, product_id):
-        if self.resolve_scope()[1] is None:
-            return self.not_found()
+        if (error := self.read_scope()[2]) is not None:
+            return error
         return self.paginate(
             request=request,
             queryset=self.get_queryset().order_by("-created_at"),
@@ -645,8 +674,8 @@ class RequirementBaselineViewSet(ProductScopedMixin, BaseViewSet):
         return Response(payload, status=status.HTTP_201_CREATED)
 
     def retrieve(self, request, slug, product_id, pk):
-        if self.resolve_scope()[1] is None:
-            return self.not_found()
+        if (error := self.read_scope()[2]) is not None:
+            return error
         baseline = self.get_queryset().filter(id=pk).first()
         if baseline is None:
             return Response(
@@ -700,9 +729,9 @@ class RequirementBaselineViewSet(ProductScopedMixin, BaseViewSet):
 
     def requirements(self, request, slug, product_id, pk):
         """基线收录的条目。内容与字段结构都取自被收录的那一版，不跟随需求现状。"""
-        _, scope = self.resolve_scope()
-        if scope is None:
-            return self.not_found()
+        _, scope, error = self.read_scope()
+        if error is not None:
+            return error
         baseline = self.get_queryset().filter(id=pk).first()
         if baseline is None:
             return Response(
@@ -729,8 +758,8 @@ class RequirementBaselineViewSet(ProductScopedMixin, BaseViewSet):
 
     def compare(self, request, slug, product_id, pk):
         """与另一个基线对比。`?to=<baselineId>`。"""
-        if self.resolve_scope()[1] is None:
-            return self.not_found()
+        if (error := self.read_scope()[2]) is not None:
+            return error
         from_baseline = self.get_queryset().filter(id=pk).first()
         to_id = request.query_params.get("to")
         to_baseline = self.get_queryset().filter(id=to_id).first() if to_id else None

@@ -17,6 +17,7 @@ from plane.app.permissions.keys import PermissionKey
 from plane.app.views.base import BaseAPIView
 from plane.app.views.requirement.library_item import get_scoped_library
 from plane.app.views.requirement.mixins import (
+    can_view_requirements,
     can_write_requirements,
     get_requirement_scope,
     get_scoped_product,
@@ -64,6 +65,23 @@ class RequirementConfigurationAPIView(BaseAPIView):
                 {"error": "Product not found."},
                 status=status.HTTP_404_NOT_FOUND,
             )
+        # 能看到产品但没有「需求 · 查看」：结构照旧、内容全空，前端按 can_view 显示无权限
+        if not can_view_requirements(request.user, product):
+            return Response(
+                {
+                    "can_view": False,
+                    "can_edit": False,
+                    "can_create": False,
+                    "can_delete": False,
+                    "can_manage_modules": False,
+                    "can_submit_review": False,
+                    "can_manage_baselines": False,
+                    "pending_change_request_count": 0,
+                    "requirement_types": [],
+                    "fields": [],
+                },
+                status=status.HTTP_200_OK,
+            )
 
         # 一个产品下的需求可能分属多个类型：requirement_types 供数据页分视图，
         # fields 保留成扁平并集，让变更记录那个 tab 完全不用改。
@@ -76,6 +94,7 @@ class RequirementConfigurationAPIView(BaseAPIView):
         )
         return Response(
             {
+                "can_view": True,
                 "can_edit": can_write_requirements(request.user, product),
                 # 下面几个按动作拆开，前端按钮显隐直接读；项目侧的 configuration 恒 false
                 "can_create": can_write_requirements(
@@ -124,6 +143,9 @@ class RequirementViewSet(BaseRequirementRowViewSet):
 
     def can_write(self, owner, permission_key=None):
         return can_write_requirements(self.request.user, owner.product, permission_key)
+
+    def can_read(self, owner):
+        return can_view_requirements(self.request.user, owner.product)
 
     def resolve_layer(self, owner):
         return resolve_row_layer(owner)

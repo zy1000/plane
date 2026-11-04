@@ -1250,7 +1250,12 @@ def _can_view_requirement_asset_owner(user, asset) -> bool:
             .first()
         )
         if product is not None:
-            return can_view_product(user, product)
+            from plane.app.permissions import PermissionKey
+            from plane.utils.product import has_product_permission
+
+            return can_view_product(user, product) and has_product_permission(
+                user, product, PermissionKey.PROJECT_REQUIREMENT_VIEW
+            )
         return RequirementLibrary.objects.filter(
             id=owner_id, workspace_id=asset.workspace_id
         ).exists()

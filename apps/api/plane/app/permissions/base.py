@@ -13,8 +13,8 @@
   project.* 部分。项目在某个组的白名单里但自己不是成员（「白名单访客」）也算能进，权限只有后一半。
   可见范围（成员 ∪ 负责 ∪ 白名单并集）在 utils/visibility.py，白名单求值在 utils/data_scope.py。
 - 没有系统组：所有权限组都是普通的、可配的；成员不默认属于任何组。
-- 产品：没有自己的 key。产品负责人 / 持 ``workspace.product.edit`` 的人拿全部项目 key；
-  其余人 = 该产品各活跃关联项目里的项目 key 并集。
+- 产品：没有自己的 key。直通身份 / 产品负责人拿全部项目 key；其余人 = 该产品各活跃关联项目里的
+  项目 key 并集。``workspace.product.edit`` 只管产品基本信息，不带需求 / 用例等内容权限。
 
 按工作项类型限定：权限组 JSON ``type_limits`` 记「这个动作不适用于哪些类型」，只对
 工作项 / 缺陷的新建、编辑、删除生效；多个组取并集 = 排除清单取交集。
@@ -579,7 +579,9 @@ def linked_project_ids(product) -> list:
 
 
 def _get_user_product_permission_keys(user, product) -> set:
-    """产品上生效的 key：workspace.* 部分照工作区，project.* 部分取各关联项目的并集。"""
+    """产品上生效的 key：workspace.* 部分照工作区，project.* 部分取各关联项目的并集。
+    project.* 全开只给直通身份和产品负责人；workspace.product.edit 只管产品基本信息，
+    不再连带产品里的需求 / 用例等内容权限（2026-11-04）。"""
     if _is_anonymous(user) or product is None:
         return set()
     cache = _cache(user)
@@ -594,11 +596,7 @@ def _get_user_product_permission_keys(user, product) -> set:
     if product.owner_id == user.id:
         # 产品负责人能改自己产品的基本信息（删产品仍看 workspace.product.delete）
         keys.add(PermissionKey.WORKSPACE_PRODUCT_EDIT.value)
-    if (
-        context.passthrough
-        or product.owner_id == user.id
-        or PermissionKey.WORKSPACE_PRODUCT_EDIT.value in context.keys
-    ):
+    if context.passthrough or product.owner_id == user.id:
         keys |= PROJECT_KEYS - _inactive_keys(user)
     else:
         for project_id in linked_project_ids(product):

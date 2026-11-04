@@ -3,6 +3,7 @@ from rest_framework.response import Response
 
 from plane.app.serializers.qa.case import CaseVersionListSerializer, CaseVersionCompareSerializer
 from plane.app.views import BaseAPIView
+from plane.app.views.qa.case_scope import CASE_VIEW, TEMPLATE_READ, case_scope_error
 from plane.db.models import TestCase, TestCaseVersion
 
 
@@ -15,8 +16,11 @@ class CaseVersionAPIView(BaseAPIView):
         case_id = request.query_params.get("case_id")
         if not case_id:
             return Response({"error": "case_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+        error = case_scope_error(request, slug, keys=CASE_VIEW, template_keys=TEMPLATE_READ, case_ids=[case_id])
+        if error is not None:
+            return error
 
-        case_versions = self.queryset.filter(case_id=case_id)
+        case_versions = self.queryset.filter(case_id=case_id, case__repository__workspace__slug=slug)
         serializer = self.serializer_class(case_versions, many=True)
         return Response(data=serializer.data, status=status.HTTP_200_OK)
 
@@ -29,6 +33,9 @@ class CaseVersionCompareAPIView(BaseAPIView):
         case_id = request.query_params.get("case_id")
         if not case_id:
             return Response({"error": "case_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+        error = case_scope_error(request, slug, keys=CASE_VIEW, template_keys=TEMPLATE_READ, case_ids=[case_id])
+        if error is not None:
+            return error
 
         from_version = request.query_params.get("from_version")
         to_version = request.query_params.get("to_version")
@@ -49,7 +56,7 @@ class CaseVersionCompareAPIView(BaseAPIView):
 
         def _build_current_snapshot() -> TestCaseVersion | None:
             try:
-                case = TestCase.objects.get(id=case_id)
+                case = TestCase.objects.get(id=case_id, repository__workspace__slug=slug)
             except TestCase.DoesNotExist:
                 return None
 
@@ -79,7 +86,9 @@ class CaseVersionCompareAPIView(BaseAPIView):
 
         required_versions = [v for v in [from_version_int, to_version_int] if v >= 0]
         snapshots = (
-            self.queryset.filter(case_id=case_id, version__in=required_versions)
+            self.queryset.filter(
+                case_id=case_id, case__repository__workspace__slug=slug, version__in=required_versions
+            )
             .only(
                 "id",
                 "case_id",

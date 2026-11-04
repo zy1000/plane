@@ -170,12 +170,16 @@ class RequirementExcelMixin:
     # --- 导出 -------------------------------------------------------------
 
     def export_excel(self, request, *args, **kwargs):
-        owner, error = self._owner_or_error(require_write=False)
+        is_template = request.query_params.get("template") in ("1", "true")
+        # 导出数据要「需求 · 导出」；下载空白导入模板只要能看（标准库的 can_write 一律查维护 key）
+        owner, error = self._owner_or_error(
+            require_write=not is_template,
+            permission_key=PermissionKey.PROJECT_REQUIREMENT_EXPORT,
+        )
         if error is not None:
             return error
         layer = self.resolve_layer(owner)
 
-        is_template = request.query_params.get("template") in ("1", "true")
         requested_ids = [
             item
             for item in (request.query_params.get("requirement_type_id") or "").split(",")

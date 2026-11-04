@@ -40,7 +40,7 @@ from plane.bgtasks.storage_metadata_task import get_asset_object_metadata
 from plane.throttles.asset import AssetRateThrottle
 from plane.utils.file_path import build_resolver, rebind_asset_to_path
 from plane.utils.asset_upload import presigned_post_for_asset
-from plane.utils.product import can_create_product, can_manage_product, can_view_product
+from plane.utils.product import can_create_product, can_manage_product, can_view_product, has_product_permission
 
 
 def requirement_asset_owner_exists(workspace, entity_identifier):
@@ -115,8 +115,64 @@ def _is_cross_workspace_product(workspace, product_id):
         return False
 
 
+def _can_access_requirement_asset(user, asset, *, manage=False):
+    """需求附件挂在产品或标准库上（entity_identifier）。产品：看要「需求 · 查看」，改要「需求 · 新建 / 编辑」；
+    标准库：看只要工作区成员，改要「维护需求标准库」。"""
+    from plane.app.permissions import PermissionKey, has_workspace_permission
+    from plane.db.models import RequirementLibrary
+
+    owner_id = asset.entity_identifier
+    if not owner_id:
+        return asset.created_by_id == user.id
+    try:
+        product = (
+            Product.objects.filter(id=owner_id, workspace_id=asset.workspace_id).select_related("workspace").first()
+        )
+        if product is not None:
+            if not can_view_product(user, product):
+                return False
+            keys = (
+                (PermissionKey.PROJECT_REQUIREMENT_EDIT, PermissionKey.PROJECT_REQUIREMENT_CREATE)
+                if manage
+                else (PermissionKey.PROJECT_REQUIREMENT_VIEW,)
+            )
+            return has_product_permission(user, product, *keys)
+        library = RequirementLibrary.objects.filter(id=owner_id, workspace_id=asset.workspace_id).first()
+    except (TypeError, ValueError, DjangoValidationError):
+        return False
+    if library is None:
+        return False
+    if manage:
+        return has_workspace_permission(
+            user, asset.workspace.slug, PermissionKey.WORKSPACE_REQUIREMENT_LIBRARY_MANAGE
+        )
+    return True
+
+
+def _can_access_case_asset(user, asset, *, manage=False):
+    """用例附件 / 用例评论图片：按用例所在库判断（产品库查「用例」权限，模板库查模板 key）。
+    还没绑用例的（先传后绑、模板贴图）照旧放行。"""
+    from plane.app.views.qa.case_scope import CASE_EDIT, CASE_VIEW, TEMPLATE_MANAGE, TEMPLATE_READ, user_can_access_cases
+
+    if not asset.case_id:
+        return True
+    if asset.entity_type == FileAsset.EntityTypeContext.TEST_CASE_COMMENT_DESCRIPTION or not manage:
+        keys, template_keys = CASE_VIEW, TEMPLATE_READ
+    else:
+        keys, template_keys = CASE_EDIT, TEMPLATE_MANAGE
+    return user_can_access_cases(user, asset.workspace.slug, [asset.case_id], keys=keys, template_keys=template_keys)
+
+
 def _can_access_product_asset(user, asset, *, manage=False):
-    if asset.entity_type != FileAsset.EntityTypeContext.PRODUCT_DESCRIPTION:
+    entity_type = asset.entity_type
+    if entity_type == FileAsset.EntityTypeContext.REQUIREMENT_ATTACHMENT:
+        return _can_access_requirement_asset(user, asset, manage=manage)
+    if entity_type in (
+        FileAsset.EntityTypeContext.CASE_ATTACHMENT,
+        FileAsset.EntityTypeContext.TEST_CASE_COMMENT_DESCRIPTION,
+    ):
+        return _can_access_case_asset(user, asset, manage=manage)
+    if entity_type != FileAsset.EntityTypeContext.PRODUCT_DESCRIPTION:
         return True
     if asset.product_id:
         return (
@@ -567,6 +623,17 @@ class WorkspaceFileAssetEndpoint(BaseAPIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
         case_id = request.data.get("case_id")
+        if case_id:
+            # 绑到的用例也要有编辑权限，不能把附件挂到看不到 / 改不了的用例上
+            from plane.app.views.qa.case_scope import CASE_EDIT, TEMPLATE_MANAGE, user_can_access_cases
+
+            if not user_can_access_cases(
+                request.user, slug, [case_id], keys=CASE_EDIT, template_keys=TEMPLATE_MANAGE
+            ):
+                return Response(
+                    {"error": "You do not have permission to update this asset."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
         asset.case_id = case_id
         asset.save()
 

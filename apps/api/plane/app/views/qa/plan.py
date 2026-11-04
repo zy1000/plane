@@ -102,11 +102,21 @@ from plane.app.permissions import (
     PermissionKey,
 )
 from plane.app.views.qa.product_scope import allow_product_scope
-from plane.app.views.qa.template_permissions import (
-    CASE_TEMPLATE_READ_KEYS,
-    allow_workspace_member_or_template,
-    template_permission_error,
+from plane.app.views.qa.case_scope import (
+    CASE_CREATE,
+    CASE_DELETE,
+    CASE_EDIT,
+    CASE_VIEW,
+    TEMPLATE_MANAGE,
+    TEMPLATE_READ,
+    as_id_list,
+    case_scope_error,
+    issue_scope_error,
+    plan_scope_error,
+    product_scope_error,
+    readable_repository_q,
 )
+from plane.app.views.qa.template_permissions import template_permission_error
 from plane.settings.storage import S3Storage
 from plane.utils.network_zone import ZONE_DOWNLOAD_DENIED, can_download_asset
 from plane.utils.asset_upload import presigned_post_for_asset
@@ -234,7 +244,7 @@ class RepositoryAPIView(BaseAPIView):
             data=request.data, context={"workspace": workspace}
         )
         serializer.is_valid(raise_exception=True)
-        # 模板库（is_template=True）走工作区级模板权限；产品库维持「工作区成员即可」
+        # 模板库（is_template=True）走工作区级模板权限；产品库查产品上的新建用例权限
         if serializer.validated_data.get("is_template"):
             error = template_permission_error(
                 request, slug, PermissionKey.WORKSPACE_CASE_TEMPLATE_MANAGE
@@ -247,13 +257,17 @@ class RepositoryAPIView(BaseAPIView):
                 {"error": "Product does not belong to this workspace"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        # 产品库：要能看到这个产品，且在产品上有新建用例权限
+        if product is not None:
+            error = product_scope_error(request, slug, [product.id], keys=CASE_CREATE)
+            if error is not None:
+                return error
         # workspace 由服务端按 URL slug 决定，覆盖客户端传值
         repository = serializer.save(workspace=workspace)
         serializer = TestCaseRepositoryDetailSerializer(instance=repository)
 
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-    @allow_workspace_member
     def put(self, request, slug):
         repository_id = request.data.pop("id")
         # is_template 创建后不可变；workspace / 产品不允许改挂
@@ -261,13 +275,16 @@ class RepositoryAPIView(BaseAPIView):
         request.data.pop("workspace", None)
         request.data.pop("product", None)
         request.data.pop("project", None)
+        error = case_scope_error(
+            request,
+            slug,
+            keys=CASE_EDIT,
+            template_keys=TEMPLATE_MANAGE,
+            repository_ids=as_id_list(repository_id),
+        )
+        if error is not None:
+            return error
         repository = get_object_or_404(self.get_queryset(), id=repository_id)
-        if repository.is_template:
-            error = template_permission_error(
-                request, slug, PermissionKey.WORKSPACE_CASE_TEMPLATE_MANAGE
-            )
-            if error is not None:
-                return error
         update_serializer = self.serializer_class(
             instance=repository, data=request.data, partial=True
         )
@@ -276,17 +293,31 @@ class RepositoryAPIView(BaseAPIView):
         serializer = TestCaseRepositoryDetailSerializer(instance=repository)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    @allow_workspace_member
     def get(self, request, slug):
         queryset = self.get_queryset().select_related("product_category")
         # 未显式查询 is_template 时默认排除模板库，
         # 让产品侧列表、库下拉、复制弹窗等存量消费方都看不到模板库
         if "is_template" not in request.query_params:
             queryset = queryset.filter(is_template=False)
-        elif request.query_params.get("is_template") in ("true", "True", "1"):
-            error = template_permission_error(request, slug, *CASE_TEMPLATE_READ_KEYS)
-            if error is not None:
-                return error
+        params = request.query_params
+        repository_ids = as_id_list(params.get("id")) + as_id_list(params.get("id__in"))
+        product_ids = as_id_list(params.get("product_id")) + as_id_list(params.get("product_id__in"))
+        # 指定了库 → 逐库查看权限（模板库查模板 key）；没指定库时只校验成员身份
+        error = case_scope_error(
+            request,
+            slug,
+            keys=CASE_VIEW,
+            template_keys=TEMPLATE_READ,
+            repository_ids=repository_ids,
+            require_target=False,
+        )
+        if error is None and product_ids:
+            error = product_scope_error(request, slug, product_ids, keys=CASE_VIEW)
+        if error is not None:
+            return error
+        if not repository_ids and not product_ids:
+            # 都没指定：只列这个人能读的库
+            queryset = queryset.filter(readable_repository_q(request, slug, field="id"))
         repositories = self.filter_queryset(queryset)
         paginator = self.pagination_class()
         paginated_queryset = paginator.paginate_queryset(repositories, request)
@@ -295,16 +326,18 @@ class RepositoryAPIView(BaseAPIView):
         )
         return list_response(data=serializer.data, count=repositories.count())
 
-    @allow_workspace_member
     def delete(self, request, slug):
         plan_ids = request.data.pop("ids")
+        error = case_scope_error(
+            request,
+            slug,
+            keys=CASE_DELETE,
+            template_keys=TEMPLATE_MANAGE,
+            repository_ids=as_id_list(plan_ids),
+        )
+        if error is not None:
+            return error
         targets = self.get_queryset().filter(id__in=plan_ids)
-        if targets.filter(is_template=True).exists():
-            error = template_permission_error(
-                request, slug, PermissionKey.WORKSPACE_CASE_TEMPLATE_MANAGE
-            )
-            if error is not None:
-                return error
         targets.delete(soft=False)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -1173,8 +1206,18 @@ class PlanView(BaseViewSet):
     def case_detail(self, request, slug):
         plan_id = request.query_params["plan_id"]
         case_id = request.query_params["case_id"]
+        error = plan_scope_error(
+            request, slug, [plan_id], keys=(PermissionKey.PROJECT_TEST_PLAN_VIEW,)
+        )
+        if error is not None:
+            return error
 
-        plan_case = PlanCase.objects.get(plan_id=plan_id, case_id=case_id)
+        # 用例必须在这个计划里，否则 404（DoesNotExist 由 handle_exception 转 404）
+        plan_case = PlanCase.objects.get(
+            plan_id=plan_id,
+            case_id=case_id,
+            plan__project__workspace__slug=slug,
+        )
         # 与 CaseAPIView 同口径：裸对象会让 CaseListSerializer 逐个关联字段回查，
         # 且 versions 不加 only 会把整份快照拉出来
         case = (
@@ -1187,7 +1230,7 @@ class PlanView(BaseViewSet):
                     ),
                 )
             )
-            .get(pk=case_id)
+            .get(pk=case_id, repository__workspace__slug=slug)
         )
         case_data = CaseListSerializer(case).data
 
@@ -1199,8 +1242,26 @@ class PlanView(BaseViewSet):
     def add_bug(self, request, slug):
         case_id = request.data["case_id"]
         issue_id = request.data["issue_id"]
-        case = TestCase.objects.get(pk=case_id)
-        issue = Issue.objects.get(pk=issue_id)
+        plan_id = request.data.get("plan_id")
+        error = issue_scope_error(request, slug, [issue_id], action="edit")
+        if error is None:
+            error = case_scope_error(
+                request, slug, keys=CASE_VIEW, template_keys=TEMPLATE_READ, case_ids=[case_id]
+            )
+        if error is None and plan_id:
+            error = plan_scope_error(
+                request,
+                slug,
+                [plan_id],
+                keys=(
+                    PermissionKey.PROJECT_TEST_PLAN_EXECUTE,
+                    PermissionKey.PROJECT_TEST_PLAN_EDIT,
+                ),
+            )
+        if error is not None:
+            return error
+        case = TestCase.objects.get(pk=case_id, repository__workspace__slug=slug)
+        issue = Issue.objects.get(pk=issue_id, workspace__slug=slug)
         case.issues.add(issue)
         return Response(status=status.HTTP_201_CREATED)
 
@@ -1862,8 +1923,12 @@ class CaseDetailAPIView(BaseAPIView):
     pagination_class = CustomPaginator
     serializer_class = CaseListSerializer
 
-    @allow_workspace_member_or_template(*CASE_TEMPLATE_READ_KEYS)
     def get(self, request, slug, case_id):
+        error = case_scope_error(
+            request, slug, keys=CASE_VIEW, template_keys=TEMPLATE_READ, case_ids=[case_id]
+        )
+        if error is not None:
+            return error
         case = get_object_or_404(
             self.queryset, id=case_id, repository__workspace__slug=slug
         )
@@ -1872,7 +1937,6 @@ class CaseDetailAPIView(BaseAPIView):
 
 
 class CaseMindmapAPIView(BaseAPIView):
-    @allow_workspace_member_or_template(*CASE_TEMPLATE_READ_KEYS)
     def get(self, request, slug):
         repository_id = request.query_params.get("repository_id")
         module_ids_raw = (
@@ -1890,10 +1954,22 @@ class CaseMindmapAPIView(BaseAPIView):
                 {"error": "repository_id is required"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        # module_id 下面会校验必须属于这个库，只查库即可
+        error = case_scope_error(
+            request,
+            slug,
+            keys=CASE_VIEW,
+            template_keys=TEMPLATE_READ,
+            repository_ids=[repository_id],
+        )
+        if error is not None:
+            return error
 
         modules = list(
             CaseModule.objects.filter(
-                repository_id=repository_id, deleted_at__isnull=True
+                repository_id=repository_id,
+                repository__workspace__slug=slug,
+                deleted_at__isnull=True,
             )
             .values("id", "name", "parent_id", "sort_order")
             .order_by("sort_order", "created_at")
@@ -1945,7 +2021,9 @@ class CaseMindmapAPIView(BaseAPIView):
                 allowed_module_ids |= collect_descendants(mid)
 
         cases_qs = TestCase.objects.filter(
-            repository_id=repository_id, deleted_at__isnull=True
+            repository_id=repository_id,
+            repository__workspace__slug=slug,
+            deleted_at__isnull=True,
         )
         if allowed_module_ids is not None:
             cases_qs = cases_qs.filter(module_id__in=list(allowed_module_ids))
@@ -2033,21 +2111,46 @@ class CaseModuleAPIView(BaseAPIView):
         # 锁定在 URL slug 对应的工作区内，杜绝跨工作区读删
         return CaseModule.objects.filter(repository__workspace__slug=self.workspace_slug)
 
-    @allow_workspace_member_or_template(*CASE_TEMPLATE_READ_KEYS)
     def get(self, request, slug):
         repository_ids_raw = request.query_params.get("repository_id__in")
+        repository_ids = as_id_list(repository_ids_raw) + as_id_list(
+            request.query_params.get("repository_id")
+        )
+        # 指定了库 → 每个库都要能看；都没指定时只校验成员身份，下面按可读库过滤
+        error = case_scope_error(
+            request,
+            slug,
+            keys=CASE_VIEW,
+            template_keys=TEMPLATE_READ,
+            repository_ids=repository_ids,
+            require_target=False,
+        )
+        if error is not None:
+            return error
         if repository_ids_raw:
             ids = [r.strip() for r in repository_ids_raw.split(",") if r.strip()]
             modules = self.get_queryset().filter(parent=None, repository_id__in=ids)
         else:
-            modules = self.filter_queryset(self.get_queryset().filter(parent=None))
+            queryset = self.get_queryset().filter(parent=None)
+            if not repository_ids:
+                queryset = queryset.filter(
+                    readable_repository_q(request, slug, field="repository_id")
+                )
+            modules = self.filter_queryset(queryset)
         serializer = CaseModuleListSerializer(instance=modules, many=True)
         return Response(data=serializer.data)
 
-    @allow_workspace_member_or_template(
-        PermissionKey.WORKSPACE_CASE_TEMPLATE_MANAGE
-    )
     def post(self, request, slug):
+        error = case_scope_error(
+            request,
+            slug,
+            keys=CASE_EDIT,
+            template_keys=TEMPLATE_MANAGE,
+            repository_ids=as_id_list(request.data.get("repository")),
+            module_ids=as_id_list(request.data.get("parent")),
+        )
+        if error is not None:
+            return error
         serializer = self.serializer_class(data=request.data)
         serializer.is_valid(raise_exception=True)
         repository = serializer.validated_data.get("repository")
@@ -2066,10 +2169,26 @@ class CaseModuleAPIView(BaseAPIView):
         serializer = CaseModuleListSerializer(instance=test_plan)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-    @allow_workspace_member_or_template(
-        PermissionKey.WORKSPACE_CASE_TEMPLATE_MANAGE
-    )
     def delete(self, request, slug):
+        module_ids = as_id_list(request.query_params.get("id"))
+        repository_ids = as_id_list(request.query_params.get("repository_id"))
+        # 不带 id / repository_id 时过滤条件为空，会删掉全工作区的模块
+        if not module_ids and not repository_ids:
+            return Response(
+                {"error": "id or repository_id is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        error = case_scope_error(
+            request,
+            slug,
+            keys=CASE_EDIT,
+            template_keys=TEMPLATE_MANAGE,
+            repository_ids=repository_ids,
+            module_ids=module_ids,
+        )
+        if error is not None:
+            return error
+        # get_queryset 已限本工作区
         targets = self.filter_queryset(self.get_queryset()).all()
         # 含产品模板受控的第一层就整体拒绝，什么都不删
         locked = (
@@ -2099,19 +2218,42 @@ class LabelAPIView(BaseAPIView):
         # 锁定在 URL slug 对应的工作区内，杜绝跨工作区读改删
         return CaseLabel.objects.filter(repository__workspace__slug=self.workspace_slug)
 
-    @allow_workspace_member_or_template(*CASE_TEMPLATE_READ_KEYS)
     def get(self, request, slug):
-        labels = self.filter_queryset(self.get_queryset()).all()
+        repository_ids = as_id_list(request.query_params.get("repository_id"))
+        error = case_scope_error(
+            request,
+            slug,
+            keys=CASE_VIEW,
+            template_keys=TEMPLATE_READ,
+            repository_ids=repository_ids,
+            require_target=False,
+        )
+        if error is not None:
+            return error
+        queryset = self.get_queryset()
+        if not repository_ids:
+            # 没指定库：只列这个人能读的库里的标签
+            queryset = queryset.filter(
+                readable_repository_q(request, slug, field="repository_id")
+            )
+        labels = self.filter_queryset(queryset).all()
         serializer = self.serializer_class(instance=labels, many=True)
         return Response(data=serializer.data)
 
-    @allow_workspace_member_or_template(
-        PermissionKey.WORKSPACE_CASE_TEMPLATE_MANAGE
-    )
     def post(self, request, slug):
         name = request.data["name"]
         case_id = request.data.get("case_id")
         repository_id = request.data["repository_id"]
+        error = case_scope_error(
+            request,
+            slug,
+            keys=CASE_EDIT,
+            template_keys=TEMPLATE_MANAGE,
+            repository_ids=as_id_list(repository_id),
+            case_ids=as_id_list(case_id),
+        )
+        if error is not None:
+            return error
         get_object_or_404(
             TestCaseRepository, id=repository_id, workspace__slug=slug
         )
@@ -2127,12 +2269,19 @@ class LabelAPIView(BaseAPIView):
         serializer = self.serializer_class(instance=label)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-    @allow_workspace_member_or_template(
-        PermissionKey.WORKSPACE_CASE_TEMPLATE_MANAGE
-    )
     def delete(self, request, slug):
         case_id = request.data.get("case_id")
         label_id = request.data["id"]
+        error = case_scope_error(
+            request,
+            slug,
+            keys=CASE_EDIT,
+            template_keys=TEMPLATE_MANAGE,
+            label_ids=as_id_list(label_id),
+            case_ids=as_id_list(case_id),
+        )
+        if error is not None:
+            return error
         label = get_object_or_404(self.get_queryset(), id=label_id)
         if case_id:
             case = TestCase.objects.get(
@@ -2230,10 +2379,15 @@ class CaseAttachmentV2Endpoint(BaseAPIView):
         case_attachment.save()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-    @allow_workspace_member
     def get(self, request, slug, case_id, pk=None):
+        error = case_scope_error(
+            request, slug, keys=CASE_VIEW, template_keys=TEMPLATE_READ, case_ids=[case_id]
+        )
+        if error is not None:
+            return error
         if pk:
-            asset = FileAsset.objects.get(id=pk, workspace__slug=slug)
+            # 附件必须挂在路径里的这个用例上
+            asset = FileAsset.objects.get(id=pk, case_id=case_id, workspace__slug=slug)
             if not asset.is_uploaded:
                 return Response(
                     {"error": "The asset is not uploaded.", "status": False},
@@ -2320,17 +2474,25 @@ class UserCaseModuleTreeAPIView(BaseAPIView):
 
     def get(self, request):
         # 1. 获取用户所在的所有工作区 ID
-        workspace_ids = list(
+        memberships = list(
             WorkspaceMember.objects.filter(
                 member=request.user,
+                is_active=True,
                 deleted_at__isnull=True,
-            ).values_list("workspace_id", flat=True)
+            ).values_list("workspace_id", "workspace__slug")
         )
+        workspace_ids = [workspace_id for workspace_id, _ in memberships]
         if not workspace_ids:
             return Response([])
 
+        # 每个工作区只留下这个人能读的用例库（产品可见 + 用例查看；模板库查模板 key）
+        readable_q = Q(pk__in=[])
+        for _, workspace_slug in memberships:
+            readable_q |= readable_repository_q(request, workspace_slug, field="id")
+
         # 2. 获取这些工作区下所有用例库（含 workspace、product 关联，用于分组）
         repository_queryset = TestCaseRepository.objects.filter(
+            readable_q,
             workspace_id__in=workspace_ids,
             deleted_at__isnull=True,
         )

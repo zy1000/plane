@@ -6,16 +6,20 @@ from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
 from django.db import IntegrityError, transaction
 
-from plane.app.permissions import allow_workspace_member, PermissionKey
+from plane.app.permissions import allow_workspace_member
 from plane.app.serializers.qa import (
     CaseModuleCreateUpdateSerializer,
     CaseModuleListSerializer,
     CaseModuleMoveSerializer,
 )
 from plane.app.views import BaseAPIView
-from plane.app.views.qa.template_permissions import (
-    CASE_TEMPLATE_READ_KEYS,
-    allow_workspace_member_or_template,
+from plane.app.views.qa.case_scope import (
+    CASE_EDIT,
+    CASE_VIEW,
+    TEMPLATE_MANAGE,
+    TEMPLATE_READ,
+    as_id_list,
+    case_scope_error,
 )
 from plane.db.models import CaseModule, TestCase
 from plane.utils.product_category import (
@@ -37,8 +41,16 @@ class CaseModuleCountAPIView(BaseAPIView):
         # 锁定在 URL slug 对应的工作区内
         return CaseModule.objects.filter(repository__workspace__slug=self.workspace_slug)
 
-    @allow_workspace_member_or_template(*CASE_TEMPLATE_READ_KEYS)
     def get(self, request, slug):
+        error = case_scope_error(
+            request,
+            slug,
+            keys=CASE_VIEW,
+            template_keys=TEMPLATE_READ,
+            repository_ids=as_id_list(request.query_params.get('repository_id')),
+        )
+        if error is not None:
+            return error
         modules = self.filter_queryset(self.get_queryset()).annotate(
             case_count=Count('cases', filter=Q(cases__deleted_at__isnull=True))).values('id', 'parent_id', 'case_count')
 
@@ -84,8 +96,18 @@ class CaseModuleDetailAPIView(BaseAPIView):
     queryset = CaseModule.objects.all()
     serializer_class = CaseModuleCreateUpdateSerializer
 
-    @allow_workspace_member_or_template(PermissionKey.WORKSPACE_CASE_TEMPLATE_MANAGE)
     def patch(self, request, slug, module_id):
+        # 源模块要能改；body 改挂到别的库 / 父模块时，目标也要能改
+        error = case_scope_error(
+            request,
+            slug,
+            keys=CASE_EDIT,
+            template_keys=TEMPLATE_MANAGE,
+            module_ids=[module_id] + as_id_list(request.data.get("parent")),
+            repository_ids=as_id_list(request.data.get("repository")),
+        )
+        if error is not None:
+            return error
         module = get_object_or_404(
             self.queryset,
             id=module_id,
@@ -116,8 +138,18 @@ class CaseModuleMoveAPIView(BaseAPIView):
     存量同级 sort_order 大多相同，前端无法靠取中点排序，所以由这里整组重编号。
     """
 
-    @allow_workspace_member_or_template(PermissionKey.WORKSPACE_CASE_TEMPLATE_MANAGE)
     def post(self, request, slug):
+        # 被移动的模块和目标父模块都要能改
+        error = case_scope_error(
+            request,
+            slug,
+            keys=CASE_EDIT,
+            template_keys=TEMPLATE_MANAGE,
+            module_ids=as_id_list(request.data.get("module_id"))
+            + as_id_list(request.data.get("target_parent_id")),
+        )
+        if error is not None:
+            return error
         serializer = CaseModuleMoveSerializer(data=request.data, context={"slug": slug})
         serializer.is_valid(raise_exception=True)
         module = serializer.validated_data["module"]

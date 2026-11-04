@@ -27,6 +27,7 @@ from plane.app.views.requirement.library import LIBRARY_READ_KEYS
 from plane.app.views.requirement.library_item import get_scoped_library
 from plane.app.permissions.keys import PermissionKey
 from plane.app.views.requirement.mixins import (
+    can_view_requirements,
     can_write_requirements,
     get_scoped_product,
 )
@@ -113,6 +114,11 @@ class _RequirementModuleScopeMixin:
             return None, None, Response(
                 {"error": self.NOT_FOUND_PRODUCT},
                 status=status.HTTP_404_NOT_FOUND,
+            )
+        if not require_write and not can_view_requirements(self.request.user, product):
+            return None, None, Response(
+                {"error": "您没有查看需求的权限。"},
+                status=status.HTTP_403_FORBIDDEN,
             )
         if require_write and not can_write_requirements(
             self.request.user, product, PermissionKey.PROJECT_REQUIREMENT_MODULE_MANAGE

@@ -174,6 +174,12 @@ def get_requirement_scope(user, *, slug, product_id, for_update=False):
     return product, RequirementScopeHandle.for_product(product)
 
 
+def can_view_requirements(user, product):
+    """产品需求的「查看」：在产品上持有 project.requirement.view（取自关联项目，负责人 / 直通全有）。
+    能看到产品不等于能看需求（2026-11-04）。"""
+    return has_product_permission(user, product, PermissionKey.PROJECT_REQUIREMENT_VIEW)
+
+
 def can_write_requirements(user, product, permission_key=None):
     """能不能对产品需求做某个动作。缺省是「编辑」；建 / 删 / 模块 / 评审 / 基线各传自己的 key。
     传一组 key 表示任一命中即可。"""

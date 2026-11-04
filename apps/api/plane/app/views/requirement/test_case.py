@@ -111,11 +111,11 @@ class RequirementTestCaseViewSet(BaseViewSet):
             )
 
         product = requirement.product
-        can_read = can_view_product(request.user, product) or (
-            has_project_side_link_permission(
-                request.user, slug=slug, requirement=requirement
-            )
-        )
+        # 产品侧要能看到产品且有「需求 · 查看」；项目侧按项目权限
+        can_read = (
+            can_view_product(request.user, product)
+            and has_product_permission(request.user, product, PermissionKey.PROJECT_REQUIREMENT_VIEW)
+        ) or has_project_side_link_permission(request.user, slug=slug, requirement=requirement)
         if not can_read:
             return None, Response(
                 {"error": "Requirement not found."}, status=status.HTTP_404_NOT_FOUND

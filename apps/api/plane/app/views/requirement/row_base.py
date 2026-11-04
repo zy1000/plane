@@ -141,6 +141,10 @@ class BaseRequirementRowViewSet(RequirementExcelMixin, BaseViewSet):
     def can_write(self, owner, permission_key=None):
         raise NotImplementedError
 
+    def can_read(self, owner):
+        """读这批需求行的门槛；默认放行（标准库的读权限挂在装饰器上），产品需求要 view key。"""
+        return True
+
     def resolve_layer(self, owner):
         """返回 RowLayer。不再有只读分支 —— 闸门下沉到了每一行。"""
         raise NotImplementedError
@@ -149,6 +153,7 @@ class BaseRequirementRowViewSet(RequirementExcelMixin, BaseViewSet):
 
     NOT_FOUND = "Requirement not found."
     FORBIDDEN = "You do not have permission to maintain these requirements."
+    READ_FORBIDDEN = "您没有查看需求的权限。"
 
     def _owner_or_error(
         self, *, for_update=False, require_write=True, permission_key=None
@@ -159,6 +164,11 @@ class BaseRequirementRowViewSet(RequirementExcelMixin, BaseViewSet):
             return None, Response(
                 {"error": self.NOT_FOUND},
                 status=status.HTTP_404_NOT_FOUND,
+            )
+        if not self.can_read(owner):
+            return None, Response(
+                {"error": self.READ_FORBIDDEN},
+                status=status.HTTP_403_FORBIDDEN,
             )
         if require_write and not self.can_write(owner, permission_key):
             return None, Response(
