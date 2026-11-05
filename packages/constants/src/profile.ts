@@ -18,12 +18,6 @@ export const PROFILE_VIEWER_TAB = [
 
 export const PROFILE_ADMINS_TAB = [
   {
-    key: "assigned",
-    route: "assigned",
-    i18n_label: "profile.tabs.assigned",
-    selected: "/assigned/",
-  },
-  {
     key: "work_items",
     route: "work_items",
     i18n_label: "profile.tabs.work_items",
@@ -40,18 +34,6 @@ export const PROFILE_ADMINS_TAB = [
     route: "requirements",
     i18n_label: "profile.tabs.requirements",
     selected: "/requirements/",
-  },
-  {
-    key: "created",
-    route: "created",
-    i18n_label: "profile.tabs.created",
-    selected: "/created/",
-  },
-  {
-    key: "overdue",
-    route: "overdue",
-    i18n_label: "profile.tabs.overdue",
-    selected: "/overdue/",
   },
   {
     key: "activity",

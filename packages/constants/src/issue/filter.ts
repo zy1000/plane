@@ -37,6 +37,7 @@ export enum EServerGroupByToFilterOptions {
   "target_date" = "target_date",
   "project_id" = "project",
   "created_by" = "created_by",
+  "user_relation" = "user_relation",
 }
 
 export enum EIssueFilterType {
@@ -124,7 +125,7 @@ export const ISSUE_DISPLAY_FILTERS_BY_PAGE: TIssueFiltersToDisplayByPageType = {
       list: {
         display_properties: ISSUE_DISPLAY_PROPERTIES_KEYS,
         display_filters: {
-          group_by: ["state_detail.group", "priority", "project", "labels", null],
+          group_by: ["user_relation", "state_detail.group", "priority", "project", "labels", null],
           order_by: ["sort_order", "-created_at", "-updated_at", "start_date", "-priority"],
           type: ["active", "backlog"],
         },
@@ -136,7 +137,7 @@ export const ISSUE_DISPLAY_FILTERS_BY_PAGE: TIssueFiltersToDisplayByPageType = {
       kanban: {
         display_properties: ISSUE_DISPLAY_PROPERTIES_KEYS,
         display_filters: {
-          group_by: ["state_detail.group", "priority", "project", "labels"],
+          group_by: ["user_relation", "state_detail.group", "priority", "project", "labels"],
           order_by: ["sort_order", "-created_at", "-updated_at", "start_date", "-priority"],
           type: ["active", "backlog"],
         },

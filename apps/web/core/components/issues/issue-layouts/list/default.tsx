@@ -23,10 +23,11 @@ import type {
 } from "@plane/types";
 // components
 import { MultipleSelectGroup, getEntitiesWithSelected } from "@/components/core/multiple-select";
+import { ProfileIssueGroupEmpty, ProfileIssueListHeader } from "@/components/profile/issues/profile-issue-columns";
 // hooks
 import { useMultipleSelectStore } from "@/hooks/store/use-multiple-select-store";
 import { useSubIssuesPreload } from "@/hooks/store/use-sub-issues-preload";
-import { useIssueStoreType, useTypedPageIssueTypeIds } from "@/hooks/use-issue-layout-store";
+import { useIssueStoreType, useIssuesStore, useTypedPageIssueTypeIds } from "@/hooks/use-issue-layout-store";
 // plane web components
 import { IssueBulkOperationsRoot } from "@/plane-web/components/issues/bulk-operations";
 // plane web hooks
@@ -35,6 +36,7 @@ import { useBulkOperationStatus } from "@/plane-web/hooks/use-bulk-operation-sta
 import type { GroupDropLocation } from "../utils";
 import { getGroupByColumns, isWorkspaceLevel, isSubGrouped } from "../utils";
 import { GroupSidebar } from "./group-sidebar";
+import { useListAppearance } from "./list-appearance-context";
 import { ListGroup } from "./list-group";
 import type { TRenderQuickActions } from "./list-view-types";
 
@@ -89,6 +91,11 @@ export const List = observer(function List(props: IList) {
 
   const storeType = useIssueStoreType();
   const typedPageIssueTypeIds = useTypedPageIssueTypeIds();
+  // 个人主页：列头 + 选中空分组时的空状态
+  const appearance = useListAppearance();
+  const {
+    issues: { getGroupIssueCount },
+  } = useIssuesStore();
   // plane web hooks
   const isBulkOperationsEnabled = useBulkOperationStatus();
   // multiple select store（读取已选项以保护直接勾选的子工作项不被清理）
@@ -173,6 +180,7 @@ export const List = observer(function List(props: IList) {
   const selectableEntities = getEntitiesWithSelected(entities, selectedEntityIds, getEntityDetailsFromEntityID);
 
   const activeGroup = isGrouped && selectedGroupId ? groups.find((g) => g.id === selectedGroupId) : null;
+  const isActiveGroupEmpty = !!activeGroup && (getGroupIssueCount(activeGroup.id, undefined, false) ?? 0) <= 0;
 
   // In sidebar mode, ensure the active group is never collapsed
   const sidebarCollapsedGroups: TIssueKanbanFilters = isGrouped && selectedGroupId
@@ -205,6 +213,14 @@ export const List = observer(function List(props: IList) {
                   ref={containerRef}
                   className="vertical-scrollbar relative scrollbar-lg size-full overflow-auto bg-surface-1"
                 >
+                  {appearance && <ProfileIssueListHeader />}
+                  {appearance && activeGroup && isActiveGroupEmpty && (
+                    <ProfileIssueGroupEmpty
+                      groupId={activeGroup.id}
+                      groupName={activeGroup.name}
+                      entityLabel={appearance.entityLabel}
+                    />
+                  )}
                   {activeGroup && (
                     <ListGroup
                       key={activeGroup.id}
@@ -258,6 +274,7 @@ export const List = observer(function List(props: IList) {
                 ref={containerRef}
                 className="vertical-scrollbar relative scrollbar-lg size-full overflow-auto bg-surface-1"
               >
+                {appearance && <ProfileIssueListHeader />}
                 {groups.map((group: IGroupByColumn) => (
                   <ListGroup
                     key={group.id}

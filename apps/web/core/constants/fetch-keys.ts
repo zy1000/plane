@@ -149,6 +149,8 @@ export const USER_PROFILE_ACTIVITY = (
 ) => `USER_WORKSPACE_PROFILE_ACTIVITY_${workspaceSlug.toUpperCase()}_${userId.toUpperCase()}_${params?.cursor}`;
 export const USER_PROFILE_PROJECT_SEGREGATION = (workspaceSlug: string, userId: string) =>
   `USER_PROFILE_PROJECT_SEGREGATION_${workspaceSlug.toUpperCase()}_${userId.toUpperCase()}`;
+export const USER_PROFILE_RELATION_COUNTS = (workspaceSlug: string, userId: string) =>
+  `USER_PROFILE_RELATION_COUNTS_${workspaceSlug.toUpperCase()}_${userId.toUpperCase()}`;
 
 // api-tokens
 export const API_TOKENS_LIST = `API_TOKENS_LIST`;

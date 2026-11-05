@@ -220,6 +220,18 @@ export class UserService extends APIService {
       });
   }
 
+  /** 个人主页页签条数：工作项 / 缺陷 / 需求（分配给他 ∪ 他创建） */
+  async getUserProfileRelationCounts(
+    workspaceSlug: string,
+    userId: string
+  ): Promise<{ work_items: number; defects: number; requirements: number }> {
+    return this.get(`/api/workspaces/${workspaceSlug}/user-relation-counts/${userId}/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
   async getUserProfileActivity(
     workspaceSlug: string,
     userId: string,

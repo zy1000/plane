@@ -149,7 +149,9 @@ class WorkSpaceMemberViewSet(BaseViewSet):
             )
         )
 
-    @allow_fine_permission(*WORKSPACE_MEMBER_LOOKUP_PERMISSIONS, level="WORKSPACE")
+    # 成员名单是全站取姓名 / 头像 / 部门的通讯录，任意工作区成员可读（同上游）；
+    # workspace.member.view 只管工作区设置「成员」页入口，邮箱等管理字段仍按 _can_view_admin_details 裁剪
+    @allow_workspace_member
     def list(self, request, slug):
         workspace_members = list(self.get_queryset())
         serializer_class = (
@@ -185,7 +187,7 @@ class WorkSpaceMemberViewSet(BaseViewSet):
         )
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    @allow_fine_permission(*WORKSPACE_MEMBER_LOOKUP_PERMISSIONS, level="WORKSPACE")
+    @allow_workspace_member
     def retrieve(self, request, slug, pk):
         try:
             # Get the specific workspace member by pk

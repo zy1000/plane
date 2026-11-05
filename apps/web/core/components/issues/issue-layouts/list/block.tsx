@@ -39,6 +39,9 @@ import { WithDisplayPropertiesHOC } from "../properties/with-display-properties-
 import { calculateIdentifierWidth } from "../utils";
 import type { TRenderQuickActions } from "./list-view-types";
 import { WorkItemTypeIcon } from "@/components/issues/work-item-type-icon";
+import { PROFILE_ISSUE_GRID_CLASS } from "@/components/profile/issues/profile-issue-columns";
+import { ProfileIssueRowCells } from "@/components/profile/issues/profile-issue-row";
+import { useListAppearance } from "./list-appearance-context";
 
 interface IssueBlockProps {
   issueId: string;
@@ -85,6 +88,7 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
   const workspaceSlug = routerWorkspaceSlug?.toString();
   const projectId = routerProjectId?.toString();
   // hooks
+  const appearance = useListAppearance();
   const { sidebarCollapsed: isSidebarCollapsed } = useAppTheme();
   const { getProjectIdentifierById, currentProjectNextSequenceId } = useProject();
   const {
@@ -185,6 +189,46 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
     isEpic,
     isArchived: !!issue?.archived_at,
   });
+
+  // 个人主页：列对齐的行（编号 | 标题 | 状态 | 优先级 | 截止日期 | 项目 | 负责人）
+  if (appearance?.variant === "profile") {
+    return (
+      <ControlLink
+        id={`issue-${issue.id}`}
+        href={workItemLink}
+        onClick={() => handleIssuePeekOverview(issue)}
+        className="w-full cursor-pointer"
+        disabled={!!issue?.tempId || issue?.is_draft}
+      >
+        <div
+          ref={issueRef}
+          className={cn(
+            PROFILE_ISSUE_GRID_CLASS,
+            "group/list-block relative min-h-12 bg-layer-transparent py-1.5 text-13 transition-colors hover:bg-layer-transparent-hover",
+            {
+              "bg-accent-primary/5": getIsIssuePeeked(issue.id) && peekIssue?.nestingLevel === nestingLevel,
+              "bg-layer-1": isCurrentBlockDragging,
+            }
+          )}
+        >
+          <ProfileIssueRowCells
+            issue={issue}
+            workspaceSlug={workspaceSlug}
+            projectIdentifier={projectIdentifier ?? issue.project_identifier ?? undefined}
+            typeIcon={issueTypeLogoIcon}
+            indent={isSubIssue ? spacingLeft : 0}
+            subIssuesCount={isEpic ? 0 : subIssuesCount}
+            isExpanded={isExpanded}
+            onToggleExpand={handleToggleExpand}
+            isReadOnly={!canEditIssueProperties}
+            updateIssue={updateIssue}
+            quickActions={issue.tempId ? null : quickActions({ issue, parentRef: issueRef })}
+          />
+        </div>
+      </ControlLink>
+    );
+  }
+
   return (
     <ControlLink
       id={`issue-${issue.id}`}

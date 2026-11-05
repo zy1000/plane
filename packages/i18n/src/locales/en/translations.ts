@@ -6436,8 +6436,9 @@ export default {
         list_hint: "open",
         empty: "No requirements assigned to you",
         all_products: "All products",
-        page_empty_title: "No requirements assigned to this member yet",
-        page_empty_description: "Product requirements assigned to this member will be listed here across products.",
+        page_empty_title: "No requirements assigned to or created by this member yet",
+        page_empty_description:
+          "Product requirements assigned to or created by this member will be listed here across products.",
       },
       workload_overview: {
         title: "Workload & progress",
@@ -6506,6 +6507,15 @@ export default {
       subscribed: "Subscribed",
       overdue: "Overdue",
       activity: "Activity",
+    },
+    user_relation: "Relation to member",
+    user_relation_empty: "No {entity} in {group}",
+    overdue_days: "{count} days overdue",
+    list_columns: {
+      id: "ID",
+      due_date: "Due date",
+      product: "Product",
+      target_date: "Target date",
     },
     empty_state: {
       activity: {

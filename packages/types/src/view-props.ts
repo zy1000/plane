@@ -28,6 +28,8 @@ export type TIssueGroupByOptions =
   | "stage"
   | "target_date"
   | "team_project"
+  // 个人主页：与本人关系（已分配 / 已创建 / 已延期，组间可重叠）
+  | "user_relation"
   | null;
 
 export type TIssueOrderByOptions =
@@ -103,6 +105,7 @@ export type TIssueParams =
   | "issue_type"
   | "type_category"
   | "exclude_type_category"
+  | "user_relation"
   | "layout"
   | "expand"
   | "scope"

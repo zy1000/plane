@@ -25,6 +25,7 @@ import { useIssuesActions } from "@/hooks/use-issues-actions";
 import { IssueLayoutHOC } from "../issue-layout-HOC";
 import { StateTransitionAssigneeModal } from "../../state-transition-assignee-modal";
 import { List } from "./default";
+import { useListAppearance } from "./list-appearance-context";
 // types
 import type { IQuickActionProps, TRenderQuickActions } from "./list-view-types";
 
@@ -81,7 +82,9 @@ export const BaseListRoot = observer(function BaseListRoot(props: IBaseListRoot)
   const orderBy = displayFilters?.order_by || undefined;
 
   const group_by = (displayFilters?.group_by || null) as GroupByColumnTypes | null;
-  const showEmptyGroup = displayFilters?.show_empty_groups ?? false;
+  // 个人主页的三组（已分配 / 已创建 / 已延期）没有数据也常驻
+  const appearance = useListAppearance();
+  const showEmptyGroup = appearance?.variant === "profile" || (displayFilters?.show_empty_groups ?? false);
 
   const { workspaceSlug, projectId } = useParams();
   const { updateFilters } = useIssuesActions(storeType);

@@ -20,13 +20,16 @@ type TWorkItemSearchProps = {
   entityType: EIssuesStoreType;
   entityId: string;
   className?: string;
+  /** 常驻展开的输入框（不收成放大镜图标），工具栏左侧用 */
+  alwaysOpen?: boolean;
+  placeholder?: string;
 };
 
 const NAME_FILTER_PROPERTY: TWorkItemFilterProperty = "name";
 const NAME_FILTER_OPERATOR = EXTENDED_EQUALITY_OPERATOR.CONTAINS;
 
 export const WorkItemSearch = observer(function WorkItemSearch(props: TWorkItemSearchProps) {
-  const { className, entityId, entityType } = props;
+  const { className, entityId, entityType, alwaysOpen = false, placeholder = "搜索工作项名称" } = props;
   // refs
   const inputRef = useRef<HTMLInputElement>(null);
   // store hooks
@@ -36,7 +39,8 @@ export const WorkItemSearch = observer(function WorkItemSearch(props: TWorkItemS
   const searchCondition = filter?.findFirstConditionByPropertyAndOperator(NAME_FILTER_PROPERTY, NAME_FILTER_OPERATOR);
   const appliedSearchQuery = typeof searchCondition?.value === "string" ? searchCondition.value : "";
   // states
-  const [isSearchOpen, setIsSearchOpen] = useState(() => appliedSearchQuery.trim().length > 0);
+  const [isSearchOpenState, setIsSearchOpen] = useState(() => appliedSearchQuery.trim().length > 0);
+  const isSearchOpen = alwaysOpen || isSearchOpenState;
   const [inputValue, setInputValue] = useState(appliedSearchQuery);
 
   const applySearchQuery = useCallback(
@@ -115,7 +119,8 @@ export const WorkItemSearch = observer(function WorkItemSearch(props: TWorkItemS
         className={cn(
           "ml-auto flex w-0 items-center justify-start gap-1 overflow-hidden rounded-md border border-transparent bg-surface-1 text-placeholder opacity-0 transition-[width] ease-linear",
           {
-            "w-30 border-subtle px-2.5 py-1.5 opacity-100 md:w-64": isSearchOpen,
+            "w-30 border-subtle px-2.5 py-1.5 opacity-100 md:w-64": isSearchOpen && !alwaysOpen,
+            "ml-0 h-9 w-full gap-2 border-subtle px-3 opacity-100 md:w-72": alwaysOpen,
           }
         )}
       >
@@ -123,12 +128,12 @@ export const WorkItemSearch = observer(function WorkItemSearch(props: TWorkItemS
         <input
           ref={inputRef}
           className="w-full max-w-[234px] border-none bg-transparent text-13 text-primary placeholder:text-placeholder focus:outline-none"
-          placeholder="搜索工作项名称"
+          placeholder={placeholder}
           value={inputValue}
           onChange={(e) => setInputValue(e.target.value)}
           onKeyDown={handleInputKeyDown}
         />
-        {isSearchOpen && (
+        {isSearchOpen && (!alwaysOpen || inputValue !== "") && (
           <button
             type="button"
             className="grid place-items-center"

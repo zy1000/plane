@@ -15,7 +15,7 @@ import { AppHeader } from "@/components/core/app-header";
 import { ContentWrapper } from "@/components/core/content-wrapper";
 import { ProfileSidebar } from "@/components/profile/sidebar";
 // constants
-import { USER_PROFILE_PROJECT_SEGREGATION } from "@/constants/fetch-keys";
+import { USER_PROFILE_PROJECT_SEGREGATION, USER_PROFILE_RELATION_COUNTS } from "@/constants/fetch-keys";
 // hooks
 import { useUser, useUserPermissions } from "@/hooks/store/user";
 import useSize from "@/hooks/use-window-size";
@@ -24,7 +24,6 @@ import { UserService } from "@/services/user.service";
 import type { Route } from "./+types/layout";
 import { UserProfileHeader } from "./header";
 import { ProfileIssuesMobileHeader } from "./mobile-header";
-import { ProfileNavbar } from "./navbar";
 
 const userService = new UserService();
 
@@ -46,6 +45,10 @@ function UseProfileLayout({ params }: Route.ComponentProps) {
 
   const { data: userProjectsData } = useSWR(USER_PROFILE_PROJECT_SEGREGATION(workspaceSlug, userId), () =>
     userService.getUserProfileProjectsSegregation(workspaceSlug, userId)
+  );
+  // 页签条数：看不了别人工作项的人不请求（接口同样会拒）
+  const { data: relationCounts } = useSWR(isAuthorized ? USER_PROFILE_RELATION_COUNTS(workspaceSlug, userId) : null, () =>
+    userService.getUserProfileRelationCounts(workspaceSlug, userId)
   );
   // derived values
   const profileBasePath = `/${workspaceSlug}/profile/${userId}`;
@@ -86,7 +89,7 @@ function UseProfileLayout({ params }: Route.ComponentProps) {
               <UserProfileHeader
                 type={currentTab?.i18n_label}
                 userProjectsData={userProjectsData}
-                showProfileIssuesFilter={isIssuesTab}
+                tabCounts={relationCounts}
                 showProfileSidebarToggle={isSummaryTab}
               />
             }
@@ -95,7 +98,6 @@ function UseProfileLayout({ params }: Route.ComponentProps) {
           <ContentWrapper>
             <div className="flex h-full w-full flex-row md:flex-col md:overflow-hidden">
               <div className="flex w-full flex-col md:h-full md:overflow-hidden">
-                <ProfileNavbar isAuthorized={!!isAuthorized} />
                 {isAuthorized || !isAuthorizedPath ? (
                   <div className={`h-full w-full overflow-hidden`}>
                     <Outlet />

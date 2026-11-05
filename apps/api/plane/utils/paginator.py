@@ -388,6 +388,93 @@ class GroupedOffsetPaginator(OffsetPaginator):
         return processed_results
 
 
+class FilterGroupedOffsetPaginator(OffsetPaginator):
+    """每组由一个 Q 条件定义、组间可重叠的分组分页（同一条可同时落在多组）。
+
+    GroupedOffsetPaginator 按单列 partition，表达不了这种派生出来的分组；这里逐组取
+    当页 id，结果集取并集交给 on_results，process_results 再按组拆回去。
+    响应结构与 GroupedOffsetPaginator 一致，前端不用区分。
+    """
+
+    def __init__(
+        self,
+        queryset,
+        group_by_field_name,
+        group_by_fields,
+        count_filter,
+        group_filters,
+        total_count_queryset=None,
+        *args,
+        **kwargs,
+    ):
+        super().__init__(queryset, *args, total_count_queryset=total_count_queryset, **kwargs)
+        self.group_by_field_name = group_by_field_name
+        self.group_by_fields = group_by_fields
+        self.count_filter = count_filter
+        # {组 id: Q}
+        self.group_filters = group_filters
+        self.group_result_ids = {}
+        self.group_totals = {}
+
+    def get_result(self, limit=50, cursor=None):
+        if cursor is None:
+            cursor = Cursor(0, 0, 0)
+
+        limit = min(limit, self.max_limit)
+        page = cursor.offset
+        offset = page * limit
+        if offset < 0:
+            raise BadPaginationError("Pagination offset cannot be negative")
+        if self.max_offset is not None and offset >= self.max_offset:
+            raise BadPaginationError("Pagination offset too large")
+
+        ordering = (
+            F(*self.key).desc(nulls_last=True) if self.desc else F(*self.key).asc(nulls_last=True),
+            F("created_at").desc(),
+        )
+        count_queryset = self.total_count_queryset if self.total_count_queryset is not None else self.queryset
+
+        has_next = False
+        page_ids = set()
+        for group_id, group_filter in self.group_filters.items():
+            group_queryset = self.queryset.filter(group_filter).order_by(*ordering)
+            # 联表筛选可能带出重复行，先去重再切当页
+            ids = list(dict.fromkeys(group_queryset.values_list("id", flat=True)[: offset + limit + 1]))[offset:]
+            has_next = has_next or len(ids) > limit
+            ids = ids[:limit]
+            self.group_result_ids[str(group_id)] = {str(item) for item in ids}
+            page_ids.update(ids)
+            self.group_totals[str(group_id)] = count_queryset.filter(group_filter).aggregate(
+                count=Count("id", filter=self.count_filter, distinct=True)
+            )["count"]
+
+        results = self.queryset.filter(id__in=page_ids).order_by(*ordering)
+        total_count = count_queryset.count()
+        max_group_total = max(self.group_totals.values(), default=0)
+
+        return CursorResult(
+            results=results,
+            next=Cursor(limit, page + 1, False, has_next),
+            prev=Cursor(limit, page - 1, True, page > 0),
+            hits=total_count,
+            max_hits=math.ceil(max_group_total / limit) if limit else 0,
+        )
+
+    def process_results(self, results):
+        processed_results = {
+            str(group_id): {"results": [], "total_results": self.group_totals.get(str(group_id), 0)}
+            for group_id in self.group_by_fields
+        }
+        added = defaultdict(set)
+        for result in results:
+            result_id = str(result["id"])
+            for group_id, ids in self.group_result_ids.items():
+                if result_id in ids and result_id not in added[group_id] and group_id in processed_results:
+                    added[group_id].add(result_id)
+                    processed_results[group_id]["results"].append(result)
+        return processed_results
+
+
 class SubGroupedOffsetPaginator(OffsetPaginator):
     # Field mappers this are the fields that are m2m
     FIELD_MAPPER = {

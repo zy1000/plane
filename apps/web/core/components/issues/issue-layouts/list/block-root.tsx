@@ -133,8 +133,9 @@ export const IssueBlockRoot = observer(function IssueBlockRoot(props: Props) {
 
   const allSubIssues = subIssuesStore.subIssuesByIssueId(issueId);
 
+  // 个人主页「已延期」组里展开子工作项，只列同样已延期的
   const subIssues = useMemo(() => {
-    if (profileViewId !== "overdue" || !allSubIssues) return allSubIssues;
+    if (!profileViewId || groupId !== "overdue" || !allSubIssues) return allSubIssues;
     const todayStr = new Date().toISOString().split("T")[0];
     return allSubIssues.filter((id) => {
       const issue = issuesMap[id];
@@ -144,7 +145,7 @@ export const IssueBlockRoot = observer(function IssueBlockRoot(props: Props) {
       if (!issue.target_date || issue.target_date >= todayStr) return false;
       return true;
     });
-  }, [profileViewId, allSubIssues, issuesMap, stateMap]);
+  }, [profileViewId, groupId, allSubIssues, issuesMap, stateMap]);
 
   if (!issueId || !issuesMap[issueId]?.created_at) return null;
 

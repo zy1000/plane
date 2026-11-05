@@ -171,6 +171,7 @@ def issue_on_results(
         "stage_id",
         "test_plan_id",
         "stage_name",
+        "project_identifier",
     ]
 
     if group_by in FIELD_MAPPER:
@@ -189,6 +190,8 @@ def issue_on_results(
             product_name=F("product__name"),
             product_module_name=F("product_module__name"),
             stage_name=F("stage__name"),
+            # 跨项目列表（个人主页等）里项目未必在前端 store 中，编号靠它拼
+            project_identifier=F("project__identifier"),
         ).values(*required_fields)
     )
 

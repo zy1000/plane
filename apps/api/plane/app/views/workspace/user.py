@@ -68,18 +68,24 @@ from plane.utils.grouper import (
 )
 from plane.utils.issue_filters import issue_filters
 from plane.utils.order_queryset import order_issue_queryset
-from plane.utils.paginator import GroupedOffsetPaginator, SubGroupedOffsetPaginator
+from plane.utils.paginator import FilterGroupedOffsetPaginator, GroupedOffsetPaginator, SubGroupedOffsetPaginator
 from plane.utils.profile_metrics import (
     OPEN_REQUIREMENT_STATUSES,
     PROFILE_METRIC_KEYS,
+    PROFILE_USER_RELATION_GROUP_BY,
+    PROFILE_USER_RELATIONS,
     accessible_product_ids,
     annotate_requirement_issue_counts,
     apply_profile_metric_filters,
-    assigned_requirements_queryset,
     build_profile_metric_tree,
     get_profile_metric_queryset,
     get_profile_requirement_summary,
+    issue_user_relation_q,
+    parse_user_relations,
+    profile_relation_tab_counts,
     profile_requirement_facets,
+    profile_requirements_queryset,
+    requirement_user_relation_q,
 )
 from plane.utils.requirement import (
     field_specs_for_requirement_types,
@@ -191,6 +197,11 @@ class WorkspaceUserProfileIssuesEndpoint(BaseAPIView):
             if category_names:
                 issue_queryset = issue_queryset.exclude(type__category__name__in=category_names)
 
+        # 与本人关系（已分配 / 已创建 / 已延期），CSV 取并集；分组里「加载更多」也靠它收窄到单组
+        relations = parse_user_relations(request.GET.get("user_relation"))
+        if relations:
+            issue_queryset = issue_queryset.filter(issue_user_relation_q(relations, user_id))
+
         # Total count queryset
         total_issue_queryset = copy.deepcopy(issue_queryset)
 
@@ -208,6 +219,35 @@ class WorkspaceUserProfileIssuesEndpoint(BaseAPIView):
 
         # issue queryset
         issue_queryset = issue_queryset_grouper(queryset=issue_queryset, group_by=group_by, sub_group_by=sub_group_by)
+
+        # 按与本人关系分组：组由条件派生且可重叠，走专门的分页器；不支持再套子分组
+        if PROFILE_USER_RELATION_GROUP_BY in (group_by, sub_group_by):
+            if sub_group_by:
+                return Response(
+                    {"error": "Sub group by is not supported with user relation grouping"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            return self.paginate(
+                request=request,
+                order_by=order_by_param,
+                queryset=issue_queryset,
+                total_count_queryset=total_issue_queryset,
+                on_results=lambda issues: issue_on_results(group_by=group_by, issues=issues, sub_group_by=sub_group_by),
+                paginator_cls=FilterGroupedOffsetPaginator,
+                group_by_fields=list(PROFILE_USER_RELATIONS),
+                group_by_field_name=group_by,
+                group_filters={
+                    relation: issue_user_relation_q([relation], user_id) for relation in PROFILE_USER_RELATIONS
+                },
+                count_filter=Q(
+                    Q(issue_intake__status=1)
+                    | Q(issue_intake__status=-1)
+                    | Q(issue_intake__status=2)
+                    | Q(issue_intake__isnull=True),
+                    archived_at__isnull=True,
+                    is_draft=False,
+                ),
+            )
 
         if group_by:
             if sub_group_by:
@@ -480,13 +520,23 @@ class WorkspaceUserActivityEndpoint(BaseAPIView):
         )
 
 
+class WorkspaceUserProfileRelationCountsEndpoint(BaseAPIView):
+    """个人主页页签条数：工作项 / 缺陷 / 需求（分配给他 ∪ 他创建）。"""
+
+    @allow_workspace_self_or_permission(PermissionKey.WORKSPACE_MEMBER_VIEW)
+    def get(self, request, slug, user_id):
+        return Response(profile_relation_tab_counts(slug, user_id, request.user), status=status.HTTP_200_OK)
+
+
 class WorkspaceUserProfileRequirementsEndpoint(BaseAPIView):
-    """profile「需求」tab：该成员负责的产品需求，跨产品聚合。
+    """profile「需求」tab：该成员负责或创建的产品需求，跨产品聚合。
 
     行结构沿用项目需求页的 ProjectRequirementSerializer，前端网格与详情可原样复用；
     项目相关注解（link_sort_order / latest_release_name / linked_cycle_ids）在跨产品
     视角没有意义，序列化器回落成 None / []。筛选参数与项目需求页同一套
-    （status / approval_state / priority / title / 日期区间 …），外加 product_id CSV。
+    （status / approval_state / priority / title / 日期区间 …），外加 product_id CSV；
+    user_relation（assigned / created / overdue，CSV）收窄到与本人的某几种关系，
+    前端按「与本人关系」分组时只取左栏选中的那组；extra_stats.relation_counts 给左栏三组条数。
     """
 
     DEFAULT_PER_PAGE = 20
@@ -494,7 +544,7 @@ class WorkspaceUserProfileRequirementsEndpoint(BaseAPIView):
 
     @allow_workspace_self_or_permission(PermissionKey.WORKSPACE_MEMBER_VIEW)
     def get(self, request, slug, user_id):
-        base = assigned_requirements_queryset(slug, user_id, request.user)
+        base = profile_requirements_queryset(slug, user_id, request.user)
 
         try:
             product_ids = [str(UUID(value)) for value in split_query_csv(request.query_params.get("product_id"))]
@@ -518,6 +568,14 @@ class WorkspaceUserProfileRequirementsEndpoint(BaseAPIView):
         search = (request.query_params.get("search") or "").strip()
         if search:
             queryset = queryset.filter(title__icontains=search)
+        # 左栏三组的条数跟着筛选 / 搜索 / 产品范围走，在收窄到某一组之前算
+        relation_counts = {
+            relation: queryset.filter(requirement_user_relation_q([relation], user_id)).count()
+            for relation in PROFILE_USER_RELATIONS
+        }
+        relations = parse_user_relations(request.query_params.get("user_relation"))
+        if relations:
+            queryset = queryset.filter(requirement_user_relation_q(relations, user_id))
         # 到期日升序（逾期优先、未排期置底），同产品内按编号
         queryset = queryset.select_related("product", "module").order_by(
             F("target_date").asc(nulls_last=True), "product__identifier", "sequence_id"
@@ -543,6 +601,7 @@ class WorkspaceUserProfileRequirementsEndpoint(BaseAPIView):
         _specs, by_requirement_type = field_specs_for_requirement_types(referenced_type_ids)
         extra_stats = {
             **profile_requirement_facets(base, product_ids),
+            "relation_counts": relation_counts,
             "requirement_types": requirement_types_field_payload_from_specs(
                 referenced_type_ids, by_requirement_type
             ),

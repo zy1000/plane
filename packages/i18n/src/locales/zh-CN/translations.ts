@@ -6586,8 +6586,8 @@ export default {
         list_hint: "未闭环",
         empty: "当前没有分配给你的需求",
         all_products: "全部产品",
-        page_empty_title: "还没有分配给该成员的需求",
-        page_empty_description: "产品需求的负责人设为该成员后，会在这里跨产品汇总。",
+        page_empty_title: "还没有该成员负责或创建的需求",
+        page_empty_description: "该成员负责或创建的产品需求，会在这里跨产品汇总。",
       },
       workload_overview: {
         title: "负载与进度",
@@ -6657,6 +6657,15 @@ export default {
       subscribed: "已订阅",
       overdue: "已延期",
       activity: "活动",
+    },
+    user_relation: "与本人关系",
+    user_relation_empty: "没有{group}的{entity}",
+    overdue_days: "逾期 {count} 天",
+    list_columns: {
+      id: "编号",
+      due_date: "截止日期",
+      product: "所属产品",
+      target_date: "计划完成",
     },
     empty_state: {
       activity: {

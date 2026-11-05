@@ -13,8 +13,12 @@ import type {
   TIssuesResponse,
   ViewFlags,
   TBulkOperationsPayload,
+  TIssueGroupByOptions,
   TProfileViews,
 } from "@plane/types";
+import { renderFormattedPayloadDate } from "@plane/utils";
+import { PROFILE_USER_RELATION_SCOPE } from "@/constants/profile-user-relation";
+import type { TProfileUserRelation } from "@/constants/profile-user-relation";
 import { UserService } from "@/services/user.service";
 
 // services
@@ -107,6 +111,39 @@ export class ProfileIssues extends BaseIssuesStore implements IProfileIssues {
     this.currentView = viewId;
   }
 
+  /** 基类的分组值计算，下面按「与本人关系」分组时改写，其余情况仍交给它 */
+  private readonly getBaseGroupValues = this.getArrayStringArray;
+
+  /**
+   * 「与本人关系」是派生分组：一条工作项属于哪几组要看负责人 / 创建人 / 截止日 / 状态，
+   * 不是某一个字段的值。本地增删改时据此把它挪进挪出对应的组（组间可重叠）。
+   * 口径同后端 profile_metrics.issue_user_relation_q。
+   */
+  getArrayStringArray = (
+    issueObject: Partial<TIssue> | undefined,
+    value: string | string[] | undefined | null,
+    groupByKey?: TIssueGroupByOptions
+  ): string[] => {
+    const userId = this.rootIssueStore.userId;
+    if (this.groupBy !== "user_relation" || (groupByKey && groupByKey !== "user_relation") || !userId)
+      return this.getBaseGroupValues(issueObject, value, groupByKey);
+    if (!issueObject) return [];
+
+    const relations: TProfileUserRelation[] = [];
+    const isAssigned = issueObject.assignee_ids?.includes(userId) ?? false;
+    if (isAssigned) relations.push("assigned");
+    if (issueObject.created_by === userId) relations.push("created");
+    if (isAssigned && issueObject.target_date) {
+      const stateGroup =
+        (issueObject.state_id && this.rootIssueStore.rootStore.state.stateMap?.[issueObject.state_id]?.group) ||
+        issueObject.state__group;
+      const isOpen = stateGroup !== "completed" && stateGroup !== "cancelled";
+      const today = renderFormattedPayloadDate(new Date());
+      if (isOpen && today && issueObject.target_date < today) relations.push("overdue");
+    }
+    return relations;
+  };
+
   fetchParentStats = () => {};
 
   /** */
@@ -154,14 +191,14 @@ export class ProfileIssues extends BaseIssuesStore implements IProfileIssues {
       else if (this.currentView === "defects") {
         params = {
           ...params,
-          assignees: userId,
+          user_relation: params.user_relation ?? PROFILE_USER_RELATION_SCOPE,
           type_category: DEFECT_TYPE_CATEGORY,
           state_group: "backlog,unstarted,started",
         };
       } else if (this.currentView === "work_items") {
         params = {
           ...params,
-          assignees: userId,
+          user_relation: params.user_relation ?? PROFILE_USER_RELATION_SCOPE,
           exclude_type_category: DEFECT_TYPE_CATEGORY,
           state_group: "backlog,unstarted,started",
         };
@@ -230,14 +267,14 @@ export class ProfileIssues extends BaseIssuesStore implements IProfileIssues {
       else if (this.currentView === "defects") {
         params = {
           ...params,
-          assignees: userId,
+          user_relation: params.user_relation ?? PROFILE_USER_RELATION_SCOPE,
           type_category: DEFECT_TYPE_CATEGORY,
           state_group: "backlog,unstarted,started",
         };
       } else if (this.currentView === "work_items") {
         params = {
           ...params,
-          assignees: userId,
+          user_relation: params.user_relation ?? PROFILE_USER_RELATION_SCOPE,
           exclude_type_category: DEFECT_TYPE_CATEGORY,
           state_group: "backlog,unstarted,started",
         };

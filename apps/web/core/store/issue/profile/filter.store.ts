@@ -141,7 +141,10 @@ export class ProfileIssuesFilter extends IssueFilterHelperStore implements IProf
     const _filters = this.handleIssuesLocalFilters.get(EIssuesStoreType.PROFILE, workspaceSlug, userId, undefined);
 
     const richFilters: TWorkItemFilterExpression = _filters?.rich_filters;
-    const displayFilters: IIssueDisplayFilterOptions = this.computedDisplayFilters(_filters?.display_filters);
+    // 没存过显示设置时默认按「与本人关系」分组（已分配 / 已创建 / 已延期）
+    const displayFilters: IIssueDisplayFilterOptions = this.computedDisplayFilters(_filters?.display_filters, {
+      group_by: "user_relation",
+    });
     const displayProperties: IIssueDisplayProperties = this.computedDisplayProperties(_filters?.display_properties);
     const kanbanFilters = {
       group_by: _filters?.kanban_filters?.group_by || [],

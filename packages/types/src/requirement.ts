@@ -543,6 +543,8 @@ export type TProjectRequirementsResponse = Omit<
 /** profile「需求」tab 的分面：没有需求类型计数，但把类型 schema 带上供网格渲染自定义列 */
 export type TProfileRequirementFacets = Pick<TProjectRequirementFacets, "by_product" | "by_status" | "total"> & {
   requirement_types: TRequirementTypeSchema[];
+  /** 与本人关系三组的条数（跟随筛选 / 搜索 / 产品范围） */
+  relation_counts?: Record<"assigned" | "created" | "overdue", number>;
 };
 
 export type TProfileRequirementsResponse = Omit<TPaginatedResponse<TProjectRequirement[]>, "extra_stats"> & {

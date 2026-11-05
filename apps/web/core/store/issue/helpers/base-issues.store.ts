@@ -132,6 +132,8 @@ export const ISSUE_GROUP_BY_KEY: Record<TIssueDisplayFilterOptions, keyof TIssue
   product_module: "product_module_id",
   stage: "stage_id",
   team_project: "project_id",
+  // 与本人关系是派生分组，实际归属由 ProfileIssues.getArrayStringArray 计算；这里只给一个会随之变化的属性
+  user_relation: "assignee_ids",
 };
 
 export const ISSUE_FILTER_DEFAULT_DATA: Record<TIssueDisplayFilterOptions, keyof TIssue> = {
@@ -150,6 +152,7 @@ export const ISSUE_FILTER_DEFAULT_DATA: Record<TIssueDisplayFilterOptions, keyof
   assignees: "assignee_ids",
   target_date: "target_date",
   team_project: "project_id",
+  user_relation: "assignee_ids",
 };
 
 // This constant maps the order by keys to the respective issue property that the key relies on

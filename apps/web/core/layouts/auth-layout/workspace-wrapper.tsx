@@ -11,7 +11,7 @@ import { useParams } from "next/navigation";
 import useSWR from "swr";
 // ui
 import { LogOut } from "lucide-react";
-import { WORKSPACE_MEMBER_VIEW_PERMISSION_KEY, WORKSPACE_PROJECT_VIEW_PERMISSION_KEY } from "@plane/constants";
+import { WORKSPACE_PROJECT_VIEW_PERMISSION_KEY } from "@plane/constants";
 import { Button, getButtonStyling } from "@plane/propel/button";
 import { PlaneLogo } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
@@ -68,10 +68,6 @@ export const WorkspaceAuthWrapper = observer(function WorkspaceAuthWrapper(props
   } = useUserPermissions();
   const { fetchWorkspaceStates } = useProjectState();
   // derived values
-  const canPerformWorkspaceMemberActions = allowWorkspacePermissionKeys(
-    [WORKSPACE_MEMBER_VIEW_PERMISSION_KEY],
-    workspaceSlug
-  );
   const canViewWorkspaceProjects = allowWorkspacePermissionKeys([WORKSPACE_PROJECT_VIEW_PERMISSION_KEY], workspaceSlug);
   const allWorkspaces = workspaces ? Object.values(workspaces) : undefined;
   const currentWorkspace =
@@ -104,12 +100,10 @@ export const WorkspaceAuthWrapper = observer(function WorkspaceAuthWrapper(props
       : null,
     { revalidateIfStale: false, revalidateOnFocus: false }
   );
-  // fetch workspace members
+  // fetch workspace members：成员名单是全站取姓名 / 头像的通讯录，任意工作区成员都拉，不看 workspace.member.view
   useSWR(
-    workspaceSlug && currentWorkspace && currentWorkspaceInfo && canPerformWorkspaceMemberActions
-      ? WORKSPACE_MEMBERS(workspaceSlug.toString())
-      : null,
-    workspaceSlug && currentWorkspace && currentWorkspaceInfo && canPerformWorkspaceMemberActions
+    workspaceSlug && currentWorkspace && currentWorkspaceInfo ? WORKSPACE_MEMBERS(workspaceSlug.toString()) : null,
+    workspaceSlug && currentWorkspace && currentWorkspaceInfo
       ? () => fetchWorkspaceMembers(workspaceSlug.toString())
       : null,
     { revalidateIfStale: false, revalidateOnFocus: false }

@@ -136,6 +136,8 @@ export type TRequirementListParams = {
   excludeClosed?: boolean;
   /** 左侧模块树的过滤（含子模块）；模块归产品，项目侧只读 */
   moduleId?: string;
+  /** profile「需求」tab：与本人关系 assigned / created / overdue，逗号分隔取并集 */
+  userRelation?: string;
   /** 选择器「按编号或标题搜索」：只匹配 display_id / title，不扫自定义字段 */
   searchIn?: "id_title";
 };
@@ -164,6 +166,7 @@ const buildRequirementListParams = (params: TRequirementListParams) => ({
   ...(params.exclude_issue_id ? { exclude_issue_id: params.exclude_issue_id } : {}),
   ...(params.excludeClosed ? { exclude_closed: "true" } : {}),
   ...(params.moduleId ? { module_id: params.moduleId } : {}),
+  ...(params.userRelation ? { user_relation: params.userRelation } : {}),
   ...(params.searchIn ? { search_in: params.searchIn } : {}),
 });
 
@@ -1182,7 +1185,7 @@ export class RequirementService extends APIService {
       });
   }
 
-  /** profile「需求」tab：某成员负责的产品需求，跨产品；筛选参数与项目需求页同一套 */
+  /** profile「需求」tab：某成员负责或创建的产品需求，跨产品；筛选参数与项目需求页同一套 */
   async listUserRequirements(
     workspaceSlug: string,
     userId: string,

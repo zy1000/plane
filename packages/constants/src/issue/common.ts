@@ -41,6 +41,7 @@ export enum EIssueGroupByToServerOptions {
   "created_by" = "created_by",
   // eslint-disable-next-line @typescript-eslint/no-duplicate-enum-values
   "team_project" = "project_id",
+  "user_relation" = "user_relation",
 }
 
 export enum EIssueGroupBYServerToProperty {
@@ -128,6 +129,7 @@ export const ISSUE_GROUP_BY_OPTIONS: {
   key: TIssueGroupByOptions;
   titleTranslationKey: string;
 }[] = [
+  { key: "user_relation", titleTranslationKey: "profile.user_relation" }, // required this on profile
   { key: "state", titleTranslationKey: "common.states" },
   { key: "state_detail.group", titleTranslationKey: "common.state_groups" },
   { key: "priority", titleTranslationKey: "common.priority" },

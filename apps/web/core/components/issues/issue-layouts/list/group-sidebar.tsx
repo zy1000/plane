@@ -12,7 +12,9 @@ import { useTranslation } from "@plane/i18n";
 import type { IGroupByColumn, TGroupedIssues, TIssueGroupByOptions } from "@plane/types";
 import { Tooltip } from "@plane/ui";
 import { cn } from "@plane/utils";
+import { ProfileRelationRail } from "@/components/profile/relation-rail";
 import { useIssuesStore } from "@/hooks/use-issue-layout-store";
+import { useListAppearance } from "./list-appearance-context";
 
 /** 与「分组方式」筛选中的选项一致，用于侧栏标题「分组方式 : {维度}」 */
 const getGroupByDimensionTranslationKey = (groupBy: TIssueGroupByOptions | null): string | undefined => {
@@ -38,6 +40,7 @@ export const GroupSidebar = observer(function GroupSidebar(props: GroupSidebarPr
     issues: { getGroupIssueCount },
   } = useIssuesStore();
   const { t } = useTranslation();
+  const appearance = useListAppearance();
 
   const [isCollapsed, setIsCollapsed] = useState(false);
 
@@ -47,6 +50,24 @@ export const GroupSidebar = observer(function GroupSidebar(props: GroupSidebarPr
     if (!dimensionKey) return groupByLabel;
     return `${groupByLabel} : ${t(dimensionKey)}`;
   }, [groupBy, t]);
+
+  // 个人主页：标题只写维度名，空组常驻
+  if (appearance?.variant === "profile") {
+    const dimensionKey = getGroupByDimensionTranslationKey(groupBy);
+    return (
+      <ProfileRelationRail
+        heading={dimensionKey ? t(dimensionKey) : t("common.group_by")}
+        items={groups.map((group) => ({
+          id: group.id,
+          name: group.name,
+          icon: group.icon ?? <CircleDashed className="size-4" strokeWidth={2} />,
+          count: getGroupIssueCount(group.id, undefined, false) ?? 0,
+        }))}
+        selectedId={selectedGroupId}
+        onSelect={onSelectGroup}
+      />
+    );
+  }
 
   return (
     <div

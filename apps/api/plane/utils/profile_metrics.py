@@ -12,6 +12,7 @@ from plane.db.models import (
     CaseReviewThrough,
     Cycle,
     Issue,
+    IssueAssignee,
     IssueTransitionRecord,
     PlanCase,
     Product,
@@ -143,9 +144,81 @@ def _assigned_requirement_queryset(slug, user_id, viewer):
     )
 
 
-def assigned_requirements_queryset(slug, user_id, viewer):
-    """「我的需求」tab 的基础集：全部交付状态，供列表与分面共用。"""
-    return _assigned_requirement_queryset(slug, user_id, viewer)
+# 个人主页「与本人关系」分组，工作项 / 缺陷 / 需求三页共用：
+# 已分配 = 负责人是他；已创建 = 他创建的；已延期 = 分配给他、过了截止日且未闭环。
+# 组间可重叠 —— 既分配给他又是他创建的，两组都出现；已延期的同时也在已分配里。
+PROFILE_USER_RELATION_GROUP_BY = "user_relation"
+PROFILE_USER_RELATIONS = ("assigned", "created", "overdue")
+
+
+def parse_user_relations(raw):
+    """CSV → 合法的关系列表，按 PROFILE_USER_RELATIONS 的顺序，未知值忽略。"""
+    values = {value.strip() for value in (raw or "").split(",")}
+    return [relation for relation in PROFILE_USER_RELATIONS if relation in values]
+
+
+def _any_of(conditions, relations):
+    combined = Q(pk__in=[])
+    for relation in relations:
+        combined |= conditions[relation]
+    return combined
+
+
+def issue_user_relation_q(relations, user_id):
+    """工作项与本人的关系条件，多个关系取并集。已延期口径同指标 overdue_issues。"""
+    assigned = Q(
+        id__in=IssueAssignee.objects.filter(assignee_id=user_id, deleted_at__isnull=True).values("issue_id")
+    )
+    conditions = {
+        "assigned": assigned,
+        "created": Q(created_by_id=user_id),
+        "overdue": assigned
+        & Q(target_date__lt=timezone.now().date())
+        & ~Q(state__group__in=CLOSED_ISSUE_STATE_GROUPS),
+    }
+    return _any_of(conditions, relations)
+
+
+def requirement_user_relation_q(relations, user_id):
+    """需求与本人的关系条件，多个关系取并集。已延期口径同指标 overdue_requirements。"""
+    conditions = {
+        "assigned": Q(assignee_id=user_id),
+        "created": Q(created_by_id=user_id),
+        "overdue": Q(
+            assignee_id=user_id,
+            status__in=OPEN_REQUIREMENT_STATUSES,
+            target_date__lt=timezone.now().date(),
+        ),
+    }
+    return _any_of(conditions, relations)
+
+
+def profile_relation_tab_counts(slug, user_id, viewer):
+    """个人主页页签上的条数，口径与三个页签的列表一致：
+    工作项 / 缺陷 = 分配给他 ∪ 他创建、未完成；需求 = 他负责 ∪ 他创建。"""
+    issues = (
+        Issue.issue_objects.filter(
+            visible_projects_q(viewer, slug, "project"),
+            workspace__slug=slug,
+        )
+        .filter(issue_user_relation_q(("assigned", "created"), user_id))
+        .exclude(state__group__in=CLOSED_ISSUE_STATE_GROUPS)
+    )
+    return {
+        "work_items": issues.exclude(type__category__name=DEFECT_TYPE_CATEGORY_NAME).count(),
+        "defects": issues.filter(type__category__name=DEFECT_TYPE_CATEGORY_NAME).count(),
+        "requirements": profile_requirements_queryset(slug, user_id, viewer).count(),
+    }
+
+
+def profile_requirements_queryset(slug, user_id, viewer):
+    """「需求」tab 的基础集：他负责的 ∪ 他创建的产品需求，全部交付状态，供列表与分面共用。
+    产品作用域之外的（标准库条目、项目作用域）没有 product，天然不在其中。"""
+    return Requirement.objects.filter(
+        requirement_user_relation_q(("assigned", "created"), user_id),
+        workspace__slug=slug,
+        product_id__in=accessible_product_ids(slug, viewer),
+    )
 
 
 def annotate_requirement_issue_counts(queryset):

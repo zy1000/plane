@@ -33,6 +33,8 @@ import { EIssuesStoreType } from "@plane/types";
 import { Avatar } from "@plane/ui";
 import { renderFormattedDate, getFileURL } from "@plane/utils";
 // helpers
+// constants
+import { PROFILE_USER_RELATION_GROUPS } from "@/constants/profile-user-relation";
 // store
 import { store } from "@/lib/store-context";
 // plane web store
@@ -129,6 +131,7 @@ export const getGroupByColumns = ({
     assignees: getAssigneeColumns,
     created_by: getCreatedByColumns,
     team_project: getTeamProjectColumns,
+    user_relation: getUserRelationColumns,
   };
 
   // Get and return the columns for the specified group by option
@@ -426,6 +429,15 @@ const getCreatedByColumns = (): IGroupByColumn[] | undefined => {
     };
   });
 };
+
+// 个人主页「与本人关系」：三组固定、可重叠；不能拖拽换组（没有可改的字段对应「已创建」）
+const getUserRelationColumns = (): IGroupByColumn[] =>
+  PROFILE_USER_RELATION_GROUPS.map(({ key, name, icon: Icon, iconClassName }) => ({
+    id: key,
+    name,
+    icon: <Icon className={`size-4 ${iconClassName}`} />,
+    payload: {},
+  }));
 
 export const getDisplayPropertiesCount = (
   displayProperties: IIssueDisplayProperties,

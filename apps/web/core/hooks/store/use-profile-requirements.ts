@@ -6,6 +6,7 @@ import type {
   TRequirementTypeSchema,
 } from "@plane/types";
 import type { TProjectRequirementListQuery } from "@/components/projects/requirements/filters";
+import type { TProfileUserRelation } from "@/constants/profile-user-relation";
 import { RequirementService } from "@/services/requirement.service";
 
 const requirementService = new RequirementService();
@@ -31,12 +32,35 @@ const EMPTY_PAGE: TProfileRequirementsResponse = {
 /** 稳定引用，避免每次渲染都产生新数组把下游 memo 打穿 */
 const EMPTY_REQUIREMENT_TYPES: TRequirementTypeSchema[] = [];
 
+/** 分组方式：与本人关系 / 不分组 */
+export type TProfileRequirementGroupBy = "user_relation" | null;
+
+// 分组方式是看的人的偏好，不跟被看的成员走；没存过默认按与本人关系分组
+const GROUP_BY_STORAGE_KEY = "profile_requirements_group_by";
+const readStoredGroupBy = (): TProfileRequirementGroupBy => {
+  try {
+    return window.localStorage.getItem(GROUP_BY_STORAGE_KEY) === "none" ? null : "user_relation";
+  } catch {
+    return "user_relation";
+  }
+};
+const storeGroupBy = (value: TProfileRequirementGroupBy) => {
+  try {
+    window.localStorage.setItem(GROUP_BY_STORAGE_KEY, value ?? "none");
+  } catch {
+    // 存不了就只在本次会话生效
+  }
+};
+
 /**
- * profile「需求」tab：某成员负责的产品需求，跨产品聚合。
+ * profile「需求」tab：某成员负责或创建的产品需求，跨产品聚合。
  *
  * 与 use-project-requirements 同形（局部 state、游标分页、筛选先清游标），但**只读**：
  * 需求内容的写入权在产品上，这里连关联/状态都不碰。需求类型 schema 随列表的
  * extra_stats 一起回来，不另拉配置接口。
+ *
+ * 按「与本人关系」分组时，表格只列左栏选中的那一组（user_relation=…），三组条数在
+ * extra_stats.relation_counts；不分组时是负责 ∪ 创建的全集。
  */
 export const useProfileRequirements = ({
   workspaceSlug,
@@ -56,6 +80,9 @@ export const useProfileRequirements = ({
   const [listFilters, setListFiltersState] = useState<TProjectRequirementListQuery>(initialListQuery ?? {});
   /** 产品范围；null = 全部。与筛选在服务端 AND 叠加 */
   const [productId, setProductIdState] = useState<string | null>(null);
+  const [groupBy, setGroupByState] = useState<TProfileRequirementGroupBy>(readStoredGroupBy);
+  /** 分组时左栏选中的组 */
+  const [relation, setRelationState] = useState<TProfileUserRelation>("assigned");
 
   /** 只认最后一次发出的请求 */
   const requestSequenceRef = useRef(0);
@@ -82,6 +109,7 @@ export const useProfileRequirements = ({
         targetDate: listFilters.targetDate,
         targetDateFrom: listFilters.targetDateFrom,
         targetDateTo: listFilters.targetDateTo,
+        userRelation: groupBy === "user_relation" ? relation : undefined,
       });
       if (requestSequence !== requestSequenceRef.current) return response;
       setRequirementsPage(response);
@@ -92,7 +120,7 @@ export const useProfileRequirements = ({
     } finally {
       if (requestSequence === requestSequenceRef.current) setIsLoading(false);
     }
-  }, [cursor, listFilters, perPage, productId, search, userId, workspaceSlug]);
+  }, [cursor, groupBy, listFilters, perPage, productId, relation, search, userId, workspaceSlug]);
 
   useEffect(() => {
     void fetchRequirements().catch(() => undefined);
@@ -128,10 +156,20 @@ export const useProfileRequirements = ({
     setCursor(undefined);
     setProductIdState(value);
   }, []);
+  const setGroupBy = useCallback((value: TProfileRequirementGroupBy) => {
+    storeGroupBy(value);
+    setCursor(undefined);
+    setGroupByState(value);
+  }, []);
+  const setRelation = useCallback((value: TProfileUserRelation) => {
+    setCursor(undefined);
+    setRelationState(value);
+  }, []);
 
   return {
     requirementsPage,
     requirementTypes: requirementsPage.extra_stats?.requirement_types ?? EMPTY_REQUIREMENT_TYPES,
+    relationCounts: requirementsPage.extra_stats?.relation_counts,
     isLoading,
     error,
     search,
@@ -139,11 +177,15 @@ export const useProfileRequirements = ({
     perPage,
     listFilters,
     productId,
+    groupBy,
+    relation,
     setSearch: updateSearch,
     setCursor,
     setPerPage: updatePerPage,
     setListFilters,
     setProductId,
+    setGroupBy,
+    setRelation,
     fetchRequirements,
     syncRequirements,
   };

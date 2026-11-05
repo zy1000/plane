@@ -30,6 +30,7 @@ import type { IQuickActionProps, TRenderQuickActions } from "../list/list-view-t
 import { StateTransitionAssigneeModal } from "../../state-transition-assignee-modal";
 //components
 import { getSourceFromDropPayload } from "../utils";
+import { useListAppearance } from "../list/list-appearance-context";
 import { KanBan } from "./default";
 import { StateSelectionModal } from "./state-selection-modal";
 import { KanBanSwimLanes } from "./swimlanes";
@@ -65,6 +66,7 @@ export const BaseKanBanRoot = observer(function BaseKanBanRoot(props: IBaseKanBa
   } = props;
   // router
   const { workspaceSlug, projectId } = useParams();
+  const appearance = useListAppearance();
   // store hooks
   const storeType = useIssueStoreType() as KanbanStoreType;
   const hideColumnHeaderAddButton = storeType === EIssuesStoreType.CYCLE;
@@ -302,7 +304,7 @@ export const BaseKanBanRoot = observer(function BaseKanBanRoot(props: IBaseKanBa
                 quickActions={renderQuickActions}
                 handleCollapsedGroups={handleCollapsedGroups}
                 collapsedGroups={collapsedGroups}
-                showEmptyGroup={userDisplayFilters?.show_empty_groups ?? true}
+                showEmptyGroup={appearance?.variant === "profile" || (userDisplayFilters?.show_empty_groups ?? true)}
                 disableIssueCreation={!enableIssueCreation || !canCreateIssue || isCompletedCycle}
                 canEditProperties={canEditProperties}
                 hideColumnHeaderAddButton={hideColumnHeaderAddButton}

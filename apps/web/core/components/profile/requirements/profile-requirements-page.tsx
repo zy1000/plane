@@ -9,9 +9,11 @@ import { observer } from "mobx-react";
 import { useParams, useSearchParams } from "react-router";
 // plane imports
 import { useTranslation } from "@plane/i18n";
-import type { TProfileRequirementFacets } from "@plane/types";
-import { cn } from "@plane/utils";
+import type { TIssueGroupByOptions } from "@plane/types";
 // components
+import { FilterGroupBy, FiltersDropdown } from "@/components/issues/issue-layouts/filters";
+import { ProfileIssueGroupEmpty } from "@/components/profile/issues/profile-issue-columns";
+import { ProfileRelationRail } from "@/components/profile/relation-rail";
 import {
   applyListQueryToSearchParams,
   listQueryToExpression,
@@ -26,64 +28,28 @@ import {
   PRODUCT_PARAM,
   getProductFromParam,
 } from "@/components/projects/requirements/project-requirement-product-tabs";
-import { ProjectRequirementsGrid } from "@/components/projects/requirements/project-requirements-grid";
-import { useProjectRequirementColumns } from "@/components/projects/requirements/use-project-requirement-columns";
 import { RequirementPeekOverview } from "@/components/requirements/requirement-detail";
+import { getCurrentPageOffset } from "@/components/requirements/requirement-grid-shared";
 import { FiltersRow } from "@/components/rich-filters/filters-row";
 import { FiltersToggle } from "@/components/rich-filters/filters-toggle";
+// constants
+import { PROFILE_USER_RELATION_GROUPS } from "@/constants/profile-user-relation";
+import type { TProfileUserRelation } from "@/constants/profile-user-relation";
 // hooks
 import { useProfileRequirements } from "@/hooks/store/use-profile-requirements";
+// local imports
+import { ProfileRequirementsTable } from "./profile-requirements-table";
+import { ProfileProductScopeMenu, ProfileRequirementSearch } from "./profile-requirements-toolbar";
 
-const noop = () => undefined;
-
-/** 顶部产品范围条：一个人可能负责多个产品的需求，只有一个产品时不显示 */
-function ProductScopeTabs({
-  facets,
-  onSelect,
-  selectedProductId,
-}: {
-  facets: TProfileRequirementFacets | null;
-  onSelect: (productId: string | null) => void;
-  selectedProductId: string | null;
-}) {
-  const { t } = useTranslation();
-  const products = facets?.by_product ?? [];
-  if (products.length < 2) return null;
-
-  const tabClassName = (active: boolean) =>
-    cn(
-      "flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-12 transition-colors",
-      active ? "bg-accent-subtle font-medium text-accent-primary" : "text-secondary hover:bg-layer-1 hover:text-primary"
-    );
-
-  return (
-    <div className="horizontal-scrollbar scrollbar-sm flex items-center gap-1 overflow-x-auto border-b border-subtle px-4 py-2">
-      <button type="button" className={tabClassName(selectedProductId === null)} onClick={() => onSelect(null)}>
-        {t("profile.stats.requirements.all_products")}
-        <span className="text-11 text-placeholder tabular-nums">{facets?.total ?? 0}</span>
-      </button>
-      {products.map((product) => (
-        <button
-          key={product.product_id}
-          type="button"
-          className={tabClassName(selectedProductId === product.product_id)}
-          onClick={() => onSelect(product.product_id)}
-          title={product.name}
-        >
-          <span className="font-medium">{product.identifier}</span>
-          <span className="max-w-40 truncate">{product.name}</span>
-          <span className="text-11 text-placeholder tabular-nums">{product.count}</span>
-        </button>
-      ))}
-    </div>
-  );
-}
+/** 「显示 › 分组方式」：与本人关系 / 无 */
+const GROUP_BY_OPTIONS: TIssueGroupByOptions[] = ["user_relation", null];
 
 /**
- * profile「需求」tab：该成员负责的产品需求，跨产品聚合。
+ * profile「需求」tab：该成员负责或创建的产品需求，跨产品聚合。
  *
- * 网格、筛选、详情抽屉全部复用项目需求页那套（网格 canManage=false 即只读）；
- * 筛选与产品范围同样落在 URL 上，刷新 / 分享都能还原。
+ * 版式与工作项 / 缺陷页一致：工具栏（搜索、产品范围 | 筛选、显示）→ 左栏「与本人关系」三组常驻 → 表格。
+ * 筛选、详情抽屉复用项目需求页那套；筛选与产品范围落在 URL 上，刷新 / 分享都能还原。
+ * 分组方式可在「显示」里改成不分组，此时没有左栏、表格是负责 ∪ 创建的全集。
  */
 export const ProfileRequirementsPage = observer(function ProfileRequirementsPage() {
   const { t } = useTranslation();
@@ -97,9 +63,9 @@ export const ProfileRequirementsPage = observer(function ProfileRequirementsPage
   const syncedFilterRef = useRef(serializeListQuery(initialListQuery));
 
   const store = useProfileRequirements({ workspaceSlug: slug, userId: user, initialListQuery });
-  const { hiddenColumns, toggleColumn } = useProjectRequirementColumns(user ? `profile-requirements-${user}` : undefined);
   const facets = store.requirementsPage.extra_stats ?? null;
   const rows = store.requirementsPage.results;
+  const isGrouped = store.groupBy === "user_relation";
 
   // 产品范围：URL 是唯一事实来源。分面未就绪时放行深链，就绪后再校验
   const allowedProductIds = facets ? facets.by_product.map((item) => item.product_id) : null;
@@ -118,7 +84,7 @@ export const ProfileRequirementsPage = observer(function ProfileRequirementsPage
     [searchParams, setSearchParams]
   );
 
-  // 负责人恒为本人，这一维筛选没有意义；其余与项目需求页同一套配置
+  // 负责人一维不开放筛选；其余与项目需求页同一套配置
   const { areAllConfigsInitialized, configs: allConfigs } = useProjectRequirementFiltersConfig({
     workspaceSlug: slug ?? "",
     projectId: "",
@@ -182,15 +148,70 @@ export const ProfileRequirementsPage = observer(function ProfileRequirementsPage
   }, [peekRequirementId, urlPeekRequirementId, searchParams, setSearchParams]);
   const peekRow = peekRequirementId ? (rows.find((row) => row.id === peekRequirementId) ?? null) : null;
 
+  // 左栏三组：条数跟着筛选 / 搜索 / 产品范围走，0 条也常驻
+  const railItems = useMemo(
+    () =>
+      PROFILE_USER_RELATION_GROUPS.map(({ key, name, icon: Icon, iconClassName }) => ({
+        id: key,
+        name,
+        icon: <Icon className={`size-4 ${iconClassName}`} />,
+        count: store.relationCounts?.[key] ?? 0,
+      })),
+    [store.relationCounts]
+  );
+  const activeGroupName = PROFILE_USER_RELATION_GROUPS.find((group) => group.key === store.relation)?.name ?? "";
+
   if (!slug || !user) return null;
 
   const isTrueEmpty = !store.isLoading && !store.error && (facets?.total ?? 0) === 0;
+  const hasActiveFilter = filter.allConditionsForDisplay.length > 0 || store.search.trim().length > 0;
+  const { requirementsPage, perPage } = store;
+  const pageIndex = getCurrentPageOffset(
+    requirementsPage.prev_cursor,
+    requirementsPage.next_cursor,
+    requirementsPage.prev_page_results,
+    requirementsPage.next_page_results
+  );
+
+  const emptyContent =
+    isGrouped && !hasActiveFilter ? (
+      <ProfileIssueGroupEmpty
+        groupId={store.relation}
+        groupName={activeGroupName}
+        entityLabel={t("profile.tabs.requirements")}
+      />
+    ) : (
+      <div className="grid place-items-center px-6 py-24 text-center">
+        <div className="max-w-md">
+          <p className="text-14 font-medium text-primary">{t("project_requirements.filtered_empty.title")}</p>
+          <p className="mt-1.5 text-13 leading-5 text-secondary">
+            {t("project_requirements.filtered_empty.description")}
+          </p>
+        </div>
+      </div>
+    );
 
   return (
     <>
       <div className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-surface-1">
+        <div className="flex h-14 flex-shrink-0 items-center gap-2 border-b border-subtle px-page-x">
+          <ProfileRequirementSearch value={store.search} onChange={store.setSearch} />
+          <ProfileProductScopeMenu facets={facets} selectedProductId={selectedProductId} onSelect={selectProduct} />
+          <div className="ml-auto flex items-center gap-2">
+            <FiltersToggle filter={filter} />
+            <FiltersDropdown title={t("common.display")} placement="bottom-end">
+              <div className="px-2.5 py-2">
+                <FilterGroupBy
+                  displayFilters={{ group_by: store.groupBy }}
+                  groupByOptions={GROUP_BY_OPTIONS}
+                  handleUpdate={(value) => store.setGroupBy(value === "user_relation" ? "user_relation" : null)}
+                  ignoreGroupedFilters={[]}
+                />
+              </div>
+            </FiltersDropdown>
+          </div>
+        </div>
         <FiltersRow filter={filter} />
-        <ProductScopeTabs facets={facets} selectedProductId={selectedProductId} onSelect={selectProduct} />
         {isTrueEmpty ? (
           <div className="grid flex-1 place-items-center p-10 text-center">
             <div className="max-w-md">
@@ -201,39 +222,28 @@ export const ProfileRequirementsPage = observer(function ProfileRequirementsPage
             </div>
           </div>
         ) : (
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            <ProjectRequirementsGrid
+          <div className="flex min-h-0 flex-1">
+            {isGrouped && (
+              <ProfileRelationRail
+                heading={t("profile.user_relation")}
+                items={railItems}
+                selectedId={store.relation}
+                onSelect={(id) => store.setRelation(id as TProfileUserRelation)}
+              />
+            )}
+            <ProfileRequirementsTable
               workspaceSlug={slug}
-              projectId={`profile-requirements-${user}`}
-              requirementTypes={store.requirementTypes}
-              requirements={rows}
-              totalCount={store.requirementsPage.total_count ?? 0}
-              perPage={store.perPage}
-              nextCursor={store.requirementsPage.next_cursor}
-              prevCursor={store.requirementsPage.prev_cursor}
-              nextPageResults={store.requirementsPage.next_page_results}
-              prevPageResults={store.requirementsPage.prev_page_results}
+              rows={rows}
               isLoading={store.isLoading}
-              isMutating={false}
               error={store.error}
               onRetry={() => void store.fetchRequirements().catch(() => undefined)}
-              canManage={false}
-              hasAnyLinked={(facets?.total ?? 0) > 0}
-              activeFilterCount={filter.allConditionsForDisplay.length + (store.search.trim() ? 1 : 0)}
-              onClearFilters={() => {
-                void filter.clearFilters();
-                store.setSearch("");
-              }}
-              search={store.search}
-              onSearchChange={store.setSearch}
-              onCursorChange={store.setCursor}
-              onPerPageChange={store.setPerPage}
               onOpenDetail={setPeekRequirement}
-              onLink={noop}
-              onUnlink={noop}
-              toolbarAfterSearch={<FiltersToggle filter={filter} />}
-              hiddenColumns={hiddenColumns}
-              onToggleColumn={toggleColumn}
+              totalCount={requirementsPage.total_count ?? 0}
+              perPage={perPage}
+              pageIndex={pageIndex}
+              onPageChange={(index) => store.setCursor(index <= 0 ? undefined : `${perPage}:${index}:0`)}
+              onPerPageChange={store.setPerPage}
+              empty={emptyContent}
             />
           </div>
         )}
