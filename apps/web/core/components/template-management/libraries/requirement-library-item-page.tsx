@@ -19,7 +19,9 @@ import { PageHead } from "@/components/core/page-title";
 import {
   RequirementDetailContent,
   RequirementDetailProperties,
+  RequirementEditModeActions,
   useRequirementDetail,
+  useRequirementEditSession,
 } from "@/components/requirements/requirement-detail";
 import { RequirementIdentifier } from "@/components/requirements/requirement-identifier";
 import { canEditRequirementContent } from "@/components/requirements/requirement-status-cell";
@@ -73,9 +75,18 @@ export const RequirementLibraryItemPage = observer(function RequirementLibraryIt
   /** 与条目列表页一致：写要「维护需求标准库」；内容还要看这一行有没有锁定 / 关闭 */
   const canEdit = canManageLibraries;
   const isEditable = canEditRequirementContent(requirement, canEdit);
-  /** 模块是旁路轴（set-module），只看页面级写权限 */
-  const onModuleChange = (moduleId: string | null, moduleName: string | null) =>
-    void detail.updateModule(moduleId, moduleName);
+  /**
+   * 内容走「编辑 → 保存 / 取消」会话，与产品需求整页同款：模块编辑中暂存、随保存走 set-module；
+   * 锁定 / 关闭进不了编辑态时直通。附件不进会话。库条目没有状态轴。
+   */
+  const session = useRequirementEditSession({
+    requirement,
+    enabled: isEditable,
+    onPatch: detail.submitPatch,
+    onModuleChange: canEdit ? detail.updateModule : undefined,
+  });
+  const contentReadOnly = !(isEditable && session.isEditing);
+  const onModuleChange = session.onModuleChange;
 
   const knownRows = useMemo(
     () => (requirement ? [requirement, ...detail.children] : []),
@@ -106,15 +117,15 @@ export const RequirementLibraryItemPage = observer(function RequirementLibraryIt
   /** 右栏与窄屏回落位置渲染的是同一份属性，只定义一次 */
   const properties = requirement && (
     <RequirementDetailProperties
-      requirement={requirement}
+      requirement={session.requirement ?? requirement}
       requirementTypeName={requirementType?.name ?? null}
       builtinLayout={configuration?.builtin_fields ?? null}
-      readOnly={!isEditable}
+      readOnly={contentReadOnly}
       canEdit={canEdit}
       workspaceSlug={workspaceSlug}
       libraryId={currentLibraryId}
       resolveParentTitle={resolveParentTitle}
-      onPatch={detail.submitPatch}
+      onPatch={session.onPatch}
       onModuleChange={onModuleChange}
     />
   );
@@ -181,25 +192,30 @@ export const RequirementLibraryItemPage = observer(function RequirementLibraryIt
                 <RequirementDetailContent
                   workspaceSlug={workspaceSlug}
                   libraryId={currentLibraryId}
-                  requirement={requirement}
+                  requirement={session.requirement ?? requirement}
                   requirementType={requirementType}
                   subRequirements={detail.children}
                   trail={detail.trail}
-                  readOnly={!isEditable}
+                  readOnly={contentReadOnly}
+                  canEditContent={isEditable}
                   layout="page"
                   resolveParentTitle={resolveParentTitle}
-                  onPatch={detail.submitPatch}
+                  onPatch={session.onPatch}
+                  onAttachmentsChange={(updater) => void detail.submitPatch({ attachments: updater })}
                   onOpenRequirement={openRequirement}
                   headerActions={
-                    <Tooltip tooltipContent={t("requirement_detail.copy_link")}>
-                      <IconButton
-                        variant="secondary"
-                        size="lg"
-                        icon={CopyLinkIcon}
-                        aria-label={t("requirement_detail.copy_link")}
-                        onClick={copyLink}
-                      />
-                    </Tooltip>
+                    <>
+                      <RequirementEditModeActions session={session} canEdit={isEditable} />
+                      <Tooltip tooltipContent={t("requirement_detail.copy_link")}>
+                        <IconButton
+                          variant="secondary"
+                          size="lg"
+                          icon={CopyLinkIcon}
+                          aria-label={t("requirement_detail.copy_link")}
+                          onClick={copyLink}
+                        />
+                      </Tooltip>
+                    </>
                   }
                 />
                 {/* 窄屏没有右栏，属性回落到主列底部 */}

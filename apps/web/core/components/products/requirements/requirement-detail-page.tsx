@@ -17,7 +17,9 @@ import {
   RequirementApprovalPanel,
   RequirementDetailContent,
   RequirementDetailProperties,
+  RequirementEditModeActions,
   useRequirementDetail,
+  useRequirementEditSession,
 } from "@/components/requirements/requirement-detail";
 import { RequirementIdentifier } from "@/components/requirements/requirement-identifier";
 import { canEditRequirementContent } from "@/components/requirements/requirement-status-cell";
@@ -57,12 +59,21 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
   /** 能不能改需求条目（页面级写权限）；内容还要看这一行在不在评审中 / 有没有关闭 */
   const canEdit = store.canEdit;
   const isEditable = canEditRequirementContent(requirement, canEdit);
-  /** 状态格只看页面级写权限：closed 行内容只读但要能重开，评审中也能改状态 */
-  const onStatusChange = canEdit ? detail.updateStatus : undefined;
-  /** 模块同为旁路轴（set-module），只看页面级写权限 */
-  const onModuleChange = canEdit
-    ? (moduleId: string | null, moduleName: string | null) => void detail.updateModule(moduleId, moduleName)
-    : undefined;
+  /**
+   * 内容走「编辑 → 保存 / 取消」会话：正文与右栏拿到的是叠加了草稿的行与暂存用的回调，保存时
+   * 内容并成一次 PATCH、状态 / 模块各走旁路接口。评审中 / 已关闭进不了编辑态时状态 / 模块直通
+   * （重开靠它）。附件 / 所属项目不进会话。真实回调只看页面级写权限。
+   */
+  const session = useRequirementEditSession({
+    requirement,
+    enabled: isEditable,
+    onPatch: detail.submitPatch,
+    onStatusChange: canEdit ? detail.updateStatus : undefined,
+    onModuleChange: canEdit ? detail.updateModule : undefined,
+  });
+  const contentReadOnly = !(isEditable && session.isEditing);
+  const onStatusChange = session.onStatusChange;
+  const onModuleChange = session.onModuleChange;
 
   const knownRows = useMemo(
     () => (requirement ? [requirement, ...detail.children] : []),
@@ -147,14 +158,16 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
                 <RequirementDetailContent
                   workspaceSlug={slug}
                   productId={product}
-                  requirement={requirement}
+                  requirement={session.requirement ?? requirement}
                   requirementType={requirementType}
                   subRequirements={detail.children}
                   trail={detail.trail}
-                  readOnly={!isEditable}
+                  readOnly={contentReadOnly}
+                  canEditContent={isEditable}
                   layout="page"
                   resolveParentTitle={resolveParentTitle}
-                  onPatch={detail.submitPatch}
+                  onPatch={session.onPatch}
+                  onAttachmentsChange={(updater) => void detail.submitPatch({ attachments: updater })}
                   onStatusChange={onStatusChange}
                   onOpenRequirement={openRequirement}
                   onRolledBack={() => {
@@ -163,15 +176,24 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
                   }}
                   headerActions={
                     <>
-                      {/* 推动评审的入口放在标题右侧 —— 页面级动作不该藏在右栏里 */}
-                      <RequirementApprovalPanel
-                        variant="actions"
-                        requirement={requirement}
-                        isMutating={changesStore.isMutating}
-                        onSubmitReview={(id) => approvalActions.openSubmitModal([id])}
-                        onWithdrawReview={(changeRequestId) => void approvalActions.withdraw(changeRequestId)}
-                        onOpenChangeRequest={openChangeRequest}
-                      />
+                      <RequirementEditModeActions session={session} canEdit={isEditable} />
+                      {/* 推动评审的入口放在标题右侧 —— 页面级动作不该藏在右栏里；编辑中先保存再提交评审 */}
+                      <div
+                        className={cn(
+                          "flex items-center gap-2",
+                          session.isEditing && "pointer-events-none opacity-50"
+                        )}
+                        aria-disabled={session.isEditing || undefined}
+                      >
+                        <RequirementApprovalPanel
+                          variant="actions"
+                          requirement={requirement}
+                          isMutating={changesStore.isMutating}
+                          onSubmitReview={(id) => approvalActions.openSubmitModal([id])}
+                          onWithdrawReview={(changeRequestId) => void approvalActions.withdraw(changeRequestId)}
+                          onOpenChangeRequest={openChangeRequest}
+                        />
+                      </div>
                       <Tooltip tooltipContent={t("requirement_detail.copy_link")}>
                         <IconButton
                           variant="secondary"
@@ -189,15 +211,15 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
                 {/* 窄屏没有右栏，属性回落到主列底部 —— 与工作项详情同款处理 */}
                 <div className="mt-8 border-t border-subtle pt-6 lg:hidden">
                   <RequirementDetailProperties
-                    requirement={requirement}
+                    requirement={session.requirement ?? requirement}
                     requirementTypeName={requirementType?.name ?? null}
                     builtinLayout={requirementType?.builtin_fields ?? null}
-                    readOnly={!isEditable}
+                    readOnly={contentReadOnly}
                     canEdit={canEdit}
                     workspaceSlug={slug}
                     productId={product}
                     resolveParentTitle={resolveParentTitle}
-                    onPatch={detail.submitPatch}
+                    onPatch={session.onPatch}
                     onStatusChange={onStatusChange}
                     onModuleChange={onModuleChange}
                     onProjectsChanged={() => void detail.refresh()}
@@ -212,15 +234,15 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
               )}
             >
               <RequirementDetailProperties
-                requirement={requirement}
+                requirement={session.requirement ?? requirement}
                 requirementTypeName={requirementType?.name ?? null}
                 builtinLayout={requirementType?.builtin_fields ?? null}
-                readOnly={!isEditable}
+                readOnly={contentReadOnly}
                 canEdit={canEdit}
                 workspaceSlug={slug}
                 productId={product}
                 resolveParentTitle={resolveParentTitle}
-                onPatch={detail.submitPatch}
+                onPatch={session.onPatch}
                 onStatusChange={onStatusChange}
                 onModuleChange={onModuleChange}
                 onProjectsChanged={() => void detail.refresh()}

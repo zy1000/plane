@@ -18,8 +18,13 @@ import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useAppRouter } from "@/hooks/use-app-router";
 import useKeypress from "@/hooks/use-keypress";
 import { RequirementDetailContent } from "./requirement-detail-content";
+import { RequirementEditModeActions } from "./requirement-edit-mode-actions";
 import type { TRequirementRelationsConfig } from "./requirement-relations-area";
 import { useRequirementDetail } from "./use-requirement-detail";
+import { useRequirementEditSession } from "./use-requirement-edit-session";
+
+/** 与工作项 peek 同一句：编辑中带着改动关抽屉要先问一声 */
+const CLOSE_WHILE_EDITING_MESSAGE = "有未保存的修改，确定放弃并关闭吗？";
 
 type TProps = {
   workspaceSlug: string;
@@ -191,6 +196,7 @@ export const RequirementPeekOverview = (props: TProps) => {
     async (status: TRequirementItemStatus) => {
       const response = await detail.updateStatus(status);
       if (response) onRequirementUpdated?.(response);
+      return response;
     },
     [detail, onRequirementUpdated]
   );
@@ -200,14 +206,38 @@ export const RequirementPeekOverview = (props: TProps) => {
     async (moduleId: string | null, moduleName: string | null) => {
       const response = await detail.updateModule(moduleId, moduleName);
       if (response) onRequirementUpdated?.(response);
+      return response;
     },
     [detail, onRequirementUpdated]
   );
 
+  /**
+   * 内容走「编辑 → 保存 / 取消」会话：正文拿到的是叠加了草稿的行与暂存用的回调，保存时内容并成
+   * 一次 PATCH、状态 / 模块各走旁路接口，都经上面的包装落库并回灌列表。附件不进会话。
+   * 状态只有产品需求有；模块库条目也有，所以只看页面级写权限。
+   */
+  const canEditContent = canEditRequirementContent(requirement, canEdit);
+  const session = useRequirementEditSession({
+    requirement,
+    enabled: canEditContent,
+    onPatch: handlePatch,
+    onStatusChange: canEdit && entityKind === "product" ? handleStatusChange : undefined,
+    onModuleChange: canEdit ? handleModuleChange : undefined,
+  });
+
+  /** 关抽屉（按钮 / 遮罩 / Esc / 打开整页）统一走这里：编辑中有改动先确认，然后丢草稿 */
+  const requestClose = useCallback(() => {
+    if (session.isEditing) {
+      if (session.hasChanges && !window.confirm(CLOSE_WHILE_EDITING_MESSAGE)) return;
+      session.cancel();
+    }
+    onClose();
+  }, [onClose, session]);
+
   useKeypress("Escape", () => {
     // 工作项抽屉叠在需求抽屉上时，Esc 先关工作项，别把需求一起带走
     if (issueDetail.peekIssue) return;
-    if (isOpen) onClose();
+    if (isOpen) requestClose();
   });
 
   const portalContainer = typeof document !== "undefined" ? document.getElementById("full-screen-portal") : null;
@@ -237,7 +267,7 @@ export const RequirementPeekOverview = (props: TProps) => {
             className="absolute inset-0 bg-black/20"
             onClick={() => {
               if (issueDetail.peekIssue) return;
-              onClose();
+              requestClose();
             }}
           />
         </Transition.Child>
@@ -261,7 +291,7 @@ export const RequirementPeekOverview = (props: TProps) => {
             <div className="relative flex flex-shrink-0 items-center justify-between p-4">
               <div className="flex items-center gap-4">
                 <Tooltip tooltipContent={t("requirement_detail.close")}>
-                  <button type="button" onClick={onClose} aria-label={t("requirement_detail.close")}>
+                  <button type="button" onClick={requestClose} aria-label={t("requirement_detail.close")}>
                     <MoveRight className="h-4 w-4 text-tertiary hover:text-secondary" />
                   </button>
                 </Tooltip>
@@ -272,6 +302,9 @@ export const RequirementPeekOverview = (props: TProps) => {
                       aria-label={t("requirement_detail.open_full_page")}
                       onClick={() => {
                         if (!activeId) return;
+                        if (session.isEditing && session.hasChanges && !window.confirm(CLOSE_WHILE_EDITING_MESSAGE))
+                          return;
+                        session.cancel();
                         onClose();
                         router.push(
                           entityKind === "library"
@@ -288,6 +321,8 @@ export const RequirementPeekOverview = (props: TProps) => {
               </div>
               <div className="flex items-center gap-2">
                 {detail.isLoading && <LoaderIcon className="size-3.5 animate-spin text-tertiary" />}
+                {/* 编辑 / 编辑中 · 取消 / 保存：与工作项抽屉同位（头部右侧、复制链接左边） */}
+                <RequirementEditModeActions session={session} canEdit={canEditContent} />
                 <Tooltip tooltipContent={t("requirement_detail.copy_link")}>
                   <IconButton
                     variant="secondary"
@@ -324,22 +359,20 @@ export const RequirementPeekOverview = (props: TProps) => {
                   workspaceSlug={workspaceSlug}
                   productId={entityKind === "product" ? entityId : undefined}
                   libraryId={entityKind === "library" ? entityId : undefined}
-                  requirement={requirement}
+                  requirement={session.requirement ?? requirement}
                   requirementType={requirementType}
                   subRequirements={detail.children}
                   trail={detail.trail}
-                  readOnly={!canEditRequirementContent(requirement, canEdit)}
+                  // 内容只在编辑态可改；放弃改动 / 回滚 / 附件看 canEditContent
+                  readOnly={!(canEditContent && session.isEditing)}
+                  canEditContent={canEditContent}
                   layout="drawer"
                   resolveParentTitle={resolveParentTitle}
-                  onPatch={handlePatch}
-                  // 状态格只看页面级写权限：closed 行内容只读但要能重开，评审中也能改状态
-                  onStatusChange={
-                    canEdit && entityKind === "product" ? (status) => void handleStatusChange(status) : undefined
-                  }
-                  // 模块同为旁路轴；库条目也有模块，不像状态那样限产品
-                  onModuleChange={
-                    canEdit ? (moduleId, moduleName) => void handleModuleChange(moduleId, moduleName) : undefined
-                  }
+                  onPatch={session.onPatch}
+                  onAttachmentsChange={(updater) => void handlePatch({ attachments: updater })}
+                  // 状态 / 模块由会话分发：编辑中暂存、随保存提交；评审中 / 已关闭进不了编辑态时直通（重开靠它）
+                  onStatusChange={session.onStatusChange}
+                  onModuleChange={session.onModuleChange}
                   onOpenRequirement={onOpenRequirement}
                   onRolledBack={() => void handleRolledBack()}
                   relations={relations}

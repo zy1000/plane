@@ -75,7 +75,17 @@ type TProps = {
   requirementType: TRequirementTypeSchema | null;
   subRequirements: TRequirement[];
   trail: TRequirementTrailEntry[];
+  /**
+   * 内容字段此刻是不是只读。详情走「编辑 → 保存 / 取消」会话（use-requirement-edit-session），
+   * 不在编辑态时这里为 true：标题 / 描述 / 属性 / 类型字段都只渲染值。
+   */
   readOnly: boolean;
+  /**
+   * 内容级可改权限（页面级写权限 + 未锁定 + 未关闭），与 readOnly 分开：「放弃改动 / 回滚 /
+   * 上传附件」这类不进编辑会话的动作只看它，不管此刻在不在编辑态。不传回退 !readOnly
+   * （基线快照抽屉等只读场景仍是一把钥匙）。
+   */
+  canEditContent?: boolean;
   /** 基线快照抽屉关掉变更轨迹和版本历史，避免再去打活接口 */
   showHistory?: boolean;
   /** drawer 把属性排成属性条，page 把它交给右栏渲染 */
@@ -83,15 +93,19 @@ type TProps = {
   resolveParentTitle?: (parentId: string) => string | undefined;
   onPatch: (patch: TPatch) => Promise<unknown>;
   /**
-   * 改需求级交付状态。走独立的状态端点、不经 onPatch；不传则状态格只读。
-   * 刻意与 readOnly 解耦：readOnly 是内容级（评审中 / 已关闭都为 true），而 closed
-   * 行必须还能把状态选回去（重开），所以由调用方按页面级写权限决定传不传。
+   * 需求级附件整组替换。附件不进编辑会话、上传即落库，所以单独一条通道直达真实提交；
+   * 不传回退 onPatch({ attachments })。
+   */
+  onAttachmentsChange?: (updater: (current: TRequirementAssetRef[]) => TRequirementAssetRef[]) => void;
+  /**
+   * 改需求级交付状态。不经 onPatch；不传则状态格只读。刻意与 readOnly 解耦：能不能改只看
+   * 传没传。调用方用 use-requirement-edit-session 分发 —— 编辑中暂存随保存提交；评审中 /
+   * 已关闭进不了编辑态时直通状态端点（closed 行必须还能把状态选回去重开）。
    */
   onStatusChange?: (status: TRequirementItemStatus) => void;
   /**
-   * 改模块挂靠。走 set-module 旁路端点、不经 onPatch；不传则模块只读。
-   * 与 onStatusChange 同理和 readOnly 解耦 —— 模块不是内容，评审中 / 已关闭
-   * 都能改，由调用方按页面级写权限决定传不传。产品与标准库两侧都可用。
+   * 改模块挂靠。不经 onPatch；不传则模块只读。与 onStatusChange 同一套分发规则，
+   * 产品与标准库两侧都可用。
    */
   onModuleChange?: (moduleId: string | null, moduleName: string | null) => void;
   onOpenRequirement: (requirementId: string) => void;
@@ -350,10 +364,12 @@ export const RequirementDetailContent = (props: TProps) => {
     subRequirements,
     trail,
     readOnly,
+    canEditContent,
     showHistory = true,
     layout,
     resolveParentTitle,
     onPatch,
+    onAttachmentsChange,
     onStatusChange,
     onModuleChange,
     onOpenRequirement,
@@ -373,6 +389,8 @@ export const RequirementDetailContent = (props: TProps) => {
 
   const isLibrary = Boolean(libraryId) && !productId;
   const scopeEntityId = productId ?? libraryId ?? "";
+  // 不进编辑会话的动作（放弃改动 / 回滚 / 附件）看权限，不看此刻在不在编辑态
+  const canModify = canEditContent ?? !readOnly;
 
   const uploadAsset = useCallback(
     async (file: globalThis.File, imageOnly: boolean) => {
@@ -515,7 +533,7 @@ export const RequirementDetailContent = (props: TProps) => {
             requirementTypeName={requirementType?.name ?? ""}
             fields={activeFields}
             builtinLayout={requirementType?.builtin_fields ?? null}
-            readOnly={readOnly}
+            readOnly={!canModify}
             onDiscarded={onRolledBack}
             onSubmitReview={isDrawer ? onSubmitReview : undefined}
           />
@@ -633,8 +651,8 @@ export const RequirementDetailContent = (props: TProps) => {
         requirement={requirement}
         subRequirements={subRequirements}
         relations={relations}
-        readOnly={readOnly}
-        onAttachmentsChange={(updater) => void onPatch({ attachments: updater })}
+        readOnly={!canModify}
+        onAttachmentsChange={onAttachmentsChange ?? ((updater) => void onPatch({ attachments: updater }))}
         onOpenRequirement={onOpenRequirement}
       />
 
@@ -650,7 +668,7 @@ export const RequirementDetailContent = (props: TProps) => {
           requirementType={requirementType}
           trail={trail}
           approvedVersion={requirement.approved_version}
-          canRollback={!readOnly}
+          canRollback={canModify}
           onRolledBack={onRolledBack}
         />
       )}
