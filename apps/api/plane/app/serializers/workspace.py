@@ -185,12 +185,31 @@ class WorkspaceMemberExtraInfoFieldsMixin(serializers.Serializer):
         return {"id": str(extra.leader_id), "display_name": extra.leader.display_name}
 
 
+# 成员名单（通讯录）对外的字段。不要用 "__all__"：会把每个人的 view_props / default_props 等个人偏好一起吐出去
+# （843 人时占响应 58%），还会因模型上的 job_roles 多对多字段对每个成员多查一次字典表（N+1）。
+# 岗位 / 权限组 / 团队都走 Mixin 的 *_ids 方法字段，列表视图预先算好放在 context 里。
+WORKSPACE_MEMBER_FIELDS = (
+    "id",
+    "member",
+    "created_at",
+    "is_active",
+    "custom_role_ids",
+    "group_role_ids",
+    "group_ids",
+    "job_role_ids",
+    "employee_id",
+    "department",
+    "leader",
+)
+
+
 class WorkSpaceMemberSerializer(WorkspaceMemberRoleFieldsMixin, WorkspaceMemberExtraInfoFieldsMixin, DynamicBaseSerializer):
     member = UserLiteSerializer(read_only=True)
 
     class Meta:
         model = WorkspaceMember
-        fields = "__all__"
+        fields = WORKSPACE_MEMBER_FIELDS
+        read_only_fields = ("id", "member", "created_at")
 
 
 class WorkspaceMemberMeSerializer(WorkspaceMemberRoleFieldsMixin, BaseSerializer):
@@ -208,7 +227,8 @@ class WorkspaceMemberAdminSerializer(
 
     class Meta:
         model = WorkspaceMember
-        fields = "__all__"
+        fields = WORKSPACE_MEMBER_FIELDS
+        read_only_fields = ("id", "member", "created_at")
 
 
 class WorkSpaceMemberInviteSerializer(BaseSerializer):

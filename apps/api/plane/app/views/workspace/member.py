@@ -159,20 +159,9 @@ class WorkSpaceMemberViewSet(BaseViewSet):
             if self._can_view_admin_details(request, slug)
             else WorkSpaceMemberSerializer
         )
+        # 字段清单由序列化器的 Meta.fields 决定（DynamicBaseSerializer 的 fields 参数会被 expand 覆盖，传了也不生效）
         serializer = serializer_class(
             workspace_members,
-            fields=(
-                "id",
-                "member",
-                "custom_role_ids",
-                "group_role_ids",
-                "group_ids",
-                "job_role_ids",
-                "is_active",
-                "employee_id",
-                "department",
-                "leader",
-            ),
             many=True,
             context={
                 "group_role_ids_by_member": self._get_group_role_ids_by_member(
@@ -203,10 +192,7 @@ class WorkSpaceMemberViewSet(BaseViewSet):
             if self._can_view_admin_details(request, slug)
             else WorkSpaceMemberSerializer
         )
-        serializer = serializer_class(
-            member,
-            fields=("id", "member", "custom_role_ids", "group_role_ids", "group_ids", "job_role_ids"),
-        )
+        serializer = serializer_class(member)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     @allow_fine_permission(PermissionKey.WORKSPACE_MEMBER_MANAGE, level="WORKSPACE")
