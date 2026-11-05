@@ -4,8 +4,8 @@
  * See the LICENSE file for details.
  */
 
-import { useCallback, useEffect, useState } from "react";
-import type { IPermissionGroup } from "@plane/types";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { IPermissionGroup, TPermissionGroupKind } from "@plane/types";
 import { WorkspaceService } from "@/services/workspace.service";
 
 const workspaceService = new WorkspaceService();
@@ -21,8 +21,8 @@ const publishRoles = (slug: string, roles: IPermissionGroup[]) => {
 };
 
 /**
- * 工作区下的权限组列表（带人数 / 权限数 / 数据权限摘要 / 引用项目数）与增删改。
- * 权限内容与数据权限的读写在 use-permission-group-detail.ts。
+ * 工作区下的权限组列表（三类都在一份里，按 kind 分：工作区权限组 / 项目权限模板 / 数据权限）与增删改。
+ * 每行带按类型给的统计（人数 / 权限数 / 数据权限摘要 / 引用项目数）；权限内容与白名单的读写在 use-permission-group-detail.ts。
  */
 export const useWorkspaceRoles = (workspaceSlug: string | undefined) => {
   const [roles, setRoles] = useState<IPermissionGroup[]>(() =>
@@ -66,11 +66,19 @@ export const useWorkspaceRoles = (workspaceSlug: string | undefined) => {
     }
   }, [workspaceSlug, commit]);
 
+  /** 按 kind 分好的三份（缓存仍是一份全量） */
+  const groupsByKind = useMemo<Record<TPermissionGroupKind, IPermissionGroup[]>>(() => {
+    const result: Record<TPermissionGroupKind, IPermissionGroup[]> = { workspace: [], project_template: [], data: [] };
+    for (const role of roles) result[role.kind]?.push(role);
+    return result;
+  }, [roles]);
+
+  /** kind 创建后不可改；copy_from 只接受同 kind 的组 */
   const createRole = useCallback(
     async (data: {
       name: string;
       description?: string;
-      is_template?: boolean;
+      kind: TPermissionGroupKind;
       copy_from?: string | null;
     }): Promise<IPermissionGroup> => {
       if (!workspaceSlug) throw new Error("缺少 workspaceSlug");
@@ -82,10 +90,7 @@ export const useWorkspaceRoles = (workspaceSlug: string | undefined) => {
   );
 
   const updateRole = useCallback(
-    async (
-      roleId: string,
-      data: Partial<{ name: string; description: string; is_template: boolean }>
-    ): Promise<IPermissionGroup> => {
+    async (roleId: string, data: Partial<{ name: string; description: string }>): Promise<IPermissionGroup> => {
       if (!workspaceSlug) throw new Error("缺少 workspaceSlug");
       const updated = await workspaceService.updateWorkspaceRole(workspaceSlug, roleId, data);
       commit((prev) => prev.map((role) => (role.id === roleId ? updated : role)));
@@ -120,6 +125,7 @@ export const useWorkspaceRoles = (workspaceSlug: string | undefined) => {
 
   return {
     roles,
+    groupsByKind,
     isLoading,
     error,
     fetchRoles,

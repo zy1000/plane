@@ -21,6 +21,7 @@ import {
   NetworkZoneColumn,
   PermissionGroupsColumn,
 } from "@/components/workspace/settings/member-columns";
+import { PERMISSION_GROUP_KIND_LABELS } from "@/components/workspace/settings/permission-group-kind";
 import { JobRoleTags } from "@/components/workspace/settings/permission-groups/job-role-tags";
 import { MemberIdentityCell } from "@/components/workspace/settings/permission-groups/member-identity-cell";
 import { useInstance } from "@/hooks/store/use-instance";
@@ -32,8 +33,9 @@ import { useUser, useUserPermissions } from "@/hooks/store/user";
 import type { IMemberFilters } from "@/store/member/utils";
 
 /**
- * 工作区成员表的列（效果图「工作区成员」）：成员 / 工号 / 部门 / 角色 / 权限组 / [大小网] / 加入时间 / 操作。
- * 列宽合计约 1170px：1536 宽窗口的内容区刚好放下（见 members-virtual-table.tsx）。
+ * 工作区成员表的列（效果图「工作区成员」）：成员 / 工号 / 部门 / 角色 / 工作区权限组 / 数据权限 / [大小网] / 加入时间 / 操作。
+ * 列宽合计约 1170px：1536 宽窗口的内容区刚好放下（见 members-virtual-table.tsx）；
+ * 权限组拆成两列后，成员 / 工号 / 部门 / 角色 / 加入时间各收了一点来凑这个预算。
  */
 export const useMemberColumns = () => {
   // states
@@ -77,7 +79,7 @@ export const useMemberColumns = () => {
     {
       key: "Member",
       content: "成员",
-      width: 240,
+      width: 220,
       thRender: () => (
         <MemberHeaderColumn
           property="full_name"
@@ -90,7 +92,7 @@ export const useMemberColumns = () => {
     {
       key: "Employee id",
       content: "工号",
-      width: 90,
+      width: 80,
       tdRender: (rowData: RowData) => (
         <div className={`truncate tabular-nums ${isSuspended(rowData) ? "text-placeholder" : ""}`}>
           {rowData.member.employee_id || "—"}
@@ -100,7 +102,7 @@ export const useMemberColumns = () => {
     {
       key: "Department",
       content: "部门",
-      width: 150,
+      width: 140,
       tdRender: (rowData: RowData) => (
         <div
           className={`truncate ${isSuspended(rowData) ? "text-placeholder" : ""}`}
@@ -113,16 +115,22 @@ export const useMemberColumns = () => {
     {
       key: "Job roles",
       content: "角色",
-      width: 190,
+      width: 170,
       tdRender: (rowData: RowData) => (
         <JobRoleTags jobRoleIds={rowData.job_role_ids} jobRoleMap={jobRoleMap} isColored={isColored} />
       ),
     },
     {
-      key: "Permission groups",
-      content: "权限组",
-      width: 220,
-      tdRender: (rowData: RowData) => <PermissionGroupsColumn rowData={rowData} groupMap={groupMap} />,
+      key: "Workspace permission groups",
+      content: PERMISSION_GROUP_KIND_LABELS.workspace,
+      width: 160,
+      tdRender: (rowData: RowData) => <PermissionGroupsColumn rowData={rowData} groupMap={groupMap} kind="workspace" />,
+    },
+    {
+      key: "Data permission groups",
+      content: PERMISSION_GROUP_KIND_LABELS.data,
+      width: 130,
+      tdRender: (rowData: RowData) => <PermissionGroupsColumn rowData={rowData} groupMap={groupMap} kind="data" />,
     },
 
     // 大网 / 小网归属：隔离开关开着、且能编辑成员才有这一列（后端只给管理员视图返回归属）
@@ -142,7 +150,7 @@ export const useMemberColumns = () => {
     {
       key: "Joining date",
       content: "加入时间",
-      width: 110,
+      width: 100,
       tdRender: (rowData: RowData) =>
         isSuspended(rowData) ? null : (
           <div className="truncate tabular-nums">{renderFormattedDate(rowData?.member?.joining_date)}</div>

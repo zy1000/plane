@@ -4,11 +4,35 @@
  * See the LICENSE file for details.
  */
 
-import type { TDataScopeEntry, TDataScopeMode } from "@plane/types";
+import type { TDataScopeMode, TPermissionGroupKind } from "@plane/types";
 import { getScopeKeys } from "./editor/catalog";
 
 export const WORKSPACE_KEY_TOTAL = getScopeKeys("workspace").length;
 export const PROJECT_KEY_TOTAL = getScopeKeys("project").length;
+
+/** 三类权限组（docs/permission-refactor/split-plan.md §1），列表分段、新建弹窗「类型」字段都按这个顺序 */
+export const PERMISSION_GROUP_KINDS: TPermissionGroupKind[] = ["workspace", "project_template", "data"];
+
+export const PERMISSION_GROUP_KIND_LABELS: Record<TPermissionGroupKind, string> = {
+  workspace: "工作区权限组",
+  project_template: "项目权限模板",
+  data: "数据权限",
+};
+
+export const isPermissionGroupKind = (value: string | null | undefined): value is TPermissionGroupKind =>
+  value != null && (PERMISSION_GROUP_KINDS as string[]).includes(value);
+
+export type TPermissionGroupDetailTab = "permissions" | "data-scope" | "members" | "referenced";
+
+/** 详情页每类可用的页签，第一个是默认页签 */
+export const PERMISSION_GROUP_KIND_TABS: Record<TPermissionGroupKind, TPermissionGroupDetailTab[]> = {
+  workspace: ["permissions", "members"],
+  project_template: ["permissions", "referenced"],
+  data: ["data-scope", "members"],
+};
+
+export const getPermissionGroupDefaultTab = (kind: TPermissionGroupKind): TPermissionGroupDetailTab =>
+  PERMISSION_GROUP_KIND_TABS[kind][0];
 
 export const DATA_SCOPE_MODE_LABELS: Record<TDataScopeMode, string> = {
   all: "全部",
@@ -18,11 +42,9 @@ export const DATA_SCOPE_MODE_LABELS: Record<TDataScopeMode, string> = {
 
 export const DATA_SCOPE_KIND_LABELS = { projects: "项目", products: "产品" } as const;
 
-/** 列表里「数据权限」列的一行文字：全部 / 指定 3 个 / 按条件 */
-/** 白名单是不是「全部」（用来判断「配了白名单却没勾项目权限」的提示） */
-export const isScopeEntryAll = (entry: TDataScopeEntry | undefined) => !entry || entry.mode === "all";
-
-export const getPermissionGroupsPath = (workspaceSlug: string) => `/${workspaceSlug}/settings/permission/`;
+/** 列表页；带 kind 时落在对应分段 */
+export const getPermissionGroupsPath = (workspaceSlug: string, kind?: TPermissionGroupKind) =>
+  `/${workspaceSlug}/settings/permission/${kind ? `?kind=${kind}` : ""}`;
 
 export const getPermissionGroupDetailPath = (workspaceSlug: string, roleId: string, tab?: string) =>
   `/${workspaceSlug}/settings/permission/${roleId}/${tab ? `?tab=${tab}` : ""}`;

@@ -14,34 +14,40 @@ import { AlertModalCore, CustomSelect } from "@plane/ui";
 import { cn } from "@plane/utils";
 // hooks
 import { useMember } from "@/hooks/store/use-member";
+// local imports
+import { PERMISSION_GROUP_KIND_CHIP_CLASS } from "./permission-group-kind";
+import type { TAssignablePermissionGroupKind } from "./permission-group-kind";
 
 /** 成员表的一行：store 的 getWorkspaceMemberDetails（member 是带工号 / 部门的 IUserLite） */
 export type RowData = IWorkspaceMember;
 
 const CHIP = "inline-flex h-5 max-w-full items-center truncate rounded border px-1.5 text-12";
 
-/** 权限组列：直绑的组 + 团队带来的组（虚线框，悬停看来源）。 */
+/**
+ * 权限组列：按 kind 各一列（工作区权限组 / 数据权限），只列该类的组。
+ * 直绑的组实底 chip（两类两种底色）+ 团队带来的组（虚线框，悬停看来源）。
+ */
 export const PermissionGroupsColumn = observer(function PermissionGroupsColumn(props: {
   rowData: RowData;
   groupMap: Map<string, IPermissionGroup>;
+  kind: TAssignablePermissionGroupKind;
 }) {
-  const { rowData, groupMap } = props;
-  if (rowData.is_active === false) return <span className="text-13 text-placeholder">已停用</span>;
-  const direct = (rowData.custom_role_ids ?? [])
-    .map((id) => groupMap.get(id))
-    .filter((group): group is IPermissionGroup => !!group);
+  const { rowData, groupMap, kind } = props;
+  // 停用状态只在第一列（工作区权限组）标一次
+  if (rowData.is_active === false)
+    return kind === "workspace" ? <span className="text-13 text-placeholder">已停用</span> : null;
+  const pick = (ids: string[]) =>
+    ids.map((id) => groupMap.get(id)).filter((group): group is IPermissionGroup => !!group && group.kind === kind);
+  const direct = pick(rowData.custom_role_ids ?? []);
   const directIds = new Set(direct.map((group) => group.id));
-  const viaTeam = (rowData.group_role_ids ?? [])
-    .filter((id) => !directIds.has(id))
-    .map((id) => groupMap.get(id))
-    .filter((group): group is IPermissionGroup => !!group);
+  const viaTeam = pick((rowData.group_role_ids ?? []).filter((id) => !directIds.has(id)));
   const names = [...direct.map((group) => group.name), ...viaTeam.map((group) => group.name)];
 
   return (
     <span className="flex min-w-0 flex-wrap items-center gap-1" title={names.join("、")}>
       {names.length === 0 && <span className="text-13 text-placeholder">—</span>}
       {direct.map((group) => (
-        <span key={group.id} className={cn(CHIP, "border-accent-primary/30 bg-accent-primary/10 text-accent-primary")}>
+        <span key={group.id} className={cn(CHIP, PERMISSION_GROUP_KIND_CHIP_CLASS[kind])}>
           {group.name}
         </span>
       ))}

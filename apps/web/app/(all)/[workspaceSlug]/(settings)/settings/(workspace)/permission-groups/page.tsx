@@ -8,7 +8,7 @@ import { observer } from "mobx-react";
 import { PermissionGroupsRoot } from "@/components/workspace/settings/permission-groups";
 import type { Route } from "./+types/page";
 
-/** 工作区设置 › 权限组：单列表，模板是组上的开关 */
+/** 工作区设置 › 权限组：三段「工作区权限组 / 项目权限模板 / 数据权限」，当前段在 ?kind= */
 const WorkspacePermissionGroupsPage = observer(function WorkspacePermissionGroupsPage({ params }: Route.ComponentProps) {
   return <PermissionGroupsRoot workspaceSlug={params.workspaceSlug} />;
 });

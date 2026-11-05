@@ -472,13 +472,26 @@ def default_data_scope():
 
 
 class WorkspaceRole(BaseModel):
-    """工作区权限组（docs/permission-refactor/data-permission-plan.md）。
+    """工作区设置里的「权限组」，按 ``kind`` 分三类（docs/permission-refactor/split-plan.md）：
 
-    一个组 = 工作区权限 + 项目权限（``permissions`` JSON）+ 数据权限（``data_scope``）+ 模板开关。
-    - ``data_scope``：项目 / 产品白名单，各自 ``{"mode": "all" | "selected" | "filter", "ids": [...], "filter": {...}}``；
-      组的项目权限只在白名单里的项目生效，白名单并集决定成员能看到哪些项目 / 产品。
-    - ``is_template``：勾上后白名单里的项目自动引用这个组（减去 ``project_exclusions``），项目里只能绑人不能改。
+    - ``workspace`` 工作区权限组：``permissions`` 装 workspace.* + project.* key，有成员（直绑 / 经团队）。
+      project.* 部分在成员能看到的所有项目上生效。
+    - ``project_template`` 项目权限模板：``permissions`` 只装 project.* key，没有成员；
+      引用集合 = 工作区全部项目 − ``project_exclusions``，项目里只能绑人、不能改、可删（= 排除）。
+    - ``data`` 数据权限：只有 ``data_scope``（项目 / 产品白名单，各自
+      ``{"mode": "all" | "selected" | "filter", "ids": [...], "filter": {...}}``），有成员；
+      白名单并集决定成员能看到、能进哪些项目 / 产品。
+    同一类型内名称唯一；不同类型可以同名。kind 创建后不可改。
     """
+
+    KIND_WORKSPACE = "workspace"
+    KIND_PROJECT_TEMPLATE = "project_template"
+    KIND_DATA = "data"
+    KIND_CHOICES = (
+        (KIND_WORKSPACE, "工作区权限组"),
+        (KIND_PROJECT_TEMPLATE, "项目权限模板"),
+        (KIND_DATA, "数据权限"),
+    )
 
     workspace = models.ForeignKey(
         "db.Workspace",
@@ -487,17 +500,17 @@ class WorkspaceRole(BaseModel):
     )
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True, null=True)
+    kind = models.CharField(max_length=20, choices=KIND_CHOICES, default=KIND_WORKSPACE, verbose_name="类型")
     permissions = models.JSONField(default=dict)
     data_scope = models.JSONField(default=default_data_scope, verbose_name="数据权限")
-    is_template = models.BooleanField(default=False, verbose_name="作为项目权限组模板")
 
     class Meta:
-        unique_together = ["workspace", "name", "deleted_at"]
+        unique_together = ["workspace", "kind", "name", "deleted_at"]
         constraints = [
             models.UniqueConstraint(
-                fields=["workspace", "name"],
+                fields=["workspace", "kind", "name"],
                 condition=models.Q(deleted_at__isnull=True),
-                name="workspace_role_unique_workspace_name_when_deleted_at_null",
+                name="workspace_role_unique_workspace_kind_name_when_deleted_at_null",
             ),
         ]
         verbose_name = "Workspace Role"
@@ -507,6 +520,34 @@ class WorkspaceRole(BaseModel):
 
     def __str__(self):
         return f"{self.name} <{self.workspace.name}>"
+
+    @property
+    def is_workspace_group(self):
+        return self.kind == self.KIND_WORKSPACE
+
+    @property
+    def is_project_template(self):
+        return self.kind == self.KIND_PROJECT_TEMPLATE
+
+    @property
+    def is_data_group(self):
+        return self.kind == self.KIND_DATA
+
+    @property
+    def can_have_members(self):
+        """模板没有成员，人在项目里绑定。"""
+        return self.kind != self.KIND_PROJECT_TEMPLATE
+
+    def clean(self):
+        super().clean()
+        perms = self.permissions if isinstance(self.permissions, dict) else {}
+        keys = perms.get("permission_keys") or []
+        if self.kind == self.KIND_DATA and keys:
+            raise ValidationError("数据权限不能有操作权限。")
+        if self.kind == self.KIND_PROJECT_TEMPLATE and any(key.startswith("workspace.") for key in keys):
+            raise ValidationError("项目权限模板只能有项目权限。")
+        if self.kind != self.KIND_DATA and self.data_scope != default_data_scope():
+            raise ValidationError("只有数据权限能配置白名单。")
 
 
 class WorkspaceRoleProjectExclusion(BaseModel):
@@ -558,6 +599,8 @@ class WorkspaceMemberRole(BaseModel):
         if self.role_id:
             if self.workspace_id != self.role.workspace_id:
                 raise ValidationError("The role does not belong to this workspace.")
+            if not self.role.can_have_members:
+                raise ValidationError("项目权限模板不能直接绑定成员，请在项目里绑定。")
 
     def save(self, *args, **kwargs):
         if self.member_id:
@@ -660,6 +703,8 @@ class WorkspaceGroupRole(BaseModel):
         if self.group_id and self.role_id:
             if self.group.workspace_id != self.role.workspace_id:
                 raise ValidationError("The role does not belong to this workspace.")
+            if not self.role.can_have_members:
+                raise ValidationError("项目权限模板不能绑定团队，请在项目里绑定。")
 
     def save(self, *args, **kwargs):
         self.full_clean(exclude=["created_by", "updated_by"])

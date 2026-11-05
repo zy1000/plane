@@ -4,12 +4,14 @@
  * See the LICENSE file for details.
  */
 
+import { useMemo } from "react";
 import { isEmpty } from "lodash-es";
 import { observer } from "mobx-react";
+import useSWR from "swr";
 // plane imports
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import type { IPermissionGroup, IWorkspaceMember } from "@plane/types";
+import type { IWorkspaceMember } from "@plane/types";
 // components
 import { MembersLayoutLoader } from "@/components/ui/loader/layouts/members-layout-loader";
 import { ConfirmWorkspaceMemberRemove } from "@/components/workspace/confirm-workspace-member-remove";
@@ -19,6 +21,7 @@ import { MembersVirtualTable } from "@/components/workspace/settings/members-vir
 // hooks
 import { useMember } from "@/hooks/store/use-member";
 import { useWorkspace } from "@/hooks/store/use-workspace";
+import { useWorkspaceGroups } from "@/hooks/store/use-workspace-groups";
 import { useUser, useUserPermissions, useUserSettings } from "@/hooks/store/user";
 import { useAppRouter } from "@/hooks/use-app-router";
 // plane web imports
@@ -39,7 +42,6 @@ export const WorkspaceMembersListItem = observer(function WorkspaceMembersListIt
     setEditingMember,
     jobRoles,
     groups,
-    groupMap,
   } = useMemberColumns();
   // router
   const router = useAppRouter();
@@ -52,7 +54,26 @@ export const WorkspaceMembersListItem = observer(function WorkspaceMembersListIt
   const { getWorkspaceRedirectionUrl } = useWorkspace();
   const { fetchCurrentUserSettings } = useUserSettings();
   const { t } = useTranslation();
+  // 团队名单只为编辑弹窗里标「经团队「X」」用，打开弹窗才拉一次
+  const { groups: teams, fetchGroups } = useWorkspaceGroups(workspaceSlug);
+  useSWR(editingMember && workspaceSlug ? `WORKSPACE_GROUPS_${workspaceSlug}` : null, fetchGroups, {
+    revalidateOnFocus: false,
+  });
   // derived values
+  // 经团队拿到、且没直绑的组 → 团队名。成员数据只有「在哪些团队」和「经团队拿到哪些组」，
+  // 对不上哪个组来自哪个团队，所以只在他恰好只在一个团队里时写团队名，否则只标「经团队」
+  const teamGroups = useMemo(() => {
+    const result = new Map<string, string | null>();
+    if (!editingMember) return result;
+    const direct = new Set(editingMember.custom_role_ids ?? []);
+    const memberTeamIds = editingMember.group_ids ?? [];
+    const teamName =
+      memberTeamIds.length === 1 ? (teams.find((team) => team.id === memberTeamIds[0])?.name ?? null) : null;
+    (editingMember.group_role_ids ?? []).forEach((id) => {
+      if (!direct.has(id)) result.set(id, teamName);
+    });
+    return result;
+  }, [editingMember, teams]);
 
   const handleLeaveWorkspace = async () => {
     if (!workspaceSlug || !currentUser) return;
@@ -101,21 +122,13 @@ export const WorkspaceMembersListItem = observer(function WorkspaceMembersListIt
 
   if (isEmpty(columns)) return <MembersLayoutLoader />;
 
-  const teamGroupNames = editingMember
-    ? (editingMember.group_role_ids ?? [])
-        .filter((id) => !(editingMember.custom_role_ids ?? []).includes(id))
-        .map((id) => groupMap.get(id))
-        .filter((group): group is IPermissionGroup => !!group)
-        .map((group) => group.name)
-    : [];
-
   return (
     <div className="grid border-t border-subtle">
       <MemberAccessModal
         member={editingMember}
         jobRoles={jobRoles}
         groups={groups}
-        teamGroupNames={teamGroupNames}
+        teamGroups={teamGroups}
         onClose={() => setEditingMember(null)}
         onSubmit={async (value) => {
           if (!editingMember) return;

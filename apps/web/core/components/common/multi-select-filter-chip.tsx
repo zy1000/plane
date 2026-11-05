@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { useRef, useState } from "react";
+import { Fragment, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import { Check, ChevronDown, Search, X } from "lucide-react";
 import { useOutsideClickDetector } from "@plane/hooks";
@@ -16,6 +16,8 @@ export type TMultiFilterOption = {
   depth?: number;
   /** 标签前的小图标（优先级、状态组、头像等） */
   icon?: ReactNode;
+  /** 分组名：相邻选项的分组变了就插一行小标题（选项要按分组排好序传进来） */
+  group?: string;
 };
 
 const I18N = "multi_select_filter";
@@ -139,26 +141,34 @@ export const MultiSelectFilterChip = ({
             {visible.length === 0 ? (
               <p className="px-2 py-3 text-12 text-placeholder">{t(`${I18N}.no_match`)}</p>
             ) : (
-              visible.map((option) => (
-                <button
-                  key={option.id}
-                  type="button"
-                  role="menuitemcheckbox"
-                  aria-checked={picked.has(option.id)}
-                  className="flex h-8 w-full items-center gap-2.5 rounded-md px-2 text-13 text-primary hover:bg-layer-transparent-hover"
-                  onClick={() => toggle(option.id)}
-                >
-                  <CheckMark checked={picked.has(option.id)} />
-                  {option.icon}
-                  <span
-                    className={cn("min-w-0 flex-1 truncate text-left", option.dim && "text-tertiary")}
-                    style={option.depth ? { paddingLeft: option.depth * 12 } : undefined}
+              visible.map((option, index) => (
+                <Fragment key={option.id}>
+                  {option.group && option.group !== visible[index - 1]?.group && (
+                    <div className={cn("px-2 pb-1 text-11 font-medium text-tertiary", index > 0 ? "pt-2" : "pt-1")}>
+                      {option.group}
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    role="menuitemcheckbox"
+                    aria-checked={picked.has(option.id)}
+                    className="flex h-8 w-full items-center gap-2.5 rounded-md px-2 text-13 text-primary hover:bg-layer-transparent-hover"
+                    onClick={() => toggle(option.id)}
                   >
-                    {option.depth ? <span className="mr-1 text-placeholder">└</span> : null}
-                    {option.label}
-                  </span>
-                  {option.hint && <span className="shrink-0 text-12 text-placeholder tabular-nums">{option.hint}</span>}
-                </button>
+                    <CheckMark checked={picked.has(option.id)} />
+                    {option.icon}
+                    <span
+                      className={cn("min-w-0 flex-1 truncate text-left", option.dim && "text-tertiary")}
+                      style={option.depth ? { paddingLeft: option.depth * 12 } : undefined}
+                    >
+                      {option.depth ? <span className="mr-1 text-placeholder">└</span> : null}
+                      {option.label}
+                    </span>
+                    {option.hint && (
+                      <span className="shrink-0 text-12 text-placeholder tabular-nums">{option.hint}</span>
+                    )}
+                  </button>
+                </Fragment>
               ))
             )}
           </div>

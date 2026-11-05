@@ -9,6 +9,8 @@ import { Search, X } from "lucide-react";
 import { Button } from "@plane/propel/button";
 import type { IPermissionGroup, IWorkspaceMember, TDataDictionaryItem } from "@plane/types";
 import { Checkbox, EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
+import { cn } from "@plane/utils";
+import { PERMISSION_GROUP_KIND_LABELS, splitAssignablePermissionGroups } from "./permission-group-kind";
 import { MemberIdentityCell } from "./permission-groups/member-identity-cell";
 
 export type TMemberAccessValue = { job_role_ids: string[]; custom_role_ids: string[] };
@@ -16,15 +18,22 @@ export type TMemberAccessValue = { job_role_ids: string[]; custom_role_ids: stri
 type Props = {
   member: IWorkspaceMember | null;
   jobRoles: TDataDictionaryItem[];
-  /** 工作区权限组 */
+  /** 工作区全部权限组；弹窗内按 kind 分成「工作区权限组 / 数据权限」两栏，项目权限模板不出现 */
   groups: IPermissionGroup[];
-  /** 通过团队拿到的组名，只读展示 */
-  teamGroupNames: string[];
+  /** 经团队拿到、且没有直绑的组：组 id → 团队名（分不清是哪个团队给的就是 null） */
+  teamGroups: Map<string, string | null>;
   onClose: () => void;
   onSubmit: (value: TMemberAccessValue) => Promise<void>;
 };
 
-type TOption = { id: string; label: string; hint?: string };
+type TOption = {
+  id: string;
+  label: string;
+  /** 右侧小字 */
+  hint?: string;
+  /** 经团队拿到：已勾、不可改 */
+  locked?: boolean;
+};
 
 /** 带搜索的勾选清单：角色几十个、权限组几个，平铺比下拉好挑 */
 function CheckList(props: { options: TOption[]; value: string[]; onChange: (value: string[]) => void; placeholder: string }) {
@@ -53,10 +62,14 @@ function CheckList(props: { options: TOption[]; value: string[]; onChange: (valu
           visible.map((option) => (
             <label
               key={option.id}
-              className="flex cursor-pointer items-center gap-2.5 px-3 py-1.5 text-13 text-primary hover:bg-layer-1-hover"
+              className={cn(
+                "flex items-center gap-2.5 px-3 py-1.5 text-13",
+                option.locked ? "cursor-default text-tertiary" : "cursor-pointer text-primary hover:bg-layer-1-hover"
+              )}
             >
               <Checkbox
-                checked={picked.has(option.id)}
+                checked={option.locked || picked.has(option.id)}
+                disabled={option.locked}
                 onChange={() =>
                   onChange(picked.has(option.id) ? value.filter((id) => id !== option.id) : [...value, option.id])
                 }
@@ -72,11 +85,11 @@ function CheckList(props: { options: TOption[]; value: string[]; onChange: (valu
 }
 
 /**
- * 编辑成员（成员表「编辑」）：角色（找人用，与权限无关）+ 权限组（决定能做什么）。
- * 团队带来的组在团队页改，这里只读列出来。
+ * 编辑成员（成员表「编辑」）：角色（找人用，与权限无关）+ 工作区权限组（能做什么）+ 数据权限（能看哪些项目 / 产品）。
+ * 两类组勾选的并集提交成一个 custom_role_ids；经团队拿到的组在对应清单里灰显，要改去团队页。
  */
 export function MemberAccessModal(props: Props) {
-  const { member, jobRoles, groups, teamGroupNames, onClose, onSubmit } = props;
+  const { member, jobRoles, groups, teamGroups, onClose, onSubmit } = props;
   const [value, setValue] = useState<TMemberAccessValue>({ job_role_ids: [], custom_role_ids: [] });
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -88,7 +101,15 @@ export function MemberAccessModal(props: Props) {
   }, [member]);
 
   const jobRoleOptions = useMemo(() => jobRoles.map((item) => ({ id: item.id, label: item.label })), [jobRoles]);
-  const groupOptions = useMemo(() => groups.map((group) => ({ id: group.id, label: group.name })), [groups]);
+  const groupOptions = useMemo(() => {
+    const toOption = (group: IPermissionGroup): TOption => {
+      if (!teamGroups.has(group.id)) return { id: group.id, label: group.name };
+      const teamName = teamGroups.get(group.id);
+      return { id: group.id, label: group.name, locked: true, hint: teamName ? `经团队「${teamName}」` : "经团队" };
+    };
+    const byKind = splitAssignablePermissionGroups(groups);
+    return { workspace: byKind.workspace.map(toOption), data: byKind.data.map(toOption) };
+  }, [groups, teamGroups]);
 
   const handleSubmit = async () => {
     setIsSubmitting(true);
@@ -102,6 +123,9 @@ export function MemberAccessModal(props: Props) {
       setIsSubmitting(false);
     }
   };
+
+  // 两个清单共用同一个数组：每次只增删被点的那个 id，所以并集天然成立
+  const handleGroupsChange = (groupIds: string[]) => setValue((current) => ({ ...current, custom_role_ids: groupIds }));
 
   return (
     <ModalCore isOpen={Boolean(member)} handleClose={onClose} position={EModalPosition.TOP} width={EModalWidth.XL}>
@@ -122,7 +146,6 @@ export function MemberAccessModal(props: Props) {
 
         <div className="flex flex-col gap-1.5">
           <span className="text-12 font-medium text-secondary">角色</span>
-          <p className="text-11 leading-4 text-tertiary">他是干什么的。审批人、评审负责人按角色找人，不决定权限。</p>
           <CheckList
             options={jobRoleOptions}
             value={value.job_role_ids}
@@ -131,18 +154,25 @@ export function MemberAccessModal(props: Props) {
           />
         </div>
 
-        <div className="flex flex-col gap-1.5">
-          <span className="text-12 font-medium text-secondary">权限组</span>
-          <p className="text-11 leading-4 text-tertiary">
-            他能做什么。
-            {teamGroupNames.length > 0 && `通过团队还有：${teamGroupNames.join("、")}（在团队页调整）。`}
-          </p>
-          <CheckList
-            options={groupOptions}
-            value={value.custom_role_ids}
-            onChange={(groupIds) => setValue((current) => ({ ...current, custom_role_ids: groupIds }))}
-            placeholder="搜索权限组"
-          />
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+          <div className="flex flex-col gap-1.5">
+            <span className="text-12 font-medium text-secondary">{PERMISSION_GROUP_KIND_LABELS.workspace}</span>
+            <CheckList
+              options={groupOptions.workspace}
+              value={value.custom_role_ids}
+              onChange={handleGroupsChange}
+              placeholder="搜索工作区权限组"
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <span className="text-12 font-medium text-secondary">{PERMISSION_GROUP_KIND_LABELS.data}</span>
+            <CheckList
+              options={groupOptions.data}
+              value={value.custom_role_ids}
+              onChange={handleGroupsChange}
+              placeholder="搜索数据权限"
+            />
+          </div>
         </div>
 
         {error && <p className="text-11 leading-4 text-danger-primary">{error}</p>}

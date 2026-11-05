@@ -12,5 +12,4 @@ export * from "./job-role-tags";
 export * from "./member-identity-cell";
 export * from "./permission-groups-root";
 export * from "./save-bar";
-export { TemplateTag } from "./groups-list";
 export * from "./ui";

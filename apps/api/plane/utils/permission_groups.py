@@ -1,8 +1,8 @@
-"""权限组的业务规则（docs/permission-refactor/data-permission-plan.md）。
+"""权限组的业务规则（docs/permission-refactor/split-plan.md）。
 
-- 工作区权限组（WorkspaceRole）同时装 workspace.* 与 project.* key；project.* 部分只在它白名单（data_scope）里的项目生效。
-- 勾了 ``is_template`` 的组是模板：白名单里的项目（减去排除列表）自动引用它，项目里只能绑人、不能改、可删（= 排除）。
-  引用与白名单权限两条线独立：组在工作区层面绑的成员在白名单项目里照样有权限，与引用无关。
+- 工作区的权限组（WorkspaceRole）按 kind 分三类：工作区权限组（workspace.* + project.* key，有成员，项目 key 在成员能看到的
+  所有项目上生效）/ 项目权限模板（只有 project.* key，无成员）/ 数据权限（只有项目、产品白名单，有成员）。
+- 模板的引用集合 = 工作区全部项目 − 排除列表，项目里只能绑人、不能改、可删（= 排除）。
 - 项目里的权限组（ProjectRole）：``source_template`` 非空 = 引用行（权限实时取模板，本行 JSON 不用，按需在绑人时生成）；
   为空 = 本项目自定义。没有「脱离」。
 - 没有系统组：每个组都能改名、改权限、删除、绑人；成员不默认属于任何组。
@@ -32,7 +32,6 @@ from plane.license.models import Instance, InstanceAdmin
 from plane.utils.data_scope import (
     excluded_project_ids,
     referencing_templates,
-    role_scope,
     template_referenced_project_ids,
     template_references_project,
 )
@@ -90,8 +89,13 @@ def project_type_options(project):
 
 
 def role_scope_keys(role) -> frozenset:
+    """这个组允许装哪些 key：工作区权限组两类都行，模板和项目里的组只有项目 key，数据权限没有 key。"""
     if isinstance(role, WorkspaceRole):
-        return WORKSPACE_KEYS | PROJECT_KEYS
+        if role.kind == WorkspaceRole.KIND_WORKSPACE:
+            return WORKSPACE_KEYS | PROJECT_KEYS
+        if role.kind == WorkspaceRole.KIND_PROJECT_TEMPLATE:
+            return PROJECT_KEYS
+        return frozenset()
     return PROJECT_KEYS
 
 
@@ -135,6 +139,8 @@ def normalize_payload(role, permission_keys, type_limits, valid_type_ids):
 
 
 def set_workspace_role_permissions(role, permission_keys, type_limits):
+    if role.kind == WorkspaceRole.KIND_DATA:
+        raise PermissionGroupError("数据权限只配置项目 / 产品范围，没有操作权限。")
     valid = {option["id"] for option in workspace_type_options(role.workspace_id)}
     role.permissions = normalize_payload(role, permission_keys, type_limits, valid)
     role.save(update_fields=["permissions", "updated_at", "updated_by"])
@@ -191,19 +197,25 @@ def workspace_group_member_previews(workspace) -> dict:
 
 
 def template_usage_counts(workspace) -> dict:
-    """{模板 id: {"referenced": 引用它的项目数}}（白名单命中 − 排除）。"""
+    """{模板 id: {"referenced": 引用它的项目数}}（全部项目 − 排除）。"""
+    total = Project.objects.filter(workspace=workspace).count()
+    excluded = dict(
+        WorkspaceRoleProjectExclusion.objects.filter(role__workspace=workspace, project__deleted_at__isnull=True)
+        .values("role_id")
+        .annotate(n=Count("project_id", distinct=True))
+        .values_list("role_id", "n")
+    )
     return {
-        template.id: {"referenced": len(template_referenced_project_ids(template))}
-        for template in WorkspaceRole.objects.filter(workspace=workspace, is_template=True)
+        template_id: {"referenced": max(total - excluded.get(template_id, 0), 0)}
+        for template_id in WorkspaceRole.objects.filter(
+            workspace=workspace, kind=WorkspaceRole.KIND_PROJECT_TEMPLATE
+        ).values_list("id", flat=True)
     }
 
 
 def template_projects(template):
-    """模板详情的「引用项目」页：白名单命中的项目，带「已排除」标记。"""
-    scope = role_scope(template, "projects", template.workspace)
+    """模板详情的「引用项目」页：工作区全部项目，带「已排除」标记。"""
     queryset = Project.objects.filter(workspace_id=template.workspace_id)
-    if not scope.all:
-        queryset = queryset.filter(id__in=list(scope.ids))
     excluded = excluded_project_ids(template)
     bound_counts = dict(
         ProjectMemberRole.objects.filter(
@@ -232,8 +244,8 @@ def template_projects(template):
 @transaction.atomic
 def exclude_template_project(template, project):
     """项目不再引用模板：记排除，硬删项目里的引用行及其成员 / 团队绑定。"""
-    if not template.is_template:
-        raise PermissionGroupError("这个权限组不是模板。")
+    if template.kind != WorkspaceRole.KIND_PROJECT_TEMPLATE:
+        raise PermissionGroupError("这个权限组不是项目权限模板。")
     WorkspaceRoleProjectExclusion.objects.get_or_create(role=template, project=project)
     rows = ProjectRole.objects.filter(project=project, source_template=template)
     ProjectMemberRole.objects.filter(role__in=rows).delete(soft=False)
@@ -242,7 +254,7 @@ def exclude_template_project(template, project):
 
 
 def restore_template_project(template, project):
-    """从排除列表拿掉：只要项目还在白名单里就恢复引用。"""
+    """从排除列表拿掉，项目重新引用这个模板。"""
     WorkspaceRoleProjectExclusion.objects.filter(role=template, project=project).delete(soft=False)
 
 
@@ -254,7 +266,7 @@ def restore_template_project(template, project):
 def template_reference_row(project, template):
     """项目里引用这个模板的那一行，没有就建（引用行按需生成）。模板必须正引用着这个项目。"""
     if not template_references_project(template, project.id):
-        raise PermissionGroupError("这个模板没有引用本项目（不在白名单里或已排除）。")
+        raise PermissionGroupError("这个模板没有引用本项目（已排除）。")
     row = ProjectRole.objects.filter(project=project, source_template=template).first()
     if row is not None:
         return row
@@ -277,7 +289,9 @@ def resolve_project_group_ids(project, group_ids):
     rows = {str(row.id): row for row in ProjectRole.objects.filter(project=project, id__in=ids)}
     templates = {
         str(template.id): template
-        for template in WorkspaceRole.objects.filter(workspace_id=project.workspace_id, is_template=True, id__in=ids)
+        for template in WorkspaceRole.objects.filter(
+            workspace_id=project.workspace_id, kind=WorkspaceRole.KIND_PROJECT_TEMPLATE, id__in=ids
+        )
     }
     resolved = []
     for value in ids:
@@ -353,8 +367,9 @@ def project_group_rows(project):
 
 
 def inherited_workspace_groups(project):
-    """项目「权限组」页的说明：白名单含本项目、带项目权限的工作区权限组，以及本项目里有谁在组里（直绑或经团队）。
-    工作区所有者、项目负责人、实例管理员本来就有全部权限，不算在内；本项目没人在里面的组不列。"""
+    """项目「权限组」页的说明：带项目权限的工作区权限组，以及本项目里有谁在组里（直绑或经团队）——
+    这些人在本项目里直接拥有组的项目权限。工作区所有者、项目负责人、实例管理员本来就有全部权限，不算在内；
+    本项目没人在里面的组不列。"""
     instance = Instance.objects.first()
     passthrough_ids = {project.workspace.owner_id, project.project_lead_id or project.created_by_id}
     if instance is not None:
@@ -377,10 +392,12 @@ def inherited_workspace_groups(project):
         return []
 
     result = []
-    roles = WorkspaceRole.objects.filter(workspace_id=project.workspace_id, deleted_at__isnull=True).order_by("created_at")
+    roles = WorkspaceRole.objects.filter(
+        workspace_id=project.workspace_id, kind=WorkspaceRole.KIND_WORKSPACE, deleted_at__isnull=True
+    ).order_by("created_at")
     for role in roles:
         keys, _ = role_payload(role.permissions, PROJECT_KEYS)
-        if not keys or not role_scope(role, "projects", project.workspace).contains(project.id):
+        if not keys:
             continue
         direct = WorkspaceMemberRole.objects.filter(
             role=role, member_id__in=members, deleted_at__isnull=True
@@ -423,7 +440,9 @@ def group_member_ids(role):
 
 
 def bind_workspace_group_members(role, user_ids):
-    """把一批工作区成员加进工作区权限组。"""
+    """把一批工作区成员加进工作区权限组 / 数据权限。模板没有成员。"""
+    if not role.can_have_members:
+        raise PermissionGroupError("项目权限模板没有成员，请在项目里绑定。")
     members = WorkspaceMember.objects.filter(
         workspace_id=role.workspace_id, member_id__in=list(user_ids), is_active=True, deleted_at__isnull=True
     )
@@ -441,8 +460,9 @@ def unbind_workspace_group_member(role, user_id):
     WorkspaceMemberRole.objects.filter(role=role, member__member_id=user_id).delete(soft=False)
 
 
-def is_name_taken(workspace_id, name, exclude_id=None):
-    queryset = WorkspaceRole.objects.filter(workspace_id=workspace_id, name=name)
+def is_name_taken(workspace_id, kind, name, exclude_id=None):
+    """同类型内名称唯一；不同类型可以同名。"""
+    queryset = WorkspaceRole.objects.filter(workspace_id=workspace_id, kind=kind, name=name)
     if exclude_id:
         queryset = queryset.exclude(pk=exclude_id)
     return queryset.exists()

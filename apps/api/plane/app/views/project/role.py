@@ -49,7 +49,9 @@ def _resolve(project, pk):
     row = ProjectRole.objects.filter(project=project, pk=pk).select_related("source_template").first()
     if row is not None:
         return row, row.source_template
-    template = WorkspaceRole.objects.filter(workspace_id=project.workspace_id, is_template=True, pk=pk).first()
+    template = WorkspaceRole.objects.filter(
+        workspace_id=project.workspace_id, kind=WorkspaceRole.KIND_PROJECT_TEMPLATE, pk=pk
+    ).first()
     if template is None or not template_references_project(template, project.id):
         return None, None
     reference = ProjectRole.objects.filter(project=project, source_template=template).first()

@@ -262,7 +262,7 @@ class WorkspaceThemeSerializer(BaseSerializer):
 
 
 class WorkspaceRoleSerializer(BaseSerializer):
-    """权限组。权限内容走 roles/<id>/permissions/，数据权限走 roles/<id>/data-scope/。"""
+    """权限组（三类，按 ``kind`` 区分，创建后不可改）。权限内容走 roles/<id>/permissions/，数据权限走 roles/<id>/data-scope/。"""
 
     class Meta:
         model = WorkspaceRole
@@ -271,7 +271,7 @@ class WorkspaceRoleSerializer(BaseSerializer):
             "workspace",
             "name",
             "description",
-            "is_template",
+            "kind",
             "data_scope",
             "created_at",
             "updated_at",
@@ -290,19 +290,23 @@ class WorkspaceRoleSerializer(BaseSerializer):
             "deleted_at",
         ]
 
-    def validate_type(self, value):
-        if self.instance is not None and value != self.instance.type:
+    def validate_kind(self, value):
+        if self.instance is not None and value != self.instance.kind:
             raise serializers.ValidationError("权限组类型创建后不能修改。")
         return value
 
-    def validate_name(self, value):
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
         workspace = self.context.get("workspace") or getattr(self.instance, "workspace", None)
-        queryset = WorkspaceRole.objects.filter(workspace=workspace, name=value)
-        if self.instance:
-            queryset = queryset.exclude(pk=self.instance.pk)
-        if workspace and queryset.exists():
-            raise serializers.ValidationError("同名权限组已存在。")
-        return value
+        name = attrs.get("name", getattr(self.instance, "name", None))
+        kind = getattr(self.instance, "kind", None) or attrs.get("kind") or WorkspaceRole.KIND_WORKSPACE
+        if workspace and name:
+            queryset = WorkspaceRole.objects.filter(workspace=workspace, kind=kind, name=name)
+            if self.instance:
+                queryset = queryset.exclude(pk=self.instance.pk)
+            if queryset.exists():
+                raise serializers.ValidationError({"name": "同名权限组已存在。"})
+        return attrs
 
 
 class PermissionSerializer(BaseSerializer):
@@ -430,6 +434,9 @@ class WorkspaceMemberCustomRolesSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 f"无效的工作区权限组 ID：{', '.join(str(role_id) for role_id in invalid_ids)}"
             )
+        templates = [role.name for role in roles if not role.can_have_members]
+        if templates:
+            raise serializers.ValidationError(f"项目权限模板不能直接绑定成员：{'、'.join(templates)}")
         self._roles = roles
         return normalized_ids
 
@@ -678,6 +685,8 @@ class WorkspaceGroupRoleSerializer(BaseSerializer):
             )
         if value.deleted_at is not None:
             raise serializers.ValidationError("The role is no longer active.")
+        if not value.can_have_members:
+            raise serializers.ValidationError("项目权限模板不能绑定团队，请在项目里绑定。")
 
         return value
 

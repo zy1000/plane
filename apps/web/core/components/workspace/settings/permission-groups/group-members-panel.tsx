@@ -15,7 +15,7 @@ import { AddMemberModal } from "@/components/workspace/settings/groups/add-membe
 import { useJobRoles } from "@/hooks/store/use-job-roles";
 import { useMember } from "@/hooks/store/use-member";
 import type { usePermissionGroupMembers } from "@/hooks/store/use-permission-group-detail";
-import { getPermissionGroupErrorMessage } from "./helpers";
+import { PERMISSION_GROUP_KIND_LABELS, getPermissionGroupErrorMessage } from "./helpers";
 import { JobRoleTags } from "./job-role-tags";
 import { MemberIdentityCell, getMemberDisplayName } from "./member-identity-cell";
 import { PermissionGroupSearch } from "./ui";
@@ -32,7 +32,7 @@ type Props = {
 
 const GRID = "grid grid-cols-[minmax(220px,1.6fr)_104px_minmax(120px,1fr)_minmax(180px,1.2fr)_56px] items-center gap-x-4 px-5";
 
-/** 工作区权限组详情的「成员」页签：直绑在这个组上的人。团队绑定带来的不在这里列（在团队页看） */
+/** 工作区权限组 / 数据权限详情的「成员」页签：直绑在这个组上的人。团队绑定带来的不在这里列（在团队页看） */
 export const PermissionGroupMembersPanel = observer(function PermissionGroupMembersPanel(props: Props) {
   const { workspaceSlug, group, canManage, members, onChanged } = props;
   const { memberIds, isLoading, error, reload, addMembers, removeMember } = members;
@@ -164,7 +164,7 @@ export const PermissionGroupMembersPanel = observer(function PermissionGroupMemb
         isOpen={isAddOpen}
         memberOptions={memberOptions}
         existingMembers={memberIds.map((member) => ({ member }))}
-        targetLabel="权限组"
+        targetLabel={PERMISSION_GROUP_KIND_LABELS[group.kind]}
         onClose={() => setIsAddOpen(false)}
         onAdd={async (userIds) => {
           try {
@@ -189,7 +189,11 @@ export const PermissionGroupMembersPanel = observer(function PermissionGroupMemb
         handleSubmit={handleRemove}
         isSubmitting={isRemoving}
         title={`把 ${getMemberDisplayName(pendingUser)} 移出「${group.name}」？`}
-        content="移出后他不再拥有这个权限组给的权限；如果他所在的团队也绑了这个组，仍会通过团队拿到。"
+        content={
+          group.kind === "data"
+            ? "移出后他不再拥有这个数据权限给的项目 / 产品可见范围；如果他所在的团队也绑了这个组，仍会通过团队拿到。"
+            : "移出后他不再拥有这个权限组给的权限；如果他所在的团队也绑了这个组，仍会通过团队拿到。"
+        }
         primaryButtonText={{ loading: "移出中", default: "移出" }}
       />
     </div>

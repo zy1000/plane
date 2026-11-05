@@ -1,7 +1,7 @@
-"""可见范围（docs/permission-refactor/data-permission-plan.md §1.2）：一个人能看到、能进哪些项目 / 产品。
+"""可见范围（docs/permission-refactor/split-plan.md §1.1）：一个人能看到、能进哪些项目 / 产品。
 
-可见项目 = 直通（实例管理员 / 工作区 owner → 全部）∪ 自己是活跃成员的 ∪ 自己负责的 ∪ 所在各工作区权限组的项目白名单并集
-可见产品 = 直通 ∪ 负责人 ∪ 评审人 ∪ 可见项目关联的产品 ∪ 各组的产品白名单并集
+可见项目 = 直通（实例管理员 / 工作区 owner → 全部）∪ 自己是活跃成员的 ∪ 自己负责的 ∪ 所在各「数据权限」的项目白名单并集
+可见产品 = 直通 ∪ 负责人 ∪ 评审人 ∪ 可见项目关联的产品 ∪ 各「数据权限」的产品白名单并集
 
 硬门禁：所有跨项目的查询（搜索、工作区视图、分析、工时、收藏、公开 API……）都用这里的 Q 收窄，
 不可见的项目直接访问任何接口都是 403。结果按请求缓存在 user 对象上。
@@ -10,7 +10,7 @@
 from django.db.models import Q
 
 from plane.app.permissions.base import _cache, _get_workspace, _is_anonymous, user_workspace_groups, workspace_context
-from plane.db.models import Product, ProductProject, Project, ProjectMember, WorkspaceMember
+from plane.db.models import Product, ProductProject, Project, ProjectMember, WorkspaceMember, WorkspaceRole
 from plane.utils.data_scope import ALL_SCOPE, EMPTY_SCOPE, ScopeResult, role_scope
 
 
@@ -18,19 +18,20 @@ def _workspace_member(user, workspace):
     return WorkspaceMember.objects.filter(member=user, workspace=workspace, is_active=True, deleted_at__isnull=True).first()
 
 
-def _groups(user, workspace):
-    """此人在工作区的权限组（请求级缓存）。"""
+def _data_groups(user, workspace):
+    """此人在工作区的数据权限（kind=data 的组，直绑 + 经团队；请求级缓存）。"""
     cache = _cache(user)
-    cache_key = ("groups", workspace.id)
+    cache_key = ("data_groups", workspace.id)
     if cache_key not in cache:
         member = _workspace_member(user, workspace)
-        cache[cache_key] = user_workspace_groups(user, workspace, member) if member else []
+        groups = user_workspace_groups(user, workspace, member) if member else []
+        cache[cache_key] = [role for role in groups if role.kind == WorkspaceRole.KIND_DATA]
     return cache[cache_key]
 
 
 def whitelisted_project_scope(user, workspace) -> ScopeResult:
     result = EMPTY_SCOPE
-    for role in _groups(user, workspace):
+    for role in _data_groups(user, workspace):
         result = result.union(role_scope(role, "projects", workspace, user))
         if result.all:
             break
@@ -39,7 +40,7 @@ def whitelisted_project_scope(user, workspace) -> ScopeResult:
 
 def whitelisted_product_scope(user, workspace) -> ScopeResult:
     result = EMPTY_SCOPE
-    for role in _groups(user, workspace):
+    for role in _data_groups(user, workspace):
         result = result.union(role_scope(role, "products", workspace, user))
         if result.all:
             break

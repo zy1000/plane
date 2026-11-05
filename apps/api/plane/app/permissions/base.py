@@ -182,8 +182,8 @@ class _WorkspaceContext:
         self.is_member = is_member
         self.passthrough = passthrough
         self.keys = frozenset(keys)
-        # 每个工作区权限组的 project.* 部分：(组, key 集合, 类型限定)。组为 None 表示直通身份的全集。
-        # 只在该组白名单里的项目生效（resolve_project_grant 按 data_scope 筛）。
+        # 各工作区权限组（kind=workspace）的 project.* 部分：(key 集合, 类型限定)。
+        # 在此人能看到的所有项目上生效（能看到哪些由 utils/visibility.py 决定）。
         self.project_payloads = tuple(project_payloads)
 
 
@@ -196,7 +196,7 @@ def _get_workspace(workspace_or_slug):
 
 
 def user_workspace_groups(user, workspace, workspace_member):
-    """此人在工作区生效的工作区权限组：直绑 + 团队绑定。"""
+    """此人在工作区绑定的权限组（工作区权限组 + 数据权限，模板不会出现）：直绑 + 团队绑定。"""
     direct_ids = WorkspaceMemberRole.objects.filter(
         member=workspace_member,
         workspace=workspace,
@@ -233,7 +233,7 @@ def workspace_context(user, workspace_or_slug) -> _WorkspaceContext:
             is_member=True,
             passthrough=True,
             keys=WORKSPACE_KEYS - inactive,
-            project_payloads=[(None, set(PROJECT_KEYS), {})],
+            project_payloads=[(set(PROJECT_KEYS), {})],
         )
         cache[cache_key] = context
         return context
@@ -248,8 +248,11 @@ def workspace_context(user, workspace_or_slug) -> _WorkspaceContext:
 
     workspace_payloads, project_payloads = [], []
     for role in user_workspace_groups(user, workspace, workspace_member):
+        if role.kind != WorkspaceRole.KIND_WORKSPACE:
+            # 数据权限只管可见范围（utils/visibility.py），没有 key
+            continue
         workspace_payloads.append(role_payload(role.permissions, WORKSPACE_KEYS))
-        project_payloads.append((role, *role_payload(role.permissions, PROJECT_KEYS)))
+        project_payloads.append(role_payload(role.permissions, PROJECT_KEYS))
     keys, _ = combine_payloads(workspace_payloads)
     context = _WorkspaceContext(
         workspace,
@@ -352,25 +355,22 @@ def resolve_project_grant(user, workspace_slug, project_id, *, project=None) -> 
     if not context.is_member:
         cache[cache_key] = EMPTY_GRANT
         return EMPTY_GRANT
-    from plane.utils.data_scope import role_scope, template_references_project
+    from plane.utils.data_scope import template_references_project
+    from plane.utils.visibility import can_access_project
 
+    # 能不能进：成员 / 负责人 / 数据权限白名单含本项目（白名单访客）；进不了就什么都没有
+    if not can_access_project(user, project.workspace, project.id):
+        cache[cache_key] = EMPTY_GRANT
+        return EMPTY_GRANT
     project_member = ProjectMember.objects.filter(
         member=user, project_id=project.id, is_active=True, deleted_at__isnull=True
     ).first()
-    # 白名单含本项目的工作区组：它们的项目权限在这里生效，也让非成员能进（白名单访客）
-    applicable = [
-        (keys, limits)
-        for role, keys, limits in context.project_payloads
-        if role is None or role_scope(role, "projects", project.workspace, user).contains(project.id)
-    ]
-    if project_member is None and not applicable:
-        cache[cache_key] = EMPTY_GRANT
-        return EMPTY_GRANT
 
-    payloads = list(applicable)
+    # 工作区权限组的项目 key 在所有能进的项目上生效
+    payloads = list(context.project_payloads)
     if project_member is not None:
         for role in user_project_roles(user, project_member, project.id):
-            # 引用行：模板不再引用本项目（掉出白名单 / 被排除）时不生效
+            # 引用行：模板不再引用本项目（被排除）时不生效
             if role.source_template_id and not template_references_project(role.source_template, project.id, user):
                 continue
             payloads.append(project_role_payload(role))
@@ -390,7 +390,8 @@ def bulk_project_permission_keys(user, workspace, project_ids, wanted_keys) -> d
     context = workspace_context(user, workspace)
     if not context.is_member or not project_ids:
         return result
-    from plane.utils.data_scope import role_scope, template_references_project
+    from plane.utils.data_scope import template_references_project
+    from plane.utils.visibility import visible_project_scope
 
     inactive = _inactive_keys(user)
     projects = {
@@ -403,11 +404,11 @@ def bulk_project_permission_keys(user, workspace, project_ids, wanted_keys) -> d
             member=user, project_id__in=project_ids, is_active=True, deleted_at__isnull=True
         ).values("id", "project_id")
     }
-    # 每个工作区组：白名单（算一次）+ 它的项目 key
-    group_scopes = [
-        (None if role is None else role_scope(role, "projects", workspace, user), keys)
-        for role, keys, _ in context.project_payloads
-    ]
+    # 工作区权限组的项目 key 并集，在所有能进的项目上生效
+    group_keys = set()
+    for keys, _ in context.project_payloads:
+        group_keys |= set(keys)
+    visible = visible_project_scope(user, workspace)
 
     role_keys_by_project = {}
     role_ids_by_project = {}
@@ -449,16 +450,10 @@ def bulk_project_permission_keys(user, workspace, project_ids, wanted_keys) -> d
         if context.passthrough or is_lead:
             result[project_id] = set(wanted - inactive)
             continue
-        is_member = project_id in member_rows
-        keys = set()
-        visible = is_member
-        for scope, group_keys in group_scopes:
-            if scope is None or scope.contains(project_id):
-                visible = True
-                keys |= group_keys
-        if not visible:
+        if not visible.contains(project_id):
             continue
-        if is_member:
+        keys = set(group_keys)
+        if project_id in member_rows:
             keys |= role_keys_by_project.get(project_id, set())
         result[project_id] = (keys & wanted) - inactive
     return result
@@ -470,7 +465,7 @@ def _get_user_project_permission_keys(user, workspace_slug, project_id, *, proje
 
 
 def is_project_member(user, workspace_slug, project_id, *, project=None) -> bool:
-    """能进这个项目：活跃成员、直通身份，或项目在他某个工作区组的白名单里（白名单访客）。
+    """能进这个项目：活跃成员、直通身份，或项目在他某个数据权限的白名单里（白名单访客）。
     名字沿用，语义是「可进」而不是「成员表里有他」；真成员看 ProjectMember。"""
     return resolve_project_grant(user, workspace_slug, project_id, project=project).is_member
 

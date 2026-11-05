@@ -31,7 +31,7 @@ const GRID = "grid grid-cols-[minmax(0,1fr)_170px_110px_56px] items-center gap-x
 const OP_BUTTON = "text-14 hover:underline disabled:cursor-not-allowed disabled:text-placeholder disabled:no-underline";
 
 /**
- * 模板组详情的「引用项目」页：白名单命中的项目，分「引用中 / 已移除」两页，搜索 + 分页。
+ * 项目权限模板详情的「引用项目」页：工作区全部项目，分「引用中 / 已移除」两页，搜索 + 分页。
  * 「移除」= 这个项目不再引用（项目里绑到它的人解绑，先确认），「恢复」= 从排除列表拿掉。
  * 项目里删除这个组和这里移除是同一件事。
  */
@@ -112,7 +112,7 @@ export const TemplateProjectsPanel = observer(function TemplateProjectsPanel(pro
             </Loader>
           ) : pageRows.length === 0 ? (
             <p className="py-14 text-center text-14 text-placeholder">
-              {keyword ? "没有匹配的项目" : filter === "excluded" ? "没有移除过的项目" : "白名单里还没有项目"}
+              {keyword ? "没有匹配的项目" : filter === "excluded" ? "没有移除过的项目" : "还没有引用中的项目"}
             </p>
           ) : (
             pageRows.map((project) => {

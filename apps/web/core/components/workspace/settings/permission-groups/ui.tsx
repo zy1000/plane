@@ -7,9 +7,11 @@
 import type { ReactNode } from "react";
 import { observer } from "mobx-react";
 import { ChevronLeft, ChevronRight, Search, X } from "lucide-react";
+import type { TPermissionGroupKind } from "@plane/types";
 import { Avatar, AvatarGroup } from "@plane/ui";
 import { cn, getFileURL } from "@plane/utils";
 import { useMember } from "@/hooks/store/use-member";
+import { PERMISSION_GROUP_KIND_LABELS } from "./helpers";
 
 /**
  * 权限组页面（工作区设置、项目设置两级）共用的小件：搜索框、分段切换、详情头部、数字卡片页签、成员头像叠放。
@@ -27,6 +29,15 @@ export const countDepartments = (userIds: string[], getUserDetails: (userId: str
 /** 列表里的权限数：一项没勾「—」、勾满「全部」、其余「N 项」 */
 export const formatKeyCount = (count: number, total: number) =>
   count <= 0 ? "—" : count >= total ? "全部" : `${count} 项`;
+
+/** 详情页标题旁的类型标签：工作区权限组 / 项目权限模板 / 数据权限 */
+export function PermissionGroupKindTag({ kind }: { kind: TPermissionGroupKind }) {
+  return (
+    <span className="inline-flex h-[22px] shrink-0 items-center rounded-md bg-accent-subtle px-2 text-12 font-medium text-accent-primary">
+      {PERMISSION_GROUP_KIND_LABELS[kind]}
+    </span>
+  );
+}
 
 export function PermissionGroupSearch(props: {
   value: string;

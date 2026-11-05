@@ -2,10 +2,10 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
-"""工作区设置 › 权限组（docs/permission-refactor/data-permission-plan.md）。
+"""工作区设置 › 权限组（docs/permission-refactor/split-plan.md）。
 
-一个组 = 工作区权限 + 项目权限 + 数据权限（项目 / 产品白名单）+ 模板开关。模板组被白名单项目自动引用，
-「引用项目」页能移除 / 恢复某个项目的引用。"""
+三类组走同一组接口，按 ``kind`` 区分：工作区权限组（权限 + 成员）、项目权限模板（项目权限 + 引用项目）、
+数据权限（项目 / 产品白名单 + 成员）。不属于该类型的页签接口返回 400。"""
 
 from rest_framework import status
 from rest_framework.response import Response
@@ -53,7 +53,7 @@ class WorkspaceRoleViewSet(BaseViewSet):
     model = WorkspaceRole
     use_read_replica = True
     search_fields = ["name", "description"]
-    filterset_fields = ["is_template"]
+    filterset_fields = ["kind"]
 
     def get_queryset(self):
         return self.filter_queryset(
@@ -67,20 +67,32 @@ class WorkspaceRoleViewSet(BaseViewSet):
         return Workspace.objects.filter(slug=slug).first()
 
     def _with_stats(self, roles, workspace):
-        member_counts = workspace_group_member_counts(workspace)
-        member_previews = workspace_group_member_previews(workspace)
-        usage = template_usage_counts(workspace)
-        totals = {kind: MODELS[kind].objects.filter(workspace=workspace).count() for kind in ("projects", "products")}
+        """列表 / 详情卡片要的统计，按类型给：工作区权限组 → 成员 + 两类 key 数；模板 → 项目 key 数 + 引用项目数；
+        数据权限 → 成员 + 白名单摘要。"""
+        kinds = {role.kind for role in roles}
+        member_counts = workspace_group_member_previews_needed = None
+        if kinds & {WorkspaceRole.KIND_WORKSPACE, WorkspaceRole.KIND_DATA}:
+            member_counts = workspace_group_member_counts(workspace)
+            workspace_group_member_previews_needed = workspace_group_member_previews(workspace)
+        usage = template_usage_counts(workspace) if WorkspaceRole.KIND_PROJECT_TEMPLATE in kinds else {}
+        totals = (
+            {kind: MODELS[kind].objects.filter(workspace=workspace).count() for kind in ("projects", "products")}
+            if WorkspaceRole.KIND_DATA in kinds
+            else None
+        )
         data = []
         for role, item in zip(roles, self.get_serializer(roles, many=True).data):
             payload = effective_payload(role)
-            item["member_count"] = member_counts.get(role.id, 0)
-            item["member_preview_ids"] = member_previews.get(role.id, [])
+            item["member_count"] = (member_counts or {}).get(role.id, 0) if role.can_have_members else 0
+            item["member_preview_ids"] = (
+                (workspace_group_member_previews_needed or {}).get(role.id, []) if role.can_have_members else []
+            )
             item["permission_keys_count"] = len(payload["permission_keys"])
             item["workspace_permission_count"] = len([k for k in payload["permission_keys"] if k.startswith("workspace.")])
             item["project_permission_count"] = len([k for k in payload["permission_keys"] if k.startswith("project.")])
-            item["data_scope_summary"] = _scope_summary(role, totals)
-            if role.is_template:
+            if role.is_data_group:
+                item["data_scope_summary"] = _scope_summary(role, totals)
+            if role.is_project_template:
                 item["referenced_project_count"] = usage.get(role.id, {}).get("referenced", 0)
             data.append(item)
         return data
@@ -106,8 +118,12 @@ class WorkspaceRoleViewSet(BaseViewSet):
         role = serializer.save(workspace=workspace, permissions={"permission_keys": []})
         copy_from = request.data.get("copy_from")
         if copy_from:
-            source = WorkspaceRole.objects.filter(workspace=workspace, pk=copy_from).first()
-            if source is not None:
+            # 只能从同类型复制：工作区组 / 模板复制权限内容，数据权限复制白名单
+            source = WorkspaceRole.objects.filter(workspace=workspace, kind=role.kind, pk=copy_from).first()
+            if source is not None and role.is_data_group:
+                role.data_scope = source.data_scope
+                role.save(update_fields=["data_scope", "updated_at", "updated_by"])
+            elif source is not None:
                 payload = effective_payload(source)
                 try:
                     set_workspace_role_permissions(role, payload["permission_keys"], payload["type_limits"])
@@ -120,7 +136,7 @@ class WorkspaceRoleViewSet(BaseViewSet):
         role = self.get_queryset().filter(pk=pk).first()
         if role is None:
             return Response({"error": "Permission group not found."}, status=status.HTTP_404_NOT_FOUND)
-        data = {key: request.data[key] for key in ("name", "description", "is_template") if key in request.data}
+        data = {key: request.data[key] for key in ("name", "description") if key in request.data}
         serializer = self.get_serializer(role, data=data, partial=True, context={"workspace": role.workspace})
         serializer.is_valid(raise_exception=True)
         serializer.save()
@@ -172,7 +188,7 @@ class WorkspaceRolePermissionAPIView(BaseAPIView):
             "role": WorkspaceRoleSerializer(role).data,
             "permission_keys": payload["permission_keys"],
             "type_limits": payload["type_limits"],
-            "is_editable": True,
+            "is_editable": not role.is_data_group,
             "type_options": workspace_type_options(role.workspace_id),
         }
 
@@ -200,7 +216,7 @@ class WorkspaceRolePermissionAPIView(BaseAPIView):
 
 
 class WorkspaceRoleMembersAPIView(BaseAPIView):
-    """工作区权限组详情的「成员」页签：列出 / 添加 / 移出。项目权限组模板没有成员（在项目里绑定）。"""
+    """工作区权限组 / 数据权限详情的「成员」页签：列出 / 添加 / 移出。项目权限模板没有成员（在项目里绑定），添加会 400。"""
 
     @allow_fine_permission(*GROUP_READ_KEYS, level="WORKSPACE")
     def get(self, request, slug, pk):
@@ -233,12 +249,12 @@ class WorkspaceRoleMembersAPIView(BaseAPIView):
 
 
 class WorkspaceRoleTemplateProjectsAPIView(BaseAPIView):
-    """模板组详情的「引用项目」页：白名单命中的项目（带已排除标记）；DELETE 排除 / PUT 恢复某个项目。"""
+    """项目权限模板详情的「引用项目」页：工作区全部项目（带已排除标记）；DELETE 排除 / PUT 恢复某个项目。"""
 
     @allow_fine_permission(*GROUP_READ_KEYS, level="WORKSPACE")
     def get(self, request, slug, pk):
         role = _get_role(slug, pk)
-        if role is None or not role.is_template:
+        if role is None or not role.is_project_template:
             return Response({"error": "Template not found."}, status=status.HTTP_404_NOT_FOUND)
         return Response(template_projects(role), status=status.HTTP_200_OK)
 
@@ -249,7 +265,7 @@ class WorkspaceRoleTemplateProjectsAPIView(BaseAPIView):
     def delete(self, request, slug, pk, project_id):
         role = _get_role(slug, pk)
         project = self._project(role, project_id) if role else None
-        if role is None or not role.is_template or project is None:
+        if role is None or not role.is_project_template or project is None:
             return Response({"error": "Template or project not found."}, status=status.HTTP_404_NOT_FOUND)
         try:
             exclude_template_project(role, project)
@@ -261,7 +277,7 @@ class WorkspaceRoleTemplateProjectsAPIView(BaseAPIView):
     def put(self, request, slug, pk, project_id):
         role = _get_role(slug, pk)
         project = self._project(role, project_id) if role else None
-        if role is None or not role.is_template or project is None:
+        if role is None or not role.is_project_template or project is None:
             return Response({"error": "Template or project not found."}, status=status.HTTP_404_NOT_FOUND)
         restore_template_project(role, project)
         return Response(template_projects(role), status=status.HTTP_200_OK)
@@ -287,7 +303,7 @@ def _scope_summary(role, totals):
 
 
 class WorkspaceRoleDataScopeAPIView(BaseAPIView):
-    """权限组的数据权限（项目 / 产品白名单）：GET 读、PATCH 整份替换。"""
+    """数据权限的项目 / 产品白名单：GET 读、PATCH 整份替换。其它类型的组没有白名单，PATCH 返回 400。"""
 
     @allow_fine_permission(*GROUP_READ_KEYS, level="WORKSPACE")
     def get(self, request, slug, pk):
@@ -301,6 +317,8 @@ class WorkspaceRoleDataScopeAPIView(BaseAPIView):
         role = _get_role(slug, pk)
         if role is None:
             return Response({"error": "Permission group not found."}, status=status.HTTP_404_NOT_FOUND)
+        if not role.is_data_group:
+            return Response({"error": "只有数据权限能配置项目 / 产品范围。"}, status=status.HTTP_400_BAD_REQUEST)
         try:
             role.data_scope = validate_data_scope(role.workspace, request.data.get("data_scope"))
         except DataScopeError as exc:

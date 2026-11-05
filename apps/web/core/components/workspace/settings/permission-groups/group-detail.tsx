@@ -4,15 +4,16 @@
  * See the LICENSE file for details.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { observer } from "mobx-react";
 import { useNavigate, useSearchParams } from "react-router";
 import useSWR from "swr";
 import { PERMISSION_KEYS } from "@plane/constants";
+import type { TPermissionScope } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import type { IPermissionGroup } from "@plane/types";
+import type { IPermissionGroup, TPermissionGroupKind } from "@plane/types";
 import { Breadcrumbs, Header, Loader } from "@plane/ui";
 import { renderFormattedPayloadDate } from "@plane/utils";
 import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
@@ -36,14 +37,20 @@ import { PermissionGroupEditor } from "./editor";
 import type { TCopySource } from "./editor";
 import { PermissionGroupFormModal } from "./group-form-modal";
 import { PermissionGroupMembersPanel } from "./group-members-panel";
-import { TemplateTag } from "./groups-list";
-import { DATA_SCOPE_MODE_LABELS, getPermissionGroupErrorMessage, getPermissionGroupsPath } from "./helpers";
+import {
+  DATA_SCOPE_MODE_LABELS,
+  PERMISSION_GROUP_KIND_LABELS,
+  PERMISSION_GROUP_KIND_TABS,
+  PROJECT_KEY_TOTAL,
+  getPermissionGroupDefaultTab,
+  getPermissionGroupErrorMessage,
+  getPermissionGroupsPath,
+} from "./helpers";
+import type { TPermissionGroupDetailTab } from "./helpers";
 import { PermissionGroupSaveBar } from "./save-bar";
 import { TemplateProjectsPanel } from "./template-projects-panel";
-import { PermissionGroupIdentity, PermissionGroupTiles, countDepartments } from "./ui";
+import { PermissionGroupIdentity, PermissionGroupKindTag, PermissionGroupTiles, countDepartments } from "./ui";
 import type { TDetailTile } from "./ui";
-
-type TDetailTab = "permissions" | "data-scope" | "members" | "referenced";
 
 const I18N = "workspace_settings.settings.roles";
 
@@ -53,8 +60,16 @@ const READ_KEYS = [
   PERMISSION_KEYS.WORKSPACE_MEMBER_MANAGE,
 ];
 
+/** 权限编辑器显示哪几段：工作区组两段，模板只有项目权限；数据权限没有权限页签 */
+const EDITOR_SCOPES: Record<TPermissionGroupKind, TPermissionScope[]> = {
+  workspace: ["project", "workspace"],
+  project_template: ["project"],
+  data: [],
+};
+
 /**
- * 权限组详情：头部 + 数字卡片（兼做页签）：权限 / 数据权限 / 成员 / 引用项目（最后一个只有模板组有）。
+ * 权限组详情：头部（标题旁类型标签）+ 两张数字卡片（兼做页签），按类型不同：
+ * 工作区权限组「权限 / 成员」、项目权限模板「项目权限 / 引用项目」、数据权限「数据权限 / 成员」。
  * 权限与数据权限各自是草稿 + 底部保存条，整份提交。
  */
 export const PermissionGroupDetail = observer(function PermissionGroupDetail(props: {
@@ -71,16 +86,24 @@ export const PermissionGroupDetail = observer(function PermissionGroupDetail(pro
   const canManage = allowWorkspacePermissionKeys([PERMISSION_KEYS.WORKSPACE_PERMISSION_GROUP_MANAGE], workspaceSlug);
 
   const { roles, fetchRoles, updateRole, deleteRole, refreshRole } = useWorkspaceRoles(workspaceSlug);
-  useSWR(canView ? `WORKSPACE_PERMISSION_GROUPS_${workspaceSlug}` : null, canView ? fetchRoles : null, {
-    revalidateOnFocus: false,
-  });
+  const { data: fetchedRoles } = useSWR(
+    canView ? `WORKSPACE_PERMISSION_GROUPS_${workspaceSlug}` : null,
+    canView ? fetchRoles : null,
+    { revalidateOnFocus: false }
+  );
   const group: IPermissionGroup | undefined = roles.find((role) => role.id === roleId);
-  const isTemplate = Boolean(group?.is_template);
+  const kind = group?.kind;
+  // 组没了（被删 / 刷新失败）回列表时还能落到原来的分段
+  const lastKindRef = useRef<TPermissionGroupKind | undefined>(kind);
+  if (kind) lastKindRef.current = kind;
+  const tabs: TPermissionGroupDetailTab[] = kind ? PERMISSION_GROUP_KIND_TABS[kind] : [];
+  const hasTab = (tab: TPermissionGroupDetailTab) => tabs.includes(tab);
 
-  const editor = usePermissionGroupDetail(canView ? workspaceSlug : undefined, roleId);
-  const dataScope = usePermissionGroupDataScope(canView ? workspaceSlug : undefined, roleId);
-  const templateProjects = usePermissionGroupTemplateProjects(workspaceSlug, roleId, canView && isTemplate);
-  const members = usePermissionGroupMembers(workspaceSlug, roleId, canView);
+  // 每块只在该类型下发请求：kind 还没拿到（列表未回）时都先不拉
+  const editor = usePermissionGroupDetail(workspaceSlug, roleId, canView && hasTab("permissions"));
+  const dataScope = usePermissionGroupDataScope(workspaceSlug, roleId, canView && hasTab("data-scope"));
+  const templateProjects = usePermissionGroupTemplateProjects(workspaceSlug, roleId, canView && hasTab("referenced"));
+  const members = usePermissionGroupMembers(workspaceSlug, roleId, canView && hasTab("members"));
 
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<IPermissionGroup | null>(null);
@@ -92,6 +115,8 @@ export const PermissionGroupDetail = observer(function PermissionGroupDetail(pro
   const excludedCount = templateProjects.projects.length - referencingCount;
   // 不用 useMemo：成员详情晚于成员 id 到达时要跟着重算（observer 会重渲）
   const departmentCount = countDepartments(members.memberIds, getUserDetails);
+  const memberCount =
+    members.isLoading && members.memberIds.length === 0 ? (group?.member_count ?? 0) : members.memberIds.length;
 
   // 权限卡片跟草稿走：勾了还没保存也能看到数字在变
   const draftKeys = editor.draft?.permission_keys;
@@ -102,53 +127,69 @@ export const PermissionGroupDetail = observer(function PermissionGroupDetail(pro
     ? draftKeys.filter((key) => key.startsWith("workspace.")).length
     : (group?.workspace_permission_count ?? 0);
 
-  const tiles = useMemo<TDetailTile<TDetailTab>[]>(() => {
+  const tiles = useMemo<TDetailTile<TPermissionGroupDetailTab>[]>(() => {
     if (!group) return [];
-    const projectsScope = group.data_scope_summary?.projects;
-    const productsScope = group.data_scope_summary?.products;
-    const productText =
-      !productsScope || productsScope.mode === "all" ? "产品全部" : `产品 ${productsScope.count ?? 0} 个`;
-    const list: TDetailTile<TDetailTab>[] = [
-      {
-        key: "permissions",
-        label: "权限",
-        value: projectPermissionCount + workspacePermissionCount,
-        unit: "项",
-        sub: `项目 ${projectPermissionCount} · 工作区 ${workspacePermissionCount}`,
-      },
-      {
-        key: "data-scope",
-        label: t(`${I18N}.data_scope.title`),
-        value: projectsScope?.count ?? "—",
-        unit: "个项目",
-        sub: `${DATA_SCOPE_MODE_LABELS[projectsScope?.mode ?? "all"]} · ${productText}`,
-      },
-      {
-        key: "members",
-        label: "成员",
-        value: members.isLoading && members.memberIds.length === 0 ? group.member_count : members.memberIds.length,
-        unit: "人",
-        sub: departmentCount > 0 ? `来自 ${departmentCount} 个部门` : undefined,
-      },
-    ];
-    if (isTemplate)
-      list.push({
-        key: "referenced",
-        label: t(`${I18N}.referenced_projects`),
-        value: templateProjects.isLoading && templateProjects.projects.length === 0
-          ? (group.referenced_project_count ?? 0)
-          : referencingCount,
-        unit: "个",
-        sub: excludedCount > 0 ? `已移除 ${excludedCount} 个` : undefined,
-      });
-    return list;
+    const membersTile: TDetailTile<TPermissionGroupDetailTab> = {
+      key: "members",
+      label: "成员",
+      value: memberCount,
+      unit: "人",
+      sub: departmentCount > 0 ? `来自 ${departmentCount} 个部门` : undefined,
+    };
+    switch (group.kind) {
+      case "project_template":
+        return [
+          {
+            key: "permissions",
+            label: "项目权限",
+            value: projectPermissionCount,
+            unit: "项",
+            sub: `共 ${PROJECT_KEY_TOTAL} 项`,
+          },
+          {
+            key: "referenced",
+            label: t(`${I18N}.referenced_projects`),
+            value:
+              templateProjects.isLoading && templateProjects.projects.length === 0
+                ? (group.referenced_project_count ?? 0)
+                : referencingCount,
+            unit: "个",
+            sub: excludedCount > 0 ? `已移除 ${excludedCount} 个` : undefined,
+          },
+        ];
+      case "data": {
+        const projectsScope = group.data_scope_summary?.projects;
+        const productsScope = group.data_scope_summary?.products;
+        const productText =
+          !productsScope || productsScope.mode === "all" ? "产品全部" : `产品 ${productsScope.count ?? 0} 个`;
+        return [
+          {
+            key: "data-scope",
+            label: t(`${I18N}.data_scope.title`),
+            value: projectsScope?.count ?? "—",
+            unit: "个项目",
+            sub: `${DATA_SCOPE_MODE_LABELS[projectsScope?.mode ?? "all"]} · ${productText}`,
+          },
+          membersTile,
+        ];
+      }
+      default:
+        return [
+          {
+            key: "permissions",
+            label: "权限",
+            value: projectPermissionCount + workspacePermissionCount,
+            unit: "项",
+            sub: `项目 ${projectPermissionCount} · 工作区 ${workspacePermissionCount}`,
+          },
+          membersTile,
+        ];
+    }
   }, [
     group,
-    isTemplate,
     projectPermissionCount,
     workspacePermissionCount,
-    members.isLoading,
-    members.memberIds.length,
+    memberCount,
     departmentCount,
     templateProjects.isLoading,
     templateProjects.projects.length,
@@ -157,18 +198,28 @@ export const PermissionGroupDetail = observer(function PermissionGroupDetail(pro
     t,
   ]);
 
-  const requestedTab = searchParams.get("tab") as TDetailTab | null;
-  const activeTab: TDetailTab = tiles.some((tile) => tile.key === requestedTab) ? requestedTab! : "permissions";
-  const setTab = (tab: TDetailTab) => setSearchParams({ tab }, { replace: true });
+  // URL ?tab= 不是这个类型的页签时回落到默认页签
+  const requestedTab = searchParams.get("tab") as TPermissionGroupDetailTab | null;
+  const activeTab: TPermissionGroupDetailTab | null = !kind
+    ? null
+    : requestedTab && hasTab(requestedTab)
+      ? requestedTab
+      : getPermissionGroupDefaultTab(kind);
+  const setTab = (tab: TPermissionGroupDetailTab) => setSearchParams({ tab }, { replace: true });
 
-  // 组被删了 / id 不对：列表拉回来后还找不到就回列表
+  // 列表拉回来后还找不到这个组：可能是别处刚建的，单独取一次；取不到（被删了 / id 不对）就回列表
   useEffect(() => {
-    if (roles.length > 0 && !group && editor.error) navigate(getPermissionGroupsPath(workspaceSlug));
-  }, [roles.length, group, editor.error, navigate, workspaceSlug]);
+    if (!fetchedRoles || group) return;
+    void refreshRole(roleId).catch(() => navigate(getPermissionGroupsPath(workspaceSlug, lastKindRef.current)));
+  }, [fetchedRoles, group, roleId, refreshRole, navigate, workspaceSlug]);
 
+  // 编辑器里的「复制自…」只列同类型的组
   const copySources = useMemo<TCopySource[]>(
-    () => roles.filter((role) => role.id !== roleId).map((role) => ({ id: role.id, name: role.name })),
-    [roles, roleId]
+    () =>
+      roles
+        .filter((role) => role.id !== roleId && role.kind === kind)
+        .map((role) => ({ id: role.id, name: role.name })),
+    [roles, roleId, kind]
   );
   const loadCopySource = useCallback(
     (sourceId: string) => fetchPermissionGroupContent(workspaceSlug, sourceId),
@@ -199,7 +250,6 @@ export const PermissionGroupDetail = observer(function PermissionGroupDetail(pro
     try {
       await dataScope.save();
       refreshAfterChange();
-      if (isTemplate) void templateProjects.reload();
       setToast({ type: TOAST_TYPE.SUCCESS, title: `${t(`${I18N}.data_scope.title`)}已保存` });
     } catch (saveError) {
       setToast({
@@ -213,13 +263,20 @@ export const PermissionGroupDetail = observer(function PermissionGroupDetail(pro
   if (workspaceUserInfo && !canView) return <NotAuthorizedView section="settings" className="h-auto" />;
 
   const RolesIcon = WORKSPACE_SETTINGS_ICONS.roles;
-  const listPath = getPermissionGroupsPath(workspaceSlug);
+  const listPath = getPermissionGroupsPath(workspaceSlug, kind);
   const updater = group?.updated_by ? getUserDetails(group.updated_by) : undefined;
   const meta = group?.updated_at
     ? `${updater?.display_name ? `${updater.display_name} ` : ""}更新于 ${renderFormattedPayloadDate(group.updated_at)}`
     : null;
   const readOnly = !canManage || !editor.detail?.is_editable;
-  const saveHint = isTemplate && referencingCount > 0 ? `保存后 ${referencingCount} 个引用项目同步生效` : undefined;
+  const saveHint =
+    kind === "project_template"
+      ? referencingCount > 0
+        ? `保存后 ${referencingCount} 个引用项目同步生效`
+        : undefined
+      : memberCount > 0
+        ? `保存后对组内 ${memberCount} 人立即生效`
+        : undefined;
 
   const header = (
     <Header>
@@ -238,8 +295,8 @@ export const PermissionGroupDetail = observer(function PermissionGroupDetail(pro
 
   return (
     <SettingsContentWrapper header={header} hugging>
-      <PageHead title={group ? `权限组 - ${group.name}` : "权限组"} />
-      {!group ? (
+      <PageHead title={group ? `${PERMISSION_GROUP_KIND_LABELS[group.kind]} - ${group.name}` : "权限组"} />
+      {!group || !kind || !activeTab ? (
         <Loader className="flex flex-col gap-3">
           <Loader.Item height="36px" width="240px" />
           <Loader.Item height="96px" />
@@ -249,7 +306,7 @@ export const PermissionGroupDetail = observer(function PermissionGroupDetail(pro
         <div className="flex flex-col gap-5">
           <PermissionGroupIdentity
             name={group.name}
-            badge={isTemplate ? <TemplateTag /> : undefined}
+            badge={<PermissionGroupKindTag kind={kind} />}
             description={group.description}
             meta={meta}
             actions={
@@ -299,25 +356,16 @@ export const PermissionGroupDetail = observer(function PermissionGroupDetail(pro
               ) : (
                 <>
                   <PermissionGroupEditor
-                    scopes={["project", "workspace"]}
+                    scopes={EDITOR_SCOPES[kind]}
                     value={editor.draft}
                     onChange={editor.setDraft}
                     typeOptions={editor.detail.type_options}
                     typeSourceLabel="类型库"
                     readOnly={readOnly}
                     notice={
-                      !canManage || projectPermissionCount === 0 ? (
-                        <div className="flex flex-col gap-2">
-                          {!canManage && (
-                            <div className="rounded-lg border border-subtle bg-layer-1 px-4 py-2.5 text-13 text-secondary">
-                              你没有管理权限组的权限，只能查看。
-                            </div>
-                          )}
-                          {projectPermissionCount === 0 && (
-                            <div className="rounded-lg border border-warning-subtle bg-warning-subtle px-4 py-2.5 text-13 text-warning-primary">
-                              {t(`${I18N}.data_scope.empty_project_permissions`)}
-                            </div>
-                          )}
+                      !canManage ? (
+                        <div className="rounded-lg border border-subtle bg-layer-1 px-4 py-2.5 text-13 text-secondary">
+                          你没有管理权限组的权限，只能查看。
                         </div>
                       ) : undefined
                     }
@@ -359,6 +407,7 @@ export const PermissionGroupDetail = observer(function PermissionGroupDetail(pro
                   {dataScope.isDirty && canManage && (
                     <PermissionGroupSaveBar
                       count={dataScope.changedCount}
+                      hint={saveHint}
                       isSaving={dataScope.isSaving}
                       onDiscard={dataScope.discard}
                       onSave={() => void handleSaveDataScope()}
@@ -393,11 +442,8 @@ export const PermissionGroupDetail = observer(function PermissionGroupDetail(pro
           copyCandidates={[]}
           onClose={() => setIsEditOpen(false)}
           onSubmit={async (value) => {
-            await updateRole(group.id, {
-              name: value.name,
-              description: value.description,
-              is_template: value.is_template,
-            });
+            // kind 创建后不可改，这里只送名称 / 描述
+            await updateRole(group.id, { name: value.name, description: value.description });
             setIsEditOpen(false);
             setToast({ type: TOAST_TYPE.SUCCESS, title: "已保存" });
           }}
@@ -408,7 +454,7 @@ export const PermissionGroupDetail = observer(function PermissionGroupDetail(pro
         onClose={() => setPendingDelete(null)}
         onConfirm={async (target) => {
           await deleteRole(target.id);
-          navigate(getPermissionGroupsPath(workspaceSlug));
+          navigate(getPermissionGroupsPath(workspaceSlug, target.kind));
         }}
       />
     </SettingsContentWrapper>

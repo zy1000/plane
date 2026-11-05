@@ -12,6 +12,7 @@ import { SearchIcon } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Checkbox, EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
 import { cn } from "@plane/utils";
+import { PermissionGroupKindTag, isAssignablePermissionGroup } from "../permission-group-kind";
 
 type Props = {
   isOpen: boolean;
@@ -55,16 +56,18 @@ export function AddRoleModal({
   }, [isOpen]);
 
   const existingRoleIds = useMemo(() => new Set(existingRoles.map((groupRole) => groupRole.role)), [existingRoles]);
+  // 项目权限模板没有成员、不能绑团队（后端也拒绝），候选只留工作区权限组 / 数据权限
+  const assignableRoles = useMemo(() => availableRoles.filter(isAssignablePermissionGroup), [availableRoles]);
   const filteredRoles = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
-    return availableRoles.filter(
+    return assignableRoles.filter(
       (role) =>
         !existingRoleIds.has(role.id) &&
         (!normalizedQuery ||
           role.name.toLowerCase().includes(normalizedQuery) ||
           role.description?.toLowerCase().includes(normalizedQuery))
     );
-  }, [availableRoles, existingRoleIds, searchQuery]);
+  }, [assignableRoles, existingRoleIds, searchQuery]);
 
   const toggleRole = (roleId: string) => {
     setSelectedIds((prev) => {
@@ -115,7 +118,9 @@ export function AddRoleModal({
         <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-4">
           <div>
             <h3 className="text-body-lg-medium text-primary">添加团队权限组</h3>
-            <p className="mt-1 text-13 leading-5 text-secondary">所选权限组的权限将自动授予团队中的全部成员。</p>
+            <p className="mt-1 text-13 leading-5 text-secondary">
+              所选工作区权限组 / 数据权限将自动授予团队中的全部成员。
+            </p>
           </div>
           <button
             type="button"
@@ -178,10 +183,10 @@ export function AddRoleModal({
             <div className="flex min-h-64 flex-col items-center justify-center text-center">
               <ShieldCheck className="mb-3 size-6 text-placeholder" />
               <p className="text-13 font-medium text-primary">
-                {searchQuery ? "没有匹配的权限组" : availableRoles.length === 0 ? "暂无可用权限组" : "所有权限组均已分配"}
+                {searchQuery ? "没有匹配的权限组" : assignableRoles.length === 0 ? "暂无可用权限组" : "所有权限组均已分配"}
               </p>
               <p className="mt-1 text-13 text-secondary">
-                {searchQuery ? "尝试更换搜索关键词。" : "可以前往权限设置创建新的工作区权限组。"}
+                {searchQuery ? "尝试更换搜索关键词。" : "可以前往权限设置创建新的工作区权限组或数据权限。"}
               </p>
             </div>
           ) : (
@@ -208,7 +213,10 @@ export function AddRoleModal({
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
                           <p className="truncate text-13 font-medium text-primary">{role.name}</p>
-                          <span className="text-11 text-tertiary tabular-nums">{getPermissionCount(role)} 项权限</span>
+                          <PermissionGroupKindTag kind={role.kind} />
+                          {role.kind === "workspace" && (
+                            <span className="text-11 text-tertiary tabular-nums">{getPermissionCount(role)} 项权限</span>
+                          )}
                         </div>
                         <p className="mt-0.5 truncate text-13 text-secondary">
                           {role.description?.trim() || "暂无权限组描述"}

@@ -7,7 +7,7 @@
 import { useParams } from "react-router";
 import { PermissionGroupDetail } from "@/components/workspace/settings/permission-groups";
 
-/** 权限组详情：工作区权限组「成员 / 权限」，项目权限组模板「权限 / 引用项目 / 已脱离」 */
+/** 权限组详情：工作区权限组「权限 / 成员」，项目权限模板「项目权限 / 引用项目」，数据权限「数据权限 / 成员」 */
 export default function WorkspacePermissionGroupDetailPage() {
   const { workspaceSlug, roleId } = useParams();
   if (!workspaceSlug || !roleId) return null;

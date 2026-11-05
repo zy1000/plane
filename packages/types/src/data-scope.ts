@@ -5,8 +5,9 @@
  */
 
 /**
- * 数据权限（docs/permission-refactor/data-permission-plan.md）：工作区权限组的项目 / 产品白名单。
- * 组的项目权限只在白名单里的项目生效；各组白名单的并集决定成员能看到哪些项目 / 产品。
+ * 数据权限（docs/permission-refactor/split-plan.md）：kind=data 的权限组的项目 / 产品白名单。
+ * 各数据权限白名单的并集（加上成员项目）决定成员能看到、能进哪些项目 / 产品；
+ * 工作区权限组的项目权限在这些项目上全部生效。
  */
 
 export type TDataScopeMode = "all" | "selected" | "filter";
@@ -38,7 +39,7 @@ export type TDataScopePreview = {
   items: { id: string; name: string; identifier: string }[];
 };
 
-/** 模板组「引用项目」页的一行：白名单命中的项目，`excluded` = 项目里删过引用 */
+/** 模板「引用项目」页的一行：工作区的一个项目，`excluded` = 项目里删过引用 */
 export type TTemplateProjectRef = {
   id: string;
   name: string;

@@ -345,7 +345,15 @@ export enum ECreateOrJoinWorkspaceViews {
 
 // Workspace Role
 /**
- * 权限组（WorkspaceRole）：工作区权限 + 项目权限 + 数据权限（白名单）+ 模板开关。
+ * 权限组的三种类型（docs/permission-refactor/split-plan.md）：
+ * - workspace 工作区权限组：工作区权限 + 项目权限，有成员；项目权限在成员能看到的所有项目上生效
+ * - project_template 项目权限模板：只有项目权限，没有成员；引用 = 全部项目 − 排除列表，项目里绑人
+ * - data 数据权限：只有项目 / 产品白名单，有成员；白名单并集决定能看到哪些项目 / 产品
+ */
+export type TPermissionGroupKind = "workspace" | "project_template" | "data";
+
+/**
+ * 权限组（WorkspaceRole），按 kind 分三类，创建后不可改类型。
  * 权限内容走 roles/<id>/permissions/，数据权限走 roles/<id>/data-scope/（见 permission-group.ts / data-scope.ts）。
  */
 export interface IWorkspaceRole {
@@ -353,8 +361,8 @@ export interface IWorkspaceRole {
   workspace: string;
   name: string;
   description: string;
-  /** 勾上 = 白名单里的项目自动引用这个组（减去排除列表），项目里只能绑人不能改 */
-  is_template: boolean;
+  kind: TPermissionGroupKind;
+  /** 只有 kind=data 的组有意义，其它类型是默认值 */
   data_scope: TDataScope;
   created_at: string;
   updated_at: string;

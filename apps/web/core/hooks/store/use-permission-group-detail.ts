@@ -42,10 +42,15 @@ export const countChanges = (base: TPermissionGroupContent, next: TPermissionGro
 };
 
 /**
- * 权限组详情的「权限」页签：读出权限内容放进草稿，编辑器改草稿，底部保存条整份 PATCH。
+ * 权限组详情的「权限」页签（工作区权限组 / 项目权限模板）：读出权限内容放进草稿，编辑器改草稿，底部保存条整份 PATCH。
  * 不做即改即存：「全部清空」「复制自…」一下改几十个 key，要给人放弃的机会。
+ * enabled=false 时不发请求（数据权限没有这一块；kind 还没拿到时也先不拉）。
  */
-export const usePermissionGroupDetail = (workspaceSlug: string | undefined, roleId: string | undefined) => {
+export const usePermissionGroupDetail = (
+  workspaceSlug: string | undefined,
+  roleId: string | undefined,
+  enabled: boolean = true
+) => {
   const [detail, setDetail] = useState<IPermissionGroupDetail | null>(null);
   const [draft, setDraft] = useState<TPermissionGroupContent | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -53,7 +58,7 @@ export const usePermissionGroupDetail = (workspaceSlug: string | undefined, role
   const [error, setError] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
-    if (!workspaceSlug || !roleId) return null;
+    if (!workspaceSlug || !roleId || !enabled) return null;
     setIsLoading(true);
     setError(null);
     try {
@@ -67,7 +72,7 @@ export const usePermissionGroupDetail = (workspaceSlug: string | undefined, role
     } finally {
       setIsLoading(false);
     }
-  }, [workspaceSlug, roleId]);
+  }, [workspaceSlug, roleId, enabled]);
 
   useEffect(() => {
     setDetail(null);
@@ -123,9 +128,14 @@ export const fetchPermissionGroupContent = async (
 };
 
 /**
- * 权限组详情的「数据权限」页签：项目 / 产品白名单的草稿与整份保存（独立于权限草稿，各自一条保存条）。
+ * 数据权限详情的「数据权限」页签：项目 / 产品白名单的草稿与整份保存。
+ * 只有 kind=data 的组有白名单，enabled=false 时不发请求。
  */
-export const usePermissionGroupDataScope = (workspaceSlug: string | undefined, roleId: string | undefined) => {
+export const usePermissionGroupDataScope = (
+  workspaceSlug: string | undefined,
+  roleId: string | undefined,
+  enabled: boolean = true
+) => {
   const [saved, setSaved] = useState<TDataScope | null>(null);
   const [draft, setDraft] = useState<TDataScope | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -133,7 +143,7 @@ export const usePermissionGroupDataScope = (workspaceSlug: string | undefined, r
   const [error, setError] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
-    if (!workspaceSlug || !roleId) return null;
+    if (!workspaceSlug || !roleId || !enabled) return null;
     setIsLoading(true);
     setError(null);
     try {
@@ -148,7 +158,7 @@ export const usePermissionGroupDataScope = (workspaceSlug: string | undefined, r
     } finally {
       setIsLoading(false);
     }
-  }, [workspaceSlug, roleId]);
+  }, [workspaceSlug, roleId, enabled]);
 
   useEffect(() => {
     setSaved(null);
@@ -183,7 +193,7 @@ export const usePermissionGroupDataScope = (workspaceSlug: string | undefined, r
   return { dataScope: saved, draft, setDraft, isDirty, changedCount, isLoading, isSaving, error, reload, discard, save };
 };
 
-/** 工作区权限组详情的「成员」页签：直绑的人（用户 id） */
+/** 工作区权限组 / 数据权限详情的「成员」页签：直绑的人（用户 id）。模板没有成员，enabled 传 false */
 export const usePermissionGroupMembers = (
   workspaceSlug: string | undefined,
   roleId: string | undefined,
@@ -232,7 +242,7 @@ export const usePermissionGroupMembers = (
   return { memberIds, isLoading, error, reload, addMembers, removeMember };
 };
 
-/** 模板组的「引用项目」页：白名单命中的项目，可以把某个项目移出引用 / 恢复 */
+/** 项目权限模板的「引用项目」页：工作区全部项目（带已排除标记），可以把某个项目移出引用 / 恢复 */
 export const usePermissionGroupTemplateProjects = (
   workspaceSlug: string | undefined,
   roleId: string | undefined,

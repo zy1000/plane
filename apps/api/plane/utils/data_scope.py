@@ -1,10 +1,10 @@
-"""数据权限（白名单）：工作区权限组的 ``data_scope`` 怎么存、怎么算（docs/permission-refactor/data-permission-plan.md）。
+"""数据权限（白名单）：kind=data 的权限组的 ``data_scope`` 怎么存、怎么算（docs/permission-refactor/split-plan.md）。
 
 存法：``{"projects": <entry>, "products": <entry>}``，entry = ``{"mode": "all" | "selected" | "filter", "ids": [...], "filter": {...}}``。
 ``filter`` 存项目列表 / 产品列表前端的扁平筛选表达式：``{"and": [{"status__in": "id1,id2"}, {"end_date__lt": "2026-10-12"}]}``，
 一个条件 = ``{"<属性>__<操作符>": "<逗号分隔的值>"}``。每次请求现算（请求级缓存），不落快照，新建的项目满足条件就自动命中。
 
-白名单之外的两条规则不在这里：成员身份与直通见 utils/visibility.py；组的项目权限只在白名单项目生效见 permissions/base.py。
+只有数据权限有白名单；成员身份与直通见 utils/visibility.py。文末还放着模板引用（= 全部项目 − 排除列表）的计算。
 """
 
 from datetime import date
@@ -280,7 +280,10 @@ def evaluate_entry(entry, kind, workspace, user=None) -> ScopeResult:
 
 
 def role_scope(role, kind, workspace, user=None) -> ScopeResult:
-    """某个组的项目 / 产品白名单；按请求缓存在 user 上（没有 user 时不缓存）。"""
+    """某个数据权限的项目 / 产品白名单；按请求缓存在 user 上（没有 user 时不缓存）。
+    不是数据权限的组没有白名单，返回空。"""
+    if role.kind != WorkspaceRole.KIND_DATA:
+        return EMPTY_SCOPE
     entry = (role.data_scope or {}).get(kind) if isinstance(role.data_scope, dict) else None
     if user is None:
         return evaluate_entry(entry, kind, workspace)
@@ -306,7 +309,7 @@ def preview_entry(entry, kind, workspace, user=None, limit=20):
 
 
 # ---------------------------------------------------------------------------
-# 模板引用 = 白名单 − 排除列表
+# 模板引用 = 工作区全部项目 − 排除列表
 # ---------------------------------------------------------------------------
 
 
@@ -317,25 +320,24 @@ def excluded_project_ids(role) -> frozenset:
 
 
 def template_references_project(role, project_id, user=None) -> bool:
-    """模板组现在引不引用这个项目：模板开、项目在白名单里、没被排除。"""
-    if not role.is_template or role.deleted_at is not None:
+    """模板现在引不引用这个项目：是项目权限模板、没被排除。新建项目不用写任何数据就自动被引用。"""
+    if role.kind != WorkspaceRole.KIND_PROJECT_TEMPLATE or role.deleted_at is not None:
         return False
-    if str(project_id) in excluded_project_ids(role):
-        return False
-    return role_scope(role, "projects", role.workspace, user).contains(project_id)
+    return str(project_id) not in excluded_project_ids(role)
 
 
 def template_referenced_project_ids(role) -> list:
-    """模板组的「引用项目」：白名单命中的项目 id（不含已排除）。"""
-    scope = role_scope(role, "projects", role.workspace)
-    if scope.all:
-        ids = {str(value) for value in Project.objects.filter(workspace=role.workspace).values_list("id", flat=True)}
-    else:
-        ids = set(scope.ids)
+    """模板的「引用项目」：工作区全部项目 id（不含已排除）。"""
+    if role.kind != WorkspaceRole.KIND_PROJECT_TEMPLATE:
+        return []
+    ids = {str(value) for value in Project.objects.filter(workspace_id=role.workspace_id).values_list("id", flat=True)}
     return sorted(ids - excluded_project_ids(role))
 
 
 def referencing_templates(project, user=None):
-    """引用了这个项目的模板组（项目「权限组」页的引用行）。"""
-    templates = WorkspaceRole.objects.filter(workspace_id=project.workspace_id, is_template=True).order_by("created_at")
-    return [role for role in templates if template_references_project(role, project.id, user)]
+    """引用了这个项目的模板（项目「权限组」页的引用行）：全部模板减去把本项目排除了的。"""
+    return list(
+        WorkspaceRole.objects.filter(workspace_id=project.workspace_id, kind=WorkspaceRole.KIND_PROJECT_TEMPLATE)
+        .exclude(project_exclusions__project=project)
+        .order_by("created_at")
+    )

@@ -33,6 +33,7 @@ import type {
   IWorkspaceMyAccess,
   IPermissionGroup,
   IPermissionGroupDetail,
+  TPermissionGroupKind,
   TPermissionGroupContent,
   TPermissionGroupTemplateProjects,
   TDataScope,
@@ -517,9 +518,9 @@ export class WorkspaceService extends APIService {
       });
   }
 
-  // workspace permission groups（后端 WorkspaceRole：工作区权限 + 项目权限 + 数据权限 + 模板开关）
-  async fetchWorkspaceRoles(workspaceSlug: string): Promise<IPermissionGroup[]> {
-    return this.get(`/api/workspaces/${workspaceSlug}/roles/`)
+  // workspace permission groups（后端 WorkspaceRole，按 kind 分 工作区权限组 / 项目权限模板 / 数据权限 三类）
+  async fetchWorkspaceRoles(workspaceSlug: string, params?: { kind?: TPermissionGroupKind }): Promise<IPermissionGroup[]> {
+    return this.get(`/api/workspaces/${workspaceSlug}/roles/`, { params })
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
@@ -534,10 +535,10 @@ export class WorkspaceService extends APIService {
       });
   }
 
-  /** copy_from：新组照这个组的权限内容建（同一工作区里的任一权限组） */
+  /** kind 创建后不可改；copy_from：照同类型的另一个组建（工作区组 / 模板复制权限内容，数据权限复制白名单） */
   async createWorkspaceRole(
     workspaceSlug: string,
-    data: { name: string; description?: string; is_template?: boolean; copy_from?: string | null }
+    data: { name: string; description?: string; kind: TPermissionGroupKind; copy_from?: string | null }
   ): Promise<IPermissionGroup> {
     return this.post(`/api/workspaces/${workspaceSlug}/roles/`, data)
       .then((response) => response?.data)
@@ -549,7 +550,7 @@ export class WorkspaceService extends APIService {
   async updateWorkspaceRole(
     workspaceSlug: string,
     roleId: string,
-    data: Partial<{ name: string; description: string; is_template: boolean }>
+    data: Partial<{ name: string; description: string }>
   ): Promise<IPermissionGroup> {
     return this.patch(`/api/workspaces/${workspaceSlug}/roles/${roleId}/`, data)
       .then((response) => response?.data)

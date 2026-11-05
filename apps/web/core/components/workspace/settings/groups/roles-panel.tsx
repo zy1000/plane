@@ -11,6 +11,7 @@ import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { AlertModalCore } from "@plane/ui";
 import { cn } from "@plane/utils";
+import { PermissionGroupKindTag } from "../permission-group-kind";
 import { AddRoleModal } from "./add-role-modal";
 
 type TBulkMutationResult = {
@@ -79,7 +80,7 @@ export function RolesPanel({
       <div className="flex items-center justify-between gap-3 border-b border-subtle px-5 py-3">
         <div>
           <p className="text-13 font-medium text-primary">已分配权限组</p>
-          <p className="mt-0.5 text-11 text-tertiary">团队绑定的权限组会立即对团队成员生效</p>
+          <p className="mt-0.5 text-11 text-tertiary">团队绑定的工作区权限组 / 数据权限会立即对团队成员生效</p>
         </div>
         {canManage && (
           <Button variant="primary" prependIcon={<PlusIcon />} onClick={() => setShowAddModal(true)}>
@@ -139,7 +140,10 @@ export function RolesPanel({
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <p className="truncate text-13 font-medium text-primary">{roleName}</p>
-                        <span className="text-11 text-tertiary tabular-nums">{permissionCount} 项权限</span>
+                        {role && <PermissionGroupKindTag kind={role.kind} />}
+                        {role?.kind !== "data" && (
+                          <span className="text-11 text-tertiary tabular-nums">{permissionCount} 项权限</span>
+                        )}
                       </div>
                       <p className="mt-0.5 truncate text-13 text-secondary">
                         {role?.description?.trim() || "暂无权限组描述"}

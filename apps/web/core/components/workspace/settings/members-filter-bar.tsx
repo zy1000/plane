@@ -8,6 +8,10 @@ import { useMemo } from "react";
 import { observer } from "mobx-react";
 import { Building2, BriefcaseBusiness, Search, ShieldCheck, X } from "lucide-react";
 import { MultiSelectFilterChip } from "@/components/common/multi-select-filter-chip";
+import {
+  PERMISSION_GROUP_KIND_LABELS,
+  splitAssignablePermissionGroups,
+} from "@/components/workspace/settings/permission-group-kind";
 import { useJobRoles } from "@/hooks/store/use-job-roles";
 import { useMember } from "@/hooks/store/use-member";
 import { useWorkspaceRoles } from "@/hooks/store/use-workspace-roles";
@@ -32,7 +36,18 @@ export const WorkspaceMembersFilterBar = observer(function WorkspaceMembersFilte
   const filters = filtersStore.filters;
 
   const jobRoleOptions = useMemo(() => jobRoles.map((item) => ({ id: item.id, label: item.label })), [jobRoles]);
-  const groupOptions = useMemo(() => roles.map((role) => ({ id: role.id, label: role.name })), [roles]);
+  // 权限组筛选按「工作区权限组 / 数据权限」两组列，项目权限模板不绑人、不出现
+  const groupOptions = useMemo(() => {
+    const byKind = splitAssignablePermissionGroups(roles);
+    return [
+      ...byKind.workspace.map((role) => ({
+        id: role.id,
+        label: role.name,
+        group: PERMISSION_GROUP_KIND_LABELS.workspace,
+      })),
+      ...byKind.data.map((role) => ({ id: role.id, label: role.name, group: PERMISSION_GROUP_KIND_LABELS.data })),
+    ];
+  }, [roles]);
   const memberIds = getWorkspaceMemberIds(workspaceSlug);
   const departmentOptions = useMemo(() => {
     const departments = new Set<string>();
