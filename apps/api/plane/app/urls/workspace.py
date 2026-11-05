@@ -56,6 +56,7 @@ from plane.app.views import (
     WorkspaceMemberNetworkZoneAPIView,
     WorkspaceMyPermissionKeysAPIView,
     WorkspaceMyAccessAPIView,
+    WorkspaceMyAccessProjectAPIView,
 )
 
 
@@ -167,6 +168,11 @@ urlpatterns = [
         "workspaces/<str:slug>/my-access/",
         WorkspaceMyAccessAPIView.as_view(),
         name="workspace-my-access",
+    ),
+    path(
+        "workspaces/<str:slug>/my-access/projects/<uuid:project_id>/",
+        WorkspaceMyAccessProjectAPIView.as_view(),
+        name="workspace-my-access-project",
     ),
     path(
         "workspaces/<str:slug>/workspace-views/",

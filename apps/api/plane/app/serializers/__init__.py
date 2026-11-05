@@ -21,7 +21,6 @@ from .workspace import (
     WorkspaceLiteSerializer,
     WorkspaceThemeSerializer,
     PermissionSerializer,
-    WorkspaceMyAccessSerializer,
     WorkspaceRoleSerializer,
     WorkspaceRolePermissionBindingSerializer,
     WorkspaceGroupSerializer,

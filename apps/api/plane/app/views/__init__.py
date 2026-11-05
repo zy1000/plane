@@ -66,6 +66,7 @@ from .workspace.member import (
     WorkspaceMemberNetworkZoneAPIView,
     WorkspaceMyPermissionKeysAPIView,
     WorkspaceMyAccessAPIView,
+    WorkspaceMyAccessProjectAPIView,
 )
 from .workspace.invite import (
     WorkspaceInvitationsViewset,

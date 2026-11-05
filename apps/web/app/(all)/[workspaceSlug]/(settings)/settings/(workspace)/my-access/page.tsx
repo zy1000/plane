@@ -15,7 +15,7 @@ export default function MyAccessWorkspaceSettingsPage({ params }: Route.Componen
   const { data, error, isLoading, refetch } = useWorkspaceMyAccess(workspaceSlug);
 
   return (
-    <SettingsContentWrapper header={<MyAccessWorkspaceSettingsHeader />}>
+    <SettingsContentWrapper header={<MyAccessWorkspaceSettingsHeader />} hugging>
       <MyAccessRoot data={data} error={error} isLoading={isLoading} onRetry={refetch} />
     </SettingsContentWrapper>
   );

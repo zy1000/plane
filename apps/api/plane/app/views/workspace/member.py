@@ -26,7 +26,6 @@ from plane.app.serializers import (
     WorkspaceMemberMeSerializer,
     WorkspaceMemberCustomRolesSerializer,
     WorkspaceMemberGroupsSerializer,
-    WorkspaceMyAccessSerializer,
     WorkSpaceMemberSerializer,
 )
 from plane.app.views.base import BaseAPIView
@@ -43,7 +42,7 @@ from plane.db.models import (
 )
 from plane.utils.cache import invalidate_cache
 from plane.utils.job_role import member_job_role_map
-from plane.utils.workspace_access import build_workspace_my_access
+from plane.utils.workspace_access import build_project_my_access, build_workspace_my_access
 
 from .. import BaseViewSet
 
@@ -478,24 +477,33 @@ class WorkspaceMyPermissionKeysAPIView(BaseAPIView):
 
 
 class WorkspaceMyAccessAPIView(BaseAPIView):
+    """工作区设置 › 我的权限：身份、可见范围、工作区 / 项目权限（全部可见项目口径）与来源。"""
+
     use_read_replica = True
 
     @allow_workspace_member
     def get(self, request, slug):
-        workspace = Workspace.objects.filter(
-            slug=slug,
-            deleted_at__isnull=True,
-        ).first()
+        workspace = Workspace.objects.filter(slug=slug, deleted_at__isnull=True).first()
         if not workspace:
-            return Response(
-                {"error": "Workspace not found."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
+            return Response({"error": "Workspace not found."}, status=status.HTTP_404_NOT_FOUND)
+        return Response(build_workspace_my_access(workspace, request.user), status=status.HTTP_200_OK)
 
-        serializer = WorkspaceMyAccessSerializer(
-            build_workspace_my_access(workspace, request.user)
-        )
-        return Response(serializer.data, status=status.HTTP_200_OK)
+
+class WorkspaceMyAccessProjectAPIView(BaseAPIView):
+    """我的权限 › 项目权限切到某个项目：工作区组的项目 key + 本项目绑定的模板 / 本项目组，带来源。"""
+
+    use_read_replica = True
+
+    @allow_workspace_member
+    def get(self, request, slug, project_id):
+        workspace = Workspace.objects.filter(slug=slug, deleted_at__isnull=True).first()
+        project = Project.objects.filter(workspace=workspace, pk=project_id).first() if workspace else None
+        if project is None:
+            return Response({"error": "Project not found."}, status=status.HTTP_404_NOT_FOUND)
+        data = build_project_my_access(workspace, request.user, project)
+        if data is None:
+            return Response({"error": "你看不到这个项目。"}, status=status.HTTP_403_FORBIDDEN)
+        return Response(data, status=status.HTTP_200_OK)
 
 
 class WorkspaceProjectMemberEndpoint(BaseAPIView):

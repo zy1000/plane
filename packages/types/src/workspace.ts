@@ -130,44 +130,85 @@ export interface IWorkspaceMemberMe {
   job_role_ids?: string[];
 }
 
-export type TWorkspaceMyAccessPermissionSourceType =
-  | "direct_role"
-  | "group_role"
-  | "workspace_owner"
-  | "instance_admin";
+/**
+ * 工作区设置 › 我的权限（GET workspaces/<slug>/my-access/）。只返回实际生效的 key，前端拿 PERMISSION_CATALOG 渲染全表。
+ */
+export type TMyAccessPassthrough = "workspace_owner" | "instance_admin" | "project_lead";
 
-export interface IWorkspaceMyAccessRole {
+/** 某个 key 从哪来：直通身份 / 工作区权限组（可能经团队）/ 项目里绑的模板 / 本项目组 */
+export type TMyAccessSource = {
+  type: TMyAccessPassthrough | "workspace_group" | "template" | "project_role";
+  role: { id: string; name: string } | null;
+  team: { id: string; name: string } | null;
+};
+
+export type TMyAccessGrant = { key: string; sources: TMyAccessSource[] };
+
+/** 我绑的一个工作区权限组 / 数据权限 */
+export interface IMyAccessGroup {
   id: string;
   name: string;
   description: string | null;
+  kind: TPermissionGroupKind;
+  project_permission_count: number;
+  workspace_permission_count: number;
+  /** 仅数据权限：白名单命中的项目 / 产品数 */
+  project_count?: number;
+  product_count?: number;
+  is_direct: boolean;
+  /** 经哪些团队拿到（直绑时也可能同时经团队） */
+  teams: { id: string; name: string }[];
 }
 
-export interface IWorkspaceMyAccessGroup {
+export interface IMyAccessTeam {
   id: string;
   name: string;
-  description: string | null;
-  joined_at: string | null;
-  roles: IWorkspaceMyAccessRole[];
+  member_count: number;
+  /** 这个团队带来的组 id（工作区权限组 + 数据权限） */
+  group_ids: string[];
 }
 
-export interface IWorkspaceMyAccessPermissionSource {
-  type: TWorkspaceMyAccessPermissionSourceType;
-  role: Pick<IWorkspaceMyAccessRole, "id" | "name"> | null;
-  group: { id: string; name: string } | null;
-}
+export type TMyAccessVisibleSourceType =
+  | "passthrough"
+  | "member"
+  | "lead"
+  | "data_scope"
+  | "owner"
+  | "reviewer"
+  | "linked_project";
 
-export interface IWorkspaceMyAccessPermission {
+export type TMyAccessVisibleSource = { type: TMyAccessVisibleSourceType; group: { id: string; name: string } | null };
+
+export interface IMyAccessVisibleProject {
   id: string;
-  key: string;
   name: string;
-  description: string | null;
-  scope: "workspace";
-  module: string | null;
-  action: string | null;
-  category: string | null;
-  sort_order: number;
-  is_granted: boolean;
-  sources: IWorkspaceMyAccessPermissionSource[];
+  identifier: string;
+  is_member: boolean;
+  is_lead: boolean;
+  sources: TMyAccessVisibleSource[];
+}
+
+export interface IMyAccessVisibleProduct {
+  id: string;
+  name: string;
+  identifier: string;
+  sources: TMyAccessVisibleSource[];
+}
+
+export interface IMyAccessVisibility<T> {
+  total: number;
+  /** 各来源命中数（一个项目可能算在多个来源里） */
+  by_source: Partial<Record<TMyAccessVisibleSourceType, number>>;
+  items: T[];
+}
+
+/** 项目权限：project 为 null 表示「全部可见项目」口径（工作区权限组项目 key 的并集）；
+ * 指定项目时（GET my-access/projects/<id>/）再并上那里绑定的模板 / 本项目组 */
+export interface IMyAccessProjectPermissions {
+  project: { id: string; name: string; identifier: string } | null;
+  grants: TMyAccessGrant[];
+  summary: { workspace_group: number; template: number; project_role: number; passthrough: number };
+  bound_groups: { id: string; name: string; source: "template" | "project" }[];
 }
 
 export interface IWorkspaceMyAccess {
@@ -176,13 +217,16 @@ export interface IWorkspaceMyAccess {
     joined_at: string | null;
     is_workspace_owner: boolean;
     is_instance_admin: boolean;
+    led_project_count: number;
   };
   /** 我的角色（数据字典 job_role） */
   job_roles: { id: string; label: string; color: string }[];
-  /** 我的工作区权限组，第一个是隐式持有的「工作区成员」 */
-  direct_roles: IWorkspaceMyAccessRole[];
-  groups: IWorkspaceMyAccessGroup[];
-  permissions: IWorkspaceMyAccessPermission[];
+  workspace_groups: IMyAccessGroup[];
+  data_groups: IMyAccessGroup[];
+  teams: IMyAccessTeam[];
+  visibility: { projects: IMyAccessVisibility<IMyAccessVisibleProject>; products: IMyAccessVisibility<IMyAccessVisibleProduct> };
+  workspace_permissions: TMyAccessGrant[];
+  project_permissions: IMyAccessProjectPermissions;
 }
 
 export interface ILastActiveWorkspaceDetails {

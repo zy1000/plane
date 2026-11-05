@@ -31,6 +31,7 @@ import type {
   IWorkspaceGroupMember,
   IWorkspaceGroupRole,
   IWorkspaceMyAccess,
+  IMyAccessProjectPermissions,
   IPermissionGroup,
   IPermissionGroupDetail,
   TPermissionGroupKind,
@@ -153,6 +154,15 @@ export class WorkspaceService extends APIService {
   async fetchMyWorkspacePermissionKeys(workspaceSlug: string): Promise<string[]> {
     return this.get(`/api/workspaces/${workspaceSlug}/my-permission-keys/`)
       .then((response) => (response?.data?.permission_keys as string[]) ?? [])
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 项目权限切到某个项目：工作区组的项目 key + 本项目绑定的模板 / 本项目组，带来源 */
+  async fetchMyWorkspaceProjectAccess(workspaceSlug: string, projectId: string): Promise<IMyAccessProjectPermissions> {
+    return this.get(`/api/workspaces/${workspaceSlug}/my-access/projects/${projectId}/`)
+      .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
       });
