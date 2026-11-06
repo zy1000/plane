@@ -151,6 +151,11 @@ export const USER_PROFILE_PROJECT_SEGREGATION = (workspaceSlug: string, userId: 
   `USER_PROFILE_PROJECT_SEGREGATION_${workspaceSlug.toUpperCase()}_${userId.toUpperCase()}`;
 export const USER_PROFILE_RELATION_COUNTS = (workspaceSlug: string, userId: string) =>
   `USER_PROFILE_RELATION_COUNTS_${workspaceSlug.toUpperCase()}_${userId.toUpperCase()}`;
+// 我的工作（待处理 / 已处理 / 我发起的）
+export const USER_WORK_SUMMARY = (workspaceSlug: string, userId: string) =>
+  `USER_WORK_SUMMARY_${workspaceSlug.toUpperCase()}_${userId.toUpperCase()}`;
+export const USER_WORK_LIST = (workspaceSlug: string, userId: string, view: string, params: string) =>
+  `USER_WORK_${view.toUpperCase()}_${workspaceSlug.toUpperCase()}_${userId.toUpperCase()}_${params}`;
 
 // api-tokens
 export const API_TOKENS_LIST = `API_TOKENS_LIST`;

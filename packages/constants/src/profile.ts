@@ -18,28 +18,22 @@ export const PROFILE_VIEWER_TAB = [
 
 export const PROFILE_ADMINS_TAB = [
   {
-    key: "work_items",
-    route: "work_items",
-    i18n_label: "profile.tabs.work_items",
-    selected: "/work_items/",
+    key: "pending",
+    route: "pending",
+    i18n_label: "profile.tabs.pending",
+    selected: "/pending/",
   },
   {
-    key: "defects",
-    route: "defects",
-    i18n_label: "profile.tabs.defects",
-    selected: "/defects/",
+    key: "processed",
+    route: "processed",
+    i18n_label: "profile.tabs.processed",
+    selected: "/processed/",
   },
   {
-    key: "requirements",
-    route: "requirements",
-    i18n_label: "profile.tabs.requirements",
-    selected: "/requirements/",
-  },
-  {
-    key: "activity",
-    route: "activity",
-    i18n_label: "profile.tabs.activity",
-    selected: "/activity/",
+    key: "initiated",
+    route: "initiated",
+    i18n_label: "profile.tabs.initiated",
+    selected: "/initiated/",
   },
 ];
 

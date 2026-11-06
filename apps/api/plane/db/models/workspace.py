@@ -425,6 +425,42 @@ class WorkspaceHomePreference(BaseModel):
         return f"{self.workspace.name} {self.user.email} {self.key}"
 
 
+class WorkspaceUserWorkPreference(BaseModel):
+    """「我的工作」页的个人视图设置（待处理 / 已处理各自启用哪些工作来源、默认分组排序、时间范围）。
+
+    一行一个 (workspace, user)，整份设置存在 ``config`` 里；缺省值与形状校验在
+    ``plane/utils/user_work.py``，这里只负责落库。
+    """
+
+    workspace = models.ForeignKey(
+        "db.Workspace",
+        on_delete=models.CASCADE,
+        related_name="workspace_user_work_preferences",
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="workspace_user_work_preferences",
+    )
+    config = models.JSONField(default=dict)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["workspace", "user"],
+                condition=models.Q(deleted_at__isnull=True),
+                name="workspace_user_work_preferences_unique_workspace_user_when_deleted_at_null",
+            )
+        ]
+        verbose_name = "Workspace User Work Preference"
+        verbose_name_plural = "Workspace User Work Preferences"
+        db_table = "workspace_user_work_preferences"
+        ordering = ("-created_at",)
+
+    def __str__(self):
+        return f"{self.workspace.name} {self.user.email} user work preference"
+
+
 class WorkspaceUserPreference(BaseModel):
     """Preference for the workspace for a user"""
 

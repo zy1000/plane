@@ -98,12 +98,16 @@ export const coreRoutes: RouteConfigEntry[] = [
             "./(all)/[workspaceSlug]/(projects)/profile/[userId]/[profileViewId]/page.tsx"
           ),
           route(
-            ":workspaceSlug/profile/:userId/activity",
-            "./(all)/[workspaceSlug]/(projects)/profile/[userId]/activity/page.tsx"
+            ":workspaceSlug/profile/:userId/pending",
+            "./(all)/[workspaceSlug]/(projects)/profile/[userId]/pending/page.tsx"
           ),
           route(
-            ":workspaceSlug/profile/:userId/requirements",
-            "./(all)/[workspaceSlug]/(projects)/profile/[userId]/requirements/page.tsx"
+            ":workspaceSlug/profile/:userId/processed",
+            "./(all)/[workspaceSlug]/(projects)/profile/[userId]/processed/page.tsx"
+          ),
+          route(
+            ":workspaceSlug/profile/:userId/initiated",
+            "./(all)/[workspaceSlug]/(projects)/profile/[userId]/initiated/page.tsx"
           ),
         ]),
 

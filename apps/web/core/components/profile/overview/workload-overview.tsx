@@ -8,12 +8,15 @@ import { useState } from "react";
 import type { ComponentType } from "react";
 import { ChevronRight, ClipboardCheck, Rocket } from "lucide-react";
 import { useParams } from "next/navigation";
+import { useNavigate } from "react-router";
 // plane imports
 import { useTranslation } from "@plane/i18n";
-import { CycleIcon, DueDatePropertyIcon, RequirementIcon, WorkflowsPropertyIcon } from "@plane/propel/icons";
+import { CycleIcon, DueDatePropertyIcon, RequirementIcon } from "@plane/propel/icons";
 import type { IUserProfileData, TProfileMetricKey } from "@plane/types";
 import { Card, ECardVariant, LinearProgressIndicator, Loader } from "@plane/ui";
 import { cn } from "@plane/utils";
+// hooks
+import { useUserWorkSummary } from "@/hooks/use-user-work";
 // components
 import { ProfileMetricDetailModal } from "./metric-detail-modal";
 
@@ -23,15 +26,19 @@ type Props = {
 
 type TQueueMetric = {
   icon: ComponentType<{ className?: string }>;
-  key: TProfileMetricKey;
+  key: TProfileMetricKey | "stage_reviews";
   title: string;
   value: number;
   warn: boolean;
+  /** 有 href 的直接跳页（评审在待处理页里看），没有的开指标明细弹窗 */
+  href?: string;
 };
 
 export function ProfileWorkloadOverview({ userProfile }: Props) {
   const { workspaceSlug, userId } = useParams();
+  const navigate = useNavigate();
   const { t } = useTranslation();
+  const { summary: workSummary } = useUserWorkSummary(String(workspaceSlug), String(userId));
   const [activeMetric, setActiveMetric] = useState<TProfileMetricKey | null>(null);
 
   if (!userProfile) {
@@ -66,6 +73,8 @@ export function ProfileWorkloadOverview({ userProfile }: Props) {
     },
   ];
 
+  // 待审批 / 待执行用例已并入摘要页「今日焦点」与待处理页；这里补一行「负责或审核的评审」直达待处理
+  const reviewCount = (workSummary?.pending.by_type.review ?? 0) + (workSummary?.pending.by_type.review_activity ?? 0);
   const queueMetrics: TQueueMetric[] = [
     {
       icon: DueDatePropertyIcon,
@@ -75,13 +84,6 @@ export function ProfileWorkloadOverview({ userProfile }: Props) {
       warn: userProfile.unscheduled_pending_issues > 0,
     },
     {
-      icon: WorkflowsPropertyIcon,
-      key: "pending_approval_issues",
-      title: t("profile.stats.pending_approval"),
-      value: userProfile.pending_approval_issues,
-      warn: userProfile.pending_approval_issues > 0,
-    },
-    {
       icon: CycleIcon,
       key: "responsible_cycles",
       title: t("profile.stats.responsible_cycles"),
@@ -89,10 +91,10 @@ export function ProfileWorkloadOverview({ userProfile }: Props) {
       warn: false,
     },
     {
-      icon: ClipboardCheck,
-      key: "pending_execution_cases",
-      title: t("profile.stats.pending_execution_cases"),
-      value: userProfile.pending_execution_cases,
+      icon: Rocket,
+      key: "responsible_releases",
+      title: t("profile.stats.responsible_releases"),
+      value: userProfile.responsible_releases,
       warn: false,
     },
     {
@@ -103,11 +105,12 @@ export function ProfileWorkloadOverview({ userProfile }: Props) {
       warn: false,
     },
     {
-      icon: Rocket,
-      key: "responsible_releases",
-      title: t("profile.stats.responsible_releases"),
-      value: userProfile.responsible_releases,
+      icon: ClipboardCheck,
+      key: "stage_reviews",
+      title: t("profile.work.summary.reviews_queue"),
+      value: reviewCount,
       warn: false,
+      href: `/${workspaceSlug}/profile/${userId}/pending?type=review`,
     },
   ];
 
@@ -172,7 +175,7 @@ export function ProfileWorkloadOverview({ userProfile }: Props) {
                 <button
                   key={metric.key}
                   type="button"
-                  onClick={() => setActiveMetric(metric.key)}
+                  onClick={() => (metric.href ? navigate(metric.href) : setActiveMetric(metric.key as TProfileMetricKey))}
                   className="focus-visible:ring-accent-primary rounded-md border border-subtle p-3 text-left outline-none transition-colors hover:bg-surface-2 focus-visible:ring-2 focus-visible:ring-inset"
                 >
                   <div className="flex items-center justify-between gap-2">

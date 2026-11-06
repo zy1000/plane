@@ -25,6 +25,11 @@ from plane.app.views import (
     WorkspaceUserProfileEndpoint,
     WorkspaceUserProfileIssuesEndpoint,
     WorkspaceUserProfileRelationCountsEndpoint,
+    WorkspaceUserWorkInitiatedEndpoint,
+    WorkspaceUserWorkPendingEndpoint,
+    WorkspaceUserWorkPreferenceEndpoint,
+    WorkspaceUserWorkProcessedEndpoint,
+    WorkspaceUserWorkSummaryEndpoint,
     WorkspaceUserProfileRequirementsEndpoint,
     WorkspaceLabelsEndpoint,
     WorkspaceProjectMemberEndpoint,
@@ -324,6 +329,32 @@ urlpatterns = [
         "workspaces/<str:slug>/user-relation-counts/<uuid:user_id>/",
         WorkspaceUserProfileRelationCountsEndpoint.as_view(),
         name="workspace-user-profile-relation-counts",
+    ),
+    # 个人主页「我的工作」：待处理 / 已处理 / 我发起的 + 视图设置
+    path(
+        "workspaces/<str:slug>/user-work/<uuid:user_id>/summary/",
+        WorkspaceUserWorkSummaryEndpoint.as_view(),
+        name="workspace-user-work-summary",
+    ),
+    path(
+        "workspaces/<str:slug>/user-work/<uuid:user_id>/pending/",
+        WorkspaceUserWorkPendingEndpoint.as_view(),
+        name="workspace-user-work-pending",
+    ),
+    path(
+        "workspaces/<str:slug>/user-work/<uuid:user_id>/processed/",
+        WorkspaceUserWorkProcessedEndpoint.as_view(),
+        name="workspace-user-work-processed",
+    ),
+    path(
+        "workspaces/<str:slug>/user-work/<uuid:user_id>/initiated/",
+        WorkspaceUserWorkInitiatedEndpoint.as_view(),
+        name="workspace-user-work-initiated",
+    ),
+    path(
+        "workspaces/<str:slug>/user-work/<uuid:user_id>/preferences/",
+        WorkspaceUserWorkPreferenceEndpoint.as_view(),
+        name="workspace-user-work-preferences",
     ),
     path(
         "workspaces/<str:slug>/labels/",

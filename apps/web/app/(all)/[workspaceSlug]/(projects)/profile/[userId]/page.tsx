@@ -10,10 +10,8 @@ import { useTranslation } from "@plane/i18n";
 import { ContentWrapper } from "@plane/ui";
 // components
 import { PageHead } from "@/components/core/page-title";
-import { ProfileAssignedWorkLists } from "@/components/profile/overview/assigned-work-lists";
 import { ProfileFocusMetrics } from "@/components/profile/overview/focus-metrics";
 import { ProfileProjectContribution } from "@/components/profile/overview/project-contribution";
-import { ProfileRequirementsOverview } from "@/components/profile/overview/requirements-overview";
 import { ProfileSummarySignals } from "@/components/profile/overview/summary-signals";
 import { ProfileWorkloadOverview } from "@/components/profile/overview/workload-overview";
 // constants
@@ -39,9 +37,8 @@ export default function ProfileOverviewPage({ params }: Route.ComponentProps) {
       <PageHead title={t("profile.page_label")} />
       <ContentWrapper className="space-y-7">
         <ProfileSummarySignals userProfile={userProfile} />
+        {/* 今日焦点的卡片带参数跳到「待处理」；原「我的待办」两张列表与「需求概览」已被待处理页取代 */}
         <ProfileFocusMetrics userProfile={userProfile} />
-        <ProfileAssignedWorkLists userProfile={userProfile} />
-        <ProfileRequirementsOverview userProfile={userProfile} />
         <ProfileWorkloadOverview userProfile={userProfile} />
         <ProfileProjectContribution userProjectsData={userProjectsData} />
       </ContentWrapper>

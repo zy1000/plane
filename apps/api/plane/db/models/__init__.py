@@ -104,6 +104,7 @@ from .workspace import (
     WorkspaceUserProperties,
     WorkspaceUserLink,
     WorkspaceHomePreference,
+    WorkspaceUserWorkPreference,
     WorkspaceUserPreference,
     WorkspaceRole,
     WorkspaceRoleProjectExclusion,

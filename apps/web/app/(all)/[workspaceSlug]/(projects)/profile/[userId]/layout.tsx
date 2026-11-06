@@ -15,17 +15,32 @@ import { AppHeader } from "@/components/core/app-header";
 import { ContentWrapper } from "@/components/core/content-wrapper";
 import { ProfileSidebar } from "@/components/profile/sidebar";
 // constants
-import { USER_PROFILE_PROJECT_SEGREGATION, USER_PROFILE_RELATION_COUNTS } from "@/constants/fetch-keys";
+import { USER_PROFILE_PROJECT_SEGREGATION } from "@/constants/fetch-keys";
 // hooks
 import { useUser, useUserPermissions } from "@/hooks/store/user";
+import { useUserWorkSummary } from "@/hooks/use-user-work";
 import useSize from "@/hooks/use-window-size";
 // local components
 import { UserService } from "@/services/user.service";
 import type { Route } from "./+types/layout";
 import { UserProfileHeader } from "./header";
-import { ProfileIssuesMobileHeader } from "./mobile-header";
 
 const userService = new UserService();
+
+// 只有本人或有查看成员权限的人能看的子页：待处理 / 已处理 / 我发起的，以及会跳到待处理的旧地址
+const AUTHORIZED_SEGMENTS = [
+  "pending",
+  "processed",
+  "initiated",
+  "assigned",
+  "created",
+  "subscribed",
+  "overdue",
+  "work_items",
+  "defects",
+  "requirements",
+  "activity",
+];
 
 function UseProfileLayout({ params }: Route.ComponentProps) {
   // router
@@ -46,36 +61,21 @@ function UseProfileLayout({ params }: Route.ComponentProps) {
   const { data: userProjectsData } = useSWR(USER_PROFILE_PROJECT_SEGREGATION(workspaceSlug, userId), () =>
     userService.getUserProfileProjectsSegregation(workspaceSlug, userId)
   );
-  // 页签条数：看不了别人工作项的人不请求（接口同样会拒）
-  const { data: relationCounts } = useSWR(isAuthorized ? USER_PROFILE_RELATION_COUNTS(workspaceSlug, userId) : null, () =>
-    userService.getUserProfileRelationCounts(workspaceSlug, userId)
-  );
+  // 页签条数：待处理（按视图设置启用的来源）/ 我发起的；看不了别人工作的人不请求（接口同样会拒）
+  const { summary } = useUserWorkSummary(workspaceSlug, userId, isAuthorized);
+  const tabCounts = summary
+    ? { pending: summary.pending.enabled_total, initiated: summary.initiated.total }
+    : undefined;
   // derived values
   const profileBasePath = `/${workspaceSlug}/profile/${userId}`;
   const isSummaryTab = pathname === `${profileBasePath}/` || pathname === profileBasePath;
-  const isAuthorizedPath =
-    pathname.includes("assigned") ||
-    pathname.includes("created") ||
-    pathname.includes("subscribed") ||
-    pathname.includes("overdue") ||
-    pathname.includes("work_items") ||
-    pathname.includes("defects") ||
-    pathname.includes("requirements");
-  const isIssuesTab =
-    pathname.includes("assigned") ||
-    pathname.includes("created") ||
-    pathname.includes("subscribed") ||
-    pathname.includes("overdue") ||
-    pathname.includes("work_items") ||
-    pathname.includes("defects");
+  const isAuthorizedPath = AUTHORIZED_SEGMENTS.some((segment) => pathname.includes(`/${segment}`));
 
   const tabsList = isAuthorized ? [...PROFILE_VIEWER_TAB, ...PROFILE_ADMINS_TAB] : PROFILE_VIEWER_TAB;
   const currentTab = tabsList.find((tab) => pathname === `/${workspaceSlug}/profile/${userId}${tab.selected}`);
 
   return (
     <>
-      {/* Passing the type prop from the current route value as we need the header as top most component.
-            TODO: We are depending on the route path to handle the mobile header type. If the path changes, this logic will break. */}
       <div
         className={
           isSummaryTab
@@ -89,11 +89,10 @@ function UseProfileLayout({ params }: Route.ComponentProps) {
               <UserProfileHeader
                 type={currentTab?.i18n_label}
                 userProjectsData={userProjectsData}
-                tabCounts={relationCounts}
+                tabCounts={tabCounts}
                 showProfileSidebarToggle={isSummaryTab}
               />
             }
-            mobileHeader={isIssuesTab && <ProfileIssuesMobileHeader />}
           />
           <ContentWrapper>
             <div className="flex h-full w-full flex-row md:flex-col md:overflow-hidden">

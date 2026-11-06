@@ -76,6 +76,13 @@ from .workspace.invite import (
 )
 from .workspace.label import WorkspaceLabelsEndpoint
 from .workspace.state import WorkspaceStatesEndpoint
+from .workspace.user_work import (
+    WorkspaceUserWorkInitiatedEndpoint,
+    WorkspaceUserWorkPendingEndpoint,
+    WorkspaceUserWorkPreferenceEndpoint,
+    WorkspaceUserWorkProcessedEndpoint,
+    WorkspaceUserWorkSummaryEndpoint,
+)
 from .workspace.user import (
     UserLastProjectWithWorkspaceEndpoint,
     WorkspaceUserProfileIssuesEndpoint,
