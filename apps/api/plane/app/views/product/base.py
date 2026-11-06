@@ -1,3 +1,4 @@
+from django.db.models import Prefetch
 from rest_framework import status
 from rest_framework.response import Response
 
@@ -9,7 +10,7 @@ from plane.app.permissions import (
 from plane.app.serializers.product import ProductSerializer
 from plane.app.permissions.base import _get_user_product_permission_keys
 from plane.app.views.base import BaseAPIView, BaseViewSet
-from plane.db.models import PlanCase, Product, Workspace
+from plane.db.models import PlanCase, Product, User, Workspace
 from plane.utils.product import (
     can_create_product,
     can_view_product,
@@ -37,7 +38,9 @@ class ProductViewSet(BaseViewSet):
             .filter(workspace__slug=self.workspace_slug)
             .select_related(
                 "workspace",
+                # *_detail 走 UserLiteSerializer 要出 avatar_url，头像资源一并 JOIN，否则每个人一条 file_assets 查询
                 "owner",
+                "owner__avatar_asset",
                 "created_by",
                 "updated_by",
                 # *_detail 要出所属字典的 is_colored，把字典头一并 JOIN 上
@@ -54,9 +57,11 @@ class ProductViewSet(BaseViewSet):
                 "software_level",
                 "software_level__dictionary",
                 "project_lead",
+                "project_lead__avatar_asset",
                 "test_lead",
+                "test_lead__avatar_asset",
             )
-            .prefetch_related("reviewers")
+            .prefetch_related(Prefetch("reviewers", queryset=User.objects.select_related("avatar_asset")))
         )
 
         workspace = Workspace.objects.filter(slug=self.workspace_slug).first()

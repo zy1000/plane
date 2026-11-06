@@ -398,6 +398,11 @@ def bulk_project_permission_keys(user, workspace, project_ids, wanted_keys) -> d
         str(row["id"]): row
         for row in Project.objects.filter(pk__in=project_ids).values("id", "project_lead_id", "created_by_id")
     }
+    if context.passthrough:
+        # 直通（实例管理员 / 工作区 owner）：全部 key，不必再拉成员、角色、团队、模板
+        for project_id in projects:
+            result[project_id] = set(wanted - inactive)
+        return result
     member_rows = {
         str(row["project_id"]): row["id"]
         for row in ProjectMember.objects.filter(
@@ -447,7 +452,7 @@ def bulk_project_permission_keys(user, workspace, project_ids, wanted_keys) -> d
             continue
         lead = row["project_lead_id"]
         is_lead = (lead == user.id) if lead else row["created_by_id"] == user.id
-        if context.passthrough or is_lead:
+        if is_lead:
             result[project_id] = set(wanted - inactive)
             continue
         if not visible.contains(project_id):

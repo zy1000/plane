@@ -313,17 +313,30 @@ def preview_entry(entry, kind, workspace, user=None, limit=20):
 # ---------------------------------------------------------------------------
 
 
-def excluded_project_ids(role) -> frozenset:
-    return frozenset(
-        str(value) for value in WorkspaceRoleProjectExclusion.objects.filter(role=role).values_list("project_id", flat=True)
-    )
+def excluded_project_ids(role, user=None) -> frozenset:
+    """模板的排除项目 id。传 ``user`` 时按请求缓存：一次取整个工作区全部模板的排除行（表很小），
+    列表页逐项目判断引用时不再每个项目查一次；不传 ``user`` 直查，写完排除行紧接着读的地方用这条路径。"""
+    if user is None:
+        return frozenset(
+            str(value) for value in WorkspaceRoleProjectExclusion.objects.filter(role=role).values_list("project_id", flat=True)
+        )
+    cache = _cache(user)
+    cache_key = ("template_exclusions", role.workspace_id)
+    if cache_key not in cache:
+        by_role = {}
+        for role_id, project_id in WorkspaceRoleProjectExclusion.objects.filter(
+            role__workspace_id=role.workspace_id
+        ).values_list("role_id", "project_id"):
+            by_role.setdefault(role_id, set()).add(str(project_id))
+        cache[cache_key] = {role_id: frozenset(ids) for role_id, ids in by_role.items()}
+    return cache[cache_key].get(role.id, frozenset())
 
 
 def template_references_project(role, project_id, user=None) -> bool:
     """模板现在引不引用这个项目：是项目权限模板、没被排除。新建项目不用写任何数据就自动被引用。"""
     if role.kind != WorkspaceRole.KIND_PROJECT_TEMPLATE or role.deleted_at is not None:
         return False
-    return str(project_id) not in excluded_project_ids(role)
+    return str(project_id) not in excluded_project_ids(role, user)
 
 
 def template_referenced_project_ids(role) -> list:

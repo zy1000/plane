@@ -59,7 +59,17 @@ class TimeSheetViewSet(BaseViewSet):
     def get_queryset(self):
         qs = TimeSheet.objects.filter(
             project__workspace__slug=self.kwargs.get("slug"),
-        ).select_related("member", "project", "issue", "test_case", "category")
+        ).select_related(
+            "member",
+            # member_detail 走 UserLiteSerializer 要出 avatar_url，头像资源一并 JOIN，否则每行一条 file_assets 查询
+            "member__avatar_asset",
+            "project",
+            "issue",
+            # issue_detail.type_name 读 issue.type.name，不 JOIN 的话每行一条 issue_types 查询
+            "issue__type",
+            "test_case",
+            "category",
+        )
 
         project_id = self.kwargs.get("project_id")
         if project_id:
