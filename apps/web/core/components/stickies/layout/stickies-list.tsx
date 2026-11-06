@@ -13,7 +13,6 @@ import type { ElementDragPayload } from "@atlaskit/pragmatic-drag-and-drop/eleme
 import { observer } from "mobx-react";
 import { usePathname } from "next/navigation";
 import { useTheme } from "next-themes";
-import Masonry from "react-masonry-component";
 
 // plane imports
 import { useTranslation } from "@plane/i18n";
@@ -33,6 +32,8 @@ import { useSticky } from "@/hooks/use-stickies";
 // local imports
 import { useStickyOperations } from "../sticky/use-operations";
 import { StickiesLoader } from "./stickies-loader";
+import { StickiesMasonry } from "./stickies-masonry";
+import type { TStickiesMasonryHandle } from "./stickies-masonry";
 import { StickyDNDWrapper } from "./sticky-dnd-wrapper";
 import { getInstructionFromPayload } from "./sticky.helpers";
 
@@ -67,7 +68,7 @@ export const StickiesList = observer(function StickiesList(props: TProps) {
   const hasGuestLevelPermissions = isWorkspaceMember(workspaceSlug?.toString());
   const stickiesResolvedPath = resolvedTheme === "light" ? lightStickiesAsset : darkStickiesAsset;
   const stickiesSearchResolvedPath = resolvedTheme === "light" ? lightStickiesSearchAsset : darkStickiesSearchAsset;
-  const masonryRef = useRef<any>(null);
+  const masonryRef = useRef<TStickiesMasonryHandle>(null);
 
   const handleLayout = () => {
     if (masonryRef.current) {
@@ -145,8 +146,7 @@ export const StickiesList = observer(function StickiesList(props: TProps) {
 
   return (
     <div className="transition-opacity duration-300 ease-in-out">
-      {/* @ts-expect-error type mismatch here */}
-      <Masonry elementType="div" ref={masonryRef}>
+      <StickiesMasonry ref={masonryRef}>
         {workspaceStickyIds.map((stickyId, index) => {
           const { isInFirstRow, isInLastRow } = getRowPositions(index);
           return (
@@ -164,7 +164,7 @@ export const StickiesList = observer(function StickiesList(props: TProps) {
           );
         })}
         {intersectionElement && <div style={{ width: itemWidth }}>{intersectionElement}</div>}
-      </Masonry>
+      </StickiesMasonry>
     </div>
   );
 });
