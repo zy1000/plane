@@ -21,6 +21,7 @@ import type { EPageStoreType } from "@/plane-web/hooks/store";
 import { usePageStore } from "@/plane-web/hooks/store";
 // local imports
 import { PageAppliedFiltersList } from "../list/applied-filters";
+import { PagesListCreateButton } from "../list/create-page-button";
 import { PageFiltersSelection } from "../list/filters";
 import { PageOrderByDropdown } from "../list/order-by";
 import { PageSearchInput } from "../list/search-input";
@@ -90,6 +91,12 @@ export const PagesListHeaderRoot = observer(function PagesListHeaderRoot(props: 
               memberIds={workspaceMemberIds ?? undefined}
             />
           </FiltersDropdown>
+          <PagesListCreateButton
+            pageType={pageType}
+            projectId={projectId}
+            storeType={storeType}
+            workspaceSlug={workspaceSlug}
+          />
         </Header.RightItem>
       </Header>
       {calculateTotalFilters(filters?.filters ?? {}) !== 0 && (

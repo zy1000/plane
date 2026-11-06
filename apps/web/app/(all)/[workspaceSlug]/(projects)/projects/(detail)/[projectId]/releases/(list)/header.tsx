@@ -11,22 +11,15 @@ import { useParams } from "next/navigation";
 import { MODULE_TRACKER_ELEMENTS, PROJECT_RELEASES_CREATE_PERMISSION_KEY } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
-import { Breadcrumbs, Header } from "@plane/ui";
-import { Rocket } from "lucide-react";
-import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
+import { Header } from "@plane/ui";
 import { ReleaseViewHeader } from "@/components/releases/release-view-header";
 import { useCommandPalette } from "@/hooks/store/use-command-palette";
-import { useProject } from "@/hooks/store/use-project";
 import { useUserPermissions } from "@/hooks/store/user";
-import { useAppRouter } from "@/hooks/use-app-router";
-import { CommonProjectBreadcrumbs } from "@/plane-web/components/breadcrumbs/common";
 
 export const ReleasesListHeader = observer(function ReleasesListHeader() {
-  const router = useAppRouter();
   const { workspaceSlug, projectId } = useParams();
   const { toggleCreateReleaseModal } = useCommandPalette();
   const { allowProjectPermissionKeys } = useUserPermissions();
-  const { loader } = useProject();
   const { t } = useTranslation();
 
   const workspaceSlugValue = workspaceSlug?.toString() ?? "";
@@ -38,25 +31,8 @@ export const ReleasesListHeader = observer(function ReleasesListHeader() {
 
   return (
     <Header>
-      <Header.LeftItem>
-        <div>
-          <Breadcrumbs onBack={router.back} isLoading={loader === "init-loader"}>
-            <CommonProjectBreadcrumbs workspaceSlug={workspaceSlug?.toString()} projectId={projectId?.toString()} />
-            <Breadcrumbs.Item
-              component={
-                <BreadcrumbLink
-                  label={t("project_release.breadcrumb_releases_link")}
-                  href={`/${workspaceSlug}/projects/${projectId}/releases`}
-                  icon={<Rocket className="h-4 w-4 text-tertiary" />}
-                  isLast
-                />
-              }
-              isLast
-            />
-          </Breadcrumbs>
-        </div>
-      </Header.LeftItem>
-      <Header.RightItem>
+      {/* 子菜单名已在顶部标签栏高亮，列表页不再重复面包屑 */}
+      <Header.RightItem className="ml-auto">
         <ReleaseViewHeader />
         <Button
           variant="primary"

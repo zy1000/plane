@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { createPortal } from "react-dom";
+import { useCallback, useMemo, useState } from "react";
 import { format } from "date-fns";
 import { observer } from "mobx-react";
 import { Layers, SearchX } from "lucide-react";
@@ -18,7 +17,6 @@ import { ProjectStageBulkBar } from "./bulk/project-stage-bulk-bar";
 import { ProjectStageBulkEditPanel } from "./bulk/project-stage-bulk-edit-panel";
 import { useProjectStageBulkEdit } from "./bulk/use-project-stage-bulk-edit";
 import { useProjectStageSelection } from "./bulk/use-project-stage-selection";
-import { PROJECT_STAGES_HEADER_ACTIONS_ID } from "./header-slots";
 import { useProjectStagePermissions } from "./permissions";
 import type { TProjectStageFormMode } from "./project-stage-form-modal";
 import { ProjectStageFormModal } from "./project-stage-form-modal";
@@ -73,7 +71,7 @@ const deepestFirst = (stages: TProjectStage[], ids: string[]) => {
 };
 
 /**
- * 项目阶段页：页头挂点里放搜索 / 从研发模式带出 / 新建；下面一行状态计数；树形阶段表；
+ * 项目阶段页：顶部一行左边状态计数、右边搜索 / 从研发模式带出 / 新建；树形阶段表；
  * 底栏占比合计；勾选后浮动批量条（修改属性 / 删除）。
  *
  * 增删改都走 hook 重拉整棵树（父占比、层级、下移都由后端算）；批量改属性回的是改到的行，就地替换。
@@ -109,11 +107,6 @@ export const ProjectStageList = observer(function ProjectStageList({
   const [pendingDelete, setPendingDelete] = useState<TPendingDelete>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isSyncOpen, setIsSyncOpen] = useState(false);
-  const [actionsHost, setActionsHost] = useState<HTMLElement | null>(null);
-
-  useEffect(() => {
-    setActionsHost(document.getElementById(PROJECT_STAGES_HEADER_ACTIONS_ID));
-  }, []);
 
   const today = useMemo(() => format(new Date(), "yyyy-MM-dd"), []);
 
@@ -250,7 +243,7 @@ export const ProjectStageList = observer(function ProjectStageList({
   const ratioPercent = Math.min(100, Math.max(0, (workloadTotal / PROJECT_STAGE_MAX_WORKLOAD_RATIO) * 100));
 
   const headerActions = (
-    <>
+    <div className="flex shrink-0 items-center gap-2">
       <PageSearchInput searchQuery={search} updateSearchQuery={setSearch} placeholder={t(`${I18N}.header.search`)} />
       {canManage && (
         <>
@@ -262,7 +255,7 @@ export const ProjectStageList = observer(function ProjectStageList({
           </Button>
         </>
       )}
-    </>
+    </div>
   );
 
   const statusOrder: EProjectStageStatus[] = [
@@ -274,28 +267,29 @@ export const ProjectStageList = observer(function ProjectStageList({
 
   return (
     <div className="relative flex h-full min-h-0 flex-col">
-      {actionsHost && createPortal(headerActions, actionsHost)}
-
-      {/* 摘要条 */}
-      <div className="flex h-10 shrink-0 flex-wrap items-center gap-x-5 gap-y-1 border-b border-subtle px-6 text-12 text-tertiary">
-        <span>
-          <b className="font-semibold text-primary">{stages.length}</b> {t(`${I18N}.summary.stages`)}
-        </span>
-        <span>
-          <b className="font-semibold text-primary">{counts.milestones}</b> {t(`${I18N}.summary.milestones`)}
-        </span>
-        {statusOrder.map((status) => (
-          <span key={status} className="inline-flex items-center gap-1.5">
-            <i className={cn("size-1.5 rounded-full", PROJECT_STAGE_STATUS_STYLE[status].dot)} />
-            {t(`${I18N}.status.${status}`)} {counts.byStatus[status] ?? 0}
+      {/* 摘要条：左边状态计数，右边搜索 / 带出 / 新建（子菜单名已在顶部标签栏，不再单独一行页头） */}
+      <div className="flex min-h-11 shrink-0 items-center justify-between gap-4 border-b border-subtle px-6 py-1.5">
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-12 text-tertiary">
+          <span>
+            <b className="font-semibold text-primary">{stages.length}</b> {t(`${I18N}.summary.stages`)}
           </span>
-        ))}
-        {counts.delayed > 0 && (
-          <span className="inline-flex items-center gap-1.5 text-danger-primary">
-            <i className="size-1.5 rounded-full bg-danger-primary" />
-            {t(`${I18N}.summary.delayed`)} {counts.delayed}
+          <span>
+            <b className="font-semibold text-primary">{counts.milestones}</b> {t(`${I18N}.summary.milestones`)}
           </span>
-        )}
+          {statusOrder.map((status) => (
+            <span key={status} className="inline-flex items-center gap-1.5">
+              <i className={cn("size-1.5 rounded-full", PROJECT_STAGE_STATUS_STYLE[status].dot)} />
+              {t(`${I18N}.status.${status}`)} {counts.byStatus[status] ?? 0}
+            </span>
+          ))}
+          {counts.delayed > 0 && (
+            <span className="inline-flex items-center gap-1.5 text-danger-primary">
+              <i className="size-1.5 rounded-full bg-danger-primary" />
+              {t(`${I18N}.summary.delayed`)} {counts.delayed}
+            </span>
+          )}
+        </div>
+        {headerActions}
       </div>
 
       <div className="relative min-h-0 flex-1 overflow-auto">

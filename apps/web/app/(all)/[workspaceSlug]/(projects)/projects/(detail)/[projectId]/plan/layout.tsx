@@ -1,15 +1,11 @@
 import { Outlet } from "react-router";
-import { AppHeader } from "@/components/core/app-header";
 import { ContentWrapper } from "@/components/core/content-wrapper";
-import { ProjectPlanHeader } from "./header";
 
+// 搜索在时间轴上方的工具栏里，不再单独占一行页头
 export default function ProjectPlanLayout() {
   return (
-    <>
-      <AppHeader header={<ProjectPlanHeader />} />
-      <ContentWrapper>
-        <Outlet />
-      </ContentWrapper>
-    </>
+    <ContentWrapper>
+      <Outlet />
+    </ContentWrapper>
   );
 }

@@ -87,7 +87,8 @@ export const InboxIssueRoot = observer(function InboxIssueRoot(props: TInboxIssu
       <div className="flex h-full w-full overflow-hidden bg-surface-1">
         <div
           className={cn(
-            "absolute top-[50px] bottom-0 z-10 w-full flex-shrink-0 bg-surface-1 transition-all lg:!relative lg:!top-0 lg:w-2/6",
+            // 页签行右端还有筛选 / 排序 / 添加工作项，侧栏太窄会把页签挤成竖排
+            "absolute top-[50px] bottom-0 z-10 w-full flex-shrink-0 bg-surface-1 transition-all lg:!relative lg:!top-0 lg:w-2/6 lg:min-w-[480px]",
             isMobileSidebar ? "translate-x-0" : "-translate-x-full lg:!translate-x-0"
           )}
         >

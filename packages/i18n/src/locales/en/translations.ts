@@ -7077,7 +7077,6 @@ export default {
     },
   },
   project_release: {
-    breadcrumb_releases_link: "Releases",
     tab_release_scope: "Scope",
     add_release: "Add release",
     created_success: "Release created successfully.",

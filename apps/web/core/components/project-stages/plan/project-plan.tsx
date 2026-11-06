@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { createPortal } from "react-dom";
+import { useCallback, useMemo, useState } from "react";
 import { format } from "date-fns";
 import { observer } from "mobx-react";
 import { PERMISSION_KEYS, PROJECT_SPRINTS_EDIT_PERMISSION_KEY } from "@plane/constants";
@@ -7,12 +6,10 @@ import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TProjectStage } from "@plane/types";
 import { Loader } from "@plane/ui";
-import { PageSearchInput } from "@/components/pages/list/search-input";
 import { useProjectStagePlan } from "@/hooks/store/use-project-stage-plan";
 import { getProjectStageError, useProjectStages } from "@/hooks/store/use-project-stages";
 import { useStageTypes } from "@/hooks/store/use-stage-types";
 import { useUserPermissions } from "@/hooks/store/user";
-import { PROJECT_PLAN_HEADER_ACTIONS_ID } from "../header-slots";
 import { useProjectStagePermissions } from "../permissions";
 import type { TProjectStageFormMode } from "../project-stage-form-modal";
 import { ProjectStageFormModal } from "../project-stage-form-modal";
@@ -27,7 +24,7 @@ const I18N = "project_stage";
  *
  * 阶段数据和阶段页走同一个接口；三类条都能在图上拖着改起止、点负责人头像换人，权限各走各的：
  * 阶段看阶段管理权限、迭代看 sprints.edit、工作项看项目成员。点阶段名打开阶段编辑弹窗。
- * 页头搜索 portal 进路由 header 的挂点。
+ * 搜索框在时间轴上方的工具栏里。
  */
 export const ProjectPlan = observer(function ProjectPlan({
   workspaceSlug,
@@ -47,11 +44,6 @@ export const ProjectPlan = observer(function ProjectPlan({
   const [search, setSearch] = useState("");
   // 弹窗按 form 对象变化重置字段，所以存对象本身，别每次渲染现拼
   const [form, setForm] = useState<TProjectStageFormMode | null>(null);
-  const [actionsHost, setActionsHost] = useState<HTMLElement | null>(null);
-
-  useEffect(() => {
-    setActionsHost(document.getElementById(PROJECT_PLAN_HEADER_ACTIONS_ID));
-  }, []);
 
   const today = useMemo(() => format(new Date(), "yyyy-MM-dd"), []);
 
@@ -121,12 +113,6 @@ export const ProjectPlan = observer(function ProjectPlan({
 
   return (
     <div className="relative flex h-full min-h-0 flex-col">
-      {actionsHost &&
-        createPortal(
-          <PageSearchInput searchQuery={search} updateSearchQuery={setSearch} placeholder={t(`${I18N}.plan.search`)} />,
-          actionsHost
-        )}
-
       <div className="min-h-0 flex-1">
         {isLoading ? (
           <Loader className="flex flex-col gap-2 p-6">
@@ -143,6 +129,7 @@ export const ProjectPlan = observer(function ProjectPlan({
             stages={stages}
             data={plan.data}
             search={search}
+            onSearchChange={setSearch}
             canEdit={canEdit}
             today={today}
             onEditStage={(stage) => setForm({ mode: "edit", stage })}

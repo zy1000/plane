@@ -7190,7 +7190,6 @@ export default {
     },
   },
   project_release: {
-    breadcrumb_releases_link: "Releases",
     tab_release_scope: "发布内容",
     add_release: "添加发布",
     update_release: "更新发布",

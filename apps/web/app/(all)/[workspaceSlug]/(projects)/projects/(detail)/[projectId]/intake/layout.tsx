@@ -6,17 +6,13 @@
 
 import { Outlet } from "react-router";
 // components
-import { AppHeader } from "@/components/core/app-header";
 import { ContentWrapper } from "@/components/core/content-wrapper";
-import { ProjectInboxHeader } from "@/plane-web/components/projects/settings/intake/header";
 
+// 「添加工作项」在侧栏「打开 / 已关闭」页签行的右端，不再单独占一行页头
 export default function ProjectInboxIssuesLayout() {
   return (
-    <>
-      <AppHeader header={<ProjectInboxHeader />} />
-      <ContentWrapper>
-        <Outlet />
-      </ContentWrapper>
-    </>
+    <ContentWrapper>
+      <Outlet />
+    </ContentWrapper>
   );
 }

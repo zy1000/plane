@@ -1,15 +1,11 @@
 import { Outlet } from "react-router";
-import { AppHeader } from "@/components/core/app-header";
 import { ContentWrapper } from "@/components/core/content-wrapper";
-import { ProjectStagesHeader } from "./header";
 
+// 搜索 / 带出 / 新建在正文顶部的统计行右侧，不再单独占一行页头
 export default function ProjectStagesLayout() {
   return (
-    <>
-      <AppHeader header={<ProjectStagesHeader />} />
-      <ContentWrapper>
-        <Outlet />
-      </ContentWrapper>
-    </>
+    <ContentWrapper>
+      <Outlet />
+    </ContentWrapper>
   );
 }

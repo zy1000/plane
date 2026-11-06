@@ -6,17 +6,13 @@
 
 import { Outlet } from "react-router";
 // components
-import { AppHeader } from "@/components/core/app-header";
 import { ContentWrapper } from "@/components/core/content-wrapper";
-import { ProjectArchivesHeader } from "../../header";
 
 export default function ProjectArchiveIssuesLayout() {
+  // 页签栏下直接是「工作项 / 迭代 / 模块 / 发布」归档页签，不再单独一行面包屑
   return (
-    <>
-      <AppHeader header={<ProjectArchivesHeader activeTab="issues" />} />
-      <ContentWrapper>
-        <Outlet />
-      </ContentWrapper>
-    </>
+    <ContentWrapper>
+      <Outlet />
+    </ContentWrapper>
   );
 }

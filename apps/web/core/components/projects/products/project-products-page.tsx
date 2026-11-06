@@ -22,10 +22,9 @@ import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Tooltip } from "@plane/propel/tooltip";
 import type { TProduct, TProductProject } from "@plane/types";
-import { AlertModalCore, Breadcrumbs, CustomMenu, Header, Loader } from "@plane/ui";
+import { AlertModalCore, CustomMenu, Header, Loader } from "@plane/ui";
 import { renderFormattedDate } from "@plane/utils";
 import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
-import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { AppHeader } from "@/components/core/app-header";
 import { ContentWrapper } from "@/components/core/content-wrapper";
 import { PageHead } from "@/components/core/page-title";
@@ -40,18 +39,15 @@ import { useProducts } from "@/hooks/store/use-products";
 import { useProject } from "@/hooks/store/use-project";
 import { useProjectProducts } from "@/hooks/store/use-project-products";
 import { useUserPermissions } from "@/hooks/store/user";
-import { useAppRouter } from "@/hooks/use-app-router";
-import { CommonProjectBreadcrumbs } from "@/plane-web/components/breadcrumbs/common";
 import { ProjectProductsModal } from "./project-products-modal";
 
 export const ProjectProductsPage = observer(function ProjectProductsPage() {
   const { t } = useTranslation();
-  const router = useAppRouter();
   const { workspaceSlug, projectId } = useParams();
   const slug = workspaceSlug?.toString() ?? "";
   const project = projectId?.toString() ?? "";
 
-  const { getProjectById, loader } = useProject();
+  const { getProjectById } = useProject();
   const { allowProjectPermissionKeys, allowWorkspacePermissionKeys, workspaceUserInfo } = useUserPermissions();
 
   // 与后端 ProjectProductViewSet 同一组 key：list 放行 view / manage 任一，create 只认 manage
@@ -147,24 +143,16 @@ export const ProjectProductsPage = observer(function ProjectProductsPage() {
   return (
     <>
       <PageHead title={pageTitle} />
+      {/* 子菜单名已在顶部标签栏高亮，不再重复面包屑：左边关联产品数，右边操作 */}
       <AppHeader
         header={
           <Header>
             <Header.LeftItem>
-              <Breadcrumbs onBack={router.back} isLoading={loader === "init-loader"}>
-                <CommonProjectBreadcrumbs workspaceSlug={slug} projectId={project} />
-                <Breadcrumbs.Item
-                  component={
-                    <BreadcrumbLink
-                      label={t("project_products.title")}
-                      href={`/${slug}/projects/${project}/products/`}
-                      icon={<Package className="h-4 w-4 text-secondary" />}
-                      isLast
-                    />
-                  }
-                  isLast
-                />
-              </Breadcrumbs>
+              {!isLoading && !error && (
+                <span className="text-13 text-tertiary">
+                  {t("project_products.result_count", { count: links.length })}
+                </span>
+              )}
             </Header.LeftItem>
             {canManage && (
               <Header.RightItem>

@@ -11,30 +11,24 @@ import { useParams } from "next/navigation";
 import { CYCLE_TRACKER_ELEMENTS, PROJECT_SPRINTS_CREATE_PERMISSION_KEY } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
-import { CycleIcon } from "@plane/propel/icons";
-import { Breadcrumbs, Header } from "@plane/ui";
+import { Header } from "@plane/ui";
 // components
-import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { CycleExportModal } from "@/components/cycles/export/cycle-export-modal";
 import { CyclesViewHeader } from "@/components/cycles/cycles-view-header";
 // hooks
 import { useCommandPalette } from "@/hooks/store/use-command-palette";
 import { useProject } from "@/hooks/store/use-project";
 import { useUserPermissions } from "@/hooks/store/user";
-import { useAppRouter } from "@/hooks/use-app-router";
-// plane web imports
-import { CommonProjectBreadcrumbs } from "@/plane-web/components/breadcrumbs/common";
 
 export const CyclesListHeader = observer(function CyclesListHeader() {
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   // router
-  const router = useAppRouter();
   const { workspaceSlug, projectId } = useParams();
 
   // store hooks
   const { toggleCreateCycleModal } = useCommandPalette();
   const { allowProjectPermissionKeys } = useUserPermissions();
-  const { currentProjectDetails, loader } = useProject();
+  const { currentProjectDetails } = useProject();
   const { t } = useTranslation();
 
   const resolvedWorkspaceSlug = workspaceSlug?.toString() ?? "";
@@ -47,24 +41,9 @@ export const CyclesListHeader = observer(function CyclesListHeader() {
   return (
     <>
       <Header>
-        <Header.LeftItem>
-          <Breadcrumbs onBack={router.back} isLoading={loader === "init-loader"}>
-            <CommonProjectBreadcrumbs workspaceSlug={workspaceSlug?.toString()} projectId={projectId?.toString()} />
-            <Breadcrumbs.Item
-              component={
-                <BreadcrumbLink
-                  label="Sprints"
-                  href={`/${workspaceSlug}/projects/${currentProjectDetails?.id}/cycles/`}
-                  icon={<CycleIcon className="h-4 w-4 text-tertiary" />}
-                  isLast
-                />
-              }
-              isLast
-            />
-          </Breadcrumbs>
-        </Header.LeftItem>
+        {/* 子菜单名已在顶部标签栏高亮，列表页不再重复面包屑 */}
         {currentProjectDetails ? (
-          <Header.RightItem>
+          <Header.RightItem className="ml-auto">
             <CyclesViewHeader projectId={currentProjectDetails.id} />
             <Button
               variant="secondary"

@@ -23,6 +23,7 @@ import { useIntersectionObserver } from "@/hooks/use-intersection-observer";
 // local imports
 import { FiltersRoot } from "../inbox-filter";
 import { InboxIssueAppliedFilters } from "../inbox-filter/applied-filters/root";
+import { InboxIssueCreateButton } from "./create-button";
 import { InboxIssueList } from "./inbox-list";
 
 type IInboxSidebarProps = {
@@ -90,7 +91,7 @@ export const InboxSidebar = observer(function InboxSidebar(props: IInboxSidebarP
             <div
               key={option?.key}
               className={cn(
-                `relative flex h-full cursor-pointer items-center gap-1 px-3 text-13 font-medium transition-all`,
+                `relative flex h-full shrink-0 cursor-pointer items-center gap-1 px-3 text-13 font-medium whitespace-nowrap transition-all`,
                 currentTab === option?.key ? `text-accent-primary` : `hover:text-secondary`
               )}
               onClick={() => {
@@ -114,8 +115,9 @@ export const InboxSidebar = observer(function InboxSidebar(props: IInboxSidebarP
               />
             </div>
           ))}
-          <div className="m-auto mr-0">
+          <div className="m-auto mr-0 flex items-center gap-2">
             <FiltersRoot />
+            <InboxIssueCreateButton workspaceSlug={workspaceSlug} projectId={projectId} />
           </div>
         </Header>
         <InboxIssueAppliedFilters />

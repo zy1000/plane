@@ -10,24 +10,18 @@ import { useParams } from "next/navigation";
 import { PROJECT_VIEW_TRACKER_ELEMENTS, PROJECT_VIEWS_CREATE_PERMISSION_KEY } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
-import { ViewsIcon } from "@plane/propel/icons";
-import { Breadcrumbs, Header } from "@plane/ui";
+import { Header } from "@plane/ui";
 // components
-import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { ViewListHeader } from "@/components/views/view-list-header";
 // hooks
 import { useCommandPalette } from "@/hooks/store/use-command-palette";
-import { useProject } from "@/hooks/store/use-project";
 import { useUserPermissions } from "@/hooks/store/user";
-// plane web imports
-import { CommonProjectBreadcrumbs } from "@/plane-web/components/breadcrumbs/common";
 
 export const ProjectViewsHeader = observer(function ProjectViewsHeader() {
   const { workspaceSlug, projectId } = useParams();
   const { t } = useTranslation();
   // store hooks
   const { toggleCreateViewModal } = useCommandPalette();
-  const { loader } = useProject();
   const { allowProjectPermissionKeys } = useUserPermissions();
   const canCreateView = allowProjectPermissionKeys(
     [PROJECT_VIEWS_CREATE_PERMISSION_KEY],
@@ -38,23 +32,8 @@ export const ProjectViewsHeader = observer(function ProjectViewsHeader() {
   return (
     <>
       <Header>
-        <Header.LeftItem>
-          <Breadcrumbs isLoading={loader === "init-loader"}>
-            <CommonProjectBreadcrumbs workspaceSlug={workspaceSlug?.toString()} projectId={projectId?.toString()} />
-            <Breadcrumbs.Item
-              component={
-                <BreadcrumbLink
-                  label="Views"
-                  href={`/${workspaceSlug}/projects/${projectId}/views/`}
-                  icon={<ViewsIcon className="h-4 w-4 text-tertiary" />}
-                  isLast
-                />
-              }
-              isLast
-            />
-          </Breadcrumbs>
-        </Header.LeftItem>
-        <Header.RightItem>
+        {/* 子菜单名已在顶部标签栏高亮，列表页不再重复面包屑 */}
+        <Header.RightItem className="ml-auto">
           <ViewListHeader />
           <div>
             <Button

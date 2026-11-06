@@ -261,7 +261,7 @@ export const ReleaseIssuesHeader = observer(function ReleaseIssuesHeader() {
               <Breadcrumbs.Item
                 component={
                   <BreadcrumbLink
-                    label={t("project_release.breadcrumb_releases_link")}
+                    label={t("sidebar.releases")}
                     href={`/${workspaceSlug}/projects/${projectId}/releases`}
                     icon={<Rocket className="h-4 w-4 text-tertiary" />}
                   />

@@ -14,6 +14,7 @@ import {
   ISSUE_DISPLAY_FILTERS_BY_PAGE,
   WORK_ITEM_TRACKER_ELEMENTS,
 } from "@plane/constants";
+import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { LockIcon, ViewsIcon } from "@plane/propel/icons";
 import { Tooltip } from "@plane/propel/tooltip";
@@ -42,6 +43,7 @@ export const ProjectViewIssuesHeader = observer(function ProjectViewIssuesHeader
   // router
   const router = useAppRouter();
   const { workspaceSlug, projectId, viewId: routerViewId } = useParams();
+  const { t } = useTranslation();
   const viewId = routerViewId ? routerViewId.toString() : undefined;
   // store hooks
   const {
@@ -123,7 +125,7 @@ export const ProjectViewIssuesHeader = observer(function ProjectViewIssuesHeader
           <Breadcrumbs.Item
             component={
               <BreadcrumbLink
-                label="Views"
+                label={t("sidebar.views")}
                 href={`/${workspaceSlug}/projects/${projectId}/views/`}
                 icon={<ViewsIcon className="h-4 w-4 text-tertiary" />}
               />
@@ -147,7 +149,7 @@ export const ProjectViewIssuesHeader = observer(function ProjectViewIssuesHeader
 
         {viewDetails?.access === EViewAccess.PRIVATE ? (
           <div className="cursor-default text-tertiary">
-            <Tooltip tooltipContent={"Private"}>
+            <Tooltip tooltipContent={t("private")}>
               <LockIcon className="h-4 w-4" />
             </Tooltip>
           </div>

@@ -1,5 +1,6 @@
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
+import { PageSearchInput } from "@/components/pages/list/search-input";
 import type { TPlanScale } from "./plan-scale";
 import { PlanSegmented } from "./plan-segmented";
 import type { TPlanLevel } from "./plan-tree";
@@ -11,6 +12,8 @@ export type TPlanCounts = { stages: number; cycles: number; issues: number; mile
 
 /** 规划视图顶栏：左边图例 + 计数，右边展开层级、时间刻度、回到今天 */
 export const PlanToolbar = ({
+  search,
+  onSearchChange,
   counts,
   level,
   onLevelChange,
@@ -18,6 +21,8 @@ export const PlanToolbar = ({
   onScaleChange,
   onToday,
 }: {
+  search: string;
+  onSearchChange: (search: string) => void;
   counts: TPlanCounts;
   level: TPlanLevel;
   onLevelChange: (level: TPlanLevel) => void;
@@ -61,6 +66,7 @@ export const PlanToolbar = ({
         )}
       </div>
       <div className="flex items-center gap-3">
+        <PageSearchInput searchQuery={search} updateSearchQuery={onSearchChange} placeholder={t(`${I18N}.search`)} />
         <span className="text-12 text-placeholder">{t(`${I18N}.pan_hint`)}</span>
         <span className="h-[18px] border-l border-subtle" />
         <span className="text-13 text-tertiary">{t(`${I18N}.expand_to`)}</span>

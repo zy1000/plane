@@ -59,6 +59,7 @@ export const ProjectStagePlanView = observer(function ProjectStagePlanView({
   stages,
   data,
   search,
+  onSearchChange,
   canEdit,
   today,
   onEditStage,
@@ -71,6 +72,7 @@ export const ProjectStagePlanView = observer(function ProjectStagePlanView({
   stages: TProjectStage[];
   data: TProjectStagePlanData;
   search: string;
+  onSearchChange: (search: string) => void;
   canEdit: TPlanDrag["canEdit"];
   today: string;
   onEditStage: (stage: TProjectStage) => void;
@@ -247,6 +249,8 @@ export const ProjectStagePlanView = observer(function ProjectStagePlanView({
   return (
     <div className="flex h-full min-h-0 flex-col">
       <PlanToolbar
+        search={search}
+        onSearchChange={onSearchChange}
         counts={counts}
         level={level}
         onLevelChange={changeLevel}
