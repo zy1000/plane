@@ -30,6 +30,7 @@ from plane.app.views.project.role import (
     ProjectRoleMembersAPIView,
     ProjectRolePermissionAPIView,
     ProjectRoleViewSet,
+    ProjectVisibleMembersAPIView,
 )
 from plane.app.views.project.group import ProjectGroupRoleViewSet, ProjectGroupViewSet
 from plane.app.views.project.template import ProjectTemplateAPIView
@@ -182,6 +183,11 @@ urlpatterns = [
         "workspaces/<str:slug>/projects/<uuid:project_id>/roles/<uuid:pk>/permissions/",
         ProjectRolePermissionAPIView.as_view(),
         name="project-role-permissions",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/visible-members/",
+        ProjectVisibleMembersAPIView.as_view(),
+        name="project-visible-members",
     ),
     path(
         "workspaces/<str:slug>/projects/<uuid:project_id>/groups/",

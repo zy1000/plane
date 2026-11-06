@@ -10,6 +10,7 @@ import type {
   TProjectPermissionGroup,
   TProjectPermissionGroupDetail,
   TProjectPermissionGroupList,
+  TProjectVisibleMembers,
 } from "@plane/types";
 import { APIService } from "@/services/api.service";
 
@@ -28,6 +29,15 @@ export class ProjectRoleService extends APIService {
 
   async list(workspaceSlug: string, projectId: string): Promise<TProjectPermissionGroupList> {
     return this.get(`${this.base(workspaceSlug, projectId)}/roles/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 可见人员：谁能看到本项目（成员、负责人、直通、数据权限白名单），以及各自在本项目的权限数 */
+  async fetchVisibleMembers(workspaceSlug: string, projectId: string): Promise<TProjectVisibleMembers> {
+    return this.get(`${this.base(workspaceSlug, projectId)}/visible-members/`)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;

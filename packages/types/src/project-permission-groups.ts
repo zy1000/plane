@@ -30,17 +30,49 @@ export type TProjectPermissionGroup = {
   permission_count: number;
 };
 
-/** 白名单含本项目、带项目权限的工作区权限组，以及本项目里谁在组里（这部分权限对组内成员在本项目生效；直通的人不算） */
+/** 带项目权限的工作区权限组，以及能看到本项目的人里谁在组里（组的项目权限对这些人在本项目生效，不管是不是项目成员；直通的人不算） */
 export type TProjectInheritedGroup = {
   id: string;
   name: string;
   project_permission_count: number;
-  members: { id: string; display_name: string }[];
+  /** 项目成员在前；is_member=false 是项目外的人 */
+  members: { id: string; display_name: string; is_member: boolean }[];
 };
 
 export type TProjectPermissionGroupList = {
   groups: TProjectPermissionGroup[];
   inherited_groups: TProjectInheritedGroup[];
+};
+
+/**
+ * 某人为什么能看到项目（后端 utils/project_visibility.py）：工作区所有者 / 实例管理员（直通）、项目负责人、项目成员、
+ * 数据权限白名单含本项目（经团队绑定时带团队名）。
+ */
+export type TProjectVisibleSource =
+  | { type: "owner" | "instance_admin" | "lead" | "member" }
+  | { type: "data"; role_id: string; role_name: string; team: string | null };
+
+export type TProjectVisiblePerson = {
+  id: string;
+  display_name: string;
+  is_member: boolean;
+  /** 直通（所有者、实例管理员、负责人）：本来就有全部项目权限 */
+  passthrough: boolean;
+  sources: TProjectVisibleSource[];
+  /** 在本项目的项目权限数 */
+  permission_count: number;
+  /** 给出这些权限的组：工作区权限组 / 本项目绑定的项目权限组 */
+  permission_groups: { id: string; name: string; kind: "workspace" | "project" }[];
+};
+
+/** 项目设置 › 权限 › 可见人员 */
+export type TProjectVisibleMembers = {
+  workspace_member_count: number;
+  /** 项目权限总数（去掉停用的），等于它就是「全部」 */
+  total_permission_count: number;
+  /** 白名单覆盖到本项目、且有人生效的数据权限 */
+  data_groups: { id: string; name: string; mode: "all" | "selected" | "filter" }[];
+  people: TProjectVisiblePerson[];
 };
 
 export type TProjectPermissionGroupDetail = TPermissionGroupContent & {

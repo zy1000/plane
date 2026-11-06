@@ -17,6 +17,7 @@ from plane.app.serializers import ProjectRolePermissionBindingSerializer, Projec
 from plane.app.views.base import BaseAPIView, BaseViewSet
 from plane.db.models import Project, ProjectRole, WorkspaceRole
 from plane.utils.data_scope import template_references_project
+from plane.utils.project_visibility import project_visible_members_payload
 from plane.utils.permission_groups import (
     PermissionGroupError,
     effective_payload,
@@ -205,3 +206,14 @@ class ProjectRoleMembersAPIView(BaseAPIView):
         row, _ = _resolve(project, pk) if project else (None, None)
         member_ids = group_member_ids(row) if row is not None else []
         return Response({"member_ids": [str(value) for value in member_ids]}, status=status.HTTP_200_OK)
+
+
+class ProjectVisibleMembersAPIView(BaseAPIView):
+    """项目设置 › 权限 › 可见人员：谁能看到本项目（项目成员、负责人、直通、数据权限白名单），以及各自在本项目的权限数。"""
+
+    @allow_project_member
+    def get(self, request, slug, project_id):
+        project = _project(slug, project_id)
+        if project is None:
+            return Response({"error": "Project not found."}, status=status.HTTP_404_NOT_FOUND)
+        return Response(project_visible_members_payload(project), status=status.HTTP_200_OK)

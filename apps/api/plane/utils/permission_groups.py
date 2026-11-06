@@ -19,22 +19,20 @@ from plane.db.models import (
     IssueType,
     Project,
     ProjectGroupRole,
-    ProjectMember,
     ProjectMemberRole,
     ProjectRole,
-    WorkspaceGroupMember,
     WorkspaceMember,
     WorkspaceMemberRole,
     WorkspaceRole,
     WorkspaceRoleProjectExclusion,
 )
-from plane.license.models import Instance, InstanceAdmin
 from plane.utils.data_scope import (
     excluded_project_ids,
     referencing_templates,
     template_referenced_project_ids,
     template_references_project,
 )
+from plane.utils.project_visibility import project_audience
 
 class PermissionGroupError(Exception):
     def __init__(self, message, code=None):
@@ -367,58 +365,33 @@ def project_group_rows(project):
 
 
 def inherited_workspace_groups(project):
-    """项目「权限组」页的说明：带项目权限的工作区权限组，以及本项目里有谁在组里（直绑或经团队）——
-    这些人在本项目里直接拥有组的项目权限。工作区所有者、项目负责人、实例管理员本来就有全部权限，不算在内；
-    本项目没人在里面的组不列。"""
-    instance = Instance.objects.first()
-    passthrough_ids = {project.workspace.owner_id, project.project_lead_id or project.created_by_id}
-    if instance is not None:
-        passthrough_ids |= set(InstanceAdmin.objects.filter(instance=instance).values_list("user_id", flat=True))
-    project_user_ids = set(
-        ProjectMember.objects.filter(project=project, is_active=True, deleted_at__isnull=True).values_list(
-            "member_id", flat=True
-        )
-    ) - passthrough_ids
-    members = {
-        member.id: member.member
-        for member in WorkspaceMember.objects.filter(
-            workspace_id=project.workspace_id,
-            member_id__in=project_user_ids,
-            is_active=True,
-            deleted_at__isnull=True,
-        ).select_related("member")
-    }
-    if not members:
-        return []
-
+    """项目「权限组」页的「工作区权限组」段：带项目权限的工作区权限组，以及能看到本项目的人里谁在组里（直绑或经团队）。
+    工作区权限组的项目权限对能进入本项目的组内人员都生效，不管是不是项目成员（``is_member`` 区分）。
+    直通的人（工作区所有者、实例管理员、项目负责人）本来就有全部权限，不算在内；没人生效的组不列。"""
+    audience = project_audience(project, with_permissions=False)
+    people = [entry for entry in audience["people"].values() if not entry["passthrough"]]
     result = []
-    roles = WorkspaceRole.objects.filter(
-        workspace_id=project.workspace_id, kind=WorkspaceRole.KIND_WORKSPACE, deleted_at__isnull=True
-    ).order_by("created_at")
-    for role in roles:
+    for role in audience["workspace_roles"]:
         keys, _ = role_payload(role.permissions, PROJECT_KEYS)
         if not keys:
             continue
-        direct = WorkspaceMemberRole.objects.filter(
-            role=role, member_id__in=members, deleted_at__isnull=True
-        ).values_list("member_id", flat=True)
-        via_team = WorkspaceGroupMember.objects.filter(
-            member_id__in=members,
-            deleted_at__isnull=True,
-            group__deleted_at__isnull=True,
-            group__group_roles__role=role,
-            group__group_roles__deleted_at__isnull=True,
-        ).values_list("member_id", flat=True)
-        holder_ids = set(direct) | set(via_team)
-        if not holder_ids:
+        holders = [entry for entry in people if role.id in entry["bindings"]]
+        if not holders:
             continue
-        holders = sorted((members[member_id] for member_id in holder_ids), key=lambda user: user.display_name or "")
+        holders.sort(key=lambda entry: (not entry["is_member"], entry["user"].display_name or ""))
         result.append(
             {
                 "id": str(role.id),
                 "name": role.name,
                 "project_permission_count": len(keys),
-                "members": [{"id": str(user.id), "display_name": user.display_name} for user in holders],
+                "members": [
+                    {
+                        "id": str(entry["user"].id),
+                        "display_name": entry["user"].display_name,
+                        "is_member": entry["is_member"],
+                    }
+                    for entry in holders
+                ],
             }
         )
     return result
