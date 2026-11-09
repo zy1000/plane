@@ -23,6 +23,7 @@ import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useIssues } from "@/hooks/store/use-issues";
 import { useAppRouter } from "@/hooks/use-app-router";
 import { useIssueEditSession } from "@/hooks/use-issue-edit-session";
+import { notifyIssueLayoutError } from "@/utils/issue-type-layout";
 // store
 import { StoreContext } from "@/lib/store-context";
 import { useIssuePermission } from "../issue-permission";
@@ -126,6 +127,7 @@ export const IssueDetailRoot = observer(function IssueDetailRoot(props: TIssueDe
           await updateIssue(workspaceSlug, projectId, issueId, data);
         } catch (error) {
           console.log("Error in updating issue:", error);
+          notifyIssueLayoutError(issueId, error);
           const errorData = error as TIssueWorkflowUpdateError;
           const errorMessage = extractIssueUpdateErrorMessage(errorData);
           const approvalInitiated = isWorkflowApprovalInitiated(errorData);
@@ -336,7 +338,7 @@ export const IssueDetailRoot = observer(function IssueDetailRoot(props: TIssueDe
       ) : (
         <div className="relative flex h-full w-full flex-col overflow-hidden">
           <div className="vertical-scrollbar flex h-full w-full overflow-auto">
-            <div className="relative h-full w-full space-y-6 overflow-auto p-4 py-5">
+            <div className="relative h-full w-full min-w-0 space-y-6 overflow-auto px-5 py-6 lg:px-8">
               {/* 编辑 / 保存按钮放在路由 header「订阅」旁边 */}
               <IssueEditModeActionsPortal session={session} canEdit={canEdit} />
               <IssueMainContent
@@ -352,11 +354,12 @@ export const IssueDetailRoot = observer(function IssueDetailRoot(props: TIssueDe
                 isSubmitting={isSubmitting}
                 setIsSubmitting={setIsSubmitting}
                 onTitleChange={session.onTitleChange}
+                onEdit={canEdit && !session.isSaving ? session.startEditing : undefined}
               />
             </div>
             {!issueDetailSidebarCollapsed && (
               <div
-                className={`vertical-scrollbar scrollbar-sm h-full !w-[400px] flex-shrink-0 overflow-hidden border-l border-subtle p-4 py-5 ${
+                className={`vertical-scrollbar hidden scrollbar-sm h-full w-80 flex-shrink-0 overflow-y-auto border-l border-subtle p-4 py-5 md:block ${
                   is_archived ? "pointer-events-none" : ""
                 }`}
               >
@@ -367,6 +370,7 @@ export const IssueDetailRoot = observer(function IssueDetailRoot(props: TIssueDe
                   issueOperations={session.operations}
                   disabled={fieldsDisabled}
                   dimmed={!canEdit}
+                  basicGroup={false}
                 />
               </div>
             )}

@@ -16,6 +16,7 @@ import { mergeIds } from "@/components/issues/issue-detail/release-operations";
 import useReloadConfirmations from "@/hooks/use-reload-confirmation";
 // store
 import { StoreContext } from "@/lib/store-context";
+import { ISSUE_LAYOUT_VALIDATE_EVENT } from "@/utils/issue-type-layout";
 
 /** 只会由标题 / 描述的自动保存回调带出来的键：会话结束后迟到的这类调用一律丢弃，否则取消掉的内容会被写回 */
 const AUTOSAVE_ONLY_KEYS = new Set(["name", "description_html", "skip_activity"]);
@@ -269,6 +270,10 @@ export const useIssueEditSession = (args: TUseIssueEditSessionArgs): TIssueEditS
 
     // 2. 只提交真的变了的字段
     const dirtyKeys = getDirtyKeys(state);
+    if (dirtyKeys.includes("extra_field_values")) {
+      const validation = new CustomEvent(ISSUE_LAYOUT_VALIDATE_EVENT, { cancelable: true, detail: { issueId: iid } });
+      if (!window.dispatchEvent(validation)) return false;
+    }
     if (dirtyKeys.length === 0) {
       endSession(false);
       return true;

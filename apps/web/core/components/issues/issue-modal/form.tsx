@@ -54,6 +54,7 @@ import { DuplicateModalRoot } from "@/plane-web/components/de-dupe/duplicate-mod
 import { IssueTypeSelect, WorkItemTemplateSelect } from "@/plane-web/components/issues/issue-modal";
 import { useDebouncedDuplicateIssues } from "@/plane-web/hooks/use-debounced-duplicate-issues";
 import { ChevronRight } from "lucide-react";
+import { getIssueLayoutErrors } from "@/utils/issue-type-layout";
 
 export interface IssueFormProps {
   data?: Partial<TIssue>;
@@ -164,6 +165,7 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
     control,
     getValues,
     setValue,
+    setError,
   } = methods;
 
   const projectId = watch("project_id");
@@ -309,6 +311,10 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
         }
       })
       .catch((error) => {
+        const errors = getIssueLayoutErrors(error);
+        if (Object.keys(errors).length) {
+          setError("extra_field_values", { type: "server", message: "请检查自定义字段", types: errors });
+        }
         console.error(error);
       });
   };
@@ -512,8 +518,10 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
                   workspaceSlug={workspaceSlug?.toString()}
                   projectId={projectId}
                   issueTypeId={watch("type_id")}
+                  context={data?.id ? "edit" : "create"}
+                  disabled={isDisabled}
                   handleFormChange={handleFormChange}
-                  embeddedFields={data?.type_extra_fields ?? null}
+                  embeddedFields={data?.type_id === watch("type_id") ? data?.type_extra_fields ?? null : null}
                 />
               </div>
             </div>

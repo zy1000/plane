@@ -8,6 +8,7 @@ import { AlertModalCore } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { TypeIcon } from "@/components/common/type-icon-picker";
 import { getApiErrorMessage, MoreMenu, WorkItemTypeModal } from "@/components/project-issue-types/root";
+import { IssueTypeLayoutEditor } from "@/components/project-issue-types/layout/editor";
 import { ProjectStateRoot } from "@/components/project-states";
 import { ProjectWorkflowRoot } from "@/components/project-workflows/root";
 import { useProjectIssueTypeFields } from "@/hooks/store/use-project-issue-type-fields";
@@ -22,6 +23,7 @@ import type { TIssueTypeLibrarySegment } from "./routes";
 
 export const ISSUE_TYPE_LIBRARY_SEGMENTS: { key: TIssueTypeLibrarySegment; label: string }[] = [
   { key: "props", label: "属性" },
+  { key: "layout", label: "布局" },
   { key: "states", label: "状态" },
   { key: "workflows", label: "工作流" },
 ];
@@ -87,6 +89,7 @@ export const IssueTypeLibraryDetail = observer(function IssueTypeLibraryDetail({
   const workflowCount = workflowsStore.getWorkflowsByIssueTypeId(issueType.id).length;
   const counts: Record<TIssueTypeLibrarySegment, number> = {
     props: typeFields.length,
+    layout: typeFields.length,
     states: stateCount,
     workflows: workflowCount,
   };
@@ -225,6 +228,18 @@ export const IssueTypeLibraryDetail = observer(function IssueTypeLibraryDetail({
       </nav>
 
       <div className="mt-[18px]">
+        {segment === "layout" &&
+          (fieldsStore.fields === undefined ? (
+            <p className="py-6 text-13 text-secondary">正在加载字段布局…</p>
+          ) : (
+            <IssueTypeLayoutEditor
+              key={issueType.id}
+              issueType={issueType}
+              fields={typeFields}
+              canEdit={canEdit}
+              onSave={issueTypesStore.updateIssueType}
+            />
+          ))}
         {segment === "props" && (
           <DevModeTypeProperties issueTypeId={issueType.id} fieldsStore={fieldsStore} canEdit={canEdit} />
         )}

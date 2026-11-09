@@ -398,6 +398,11 @@ def copy_scheme(source, target, actor_id=None, type_ids=None):
         new.linkage = remap_linkage(old.linkage, field_id_map)
     if field_pairs:
         TypeExtraField.all_objects.bulk_update([new for _, new in field_pairs], ["linkage"])
+    from plane.utils.issue_type_layout import remap_field_layout
+    for old, new in type_pairs:
+        new.field_layout = remap_field_layout(old.field_layout, field_id_map)
+    if type_pairs:
+        IssueType.all_objects.bulk_update([new for _, new in type_pairs], ["field_layout"])
     _clone_rows(State, State.all_state_objects.filter(by_type | Q(issue_type__isnull=True), scheme=source), target,
                 id_map, fk_fields=("issue_type",), actor_id=actor_id)
     workflows = Workflow.all_objects.filter(by_type, scheme=source)

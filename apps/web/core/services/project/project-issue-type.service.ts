@@ -2,6 +2,7 @@ import type { TFieldLinkage } from "@plane/types";
 import { API_BASE_URL } from "@plane/constants";
 import { APIService } from "@/services/api.service";
 import { issueConfigBasePath } from "@/services/project/issue-scheme-scope";
+import type { TStoredIssueTypeFieldLayout } from "./issue-type-layout.types";
 
 export type TIssueTypeIconProps = {
   name: string;
@@ -31,6 +32,7 @@ export type TIssueType = {
   is_default?: boolean;
   is_active?: boolean;
   level?: number;
+  field_layout?: TStoredIssueTypeFieldLayout;
   external_source?: string | null;
   external_id?: string | null;
   workspace?: string;
@@ -141,8 +143,16 @@ export class ProjectIssueTypeService extends APIService {
    */
   private upsertCache(projectId: string, issueType: TIssueType | undefined): void {
     const cached = projectIssueTypesCache.get(projectId);
-    if (!cached || !issueType?.id) return;
-    projectIssueTypesCache.set(projectId, { ...cached, [issueType.id]: issueType });
+    if (!issueType?.id) return;
+    if (cached) {
+      projectIssueTypesCache.set(projectId, { ...cached, [issueType.id]: { ...cached[issueType.id], ...issueType } });
+    }
+    // 多个跟随项目可引用同一个库类型，布局更新需要同步已有的类型缓存。
+    for (const [scope, types] of projectIssueTypesCache) {
+      if (scope !== projectId && types[issueType.id]) {
+        projectIssueTypesCache.set(scope, { ...types, [issueType.id]: { ...types[issueType.id], ...issueType } });
+      }
+    }
   }
 
   private removeFromCache(projectId: string, issueTypeId: string): void {
@@ -180,9 +190,7 @@ export class ProjectIssueTypeService extends APIService {
       .then((response) => {
         const issueType = response?.data;
         if (issueType?.id) {
-          const map = projectIssueTypesCache.get(projectId) || {};
-          map[issueType.id] = issueType;
-          projectIssueTypesCache.set(projectId, map);
+          this.upsertCache(projectId, issueType);
         }
         return issueType;
       })

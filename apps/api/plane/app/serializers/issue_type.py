@@ -213,6 +213,23 @@ class IssueTypeSerializer(BaseSerializer):
     # 项目方案副本指回的类型库类型；权限组按类型限定时，库类型 id 与副本 id 都算
     library_type_id = serializers.UUIDField(read_only=True, allow_null=True)
 
+    def validate_field_layout(self, value):
+        from django.core.exceptions import ValidationError as DjangoValidationError
+        from plane.utils.issue_type_layout import validate_field_layout
+        fields = self.instance.extra_fields.all() if self.instance else []
+        try:
+            validate_field_layout(value, fields)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.messages) from exc
+        return value
+
+    def save(self, **kwargs):
+        from django.core.exceptions import ValidationError as DjangoValidationError
+        try:
+            return super().save(**kwargs)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError({"field_layout": exc.messages}) from exc
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         workspace_slug = self.context.get("workspace_slug")
@@ -245,6 +262,7 @@ class IssueTypeSerializer(BaseSerializer):
             "external_id",
             "workspace",
             "extra_fields",
+            "field_layout",
             "category_id",
             "category_name",
             "library_type_id",

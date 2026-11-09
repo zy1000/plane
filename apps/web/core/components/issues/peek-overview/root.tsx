@@ -18,6 +18,7 @@ import { EIssueServiceType, EIssuesStoreType } from "@plane/types";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useIssues } from "@/hooks/store/use-issues";
 import { useIssueStoreType } from "@/hooks/use-issue-layout-store";
+import { notifyIssueLayoutError } from "@/utils/issue-type-layout";
 import { StoreContext } from "@/lib/store-context";
 import { useWorkItemProperties } from "@/plane-web/hooks/use-issue-properties";
 // local imports
@@ -92,6 +93,7 @@ export const IssuePeekOverview = observer(function IssuePeekOverview(props: IWor
               return;
             })
             .catch((error) => {
+              notifyIssueLayoutError(issueId, error);
               const errorData = error as TIssueWorkflowUpdateError;
               const errorMessage = extractIssueUpdateErrorMessage(errorData);
               const approvalInitiated = isWorkflowApprovalInitiated(errorData);

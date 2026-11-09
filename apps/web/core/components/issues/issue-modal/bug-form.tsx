@@ -40,6 +40,7 @@ import { useDebouncedDuplicateIssues } from "@/plane-web/hooks/use-debounced-dup
 import { ChevronRight } from "lucide-react";
 import { IssueTypeSelect } from "@/plane-web/components/issues/issue-modal";
 import { IssueService } from "@/services/issue/issue.service";
+import { getIssueLayoutErrors } from "@/utils/issue-type-layout";
 
 export interface BugIssueFormProps {
   data?: Partial<TIssue>;
@@ -148,6 +149,7 @@ export const BugIssueFormRoot: FC<BugIssueFormProps> = observer((props) => {
     control,
     getValues,
     setValue,
+    setError,
   } = methods;
 
   const projectId = watch("project_id");
@@ -302,6 +304,10 @@ export const BugIssueFormRoot: FC<BugIssueFormProps> = observer((props) => {
       );
       editorRef?.current?.clearEditor();
     } catch (error: any) {
+      const errors = getIssueLayoutErrors(error);
+      if (Object.keys(errors).length) {
+        setError("extra_field_values", { type: "server", message: "请检查自定义字段", types: errors });
+      }
       const msg = error?.error || error?.detail || error?.message || "创建失败";
       setToast({ type: TOAST_TYPE.ERROR, title: t("error"), message: msg });
     } finally {
@@ -419,7 +425,9 @@ export const BugIssueFormRoot: FC<BugIssueFormProps> = observer((props) => {
                   projectId={projectId}
                   issueTypeId={watch("type_id")}
                   handleFormChange={handleFormChange}
-                  embeddedFields={data?.type_extra_fields ?? null}
+                  context="create"
+                  disabled={isSubmitting || creating}
+                  embeddedFields={data?.type_id === watch("type_id") ? data?.type_extra_fields ?? null : null}
                 />
               </div>
             </div>

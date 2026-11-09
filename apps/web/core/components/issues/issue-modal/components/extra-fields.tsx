@@ -22,6 +22,8 @@ import {
 } from "@/components/issues/extra-fields";
 // hooks
 import { useIssueTypeExtraFields } from "@/hooks/store/use-issue-type-extra-fields";
+import { useIssueTypeLayout } from "@/hooks/store/use-issue-type-layout";
+import { IssueFieldLayout } from "../../extra-fields/field-layout";
 // services
 import type { TTypeExtraField } from "@/services/project/project-issue-type.service";
 
@@ -33,6 +35,7 @@ type TIssueExtraFieldsProps = {
   handleFormChange: () => void;
   disabled?: boolean;
   embeddedFields?: TIssueTypeExtraField[] | null;
+  context?: "create" | "edit";
 };
 
 type TFieldRowProps = {
@@ -50,8 +53,8 @@ const ExtraFieldRow = (props: TFieldRowProps) => {
   const FieldIcon = FIELD_TYPE_ICON[field.field_type] ?? FIELD_TYPE_ICON.text;
 
   return (
-    <div className="flex items-center gap-0 py-1.5">
-      <label htmlFor={inputId} className="flex w-1/4 shrink-0 items-center gap-1.5 text-sm text-secondary">
+    <div className="space-y-1.5 py-1">
+      <label htmlFor={inputId} className="flex items-center gap-1.5 text-sm text-secondary">
         <FieldIcon className="h-3.5 w-3.5 shrink-0 text-tertiary" />
         <span className="truncate">{field.name}</span>
         {field.is_required && <span className="text-danger-primary">*</span>}
@@ -73,9 +76,23 @@ const ExtraFieldRow = (props: TFieldRowProps) => {
 };
 
 export const IssueExtraFields = observer(function IssueExtraFields(props: TIssueExtraFieldsProps) {
-  const { control, workspaceSlug, projectId, issueTypeId, handleFormChange, disabled, embeddedFields } = props;
+  const {
+    control,
+    workspaceSlug,
+    projectId,
+    issueTypeId,
+    handleFormChange,
+    disabled,
+    embeddedFields,
+    context = "create",
+  } = props;
   const { fields } = useIssueTypeExtraFields(workspaceSlug, projectId, issueTypeId, embeddedFields);
-  const { setValue, watch } = useFormContext<TIssue>();
+  const { layout } = useIssueTypeLayout(workspaceSlug, projectId, issueTypeId);
+  const {
+    setValue,
+    watch,
+    formState: { submitCount },
+  } = useFormContext<TIssue>();
 
   // 当字段列表加载完成后，若 extra_field_values 为空（新建或切换类型后），
   // 将各字段的 default_value 填入表单。
@@ -93,7 +110,10 @@ export const IssueExtraFields = observer(function IssueExtraFields(props: TIssue
       }));
 
     if (defaults.length > 0) {
-      setValue("extra_field_values", evaluateFieldLinkage(fields, defaults).values, { shouldValidate: false, shouldDirty: false });
+      setValue("extra_field_values", evaluateFieldLinkage(fields, defaults).values, {
+        shouldValidate: false,
+        shouldDirty: false,
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fields]);
@@ -120,20 +140,37 @@ export const IssueExtraFields = observer(function IssueExtraFields(props: TIssue
         const currentValues = effective.values;
         const requiredErrorMessage =
           typeof fieldState.error?.message === "string" ? fieldState.error.message : undefined;
+        const errors: Record<string, string> = {};
+        if (requiredErrorMessage) {
+          for (const field of effective.fields) {
+            if (field.is_required && isValueEmpty(findValueForField(currentValues, field.id)))
+              errors[field.id] = `${field.name} 为必填字段`;
+          }
+        }
+        if (fieldState.error?.type === "server") {
+          for (const [fieldId, message] of Object.entries(fieldState.error.types ?? {})) {
+            if (typeof message === "string") errors[fieldId] = message;
+          }
+        }
 
         return (
-          <div className="flex flex-col">
-            {effective.fields.map((field) => {
+          <IssueFieldLayout
+            key={(projectId ?? "") + ":" + (issueTypeId ?? "")}
+            layout={layout}
+            fields={effective.fields}
+            values={currentValues}
+            context={context}
+            validationAttempt={submitCount}
+            errors={errors}
+            renderField={(field) => {
               const value = findValueForField(currentValues, field.id);
-              const isRequiredAndEmpty =
-                !!requiredErrorMessage && field.is_required && isValueEmpty(value);
               return (
                 <ExtraFieldRow
                   key={field.id}
                   field={field}
                   projectId={projectId}
                   value={value}
-                  error={isRequiredAndEmpty ? `${field.name} 为必填字段` : undefined}
+                  error={errors[field.id]}
                   disabled={disabled}
                   onChange={(next) => {
                     const updated = upsertValue(currentValues, field.id, field.field_type, next);
@@ -142,8 +179,8 @@ export const IssueExtraFields = observer(function IssueExtraFields(props: TIssue
                   }}
                 />
               );
-            })}
-          </div>
+            }}
+          />
         );
       }}
     />

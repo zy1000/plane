@@ -3,7 +3,7 @@
  * 流转配置是它下面的子路径，带上 `?type=` 返回时回到原来的类型。
  */
 
-export type TIssueTypeLibrarySegment = "props" | "states" | "workflows";
+export type TIssueTypeLibrarySegment = "props" | "layout" | "states" | "workflows";
 
 export const issueTypeLibraryBasePath = (workspaceSlug: string) => `/${workspaceSlug}/templates/issue-types`;
 

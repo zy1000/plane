@@ -202,62 +202,62 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
               <div className="vertical-scrollbar relative scrollbar-md h-full w-full overflow-hidden overflow-y-auto">
                 {["side-peek", "modal"].includes(peekMode) ? (
                   // 抽屉够宽（≥ 48rem）时左内容、右属性两栏；窄时退回单栏，属性排在活动前
-                  <div className="@container/peek px-8 py-5">
-                  <div className="relative grid grid-cols-1 gap-y-6 @3xl/peek:grid-cols-[minmax(0,1fr)_280px] @3xl/peek:grid-rows-[auto_auto_1fr] @3xl/peek:gap-x-8">
-                    <div className="min-w-0 @3xl/peek:col-start-1">
-                    <PeekOverviewIssueDetails
-                      editorRef={editorRef}
-                      workspaceSlug={workspaceSlug}
-                      projectId={projectId}
-                      issueId={issueId}
-                      issueOperations={session.operations}
-                      disabled={disabled}
-                      isArchived={is_archived}
-                      isSubmitting={isSubmitting}
-                      setIsSubmitting={(value) => setIsSubmitting(value)}
-                      propertyBarClassName="@3xl/peek:hidden"
-                      isEditing={isEditing}
-                      sessionKey={session.sessionKey}
-                      onTitleChange={session.onTitleChange}
-                    />
-                    </div>
+                  <div className="@container/peek px-5 py-6 sm:px-8">
+                    <div className="relative grid grid-cols-1 gap-y-6 @3xl/peek:grid-cols-[minmax(0,1fr)_280px] @3xl/peek:grid-rows-[auto_auto_1fr] @3xl/peek:gap-x-8">
+                      <div className="min-w-0 @3xl/peek:col-start-1">
+                        <PeekOverviewIssueDetails
+                          editorRef={editorRef}
+                          workspaceSlug={workspaceSlug}
+                          projectId={projectId}
+                          issueId={issueId}
+                          issueOperations={session.operations}
+                          disabled={disabled}
+                          isArchived={is_archived}
+                          isSubmitting={isSubmitting}
+                          setIsSubmitting={(value) => setIsSubmitting(value)}
+                          isEditing={isEditing}
+                          sessionKey={session.sessionKey}
+                          onTitleChange={session.onTitleChange}
+                          onEdit={canEdit && !session.isSaving ? session.startEditing : undefined}
+                        />
+                      </div>
 
-                    <div className="min-w-0 @3xl/peek:col-start-1">
-                      <IssueDetailWidgets
-                        workspaceSlug={workspaceSlug}
-                        projectId={projectId}
-                        issueId={issueId}
-                        disabled={disabled || is_archived}
-                        issueServiceType={EIssueServiceType.ISSUES}
-                      />
-                    </div>
+                      <div className="min-w-0 @3xl/peek:col-start-1">
+                        <IssueDetailWidgets
+                          workspaceSlug={workspaceSlug}
+                          projectId={projectId}
+                          issueId={issueId}
+                          disabled={disabled || is_archived}
+                          issueServiceType={EIssueServiceType.ISSUES}
+                        />
+                      </div>
 
-                    <div
-                      className={cn(
-                        "min-w-0 @3xl/peek:col-start-2 @3xl/peek:row-span-3 @3xl/peek:row-start-1 @3xl/peek:border-l @3xl/peek:border-subtle @3xl/peek:pl-6",
-                        is_archived && "pointer-events-none"
-                      )}
-                    >
-                      <PeekOverviewProperties
-                        workspaceSlug={workspaceSlug}
-                        projectId={projectId}
-                        issueId={issueId}
-                        issueOperations={session.operations}
-                        disabled={!canEdit || !isEditing}
-                        dimmed={!canEdit}
-                        basicGroup="hidden @3xl/peek:block"
-                      />
-                    </div>
+                      <div
+                        className={cn(
+                          "min-w-0 @3xl/peek:col-start-2 @3xl/peek:row-span-3 @3xl/peek:row-start-1 @3xl/peek:border-l @3xl/peek:border-subtle @3xl/peek:pl-6",
+                          is_archived && "pointer-events-none"
+                        )}
+                      >
+                        <PeekOverviewProperties
+                          workspaceSlug={workspaceSlug}
+                          projectId={projectId}
+                          issueId={issueId}
+                          issueOperations={session.operations}
+                          disabled={!canEdit || !isEditing}
+                          dimmed={!canEdit}
+                          basicGroup={false}
+                        />
+                      </div>
 
-                    <div className="min-w-0 @3xl/peek:col-start-1">
-                      <IssueActivity
-                        workspaceSlug={workspaceSlug}
-                        projectId={projectId}
-                        issueId={issueId}
-                        disabled={is_archived}
-                      />
+                      <div className="min-w-0 @3xl/peek:col-start-1">
+                        <IssueActivity
+                          workspaceSlug={workspaceSlug}
+                          projectId={projectId}
+                          issueId={issueId}
+                          disabled={is_archived}
+                        />
+                      </div>
                     </div>
-                  </div>
                   </div>
                 ) : (
                   <div className="vertical-scrollbar flex h-full w-full overflow-auto">
@@ -273,10 +273,10 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
                           isArchived={is_archived}
                           isSubmitting={isSubmitting}
                           setIsSubmitting={(value) => setIsSubmitting(value)}
-                          propertyBarClassName="hidden"
                           isEditing={isEditing}
                           sessionKey={session.sessionKey}
                           onTitleChange={session.onTitleChange}
+                          onEdit={canEdit && !session.isSaving ? session.startEditing : undefined}
                         />
 
                         <div className="py-2">
@@ -309,6 +309,7 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
                         issueOperations={session.operations}
                         disabled={!canEdit || !isEditing}
                         dimmed={!canEdit}
+                        basicGroup={false}
                       />
                     </div>
                   </div>

@@ -37,11 +37,9 @@ type TPeekCorePropertyBar = {
 };
 
 /**
- * 单行展示状态、优先级、负责人、起止日期，用于 Peek / 主内容窄屏，置于描述区域上方（参考设计稿的横向分隔 + 轻量控件的样式）
+ * 标题下的核心属性区：窄屏两列、宽屏三列或六列，统一用于详情页和 Peek。
  */
-export const PeekOverviewCorePropertyBar = observer(function PeekOverviewCorePropertyBar(
-  props: TPeekCorePropertyBar
-) {
+export const PeekOverviewCorePropertyBar = observer(function PeekOverviewCorePropertyBar(props: TPeekCorePropertyBar) {
   const { workspaceSlug, projectId, issueId, issueOperations, disabled, dimmed = disabled } = props;
   const { t } = useTranslation();
   const {
@@ -55,8 +53,8 @@ export const PeekOverviewCorePropertyBar = observer(function PeekOverviewCorePro
   if (!issue) return <></>;
   const stateDetails = getStateById(issue.state_id);
   const issueTypeLogoIcon = issue?.type_id
-    ? issueTypes?.find((issueType) => issueType.id === issue.type_id)?.logo_props?.icon ??
-      (issue?.project_id ? projectIssueTypesCache.get(issue.project_id)?.[issue.type_id]?.logo_props?.icon : undefined)
+    ? (issueTypes?.find((issueType) => issueType.id === issue.type_id)?.logo_props?.icon ??
+      (issue?.project_id ? projectIssueTypesCache.get(issue.project_id)?.[issue.type_id]?.logo_props?.icon : undefined))
     : undefined;
 
   const handleStateChange = async (nextStateId: string) => {
@@ -65,147 +63,148 @@ export const PeekOverviewCorePropertyBar = observer(function PeekOverviewCorePro
     });
   };
 
-  // 与 IssueTitleInput 的 TextArea（px-3）+ 容器 -ml-3 的文本起点一致；首列补 pl-3，并去掉状态按钮左侧默认内边距，避免相对标题再右偏
-  // 宽（≥ 42rem）一行 6 格；窄（抽屉两栏时的左栏）两行各 3 格，第 4 格是第二行行首，不画分隔线
-  const fieldShell = (index: number) =>
-    cn(
-      "flex min-h-7 min-w-0 items-stretch",
-      index === 0 && "pl-3",
-      index === 3 && "pl-3 @2xl:border-l @2xl:border-subtle @2xl:pl-2.5",
-      index > 0 && index !== 3 && "border-l border-subtle pl-2.5"
-    );
+  const fieldShell = "flex min-w-0 flex-col gap-2";
+  const fieldLabel = "text-12 text-tertiary";
 
   return (
-    <div className="@container">
+    <div className="@container border-b border-subtle pb-5">
       <div
         className={cn(
-          "mb-2 grid w-full min-w-0 grid-cols-3 items-stretch gap-y-1.5 text-body-xs-medium @2xl:grid-cols-6",
+          "grid w-full min-w-0 grid-cols-2 items-start gap-x-5 gap-y-4 text-body-xs-medium @lg:grid-cols-3 @4xl:grid-cols-6",
           dimmed && "opacity-60"
         )}
       >
-      <div className={fieldShell(0)}>
-        {issue.type_name ? (
-          <div className="flex h-7 w-full min-w-0 items-center gap-1.5 truncate rounded-sm pr-1.5 text-body-xs-medium leading-5 text-secondary">
-            <WorkItemTypeIcon
-              typeName={issue.type_name}
-              fallbackIcon={issueTypeLogoIcon}
-              className="size-3.5 flex-shrink-0"
-            />
-            <span className="min-w-0 truncate">{issue.type_name}</span>
-          </div>
-        ) : null}
-      </div>
-
-      <div className={fieldShell(1)}>
-        <StateDropdown
-          value={issue?.state_id}
-          onChange={handleStateChange}
-          projectId={projectId}
-          issueTypeId={issue?.type_id}
-          disabled={disabled}
-          buttonVariant="transparent-with-text"
-          className="group w-full min-w-0"
-          buttonContainerClassName="h-7 w-full min-w-0 text-left"
-          buttonClassName={cn(
-            "w-full min-w-0 truncate !pl-0 pr-1.5 text-body-xs-medium leading-5",
-            issue?.state_id ? "text-secondary" : "text-placeholder"
-          )}
-        />
-      </div>
-
-      <div className={fieldShell(2)}>
-        <PriorityDropdown
-          value={issue?.priority}
-          onChange={(val) => issueOperations.update(workspaceSlug, projectId, issueId, { priority: val })}
-          disabled={disabled}
-          buttonVariant="transparent-with-text"
-          className="h-7 w-full min-w-0 rounded-sm"
-          buttonContainerClassName="h-7 w-full min-w-0 text-left"
-          buttonClassName={cn(
-            "w-full min-w-0 truncate text-body-xs-medium leading-5 [&_svg]:size-3.5",
-            !issue?.priority || issue?.priority === "none" ? "text-placeholder" : "text-secondary"
-          )}
-        />
-      </div>
-
-      <div className={fieldShell(3)}>
-        <MemberDropdown
-          value={issue?.assignee_ids ?? undefined}
-          onChange={(val) => issueOperations.update(workspaceSlug, projectId, issueId, { assignee_ids: val })}
-          disabled={disabled}
-          projectId={projectId}
-          placeholder={disabled ? "未设置" : t("issue.add.assignee")}
-          multiple
-          buttonVariant={issue?.assignee_ids && issue.assignee_ids.length > 1 ? "transparent-without-text" : "transparent-with-text"}
-          className="group w-full min-w-0"
-          buttonContainerClassName="h-7 w-full min-w-0 text-left"
-          buttonClassName={cn(
-            "min-w-0 justify-start truncate text-body-xs-medium leading-5",
-            (issue?.assignee_ids?.length ?? 0) > 0 ? "text-secondary" : "text-placeholder"
-          )}
-        />
-      </div>
-
-      <div className={fieldShell(4)}>
-        <DateDropdown
-          value={issue.start_date ?? null}
-          onChange={(date) =>
-            issueOperations.update(workspaceSlug, projectId, issueId, {
-              start_date: date ? renderFormattedPayloadDate(date) : null,
-            })
-          }
-          maxDate={getDate(issue.target_date)}
-          placeholder={t("issue.add.start_date")}
-          buttonVariant="transparent-with-text"
-          disabled={disabled}
-          className="group w-full min-w-0"
-          buttonContainerClassName="h-7 w-full min-w-0 text-left"
-          buttonClassName={cn(
-            "w-full min-w-0 truncate text-body-xs-medium leading-5",
-            !issue.start_date ? "text-placeholder" : "text-secondary"
-          )}
-          clearIconClassName="text-tertiary opacity-0 group-hover:opacity-100"
-        />
-      </div>
-
-      <div className={fieldShell(5)}>
-        <div className="flex w-full min-w-0 items-center gap-1">
-          <div className="min-w-0 flex-1">
-            <DateDropdown
-              value={issue.target_date ?? null}
-              onChange={(date) =>
-                issueOperations.update(workspaceSlug, projectId, issueId, {
-                  target_date: date ? renderFormattedPayloadDate(date) : null,
-                })
-              }
-              minDate={getDate(issue.start_date)}
-              placeholder={t("issue.add.due_date")}
-              buttonVariant="transparent-with-text"
-              disabled={disabled}
-              className="group w-full min-w-0"
-              buttonContainerClassName="h-7 w-full min-w-0 text-left"
-              buttonClassName={cn(
-                "w-full min-w-0 truncate text-body-xs-medium leading-5",
-                shouldHighlightIssueDueDate(issue.target_date, stateDetails?.group)
-                  ? "text-red-500"
-                  : !issue.target_date
-                    ? "text-placeholder"
-                    : "text-secondary"
-              )}
-              clearIconClassName="text-tertiary opacity-0 group-hover:opacity-100"
-            />
-          </div>
-          {issue.target_date ? (
-            <span className="shrink-0">
-              <DateAlert date={issue.target_date} workItem={issue} projectId={projectId} />
-            </span>
+        <div className={fieldShell}>
+          <span className={fieldLabel}>工作项类型</span>
+          {issue.type_name ? (
+            <div className="flex h-7 w-full min-w-0 items-center gap-1.5 truncate rounded-sm pr-1.5 text-body-xs-medium leading-5 text-secondary">
+              <WorkItemTypeIcon
+                typeName={issue.type_name}
+                fallbackIcon={issueTypeLogoIcon}
+                className="size-3.5 flex-shrink-0"
+              />
+              <span className="min-w-0 truncate">{issue.type_name}</span>
+            </div>
           ) : null}
         </div>
+
+        <div className={fieldShell}>
+          <span className={fieldLabel}>{t("common.state")}</span>
+          <StateDropdown
+            value={issue?.state_id}
+            onChange={handleStateChange}
+            projectId={projectId}
+            issueTypeId={issue?.type_id}
+            disabled={disabled}
+            buttonVariant="transparent-with-text"
+            className="group w-full min-w-0"
+            buttonContainerClassName="h-7 w-full min-w-0 text-left"
+            buttonClassName={cn(
+              "w-full min-w-0 truncate pr-1.5 !pl-0 text-body-xs-medium leading-5",
+              issue?.state_id ? "text-secondary" : "text-placeholder"
+            )}
+          />
+        </div>
+
+        <div className={fieldShell}>
+          <span className={fieldLabel}>{t("common.priority")}</span>
+          <PriorityDropdown
+            value={issue?.priority}
+            onChange={(val) => issueOperations.update(workspaceSlug, projectId, issueId, { priority: val })}
+            disabled={disabled}
+            buttonVariant="transparent-with-text"
+            className="h-7 w-full min-w-0 rounded-sm"
+            buttonContainerClassName="h-7 w-full min-w-0 text-left"
+            buttonClassName={cn(
+              "w-full min-w-0 truncate !px-0 text-body-xs-medium leading-5 [&_svg]:size-3.5",
+              !issue?.priority || issue?.priority === "none" ? "text-placeholder" : "text-secondary"
+            )}
+          />
+        </div>
+
+        <div className={fieldShell}>
+          <span className={fieldLabel}>{t("common.assignees")}</span>
+          <MemberDropdown
+            value={issue?.assignee_ids ?? undefined}
+            onChange={(val) => issueOperations.update(workspaceSlug, projectId, issueId, { assignee_ids: val })}
+            disabled={disabled}
+            projectId={projectId}
+            placeholder={disabled ? "未设置" : t("issue.add.assignee")}
+            multiple
+            buttonVariant={
+              issue?.assignee_ids && issue.assignee_ids.length > 1
+                ? "transparent-without-text"
+                : "transparent-with-text"
+            }
+            className="group w-full min-w-0"
+            buttonContainerClassName="h-7 w-full min-w-0 text-left"
+            buttonClassName={cn(
+              "min-w-0 justify-start truncate !px-0 text-body-xs-medium leading-5",
+              (issue?.assignee_ids?.length ?? 0) > 0 ? "text-secondary" : "text-placeholder"
+            )}
+          />
+        </div>
+
+        <div className={fieldShell}>
+          <span className={fieldLabel}>{t("issue.add.start_date")}</span>
+          <DateDropdown
+            value={issue.start_date ?? null}
+            onChange={(date) =>
+              issueOperations.update(workspaceSlug, projectId, issueId, {
+                start_date: date ? renderFormattedPayloadDate(date) : null,
+              })
+            }
+            maxDate={getDate(issue.target_date)}
+            placeholder={disabled ? "未设置" : t("issue.add.start_date")}
+            buttonVariant="transparent-with-text"
+            disabled={disabled}
+            className="group w-full min-w-0"
+            buttonContainerClassName="h-7 w-full min-w-0 text-left"
+            buttonClassName={cn(
+              "w-full min-w-0 truncate !px-0 text-body-xs-medium leading-5",
+              !issue.start_date ? "text-placeholder" : "text-secondary"
+            )}
+            clearIconClassName="text-tertiary opacity-0 group-hover:opacity-100"
+          />
+        </div>
+
+        <div className={fieldShell}>
+          <span className={fieldLabel}>{t("issue.add.due_date")}</span>
+          <div className="flex w-full min-w-0 items-center gap-1">
+            <div className="min-w-0 flex-1">
+              <DateDropdown
+                value={issue.target_date ?? null}
+                onChange={(date) =>
+                  issueOperations.update(workspaceSlug, projectId, issueId, {
+                    target_date: date ? renderFormattedPayloadDate(date) : null,
+                  })
+                }
+                minDate={getDate(issue.start_date)}
+                placeholder={disabled ? "未设置" : t("issue.add.due_date")}
+                buttonVariant="transparent-with-text"
+                disabled={disabled}
+                className="group w-full min-w-0"
+                buttonContainerClassName="h-7 w-full min-w-0 text-left"
+                buttonClassName={cn(
+                  "w-full min-w-0 truncate !px-0 text-body-xs-medium leading-5",
+                  shouldHighlightIssueDueDate(issue.target_date, stateDetails?.group)
+                    ? "text-red-500"
+                    : !issue.target_date
+                      ? "text-placeholder"
+                      : "text-secondary"
+                )}
+                clearIconClassName="text-tertiary opacity-0 group-hover:opacity-100"
+              />
+            </div>
+            {issue.target_date ? (
+              <span className="shrink-0">
+                <DateAlert date={issue.target_date} workItem={issue} projectId={projectId} />
+              </span>
+            ) : null}
+          </div>
+        </div>
       </div>
-      </div>
-      <StateTransitionAssigneeModal
-        {...stateTransitionGuard.modalProps}
-      />
+      <StateTransitionAssigneeModal {...stateTransitionGuard.modalProps} />
     </div>
   );
 });

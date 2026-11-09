@@ -52,6 +52,8 @@ class IssueType(SchemeBaseModel):
     is_default = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
     level = models.FloatField(default=0)
+    # 页面、分组与字段位置属于类型，不同步到通用字段库。
+    field_layout = models.JSONField(default=dict, blank=True)
     external_source = models.CharField(max_length=255, null=True, blank=True)
     external_id = models.CharField(max_length=255, blank=True, null=True)
 
@@ -90,6 +92,24 @@ class IssueType(SchemeBaseModel):
 
     def __str__(self):
         return self.name
+
+    def clean(self):
+        super().clean()
+        from plane.utils.issue_type_layout import validate_field_layout
+        fields = [] if self._state.adding else self.extra_fields.all()
+        validate_field_layout(self.field_layout, fields)
+
+    @transaction.atomic
+    def save(self, *args, **kwargs):
+        update_fields = kwargs.get("update_fields")
+        if update_fields is None or "field_layout" in update_fields:
+            previous = None if self._state.adding else (
+                IssueType.all_objects.select_for_update().filter(pk=self.pk).values("field_layout").first()
+            )
+            # 字段增删后未重新排版时，普通类型编辑仍可保存；显式更新布局才校验全部引用。
+            if previous is None or previous["field_layout"] != self.field_layout:
+                self.clean()
+        return super().save(*args, **kwargs)
 
 
 #: 库字段统一定义、同步到绑定行的列（绑定行自己只管 sort_order）

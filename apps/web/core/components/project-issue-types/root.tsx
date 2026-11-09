@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { observer } from "mobx-react";
@@ -58,6 +58,7 @@ import type {
 import { buildFieldPayload, DEFAULT_FIELD_FORM, fieldToFormState, getFieldRowLabel, InlineFieldForm } from "./field-form";
 import type { TFieldFormState, TFieldPayloadBase } from "./field-form";
 import { LibraryFieldPickerModal } from "./library-field-picker-modal";
+import { IssueTypeLayoutEditor } from "./layout/editor";
 
 export { getFieldRowLabel, getFieldTypeOption } from "./field-form";
 export type { TFieldPayloadBase } from "./field-form";
@@ -626,6 +627,12 @@ function IssueTypesSettingsContentInner({ workspaceSlug, projectId }: TIssueType
   // translation
   const { t } = useTranslation();
   const [expandedId, setExpandedId] = useState<string | undefined>();
+  const [expandedSection, setExpandedSection] = useState<"props" | "layout">("props");
+  const layoutDirty = useRef(false);
+  const setLayoutDirty = useCallback((dirty: boolean) => {
+    layoutDirty.current = dirty;
+  }, []);
+  const confirmLayoutLeave = () => !layoutDirty.current || window.confirm("布局有未保存的修改，确定离开吗？");
   const [isTypeModalOpen, setIsTypeModalOpen] = useState(false);
   const [editingIssueType, setEditingIssueType] = useState<TIssueType | undefined>();
   const [isTypeSubmitting, setIsTypeSubmitting] = useState(false);
@@ -845,7 +852,9 @@ function IssueTypesSettingsContentInner({ workspaceSlug, projectId }: TIssueType
                         <button
                           type="button"
                           className="flex min-w-0 flex-1 items-center gap-3 text-left"
-                          onClick={() => setExpandedId(isExpanded ? undefined : issueType.id)}
+                          onClick={() => {
+                            if (confirmLayoutLeave()) setExpandedId(isExpanded ? undefined : issueType.id);
+                          }}
                         >
                           <ChevronDown
                             className={`size-4 shrink-0 text-tertiary transition-transform duration-200 ${isExpanded ? "" : "-rotate-90"}`}
@@ -906,7 +915,34 @@ function IssueTypesSettingsContentInner({ workspaceSlug, projectId }: TIssueType
                       >
                         <div className="min-h-0 overflow-hidden">
                           <div className="border-t border-subtle">
-                            <IssueTypeFieldList
+                            <div className="flex gap-5 px-3 pt-3 text-13">
+                              <button
+                                type="button"
+                                className={expandedSection === "props" ? "text-accent-primary" : "text-secondary"}
+                                onClick={() => { if (confirmLayoutLeave()) setExpandedSection("props"); }}
+                              >
+                                属性
+                              </button>
+                              <button
+                                type="button"
+                                className={expandedSection === "layout" ? "text-accent-primary" : "text-secondary"}
+                                onClick={() => setExpandedSection("layout")}
+                              >
+                                布局
+                              </button>
+                            </div>
+                            {expandedSection === "layout" && isExpanded && fields !== undefined ? (
+                              <div className="p-3">
+                                <IssueTypeLayoutEditor
+                                  key={issueType.id}
+                                  issueType={issueType}
+                                  fields={typeFields}
+                                  canEdit={canEdit}
+                                  onSave={updateIssueType}
+                                  onDirtyChange={setLayoutDirty}
+                                />
+                              </div>
+                            ) : expandedSection === "props" && <IssueTypeFieldList
                               issueTypeId={issueType.id}
                               fields={typeFields}
                               isLoading={fieldsLoading}
@@ -917,7 +953,7 @@ function IssueTypesSettingsContentInner({ workspaceSlug, projectId }: TIssueType
                               onCreate={createField}
                               onUpdate={updateField}
                               onRequestDelete={requestDeleteField}
-                            />
+                            />}
                           </div>
                         </div>
                       </div>

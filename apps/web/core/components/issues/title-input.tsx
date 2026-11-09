@@ -4,7 +4,6 @@
  * See the LICENSE file for details.
  */
 
-import type { FC } from "react";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { observer } from "mobx-react";
 import { useTranslation } from "@plane/i18n";
@@ -156,23 +155,33 @@ export const IssueTitleInput = observer(function IssueTitleInput(props: IssueTit
     [setIsSubmitting, onChange]
   );
 
-  // 只读时直接显示已保存的值，不受本地未提交输入影响；容器与内边距和编辑态输入框保持一致，换行位置才不会变
+  // 阅读态使用自然标题，输入边界仅在编辑时出现。
   if (disabled)
     return (
       <div className={cn("relative", containerClassName)}>
-        <div className={cn("px-3 text-20 font-medium whitespace-pre-line", className)}>{value ?? ""}</div>
+        <h1
+          className={cn(
+            "text-24 leading-normal font-semibold [overflow-wrap:anywhere] break-words whitespace-pre-wrap text-primary",
+            className
+          )}
+        >
+          {value ?? ""}
+        </h1>
       </div>
     );
 
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex min-w-0 flex-col gap-2">
+      <label htmlFor="title-input" className="text-12 font-medium text-secondary">
+        {t("issue.title.label")} <span className="text-danger-primary">*</span>
+      </label>
       <div className={cn("relative", containerClassName)}>
         <TextArea
           id="title-input"
           className={cn(
-            "block w-full resize-none overflow-hidden rounded-sm border-none bg-transparent px-3 py-0 text-20 font-medium ring-0 outline-none",
+            "focus:border-accent-primary focus:ring-accent-primary block w-full resize-none overflow-hidden rounded-md border border-strong bg-surface-1 px-3 py-2 text-24 leading-normal font-semibold ring-0 outline-none focus:ring-1",
             {
-              "mx-2.5 ring-1 ring-danger-strong": title?.length === 0,
+              "border-danger-strong ring-1 ring-danger-strong": title?.trim().length === 0,
             },
             className
           )}
@@ -181,6 +190,7 @@ export const IssueTitleInput = observer(function IssueTitleInput(props: IssueTit
           onChange={handleTitleChange}
           maxLength={255}
           placeholder={t("issue.title.label")}
+          aria-invalid={title.trim().length === 0}
           onFocus={() => setIsLengthVisible(true)}
           onBlur={() => setIsLengthVisible(false)}
         />
