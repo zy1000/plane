@@ -10,7 +10,13 @@ const MAX_VISIBLE_TYPES = 3;
  * 库字段「使用的类型」：used_by 只含研发模式类型库里的类型；
  * 只在自定义项目的类型里绑定时 used_by 为空、binding_count > 0，显示处数而不是「未使用」（这时删除会被拒）。
  */
-export function IssueFieldUsedBy({ field }: { field: TIssueFieldLibraryItem }) {
+export function IssueFieldUsedBy({
+  field,
+  maxVisible = MAX_VISIBLE_TYPES,
+}: {
+  field: TIssueFieldLibraryItem;
+  maxVisible?: number;
+}) {
   const usedBy = field.used_by ?? [];
 
   if (usedBy.length === 0) {
@@ -21,13 +27,18 @@ export function IssueFieldUsedBy({ field }: { field: TIssueFieldLibraryItem }) {
     );
   }
 
-  const visible = usedBy.slice(0, MAX_VISIBLE_TYPES);
+  const visible = usedBy.slice(0, maxVisible);
   const restCount = usedBy.length - visible.length;
 
   return (
     <span className="flex min-w-0 flex-nowrap items-center gap-1.5 overflow-hidden">
       {visible.map((type) => (
-        <IssueTypeTag key={type.issue_type_id} name={type.name} icon={type.logo_props?.icon} className="max-w-32" />
+        <IssueTypeTag
+          key={type.issue_type_id}
+          name={type.name}
+          icon={type.logo_props?.icon}
+          className="max-w-32 min-w-0 shrink"
+        />
       ))}
       {restCount > 0 && (
         <AnchoredPopover
@@ -39,7 +50,10 @@ export function IssueFieldUsedBy({ field }: { field: TIssueFieldLibraryItem }) {
         >
           {() =>
             usedBy.map((type) => (
-              <div key={type.issue_type_id} className="flex items-center gap-2 rounded-md px-2 py-1.5 text-13 text-primary">
+              <div
+                key={type.issue_type_id}
+                className="flex items-center gap-2 rounded-md px-2 py-1.5 text-13 text-primary"
+              >
                 <TypeIcon iconProps={type.logo_props?.icon} className="size-4 rounded" iconClassName="size-3.5" />
                 <span className="truncate">{type.name}</span>
               </div>

@@ -187,22 +187,15 @@ def _evaluate_required_fields(transition, issue: Issue, pending_values=None):
     queryset = WorkflowTransitionRequiredField.objects.filter(
         workflow=transition, deleted_at__isnull=True
     ).select_related("extra_field")
+    from plane.db.models import TypeExtraField
+    from plane.utils.field_linkage import evaluate_linkage
+    fields = list(TypeExtraField.objects.filter(issue_type_id=issue.type_id, scheme__projects=issue.project_id, is_active=True))
+    values = {str(v.extra_field_id): v.value for v in TypeExtraFieldValue.objects.filter(issue=issue)}
+    values.update(pending_values or {})
+    normalized, visible, _ = evaluate_linkage(fields, values)
     for obj in queryset:
         field_id = str(obj.extra_field_id)
-        if pending_values and field_id in pending_values:
-            if is_extra_field_value_empty(pending_values[field_id]):
-                return False, f"按照工作流规则[{obj.extra_field.name}]是必填项"
-            continue
-        value = (
-            TypeExtraFieldValue.objects.filter(
-                issue=issue,
-                extra_field=obj.extra_field,
-                deleted_at__isnull=True,
-            )
-            .values_list("value", flat=True)
-            .first()
-        )
-        if is_extra_field_value_empty(value):
+        if field_id in visible and is_extra_field_value_empty(normalized.get(field_id)):
             return False, f"按照工作流规则[{obj.extra_field.name}]是必填项"
     return True, None
 

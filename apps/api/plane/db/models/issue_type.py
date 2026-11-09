@@ -135,6 +135,7 @@ class IssueFieldDefinition(BaseModel):
     options = models.JSONField(default=dict, blank=True)
     default_value = models.JSONField(null=True, blank=True)
     validation = models.JSONField(default=dict, blank=True)
+    linkage = models.JSONField(default=dict, blank=True)
 
     class Meta:
         constraints = [
@@ -155,11 +156,24 @@ class IssueFieldDefinition(BaseModel):
     def definition_values(self):
         return {column: getattr(self, column) for column in LIBRARY_FIELD_DEFINITION_COLUMNS}
 
+    def clean(self):
+        super().clean()
+        from plane.utils.field_linkage import validate_field
+        validate_field(self)
+
     def save(self, *args, **kwargs):
+        from plane.utils.field_linkage import bind_library_dependencies
+        from plane.db.models import Workspace
         with transaction.atomic():
+            Workspace.objects.select_for_update().get(pk=self.workspace_id)
+            self.clean()
             super().save(*args, **kwargs)
             # 定义同步到全部绑定行（含软删的，免得恢复后带着旧定义）
             TypeExtraField.all_objects.filter(library_field_id=self.pk).update(**self.definition_values())
+            for issue_type in IssueType.objects.filter(extra_fields__library_field_id=self.pk, extra_fields__deleted_at__isnull=True).distinct():
+                bind_library_dependencies(issue_type, [self.pk])
+                from plane.utils.field_linkage import validate_graph
+                validate_graph(list(TypeExtraField.objects.filter(issue_type=issue_type)))
 
 
 class TypeExtraField(SchemeBaseModel):
@@ -196,6 +210,7 @@ class TypeExtraField(SchemeBaseModel):
     options = models.JSONField(default=dict, blank=True)
     default_value = models.JSONField(null=True, blank=True)
     validation = models.JSONField(default=dict, blank=True)
+    linkage = models.JSONField(default=dict, blank=True)
     # 绑定的库字段：非空时上面的定义列由库同步、只读（serializer 拦），本行只管 sort_order；空 = 本类型私有字段
     library_field = models.ForeignKey(
         "db.IssueFieldDefinition",
@@ -221,7 +236,15 @@ class TypeExtraField(SchemeBaseModel):
     def __str__(self):
         return f"{self.name} <{self.issue_type.name}>"
 
+    def clean(self):
+        super().clean()
+        from plane.utils.field_linkage import validate_field
+        validate_field(self)
+
+    @transaction.atomic
     def save(self, *args, **kwargs):
+        IssueType.objects.select_for_update().get(pk=self.issue_type_id)
+        self.clean()
         if self.issue_type_id and not self.scheme_id:
             self.scheme_id = self.issue_type.scheme_id
         super().save(*args, **kwargs)

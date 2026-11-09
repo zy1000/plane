@@ -4,6 +4,8 @@
  * See the LICENSE file for details.
  */
 
+import { evaluateFieldLinkage } from "@/utils/field-linkage";
+
 import { useCallback, useEffect, useState } from "react";
 import { observer } from "mobx-react";
 import { ChevronRight, Eye, EyeOff } from "lucide-react";
@@ -212,7 +214,7 @@ export const IssueExtraFieldsSection = observer(function IssueExtraFieldsSection
       const current = (issue?.extra_field_values ?? []) as TIssueExtraFieldValue[];
       const filteredCurrent = current.filter((item) => allowedFieldIds.has(item.extra_field_id));
       const merged = upsertValue(filteredCurrent, fieldId, fieldType, nextValue);
-      await issueOperations.update(workspaceSlug, projectId, issueId, { extra_field_values: merged });
+      await issueOperations.update(workspaceSlug, projectId, issueId, { extra_field_values: evaluateFieldLinkage(fields ?? [], merged).values });
     },
     [fields, issue?.extra_field_values, issueOperations, workspaceSlug, projectId, issueId]
   );
@@ -222,12 +224,13 @@ export const IssueExtraFieldsSection = observer(function IssueExtraFieldsSection
   // 两种情况都不渲染，不显示骨架，避免无字段类型先占位后消失
   if (!issue || fields === null || fields.length === 0) return null;
 
-  const activeFields = fields.filter((f) => f.is_active !== false);
+  const effective = evaluateFieldLinkage(fields, issue.extra_field_values ?? []);
+  const activeFields = effective.fields;
   if (activeFields.length === 0) return null;
 
   const isEditing = !disabled;
   const title = getSectionTitle(issueTypes?.find((type) => type.id === issue.type_id)?.name);
-  const values = (issue.extra_field_values ?? []) as TIssueExtraFieldValue[];
+  const values = effective.values;
   // 布尔字段没有「未填」：关着也是一个值
   const isEmptyField = (field: TTypeExtraField) =>
     field.field_type !== "boolean" && isValueEmpty(findValueForField(values, field.id));
@@ -293,7 +296,7 @@ export const IssueExtraFieldsSection = observer(function IssueExtraFieldsSection
                   isEditing ? "items-center py-1.5" : "items-start py-2"
                 )}
               >
-                <FieldLabel field={field} required={isEditing && field.is_required} />
+                <FieldLabel field={field} required={isEditing && !!field.is_required} />
                 {renderValue(field)}
               </div>
             ))}
@@ -312,7 +315,7 @@ export const IssueExtraFieldsSection = observer(function IssueExtraFieldsSection
           >
             {/* 编辑态文本框有边框和上内边距，标签下移对齐首行 */}
             <div className={cn(isEditing && "pt-[7px]")}>
-              <FieldLabel field={field} required={isEditing && field.is_required} />
+              <FieldLabel field={field} required={isEditing && !!field.is_required} />
             </div>
             {renderValue(field)}
           </div>

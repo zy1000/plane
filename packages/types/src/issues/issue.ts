@@ -51,6 +51,11 @@ export type TIssueExtraFieldValue = {
   field_type?: TIssueExtraFieldType;
 };
 
+export type TFieldLinkage = {
+  visibility?: { field_id: string; values: string[] };
+  options?: { field_id: string; mappings: Record<string, string[]> };
+};
+
 export type TIssueTypeExtraField = {
   id: string;
   name: string;
@@ -64,6 +69,7 @@ export type TIssueTypeExtraField = {
   options?: Record<string, unknown>;
   default_value?: unknown;
   validation?: Record<string, unknown>;
+  linkage?: TFieldLinkage;
 };
 
 export type TBaseIssue = {

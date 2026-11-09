@@ -17,7 +17,7 @@ def extra_field_context(create_user):
         workspace=workspace,
         created_by=create_user,
     )
-    issue_type = IssueType.objects.create(scheme_id=project.issue_scheme_id, name="任务")
+    issue_type = IssueType.objects.create(scheme_id=project.issue_scheme_id, name="字段校验测试类型")
     return {"project": project, "issue_type": issue_type}
 
 

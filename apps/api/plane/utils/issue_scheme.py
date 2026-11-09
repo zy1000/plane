@@ -87,6 +87,9 @@ def ensure_issue_type_library(workspace_id, created_by=None):
 def adopt_library_fields(scheme):
     """把方案里还没绑库的字段收进通用字段库：库里没有同名的就新建，有同名且定义一致的就绑上，不一致的留作私有。"""
     for field in TypeExtraField.objects.filter(scheme=scheme, library_field__isnull=True).order_by("sort_order", "created_at"):
+        # Type-specific dependencies cannot be promoted without changing their scope.
+        if field.linkage:
+            continue
         definition = IssueFieldDefinition.objects.filter(workspace_id=scheme.workspace_id, name=field.name).first()
         values = {column: getattr(field, column) for column in LIBRARY_FIELD_DEFINITION_COLUMNS}
         if definition is None:
@@ -94,7 +97,7 @@ def adopt_library_fields(scheme):
             definition = IssueFieldDefinition.objects.create(
                 workspace_id=scheme.workspace_id, sort_order=(last or 0) + LINK_SORT_STEP, **values
             )
-        elif definition.definition_values() != values:
+        elif definition.linkage or definition.definition_values() != values:
             continue
         TypeExtraField.objects.filter(pk=field.pk).update(library_field_id=definition.id)
 
@@ -387,8 +390,14 @@ def copy_scheme(source, target, actor_id=None, type_ids=None):
             linked.append(new_type)
     if linked:
         IssueType.all_objects.bulk_update(linked, ["library_type"], batch_size=500)
-    _clone_rows(TypeExtraField, TypeExtraField.all_objects.filter(by_type, scheme=source), target, id_map,
+    field_pairs = _clone_rows(TypeExtraField, TypeExtraField.all_objects.filter(by_type, scheme=source), target, id_map,
                 fk_fields=("issue_type",), actor_id=actor_id)
+    from plane.utils.field_linkage import remap_linkage
+    field_id_map = {str(old.id): str(new.id) for old, new in field_pairs}
+    for old, new in field_pairs:
+        new.linkage = remap_linkage(old.linkage, field_id_map)
+    if field_pairs:
+        TypeExtraField.all_objects.bulk_update([new for _, new in field_pairs], ["linkage"])
     _clone_rows(State, State.all_state_objects.filter(by_type | Q(issue_type__isnull=True), scheme=source), target,
                 id_map, fk_fields=("issue_type",), actor_id=actor_id)
     workflows = Workflow.all_objects.filter(by_type, scheme=source)

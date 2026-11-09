@@ -1,403 +1,257 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { Button } from "@plane/propel/button";
-import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TIssueFieldLibraryItem, TIssueFieldLibraryPayload } from "@plane/types";
-import { EModalPosition, EModalWidth, ModalCore, TextArea, ToggleSwitch } from "@plane/ui";
+import { EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
 import { cn } from "@plane/utils";
-import {
-  buildFieldPayload,
-  changeFieldType,
-  DEFAULT_FIELD_FORM,
-  fieldToFormState,
-  getNormalizedSelectOptions,
-  isSelectFieldType,
-  removeSelectOption,
-  SelectExtraFieldDefaultMultiple,
-  SelectExtraFieldDefaultSingle,
-} from "@/components/project-issue-types/field-form";
+import { buildFieldPayload, DEFAULT_FIELD_FORM, fieldToFormState } from "@/components/project-issue-types/field-form";
 import type { TFieldFormState } from "@/components/project-issue-types/field-form";
+import { FieldLinkageEditor } from "@/components/project-issue-types/field-linkage-editor";
+import { dependencyClosure, linkageSources } from "@/utils/field-linkage";
 import { getIssueFieldErrorMessage } from "./helpers";
+import { IssueFieldPreview } from "./issue-field-preview";
+import { IssueFieldSettings } from "./issue-field-settings";
 import { IssueFieldSyncTargets } from "./issue-field-used-by";
 
 type Props = {
   isOpen: boolean;
-  /** null 为新建 */
+  fields: TIssueFieldLibraryItem[];
   field: TIssueFieldLibraryItem | null;
   onClose: () => void;
-  /** 失败时抛出，弹窗保持打开 */
   onSubmit: (payload: TIssueFieldLibraryPayload) => Promise<unknown>;
 };
-
-/** 顺序同效果图 */
-const FIELD_TYPE_SEGMENTS: { value: TFieldFormState["field_type"]; label: string }[] = [
-  { value: "select", label: "下拉" },
-  { value: "text", label: "文本" },
-  { value: "number", label: "数字" },
-  { value: "date", label: "日期" },
-  { value: "user", label: "人员" },
-  { value: "boolean", label: "是/否" },
+type Tab = "settings" | "linkage";
+const TABS: { id: Tab; label: string }[] = [
+  { id: "settings", label: "字段设置" },
+  { id: "linkage", label: "联动规则" },
 ];
 
-const LABEL_CLASS = "text-13 font-medium text-secondary";
-const INPUT_CLASS =
-  "h-10 w-full rounded-lg border border-subtle bg-surface-1 px-3 text-14 text-primary outline-none placeholder:text-placeholder focus:border-accent-strong";
-
-function Segmented<T extends string>({
-  options,
-  value,
-  onChange,
-  disabled = false,
-  title,
-  className,
-}: {
-  options: { value: T; label: string }[];
-  value: T;
-  onChange: (value: T) => void;
-  disabled?: boolean;
-  title?: string;
-  className?: string;
-}) {
-  return (
-    <div role="radiogroup" title={title} className={cn("flex gap-0.5 rounded-[9px] bg-layer-1 p-[3px]", className)}>
-      {options.map((option) => {
-        const isActive = option.value === value;
-        return (
-          <button
-            key={option.value}
-            type="button"
-            role="radio"
-            aria-checked={isActive}
-            disabled={disabled && !isActive}
-            onClick={() => onChange(option.value)}
-            className={cn(
-              "h-8 flex-1 rounded-[7px] px-2 text-13 whitespace-nowrap transition-colors",
-              isActive
-                ? "bg-surface-1 font-medium text-primary shadow-raised-100"
-                : "text-secondary hover:text-primary disabled:cursor-not-allowed disabled:text-disabled disabled:hover:text-disabled"
-            )}
-          >
-            {option.label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-/** 改选项文字时，若它正是默认值，默认值跟着改，免得保存时默认值被悄悄丢掉 */
-const renameSelectOption = (form: TFieldFormState, index: number, value: string): TFieldFormState => {
-  const previous = (form.select_options[index] ?? "").trim();
-  const nextOptions = [...form.select_options];
-  nextOptions[index] = value;
-  const next = value.trim();
-  return {
-    ...form,
-    select_options: nextOptions,
-    select_default_value: previous && form.select_default_value === previous ? next : form.select_default_value,
-    select_default_values: previous
-      ? form.select_default_values.map((item) => (item === previous ? next : item))
-      : form.select_default_values,
-  };
-};
-
-/**
- * 通用字段库的新建 / 编辑弹窗：左栏基本定义，右栏下拉选项（不是下拉时收成单栏）。
- * 表单状态、校验、请求体与类型属性的行内表单共用 project-issue-types/field-form。
- */
-export function IssueFieldFormModal({ isOpen, field, onClose, onSubmit }: Props) {
+/** Fixed header/footer with independently scrollable editing and live preview panes. */
+export function IssueFieldFormModal({ isOpen, field, fields, onClose, onSubmit }: Props) {
   const [form, setForm] = useState<TFieldFormState>(DEFAULT_FIELD_FORM);
+  const [activeTab, setActiveTab] = useState<Tab>("settings");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  // 打开时聚焦名称：不指定时 Headless UI 会聚焦右上角的关闭按钮
+  const [error, setError] = useState<string | null>(null);
   const nameInputRef = useRef<HTMLInputElement | null>(null);
+  const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const id = useId();
 
   useEffect(() => {
     if (!isOpen) return;
-    // 新建默认选「下拉」（分段里的第一个）
     setForm(field ? fieldToFormState(field) : { ...DEFAULT_FIELD_FORM, field_type: "select" });
+    setActiveTab("settings");
+    setError(null);
   }, [isOpen, field?.id]);
 
-  const isEditing = Boolean(field);
-  const isSelect = isSelectFieldType(form.field_type);
-  const selectOptions = getNormalizedSelectOptions(form.select_options);
-  const isDefaultOption = (option: string) => {
-    const value = option.trim();
-    if (!value) return false;
-    return form.select_is_multiple ? form.select_default_values.includes(value) : form.select_default_value === value;
+  const updateForm = (next: TFieldFormState) => {
+    setForm(next);
+    setError(null);
   };
-
+  const close = () => {
+    if (!isSubmitting) onClose();
+  };
+  const dependencyNames = dependencyClosure(fields, linkageSources(form.linkage)).map((source) => source.name);
   const handleSubmit = async () => {
-    if (!form.name.trim()) return;
-    const built = buildFieldPayload(form);
-    if ("error" in built) {
-      setToast({ type: TOAST_TYPE.ERROR, title: "校验失败", message: built.error });
+    if (isSubmitting) return;
+    if (!form.name.trim()) {
+      setActiveTab("settings");
+      setError("请填写字段名称。");
+      requestAnimationFrame(() => nameInputRef.current?.focus());
       return;
     }
-    const { name, description, field_type, is_required, is_active, options, default_value } = built.payload;
-    const payload: TIssueFieldLibraryPayload = {
-      name,
-      description: description ?? "",
-      field_type,
-      is_required: is_required === true,
-      is_active: is_active !== false,
-      ...(options !== undefined ? { options } : {}),
-      ...("default_value" in built.payload ? { default_value } : {}),
-    };
+    const built = buildFieldPayload(form);
+    if ("error" in built) {
+      setActiveTab(/显示|映射/.test(built.error) ? "linkage" : "settings");
+      setError(built.error);
+      return;
+    }
+    if (linkageSources(form.linkage).length !== Object.keys(form.linkage).length) {
+      setActiveTab("linkage");
+      setError("请为已开启的联动规则选择来源字段。");
+      return;
+    }
+    const { name, description, field_type, is_required, is_active, options, default_value, linkage } = built.payload;
     setIsSubmitting(true);
+    setError(null);
     try {
-      await onSubmit(payload);
-      onClose();
-    } catch (error) {
-      setToast({
-        type: TOAST_TYPE.ERROR,
-        title: isEditing ? "保存失败" : "创建失败",
-        message: getIssueFieldErrorMessage(
-          error,
-          isEditing ? "无法保存字段，请稍后重试。" : "无法创建字段，请稍后重试。"
-        ),
+      await onSubmit({
+        name,
+        description: description ?? "",
+        field_type,
+        is_required: is_required === true,
+        is_active: is_active !== false,
+        linkage,
+        ...(options !== undefined ? { options } : {}),
+        ...("default_value" in built.payload ? { default_value } : {}),
       });
+      onClose();
+    } catch (submitError) {
+      if (submitError && typeof submitError === "object" && "linkage" in submitError) setActiveTab("linkage");
+      setError(getIssueFieldErrorMessage(submitError, "无法保存字段，请稍后重试。"));
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const renderDefaultValue = () => {
-    if (isSelect) {
-      if (selectOptions.length === 0) return null;
-      return (
-        <div className="flex flex-col gap-2">
-          <span className={LABEL_CLASS}>默认值</span>
-          {form.select_is_multiple ? (
-            <SelectExtraFieldDefaultMultiple
-              label={null}
-              values={form.select_default_values}
-              options={selectOptions}
-              onChange={(select_default_values) => setForm({ ...form, select_default_values })}
-            />
-          ) : (
-            <SelectExtraFieldDefaultSingle
-              label={null}
-              value={form.select_default_value}
-              options={selectOptions}
-              onChange={(select_default_value) => setForm({ ...form, select_default_value })}
-            />
-          )}
-        </div>
-      );
-    }
-    if (form.field_type === "number") {
-      return (
-        <label className="flex flex-col gap-2">
-          <span className={LABEL_CLASS}>默认值</span>
-          <input
-            type="number"
-            inputMode="decimal"
-            value={form.number_default_value}
-            onChange={(event) => setForm({ ...form, number_default_value: event.target.value })}
-            placeholder="不设置"
-            className={INPUT_CLASS}
-          />
-        </label>
-      );
-    }
-    return null;
-  };
-
   return (
     <ModalCore
       isOpen={isOpen}
-      handleClose={onClose}
+      handleClose={close}
       position={EModalPosition.CENTER}
-      width={isSelect ? EModalWidth.XXXXL : EModalWidth.XL}
+      width={EModalWidth.XXXXL}
       initialFocus={nameInputRef}
+      className="overflow-hidden border border-subtle"
     >
       <form
+        className="flex h-[min(820px,calc(100dvh-2rem))] min-h-0 flex-col"
+        aria-label={field ? "编辑字段" : "新建字段"}
         onSubmit={(event) => {
           event.preventDefault();
           void handleSubmit();
         }}
       >
-        <div className="flex items-center justify-between gap-3 px-7 pt-5">
-          <h2 className="text-20 font-semibold text-primary">{isEditing ? "编辑字段" : "新建字段"}</h2>
-          <button
-            type="button"
-            className="grid size-8 shrink-0 place-items-center rounded-md text-secondary hover:bg-layer-transparent-hover"
-            onClick={onClose}
-            aria-label="关闭"
-          >
-            <X className="size-4" />
-          </button>
-        </div>
-
-        <div className={cn("grid gap-8 px-7 pt-[18px] pb-6", isSelect ? "grid-cols-2" : "grid-cols-1")}>
-          <div className="flex min-w-0 flex-col gap-[18px]">
-            <label className="flex flex-col gap-2">
-              <span className={LABEL_CLASS}>
-                字段名称<span className="ml-0.5 text-danger-primary">*</span>
-              </span>
-              <input
-                ref={nameInputRef}
-                value={form.name}
-                onChange={(event) => setForm({ ...form, name: event.target.value })}
-                maxLength={255}
-                className={INPUT_CLASS}
-              />
-            </label>
-
-            <div className="flex flex-col gap-2">
-              <span className={LABEL_CLASS}>字段类型</span>
-              <Segmented
-                options={FIELD_TYPE_SEGMENTS}
-                value={form.field_type}
-                disabled={isEditing}
-                title={isEditing ? "编辑时不可修改字段类型" : undefined}
-                onChange={(fieldType) => setForm(changeFieldType(form, fieldType))}
-              />
+        <header className="shrink-0 px-6 pt-5 sm:px-7">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <h2 className="text-20 font-semibold text-primary">{field ? "编辑字段" : "新建字段"}</h2>
+              <span className="rounded bg-layer-1 px-2 py-0.5 text-12 font-medium text-secondary">通用字段</span>
             </div>
-
-            {(isSelect || form.field_type === "user") && (
-              <div className="flex flex-col gap-2">
-                <span className={LABEL_CLASS}>选择方式</span>
-                <Segmented
-                  className="w-[200px]"
-                  options={[
-                    { value: "single", label: "单选" },
-                    { value: "multiple", label: "多选" },
-                  ]}
-                  value={(isSelect ? form.select_is_multiple : form.user_is_multiple) ? "multiple" : "single"}
-                  onChange={(mode) => {
-                    const multiple = mode === "multiple";
-                    if (!isSelect) {
-                      setForm({ ...form, user_is_multiple: multiple });
-                      return;
-                    }
-                    // 单 / 多选切换时把已有默认值搬到另一种形态，不丢
-                    setForm(
-                      multiple
-                        ? {
-                            ...form,
-                            select_is_multiple: true,
-                            select_default_values: form.select_default_value ? [form.select_default_value] : [],
-                            select_default_value: "",
-                          }
-                        : {
-                            ...form,
-                            select_is_multiple: false,
-                            select_default_value: form.select_default_values[0] ?? "",
-                            select_default_values: [],
-                          }
-                    );
-                  }}
-                />
-              </div>
-            )}
-
-            {form.field_type === "text" && (
-              <div className="flex flex-col gap-2">
-                <span className={LABEL_CLASS}>文本格式</span>
-                <Segmented
-                  className="w-[200px]"
-                  options={[
-                    { value: "single_line", label: "单行" },
-                    { value: "paragraph", label: "多行" },
-                  ]}
-                  value={form.text_is_paragraph ? "paragraph" : "single_line"}
-                  onChange={(mode) => setForm({ ...form, text_is_paragraph: mode === "paragraph" })}
-                />
-              </div>
-            )}
-
-            {renderDefaultValue()}
-
-            <div className="flex h-10 items-center justify-between">
-              <span className={LABEL_CLASS}>必填</span>
-              <ToggleSwitch value={form.is_required} onChange={(value) => setForm({ ...form, is_required: value })} />
-            </div>
-
-            <label className="flex flex-col gap-2">
-              <span className={LABEL_CLASS}>说明</span>
-              <TextArea
-                value={form.description}
-                onChange={(event) => setForm({ ...form, description: event.target.value })}
-                placeholder="填写字段说明"
-                className="h-[72px] resize-none rounded-lg border border-subtle bg-surface-1 px-3 py-2.5 text-14"
-              />
-            </label>
+            <button
+              type="button"
+              aria-label="关闭"
+              disabled={isSubmitting}
+              onClick={close}
+              className="-mr-1 grid size-7 place-items-center rounded text-secondary hover:bg-layer-1-hover disabled:opacity-50"
+            >
+              <X className="size-4" />
+            </button>
           </div>
-
-          {isSelect && (
-            <div className="flex min-w-0 flex-col gap-2">
-              <span className={LABEL_CLASS}>选项</span>
-              <div className="flex max-h-[460px] flex-col overflow-y-auto rounded-[10px] border border-subtle p-1.5">
-                {form.select_options.map((option, index) => (
-                  <div
-                    key={index}
-                    className="flex h-[42px] shrink-0 items-center gap-2.5 rounded-lg pr-2 pl-2.5 hover:bg-layer-1-hover"
-                  >
-                    <input
-                      value={option}
-                      onChange={(event) => setForm(renameSelectOption(form, index, event.target.value))}
-                      onKeyDown={(event) => {
-                        // 选项里回车不提交整张表单
-                        if (event.key === "Enter") event.preventDefault();
-                      }}
-                      placeholder="选项名称"
-                      className="h-8 min-w-0 flex-1 bg-transparent text-14 text-primary outline-none placeholder:text-placeholder"
-                    />
-                    {isDefaultOption(option) && (
-                      <span className="shrink-0 rounded-[5px] bg-layer-1 px-2 text-12 leading-[22px] text-secondary">
-                        默认
-                      </span>
-                    )}
-                    {form.select_options.length > 1 && (
-                      <button
-                        type="button"
-                        aria-label="删除选项"
-                        className="grid size-7 shrink-0 place-items-center rounded-md text-tertiary hover:bg-layer-transparent-hover hover:text-danger-primary"
-                        onClick={() => setForm(removeSelectOption(form, index))}
-                      >
-                        <X className="size-[15px]" />
-                      </button>
-                    )}
-                  </div>
-                ))}
-                <button
-                  type="button"
-                  className="flex h-10 shrink-0 items-center px-2.5 text-left text-14 text-accent-primary hover:underline"
-                  onClick={() => setForm({ ...form, select_options: [...form.select_options, ""] })}
-                >
-                  添加选项
-                </button>
-              </div>
+          <p className="mt-1.5 text-13 text-secondary">定义字段内容与填写规则</p>
+          <div role="tablist" aria-label="字段配置" className="mt-5 flex gap-7">
+            {TABS.map((tab, index) => (
+              <button
+                key={tab.id}
+                ref={(element) => {
+                  tabRefs.current[index] = element;
+                }}
+                type="button"
+                role="tab"
+                id={`${id}-${tab.id}-tab`}
+                aria-controls={`${id}-${tab.id}-panel`}
+                aria-selected={activeTab === tab.id}
+                tabIndex={activeTab === tab.id ? 0 : -1}
+                onClick={() => setActiveTab(tab.id)}
+                onKeyDown={(event) => {
+                  if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+                  event.preventDefault();
+                  const next = event.key === "Home" ? 0 : event.key === "End" ? 1 : 1 - index;
+                  setActiveTab(TABS[next].id);
+                  tabRefs.current[next]?.focus();
+                }}
+                className={cn(
+                  "border-b-2 px-0.5 pb-3 text-14 outline-none focus-visible:ring-2 focus-visible:ring-accent-strong",
+                  activeTab === tab.id
+                    ? "border-accent-strong font-semibold text-primary"
+                    : "border-transparent text-secondary hover:text-primary"
+                )}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </header>
+        <div
+          className="grid min-h-0 flex-1 overflow-y-auto border-t border-subtle md:grid-cols-[minmax(0,1.75fr)_minmax(0,1fr)] md:overflow-hidden"
+          data-modal-wheel-scroll
+        >
+          <div className="min-w-0 px-6 py-6 sm:px-7 md:overflow-y-auto" data-modal-wheel-scroll>
+            <div
+              role="tabpanel"
+              id={`${id}-settings-panel`}
+              aria-labelledby={`${id}-settings-tab`}
+              hidden={activeTab !== "settings"}
+            >
+              <IssueFieldSettings
+                key={`${field?.id ?? "new"}-${isOpen}`}
+                form={form}
+                onChange={updateForm}
+                nameInputRef={nameInputRef}
+                isEditing={Boolean(field)}
+                disabled={isSubmitting}
+              />
             </div>
-          )}
+            <div
+              role="tabpanel"
+              id={`${id}-linkage-panel`}
+              aria-labelledby={`${id}-linkage-tab`}
+              hidden={activeTab !== "linkage"}
+            >
+              <FieldLinkageEditor
+                fieldId={field?.id}
+                fieldType={form.field_type}
+                fieldName={form.name}
+                fields={fields}
+                choices={form.select_options
+                  .map((option) => option.trim())
+                  .filter(Boolean)
+                  .map((key) => ({ key, label: key }))}
+                value={form.linkage}
+                onChange={(linkage) => updateForm({ ...form, linkage })}
+                disabled={isSubmitting}
+              />
+              {dependencyNames.length > 0 && (
+                <p className="mt-6 border-t border-subtle pt-4 text-12 leading-5 text-secondary">
+                  依赖字段：{dependencyNames.join("、")}。引用类型中缺少的依赖会一并添加。
+                </p>
+              )}
+              {field && field.binding_count > 0 && (
+                <div className="mt-4 space-y-2 text-12 leading-5 text-secondary">
+                  <IssueFieldSyncTargets field={field} />
+                  <p>保存后同步至 {field.binding_count} 处引用；遇到同名冲突时整次保存取消。</p>
+                </div>
+              )}
+            </div>
+          </div>
+          <IssueFieldPreview
+            key={`${field?.id ?? "new"}-${isOpen}`}
+            form={form}
+            fields={fields}
+            fieldId={field?.id}
+            showLinkage={activeTab === "linkage"}
+          />
         </div>
-
-        <div className="flex flex-wrap items-center justify-end gap-3 rounded-b-lg border-t border-subtle bg-surface-2 px-7 py-4">
-          {field && <IssueFieldSyncTargets field={field} />}
-          <div className="ml-auto flex shrink-0 gap-2.5">
+        {error && (
+          <p role="alert" className="shrink-0 border-t border-subtle px-6 py-2 text-13 text-danger-primary sm:px-7">
+            {error}
+          </p>
+        )}
+        <footer className="flex shrink-0 items-center justify-between gap-3 border-t border-subtle px-6 py-4 sm:px-7">
+          <span className="hidden text-12 text-secondary sm:block">
+            {field ? `保存后同步到 ${field.binding_count} 处引用` : "创建后可添加到工作项类型"}
+          </span>
+          <div className="ml-auto flex gap-2.5">
             <Button
+              type="button"
               variant="secondary"
               size="xl"
-              className="px-4"
-              type="button"
-              onClick={onClose}
+              className="h-9 px-3"
+              onClick={close}
               disabled={isSubmitting}
             >
               取消
             </Button>
             <Button
+              type="submit"
               variant="primary"
               size="xl"
-              className="px-4"
-              type="submit"
+              className="h-9 px-3"
               loading={isSubmitting}
-              disabled={!form.name.trim()}
+              disabled={isSubmitting}
             >
-              {isEditing ? "保存" : "创建"}
+              {field ? "保存修改" : "创建字段"}
             </Button>
           </div>
-        </div>
+        </footer>
       </form>
     </ModalCore>
   );

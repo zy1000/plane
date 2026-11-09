@@ -355,6 +355,8 @@ export const IssueTypeFieldList = observer(function IssueTypeFieldList({
               return (
                 <div key={field.id} ref={inlineFormRef}>
                   <InlineFieldForm
+                    linkageFields={fields}
+                    fieldId={field.id}
                     form={fieldForm}
                     isSubmitting={isSubmitting}
                     submitLabel="更新"
@@ -375,6 +377,8 @@ export const IssueTypeFieldList = observer(function IssueTypeFieldList({
                 <GripVertical className="size-4 shrink-0 text-tertiary" />
                 <span className="min-w-0 flex-1 truncate font-medium text-primary">{field.name}</span>
                 <span className="text-xs text-secondary">{getFieldRowLabel(field)}</span>
+                {field.linkage?.visibility && <StatusBadge>条件显示</StatusBadge>}
+                {field.linkage?.options && <StatusBadge>选项联动</StatusBadge>}
                 {isLibraryField ? <StatusBadge tone="blue">字段库</StatusBadge> : <StatusBadge>本类型</StatusBadge>}
                 {field.is_active === false ? (
                   <StatusBadge tone="danger">已禁用</StatusBadge>
@@ -422,6 +426,7 @@ export const IssueTypeFieldList = observer(function IssueTypeFieldList({
           {isAdding && (
             <div ref={inlineFormRef}>
               <InlineFieldForm
+                linkageFields={fields}
                 form={fieldForm}
                 isSubmitting={isSubmitting}
                 submitLabel="创建"

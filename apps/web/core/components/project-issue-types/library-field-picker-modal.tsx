@@ -4,6 +4,8 @@
  * See the LICENSE file for details.
  */
 
+import { dependencyClosure } from "@/utils/field-linkage";
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, Search, X } from "lucide-react";
 // plane imports
@@ -93,6 +95,9 @@ export function LibraryFieldPickerModal({ isOpen, workspaceSlug, issueType, type
       current.includes(fieldId) ? current.filter((id) => id !== fieldId) : [...current, fieldId]
     );
 
+  const dependencies = dependencyClosure(fields, selectedIds).filter((field) =>
+    !selectedIds.includes(field.id) && !typeFields.some((bound) => bound.library_field_id === field.id));
+
   const handleSubmit = async () => {
     if (selectedIds.length === 0) return;
     setIsSubmitting(true);
@@ -100,7 +105,7 @@ export function LibraryFieldPickerModal({ isOpen, workspaceSlug, issueType, type
       // 按库里的顺序绑定，新行在类型里的先后与字段库一致
       const orderedIds = fields.filter((field) => selectedIds.includes(field.id)).map((field) => field.id);
       await onSubmit(orderedIds);
-      setToast({ type: TOAST_TYPE.SUCCESS, title: `已添加 ${orderedIds.length} 个字段` });
+      setToast({ type: TOAST_TYPE.SUCCESS, title: `已添加 ${orderedIds.length + dependencies.length} 个字段` });
       onClose();
     } catch (submitError) {
       setToast({
@@ -227,6 +232,7 @@ export function LibraryFieldPickerModal({ isOpen, workspaceSlug, issueType, type
 
         <div className="max-h-[470px] overflow-y-auto border-t border-subtle">{renderList()}</div>
 
+        {dependencies.length > 0 && <p className="px-6 py-3 text-13 text-secondary">将一并添加依赖字段：{dependencies.map((f) => f.name).join("、")}。已有同名但不同来源的字段时，将提示冲突。</p>}
         <div className="flex items-center gap-2.5 border-t border-subtle px-6 py-4">
           <span className="mr-auto text-14 text-secondary">
             已选 <b className="font-semibold text-primary">{selectedIds.length}</b> 个

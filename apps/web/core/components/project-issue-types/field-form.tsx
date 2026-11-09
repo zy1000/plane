@@ -4,6 +4,10 @@
  * See the LICENSE file for details.
  */
 
+import type { TFieldLinkage } from "@plane/types";
+import { FieldLinkageEditor } from "./field-linkage-editor";
+import type { TLinkageField } from "@/utils/field-linkage";
+
 /**
  * 工作项类型字段（属性）的表单：表单状态、字段 ↔ 表单互转、校验与请求体、行内编辑表单 UI。
  * 项目设置 / 模板中心的类型属性列表（行内表单）与通用字段库的编辑弹窗共用这一份，校验口径只有一处。
@@ -30,7 +34,7 @@ import { Button, Input, TextArea } from "@plane/ui";
 import type { TTypeExtraField, TTypeExtraFieldPayload } from "@/services/project/project-issue-type.service";
 
 /** 字段定义的公共部分：类型字段（TTypeExtraField）与字段库字段（TIssueFieldLibraryItem）都满足 */
-export type TFieldDefinition = Pick<TTypeExtraField, "field_type" | "options" | "default_value"> & {
+export type TFieldDefinition = Pick<TTypeExtraField, "field_type" | "options" | "default_value" | "linkage"> & {
   name?: string | null;
   description?: string | null;
   is_required?: boolean;
@@ -94,6 +98,7 @@ export const getFieldRowLabel = (field: TFieldDefinition): string => {
 };
 
 export type TFieldFormState = {
+  linkage: TFieldLinkage;
   name: string;
   description: string;
   field_type: TTypeExtraField["field_type"];
@@ -114,6 +119,7 @@ export type TFieldFormState = {
 };
 
 export const DEFAULT_FIELD_FORM: TFieldFormState = {
+  linkage: {},
   name: "",
   description: "",
   field_type: "text",
@@ -197,6 +203,7 @@ function formatUserIsMultipleForForm(field: TFieldDefinition): boolean {
 /** 已有属性 → 表单初值（编辑态） */
 export function fieldToFormState(field: TFieldDefinition): TFieldFormState {
   return {
+    linkage: field.linkage ?? {},
     name: field.name ?? "",
     description: field.description ?? "",
     field_type: field.field_type,
@@ -217,6 +224,7 @@ export function changeFieldType(form: TFieldFormState, fieldType: TTypeExtraFiel
   return {
     ...form,
     field_type: fieldType,
+    linkage: fieldType === "select" ? form.linkage : { ...(form.linkage.visibility ? { visibility: form.linkage.visibility } : {}) },
     ...(fieldType !== "text" ? { text_is_paragraph: false } : {}),
     ...(fieldType !== "number" ? { number_default_value: "" } : {}),
     ...(!isSelectFieldType(fieldType)
@@ -246,6 +254,8 @@ export type TFieldPayloadBase = Omit<TTypeExtraFieldPayload, "issue_type_id">;
  */
 export function buildFieldPayload(fieldForm: TFieldFormState): { error: string } | { payload: TFieldPayloadBase } {
   const name = fieldForm.name.trim();
+  if (fieldForm.linkage.visibility && !fieldForm.linkage.visibility.values.length) return { error: "请选择触发显示的选项。" };
+  if (fieldForm.linkage.options && !Object.keys(fieldForm.linkage.options.mappings).length) return { error: "请配置至少一组选项映射。" };
 
   let numberDefaultPayload: number | null | undefined;
   if (fieldForm.field_type === "number") {
@@ -282,6 +292,7 @@ export function buildFieldPayload(fieldForm: TFieldFormState): { error: string }
   return {
     payload: {
       name,
+      linkage: fieldForm.linkage,
       description: fieldForm.description.trim(),
       field_type: fieldForm.field_type,
       is_required: fieldForm.is_required,
@@ -647,6 +658,8 @@ export function InlineFieldForm({
   isSubmitting,
   submitLabel = "创建",
   fieldTypeLocked = false,
+  linkageFields = [],
+  fieldId,
   onChange,
   onCancel,
   onSubmit,
@@ -656,6 +669,8 @@ export function InlineFieldForm({
   submitLabel?: string;
   /** 编辑已有属性时为 true，禁止修改属性类型 */
   fieldTypeLocked?: boolean;
+  linkageFields?: TLinkageField[];
+  fieldId?: string;
   onChange: (form: TFieldFormState) => void;
   onCancel: () => void;
   onSubmit: () => void;
@@ -851,6 +866,11 @@ export function InlineFieldForm({
               </div>
             </div>
           )}
+        </div>
+        <div className="mb-4">
+          <FieldLinkageEditor fieldId={fieldId} fieldType={form.field_type} fieldName={form.name} fields={linkageFields}
+            choices={selectOptions.map((key) => ({ key, label: key }))} value={form.linkage}
+            onChange={(linkage) => onChange({ ...form, linkage })} disabled={isSubmitting} />
         </div>
         <div className="mt-auto flex justify-end gap-2 border-t border-subtle pt-3">
           <Button variant="neutral-primary" size="sm" onClick={onCancel} disabled={isSubmitting}>

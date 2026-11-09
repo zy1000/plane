@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { usePopper } from "react-popper";
@@ -26,6 +26,7 @@ export function AnchoredPopover({
   children,
 }: Props) {
   const [isOpen, setIsOpen] = useState(false);
+  const panelId = useId();
   const containerRef = useRef<HTMLDivElement>(null);
   const [referenceElement, setReferenceElement] = useState<HTMLButtonElement | null>(null);
   const [popperElement, setPopperElement] = useState<HTMLDivElement | null>(null);
@@ -41,6 +42,18 @@ export function AnchoredPopover({
 
   useOutsideClickDetector(containerRef, () => setIsOpen(false), true);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      setIsOpen(false);
+      referenceElement?.focus();
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, referenceElement]);
+
   const close = () => setIsOpen(false);
 
   return (
@@ -50,6 +63,7 @@ export function AnchoredPopover({
         type="button"
         aria-label={ariaLabel}
         aria-expanded={isOpen}
+        aria-controls={isOpen ? panelId : undefined}
         className={buttonClassName}
         onClick={() => setIsOpen((prev) => !prev)}
       >
@@ -59,14 +73,12 @@ export function AnchoredPopover({
         typeof document !== "undefined" &&
         createPortal(
           <div
+            id={panelId}
             ref={setPopperElement}
             style={styles.popper}
             {...attributes.popper}
             data-prevent-outside-click
-            className={cn(
-              "z-50 rounded-lg border border-subtle bg-surface-1 p-1 shadow-raised-200",
-              panelClassName
-            )}
+            className={cn("z-50 rounded-lg border border-subtle bg-surface-1 p-1 shadow-raised-200", panelClassName)}
           >
             {children(close)}
           </div>,

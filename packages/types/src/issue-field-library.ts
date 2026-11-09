@@ -4,6 +4,8 @@
  * See the LICENSE file for details.
  */
 
+import type { TFieldLinkage } from "./issues/issue";
+
 /**
  * 工作区「通用字段库」。
  *
@@ -31,6 +33,7 @@ export type TIssueFieldLibraryItem = {
   options: Record<string, unknown>;
   default_value: unknown;
   validation: Record<string, unknown>;
+  linkage?: TFieldLinkage;
   is_required: boolean;
   is_active: boolean;
   logo_props: Record<string, unknown>;
@@ -51,6 +54,7 @@ export type TIssueFieldLibraryPayload = Partial<
     | "options"
     | "default_value"
     | "validation"
+    | "linkage"
     | "is_required"
     | "is_active"
     | "logo_props"

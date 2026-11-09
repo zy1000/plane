@@ -115,6 +115,10 @@ class IssueFieldDefinitionViewSet(BaseViewSet):
         definition = IssueFieldDefinition.objects.filter(workspace__slug=slug, pk=pk).first()
         if definition is None:
             return Response({"error": "字段不存在"}, status=status.HTTP_404_NOT_FOUND)
+        from plane.utils.field_linkage import dependent_names
+        names = dependent_names(definition)
+        if names:
+            return Response({"error": f"请先调整依赖此字段的联动规则：{'、'.join(names)}"}, status=status.HTTP_409_CONFLICT)
         binding_count = definition.bindings.filter(deleted_at__isnull=True).count()
         if binding_count:
             return Response(

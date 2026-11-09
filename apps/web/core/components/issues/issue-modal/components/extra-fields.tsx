@@ -4,6 +4,8 @@
  * See the LICENSE file for details.
  */
 
+import { evaluateFieldLinkage } from "@/utils/field-linkage";
+
 import { useEffect } from "react";
 import { observer } from "mobx-react";
 import type { Control } from "react-hook-form";
@@ -91,7 +93,7 @@ export const IssueExtraFields = observer(function IssueExtraFields(props: TIssue
       }));
 
     if (defaults.length > 0) {
-      setValue("extra_field_values", defaults, { shouldValidate: false, shouldDirty: false });
+      setValue("extra_field_values", evaluateFieldLinkage(fields, defaults).values, { shouldValidate: false, shouldDirty: false });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fields]);
@@ -104,22 +106,24 @@ export const IssueExtraFields = observer(function IssueExtraFields(props: TIssue
       name="extra_field_values"
       rules={{
         validate: (current) => {
-          for (const field of fields) {
+          const evaluated = evaluateFieldLinkage(fields, current as TIssueExtraFieldValue[] | undefined);
+          for (const field of evaluated.fields) {
             if (!field.is_required) continue;
-            const v = findValueForField(current as TIssueExtraFieldValue[] | undefined, field.id);
+            const v = findValueForField(evaluated.values, field.id);
             if (isValueEmpty(v)) return `${field.name} 为必填字段`;
           }
           return true;
         },
       }}
       render={({ field: rhf, fieldState }) => {
-        const currentValues = (rhf.value as TIssueExtraFieldValue[] | undefined) ?? [];
+        const effective = evaluateFieldLinkage(fields, (rhf.value as TIssueExtraFieldValue[] | undefined) ?? []);
+        const currentValues = effective.values;
         const requiredErrorMessage =
           typeof fieldState.error?.message === "string" ? fieldState.error.message : undefined;
 
         return (
           <div className="flex flex-col">
-            {fields.map((field) => {
+            {effective.fields.map((field) => {
               const value = findValueForField(currentValues, field.id);
               const isRequiredAndEmpty =
                 !!requiredErrorMessage && field.is_required && isValueEmpty(value);
@@ -133,7 +137,7 @@ export const IssueExtraFields = observer(function IssueExtraFields(props: TIssue
                   disabled={disabled}
                   onChange={(next) => {
                     const updated = upsertValue(currentValues, field.id, field.field_type, next);
-                    rhf.onChange(updated);
+                    rhf.onChange(evaluateFieldLinkage(fields, updated).values);
                     handleFormChange();
                   }}
                 />

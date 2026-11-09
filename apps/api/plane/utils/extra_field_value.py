@@ -227,6 +227,7 @@ def validate_extra_field_values(
     project_id: str,
     issue_type_id: Optional[str],
     require_all: bool = True,
+    existing_values: Optional[Dict[str, Any]] = None,
 ) -> Tuple[List[Tuple[TypeExtraField, Any]], Dict[str, List[str]]]:
     """对一组 `extra_field_values` 做项目/类型/必填/类型校验。
 
@@ -247,6 +248,11 @@ def validate_extra_field_values(
     )
     field_map: Dict[str, TypeExtraField] = {str(f.id): f for f in fields_qs}
 
+    from plane.utils.field_linkage import evaluate_linkage, sources
+    proposed = dict(existing_values or {})
+    proposed.update(pending_extra_field_values(raw_values))
+    effective_values, _, _ = evaluate_linkage(list(field_map.values()), proposed)
+
     errors: Dict[str, List[str]] = {}
     items: List[Tuple[TypeExtraField, Any]] = []
     seen_ids = set()
@@ -263,20 +269,36 @@ def validate_extra_field_values(
             errors.setdefault(field_id, []).append("字段不属于该工作项类型")
             continue
 
-        normalized, err = _coerce_value_for_field(field, raw.get("value"), project_id)
+        normalized, err = _coerce_value_for_field(field, effective_values.get(field_id), project_id)
         if err:
             errors.setdefault(field_id, []).append(err)
             continue
         items.append((field, normalized))
 
-    normalized_by_field_id = {str(field.id): value for field, value in items}
+    combined = dict(existing_values or {})
+    combined.update({str(field.id): value for field, value in items})
+    normalized, visible, _ = evaluate_linkage(list(field_map.values()), combined)
+    affected = {key for key in seen_ids if combined.get(key) != (existing_values or {}).get(key)}
+    dependents = set()
+    for _ in field_map:
+        added = {key for key, field in field_map.items() if set(sources(field.linkage)) & affected}
+        dependents.update(added)
+        if added <= affected:
+            break
+        affected.update(added)
+    cleaned = []
     for field_id, field in field_map.items():
-        if require_all and field.is_required and field_id not in seen_ids:
-            errors.setdefault(field_id, []).append(f"{field.name} 为必填字段")
-        if field.is_required and field_id in seen_ids:
-            normalized = normalized_by_field_id.get(field_id)
-            if normalized is None:
+        value = normalized.get(field_id)
+        changed = combined.get(field_id) != value
+        if field_id not in visible:
+            errors.pop(field_id, None)
+        if field_id in seen_ids or changed:
+            cleaned.append((field, value))
+        # A partial upstream edit may clear B; B can be completed in the next edit.
+        if field_id in visible and field.is_required and _is_value_empty(value):
+            if require_all or (field_id in seen_ids and field_id not in dependents):
                 errors.setdefault(field_id, []).append(f"{field.name} 为必填字段")
+    items = cleaned
 
     return items, errors
 
@@ -312,7 +334,6 @@ def get_missing_required_extra_fields(
             scheme__projects=issue.project_id,
             issue_type_id=issue.type_id,
             is_active=True,
-            is_required=True,
             deleted_at__isnull=True,
         ).order_by("sort_order", "created_at")
     )
@@ -329,11 +350,10 @@ def get_missing_required_extra_fields(
     }
     if pending_values:
         value_map.update(pending_values)
-    return [
-        field
-        for field in required_fields
-        if _is_value_empty(value_map.get(str(field.id)))
-    ]
+    from plane.utils.field_linkage import evaluate_linkage
+    normalized, visible, _ = evaluate_linkage(required_fields, value_map)
+    return [field for field in required_fields if field.is_required and str(field.id) in visible
+            and _is_value_empty(normalized.get(str(field.id)))]
 
 
 def save_extra_field_values(

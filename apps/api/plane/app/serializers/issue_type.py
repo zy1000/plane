@@ -11,7 +11,18 @@ from plane.db.models.issue_type import LIBRARY_FIELD_DEFINITION_COLUMNS, IssueTy
 LIBRARY_BOUND_EDITABLE_FIELDS = {"sort_order", "issue_type"}
 
 
-class TypeExtraFieldSerializer(BaseSerializer):
+class LinkageSerializerMixin:
+    def save(self, **kwargs):
+        from django.core.exceptions import ValidationError as DjangoValidationError
+        from django.db import transaction
+        try:
+            with transaction.atomic():
+                return super().save(**kwargs)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError({"linkage": exc.messages}) from exc
+
+
+class TypeExtraFieldSerializer(LinkageSerializerMixin, BaseSerializer):
     # 字段归方案。project / project_id 取方案的归属项目（模式方案为空），保留给老调用方
     project = serializers.UUIDField(source="scheme.project_id", read_only=True)
     project_id = serializers.UUIDField(source="scheme.project_id", read_only=True)
@@ -47,6 +58,7 @@ class TypeExtraFieldSerializer(BaseSerializer):
             "options",
             "default_value",
             "validation",
+            "linkage",
             "created_at",
             "updated_at",
         ]
@@ -112,6 +124,7 @@ class TypeExtraFieldSerializer(BaseSerializer):
             if changed or (attrs.get("issue_type") and attrs["issue_type"].id != self.instance.issue_type_id):
                 raise serializers.ValidationError({"error": "字段库字段请到字段库修改"})
 
+        _validate_linkage_candidate(self, attrs, issue_type=issue_type)
         return attrs
 
     def create(self, validated_data):
@@ -142,6 +155,7 @@ class IssueTypeExtraFieldSerializer(BaseSerializer):
             "options",
             "default_value",
             "validation",
+            "linkage",
         ]
 
 
@@ -240,7 +254,7 @@ class IssueTypeSerializer(BaseSerializer):
         read_only_fields = ["workspace", "system_key", "created_at", "updated_at"]
 
 
-class IssueFieldDefinitionSerializer(BaseSerializer):
+class IssueFieldDefinitionSerializer(LinkageSerializerMixin, BaseSerializer):
     """通用字段库的字段。``used_by`` / ``binding_count`` 由视图补。"""
 
     workspace_id = serializers.UUIDField(read_only=True)
@@ -260,10 +274,16 @@ class IssueFieldDefinitionSerializer(BaseSerializer):
             "options",
             "default_value",
             "validation",
+            "linkage",
             "created_at",
             "updated_at",
         ]
         read_only_fields = ["id", "workspace_id", "created_at", "updated_at"]
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        _validate_linkage_candidate(self, attrs, workspace_id=self.context.get("workspace_id"))
+        return attrs
 
     def validate_name(self, value):
         name = (value or "").strip()
@@ -287,3 +307,16 @@ class IssueFieldDefinitionSerializer(BaseSerializer):
             if clash is not None:
                 raise serializers.ValidationError(f"类型「{clash.issue_type.name}」里已有同名字段")
         return name
+
+
+def _validate_linkage_candidate(serializer, attrs, **scope):
+    from copy import copy
+    from django.core.exceptions import ValidationError as DjangoValidationError
+    from plane.utils.field_linkage import validate_field
+    candidate = copy(serializer.instance) if serializer.instance else serializer.Meta.model(**scope)
+    for key, value in attrs.items():
+        setattr(candidate, key, value)
+    try:
+        validate_field(candidate)
+    except DjangoValidationError as exc:
+        raise serializers.ValidationError({"linkage": exc.messages}) from exc

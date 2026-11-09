@@ -7,8 +7,6 @@ from plane.app.permissions import IssueSchemeConfigPermission
 from plane.app.serializers.issue_type import TypeExtraFieldSerializer, TypeExtraFieldLiteSerializer
 from plane.app.views.base import BaseViewSet
 from plane.app.views.issue_scheme.scope import IssueSchemeScopeMixin
-from django.db import transaction
-from django.db.models import Max
 
 from plane.db.models import IssueFieldDefinition, IssueType, TypeExtraField
 from plane.utils.issue_scheme import (
@@ -58,6 +56,10 @@ class IssueExtraViewSet(IssueSchemeScopeMixin, BaseViewSet):
     def destroy(self, request, *args, **kwargs):
         # 删除保护（需求 4.3）：字段归方案，任一项目（含已脱离的）有这个字段的值就不能删，只能停用
         field = self.get_object()
+        from plane.utils.field_linkage import dependent_names
+        names = dependent_names(field)
+        if names:
+            return Response({"error": f"请先调整依赖此字段的联动规则：{'、'.join(names)}"}, status=status.HTTP_409_CONFLICT)
         refs = extra_field_references(field.id)
         if is_referenced(refs):
             return Response(in_use_response_data(refs, "字段"), status=status.HTTP_409_CONFLICT)
@@ -89,26 +91,11 @@ class IssueExtraViewSet(IssueSchemeScopeMixin, BaseViewSet):
         }
         if len(definitions) != len(ids):
             return Response({"error": "字段不在字段库里"}, status=status.HTTP_400_BAD_REQUEST)
-        existing_names = set(TypeExtraField.objects.filter(issue_type=issue_type).values_list("name", flat=True))
-        clashes = [definitions[item].name for item in ids if definitions[item].name in existing_names]
-        if clashes:
-            return Response(
-                {"error": f"类型「{issue_type.name}」里已有同名字段：{'、'.join(clashes)}"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        with transaction.atomic():
-            last = TypeExtraField.objects.filter(issue_type=issue_type).aggregate(m=Max("sort_order"))["m"] or 0
-            created = []
-            for index, item in enumerate(ids):
-                definition = definitions[item]
-                created.append(
-                    TypeExtraField.objects.create(
-                        scheme_id=issue_type.scheme_id,
-                        issue_type=issue_type,
-                        library_field=definition,
-                        sort_order=last + (index + 1) * 10000,
-                        **definition.definition_values(),
-                    )
-                )
+        from django.core.exceptions import ValidationError
+        from plane.utils.field_linkage import bind_library_dependencies
+        try:
+            created = bind_library_dependencies(issue_type, ids)
+        except ValidationError as exc:
+            return Response({"error": "；".join(exc.messages)}, status=status.HTTP_400_BAD_REQUEST)
         serializer = TypeExtraFieldSerializer(created, many=True, context=self.get_serializer_context())
         return Response(serializer.data, status=status.HTTP_201_CREATED)

@@ -1,3 +1,4 @@
+import type { TFieldLinkage } from "@plane/types";
 import { API_BASE_URL } from "@plane/constants";
 import { APIService } from "@/services/api.service";
 import { issueConfigBasePath } from "@/services/project/issue-scheme-scope";
@@ -64,6 +65,7 @@ export type TTypeExtraField = {
   options?: Record<string, unknown>;
   default_value?: unknown;
   validation?: Record<string, unknown>;
+  linkage?: TFieldLinkage;
   /** 绑定的通用字段库字段；非空时这一行的定义只读（只能调排序或移除），改定义去字段库 */
   library_field_id?: string | null;
   created_at?: string;
