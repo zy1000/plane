@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { observer } from "mobx-react";
 import { useSearchParams } from "react-router";
-import { AlertCircle, ClipboardCheck, Plus } from "lucide-react";
+import { AlertCircle, ClipboardCheck } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
-import { SearchIcon } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TStageReviewTemplate } from "@plane/types";
 import { STAGE_REVIEW_ROOT_KINDS } from "@plane/types";
@@ -15,6 +14,7 @@ import { useStageReviewTemplates } from "@/hooks/store/use-stage-review-template
 import { useStageTypes } from "@/hooks/store/use-stage-types";
 import { useTemplatePermissions } from "../permissions";
 import { useTemplateCenter } from "../template-center-context";
+import { TemplatePageHeader, TemplatePageSearch } from "../template-page-header";
 import { StageRail } from "./stage-rail";
 import { StageReviewTemplateFormModal, type TStageReviewFormValue } from "./stage-review-template-form-modal";
 import { StageReviewTemplateTable } from "./stage-review-template-table";
@@ -161,7 +161,7 @@ export const StageReviewTemplateList = observer(function StageReviewTemplateList
   const renderBody = () => {
     if (isLoading) {
       return (
-        <Loader className="flex min-h-0 w-full flex-1 gap-4 px-7">
+        <Loader className="flex min-h-0 w-full flex-1 gap-4 px-7 pt-5">
           <Loader.Item height="420px" width="248px" className="hidden md:block" />
           <Loader.Item height="420px" width="100%" className="flex-1" />
         </Loader>
@@ -198,7 +198,7 @@ export const StageReviewTemplateList = observer(function StageReviewTemplateList
     }
 
     return (
-      <div className="flex min-h-0 w-full flex-1 border-t border-subtle">
+      <div className="flex min-h-0 w-full flex-1">
         <div className="min-h-0 w-[220px] shrink-0 border-r border-subtle">
           <StageRail
             groups={groups}
@@ -252,29 +252,14 @@ export const StageReviewTemplateList = observer(function StageReviewTemplateList
     <>
       <PageHead title={`${t(`${I18N}.title`)} - ${t("workspace_templates.title")}`} />
       <ContentWrapper className="flex min-h-0 flex-col overflow-hidden bg-surface-1">
-        <div className="flex shrink-0 flex-wrap items-start gap-4 px-7 pb-[18px] pt-6">
-          <div className="min-w-0">
-            <h1 className="text-20 font-semibold text-primary">{t(`${I18N}.title`)}</h1>
-            <p className="mt-1 text-13 text-secondary">按阶段类型维护标准评审与评审活动；研发模式的阶段从这里勾选节点。</p>
-          </div>
-          <div className="ml-auto flex items-center gap-2">
-            <div className="relative">
-              <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-placeholder" />
-              <input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder={t(`${I18N}.search_placeholder`)}
-                className="h-8 w-60 rounded-md border border-subtle bg-surface-1 pr-2.5 pl-8 text-13 text-primary outline-none placeholder:text-placeholder focus:border-accent-strong"
-              />
-            </div>
-            {canManageReviewTemplates && (
-              <Button variant="primary" onClick={() => setEditor({ mode: "create", parent: null })}>
-                <Plus className="size-3.5" />
-                {t(`${I18N}.create`)}
-              </Button>
-            )}
-          </div>
-        </div>
+        <TemplatePageHeader title={t(`${I18N}.title`)}>
+          <TemplatePageSearch value={search} onChange={setSearch} placeholder={t(`${I18N}.search_placeholder`)} />
+          {canManageReviewTemplates && (
+            <Button variant="primary" size="xl" className="px-3" onClick={() => setEditor({ mode: "create", parent: null })}>
+              {t(`${I18N}.create`)}
+            </Button>
+          )}
+        </TemplatePageHeader>
         {renderBody()}
       </ContentWrapper>
 

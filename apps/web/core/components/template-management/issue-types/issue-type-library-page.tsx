@@ -11,12 +11,14 @@ import { useIssueTypeLibrary } from "@/hooks/store/use-issue-type-library";
 import { useProjectIssueTypes } from "@/hooks/store/use-project-issue-types";
 import type { TIssueType } from "@/services/project/project-issue-type.service";
 import { useTemplatePermissions } from "../permissions";
+import { TemplatePageHeader, TemplatePageSearch } from "../template-page-header";
 import { ISSUE_TYPE_LIBRARY_SEGMENTS, IssueTypeLibraryDetail } from "./issue-type-library-detail";
 import { IssueTypeLibraryList } from "./issue-type-library-list";
 import type { TIssueTypeLibrarySegment } from "./routes";
 
 /**
- * 模板中心「工作项类型」：工作区唯一的类型库。左边选类型，右边看这个类型的属性 / 状态 / 工作流。
+ * 模板中心「工作项类型」：工作区唯一的类型库。页头下面左边一列选类型，右边看这个类型的属性 / 布局 / 状态 / 工作流。
+ * 页头和类型列不动，只有右边详情滚动。
  *
  * 所有研发模式共用这一份类型、状态、工作流和字段，模式只关联其中一部分（模式页「工作项」页签）。
  * 选中项与分段放在 URL（?type= / ?tab=），刷新不丢，模式页「去类型库」也靠它直达。
@@ -32,6 +34,7 @@ export const IssueTypeLibraryPage = observer(function IssueTypeLibraryPage({
   const [searchParams, setSearchParams] = useSearchParams();
   const [isCreating, setIsCreating] = useState(false);
   const [isCreateSubmitting, setIsCreateSubmitting] = useState(false);
+  const [query, setQuery] = useState("");
 
   const issueTypes = scopeKey ? issueTypesStore.issueTypes : undefined;
   const selected = issueTypes?.find((item) => item.id === searchParams.get("type")) ?? issueTypes?.[0];
@@ -93,31 +96,31 @@ export const IssueTypeLibraryPage = observer(function IssueTypeLibraryPage({
   return (
     <>
       <PageHead title="工作项类型 - 模板中心" />
-      <ContentWrapper className="bg-surface-1">
-        <header className="flex flex-wrap items-center justify-between gap-3 px-8 pt-6">
-          <div className="flex items-center gap-2.5">
-            <h1 className="text-20 leading-7 font-semibold text-primary">工作项类型</h1>
-            {issueTypes && <span className="text-14 tabular-nums text-tertiary">{issueTypes.length}</span>}
-          </div>
+      <ContentWrapper className="flex min-h-0 flex-col overflow-hidden bg-surface-1">
+        <TemplatePageHeader title="工作项类型" count={issueTypes?.length}>
+          <TemplatePageSearch value={query} onChange={setQuery} placeholder="搜索类型" />
           {canEdit && scopeKey && (
             <Button variant="primary" size="xl" className="px-3" onClick={() => setIsCreating(true)}>
               新建类型
             </Button>
           )}
-        </header>
+        </TemplatePageHeader>
 
         {libraryError ? (
           <div className="py-16 text-center text-13 text-secondary">加载工作项类型库失败，请刷新重试。</div>
         ) : (
-          <div className="flex items-start gap-6 px-8 pt-5 pb-8">
-            <IssueTypeLibraryList
-              issueTypes={issueTypes}
-              selectedId={selected?.id}
-              onSelect={(issueTypeId) => updateParams({ type: issueTypeId })}
-            />
+          <div className="flex min-h-0 w-full flex-1">
+            <div className="min-h-0 w-[200px] shrink-0 border-r border-subtle">
+              <IssueTypeLibraryList
+                issueTypes={issueTypes}
+                query={query}
+                selectedId={selected?.id}
+                onSelect={(issueTypeId) => updateParams({ type: issueTypeId })}
+              />
+            </div>
             <section
               aria-label="类型详情"
-              className="min-w-0 flex-1 rounded-xl border border-subtle px-7 pt-6 pb-7"
+              className="vertical-scrollbar scrollbar-sm min-h-0 min-w-0 flex-1 overflow-y-auto px-8 pt-6 pb-10"
             >
               {renderDetail()}
             </section>
