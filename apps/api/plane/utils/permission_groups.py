@@ -138,7 +138,7 @@ def normalize_payload(role, permission_keys, type_limits, valid_type_ids):
 
 def set_workspace_role_permissions(role, permission_keys, type_limits):
     if role.kind == WorkspaceRole.KIND_DATA:
-        raise PermissionGroupError("数据权限只配置项目 / 产品范围，没有操作权限。")
+        raise PermissionGroupError("数据权限组只配置项目 / 产品范围，没有操作权限。")
     valid = {option["id"] for option in workspace_type_options(role.workspace_id)}
     role.permissions = normalize_payload(role, permission_keys, type_limits, valid)
     role.save(update_fields=["permissions", "updated_at", "updated_by"])
@@ -147,7 +147,7 @@ def set_workspace_role_permissions(role, permission_keys, type_limits):
 
 def set_project_role_permissions(role, permission_keys, type_limits):
     if role.source_template_id:
-        raise PermissionGroupError("引用模板的权限组不能在项目里修改，请改工作区的模板。", "PERMISSION_GROUP_REFERENCED")
+        raise PermissionGroupError("标准权限组不能在项目里修改，请到工作区设置里修改。", "PERMISSION_GROUP_REFERENCED")
     valid = {option["id"] for option in project_type_options(role.project)}
     valid |= {option["id"] for option in workspace_type_options(role.workspace_id)}
     role.permissions = normalize_payload(role, permission_keys, type_limits, valid)
@@ -243,7 +243,7 @@ def template_projects(template):
 def exclude_template_project(template, project):
     """项目不再引用模板：记排除，硬删项目里的引用行及其成员 / 团队绑定。"""
     if template.kind != WorkspaceRole.KIND_PROJECT_TEMPLATE:
-        raise PermissionGroupError("这个权限组不是项目权限模板。")
+        raise PermissionGroupError("这个权限组不是项目标准权限组。")
     WorkspaceRoleProjectExclusion.objects.get_or_create(role=template, project=project)
     rows = ProjectRole.objects.filter(project=project, source_template=template)
     ProjectMemberRole.objects.filter(role__in=rows).delete(soft=False)
@@ -264,12 +264,12 @@ def restore_template_project(template, project):
 def template_reference_row(project, template):
     """项目里引用这个模板的那一行，没有就建（引用行按需生成）。模板必须正引用着这个项目。"""
     if not template_references_project(template, project.id):
-        raise PermissionGroupError("这个模板没有引用本项目（已排除）。")
+        raise PermissionGroupError("这个标准权限组没有引用本项目（已排除）。")
     row = ProjectRole.objects.filter(project=project, source_template=template).first()
     if row is not None:
         return row
     taken = set(ProjectRole.objects.filter(project=project).values_list("name", flat=True))
-    name = template.name if template.name not in taken else f"{template.name}（模板）"
+    name = template.name if template.name not in taken else f"{template.name}（标准权限组）"
     return ProjectRole.objects.create(
         project=project,
         workspace_id=project.workspace_id,
@@ -415,7 +415,7 @@ def group_member_ids(role):
 def bind_workspace_group_members(role, user_ids):
     """把一批工作区成员加进工作区权限组 / 数据权限。模板没有成员。"""
     if not role.can_have_members:
-        raise PermissionGroupError("项目权限模板没有成员，请在项目里绑定。")
+        raise PermissionGroupError("项目标准权限组没有成员，请在项目里绑定。")
     members = WorkspaceMember.objects.filter(
         workspace_id=role.workspace_id, member_id__in=list(user_ids), is_active=True, deleted_at__isnull=True
     )

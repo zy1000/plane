@@ -80,7 +80,7 @@ export function RolesPanel({
       <div className="flex items-center justify-between gap-3 border-b border-subtle px-5 py-3">
         <div>
           <p className="text-13 font-medium text-primary">已分配权限组</p>
-          <p className="mt-0.5 text-11 text-tertiary">团队绑定的工作区权限组 / 数据权限会立即对团队成员生效</p>
+          <p className="mt-0.5 text-11 text-tertiary">团队绑定的工作区权限组 / 数据权限组会立即对团队成员生效</p>
         </div>
         {canManage && (
           <Button variant="primary" prependIcon={<PlusIcon />} onClick={() => setShowAddModal(true)}>

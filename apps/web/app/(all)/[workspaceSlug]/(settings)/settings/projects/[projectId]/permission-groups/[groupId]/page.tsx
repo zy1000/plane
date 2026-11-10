@@ -140,7 +140,7 @@ function ProjectPermissionGroupDetailPage({ params }: Route.ComponentProps) {
     ) : undefined;
 
   const meta = group?.updated_at
-    ? `${group.source === "project" ? "更新于" : "模板更新于"} ${renderFormattedPayloadDate(group.updated_at)}`
+    ? `${group.source === "project" ? "更新于" : "标准权限组更新于"} ${renderFormattedPayloadDate(group.updated_at)}`
     : null;
 
   return (
@@ -199,7 +199,7 @@ function ProjectPermissionGroupDetailPage({ params }: Route.ComponentProps) {
                   notice={
                     !content.is_editable ? (
                       <div className="rounded-lg border border-subtle bg-layer-1 px-4 py-2.5 text-13 text-secondary">
-                        这是工作区的模板组，权限请到工作区设置里改；本项目里只能绑人或「删除引用」。
+                        这是工作区的标准权限组，权限请到工作区设置里改；本项目里只能绑人或「删除引用」。
                       </div>
                     ) : !canManage ? (
                       <div className="rounded-lg border border-subtle bg-layer-1 px-4 py-2.5 text-13 text-secondary">

@@ -41,11 +41,11 @@ const COLUMNS: Record<TPermissionGroupKind, { grid: string; headers: string[] }>
   },
   project_template: {
     grid: "grid-cols-[minmax(220px,1fr)_104px_200px_88px]",
-    headers: ["模板", "项目权限", "引用项目"],
+    headers: ["权限组", "项目权限", "引用项目"],
   },
   data: {
     grid: "grid-cols-[minmax(220px,1fr)_140px_150px_150px_88px]",
-    headers: ["数据权限", "成员", "项目", "产品"],
+    headers: ["权限组", "成员", "项目", "产品"],
   },
 };
 
@@ -53,7 +53,7 @@ const ROW = "grid items-center gap-x-4 px-5";
 const OP_LINK = "text-14 hover:underline disabled:cursor-not-allowed disabled:text-placeholder disabled:no-underline";
 
 /**
- * 权限组列表：顶部三段「工作区权限组 / 项目权限模板 / 数据权限」各一张表，列按类型不同。
+ * 权限组列表：顶部三段「工作区权限组 / 数据权限组 / 项目标准权限组」各一张表，列按类型不同。
  * 名称点进详情，「编辑」进该类型的默认页签，「删除」常显（灰字，确认弹窗里写清影响）。
  */
 export function PermissionGroupsList(props: Props) {

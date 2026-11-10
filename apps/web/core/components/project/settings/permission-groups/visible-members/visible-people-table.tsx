@@ -185,7 +185,7 @@ export const VisiblePeopleTable = observer(function VisiblePeopleTable({ data, c
           <SourceFilterChip
             key={channel.key}
             label={channel.label}
-            prefix={channel.kind === "data" ? "数据权限" : undefined}
+            prefix={channel.kind === "data" ? "数据权限组" : undefined}
             count={count}
             hint={channel.hint}
             active={filter.channelKey === channel.key}

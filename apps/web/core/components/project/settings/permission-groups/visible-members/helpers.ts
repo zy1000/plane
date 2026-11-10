@@ -69,7 +69,7 @@ export const sourceChips = (person: TProjectVisiblePerson): TSourceChip[] =>
       default:
         return {
           key: `data:${source.role_id}`,
-          prefix: "数据权限",
+          prefix: "数据权限组",
           label: source.role_name,
           tone: "data",
           title: source.team ? `通过团队「${source.team}」分配` : undefined,

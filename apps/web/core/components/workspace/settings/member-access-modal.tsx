@@ -170,7 +170,7 @@ export function MemberAccessModal(props: Props) {
               options={groupOptions.data}
               value={value.custom_role_ids}
               onChange={handleGroupsChange}
-              placeholder="搜索数据权限"
+              placeholder="搜索数据权限组"
             />
           </div>
         </div>

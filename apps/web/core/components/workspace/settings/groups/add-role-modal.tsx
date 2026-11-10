@@ -119,7 +119,7 @@ export function AddRoleModal({
           <div>
             <h3 className="text-body-lg-medium text-primary">添加团队权限组</h3>
             <p className="mt-1 text-13 leading-5 text-secondary">
-              所选工作区权限组 / 数据权限将自动授予团队中的全部成员。
+              所选工作区权限组 / 数据权限组将自动授予团队中的全部成员。
             </p>
           </div>
           <button
@@ -186,7 +186,7 @@ export function AddRoleModal({
                 {searchQuery ? "没有匹配的权限组" : assignableRoles.length === 0 ? "暂无可用权限组" : "所有权限组均已分配"}
               </p>
               <p className="mt-1 text-13 text-secondary">
-                {searchQuery ? "尝试更换搜索关键词。" : "可以前往权限设置创建新的工作区权限组或数据权限。"}
+                {searchQuery ? "尝试更换搜索关键词。" : "可以前往权限设置创建新的工作区权限组或数据权限组。"}
               </p>
             </div>
           ) : (

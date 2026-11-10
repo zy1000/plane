@@ -21,8 +21,8 @@ const describeImpact = (group: IPermissionGroup) => {
   switch (group.kind) {
     case "project_template":
       return (group.referenced_project_count ?? 0) > 0
-        ? `有 ${group.referenced_project_count} 个项目正在引用这个模板，删除后这些项目里的这个权限组一并消失，引用它的项目里绑定的成员会解绑。`
-        : "目前没有项目引用这个模板。";
+        ? `有 ${group.referenced_project_count} 个项目正在引用这个权限组，删除后这些项目里的这个权限组一并消失，引用它的项目里绑定的成员会解绑。`
+        : "目前没有项目引用这个权限组。";
     case "data":
       return group.member_count > 0
         ? `组内的 ${group.member_count} 名成员会失去这些项目 / 产品的可见范围（通过团队获得的也一并失去）。`

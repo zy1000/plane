@@ -11,12 +11,12 @@ export const WORKSPACE_KEY_TOTAL = getScopeKeys("workspace").length;
 export const PROJECT_KEY_TOTAL = getScopeKeys("project").length;
 
 /** 三类权限组（docs/permission-refactor/split-plan.md §1），列表分段、新建弹窗「类型」字段都按这个顺序 */
-export const PERMISSION_GROUP_KINDS: TPermissionGroupKind[] = ["workspace", "project_template", "data"];
+export const PERMISSION_GROUP_KINDS: TPermissionGroupKind[] = ["workspace", "data", "project_template"];
 
 export const PERMISSION_GROUP_KIND_LABELS: Record<TPermissionGroupKind, string> = {
   workspace: "工作区权限组",
-  project_template: "项目权限模板",
-  data: "数据权限",
+  data: "数据权限组",
+  project_template: "项目标准权限组",
 };
 
 export const isPermissionGroupKind = (value: string | null | undefined): value is TPermissionGroupKind =>

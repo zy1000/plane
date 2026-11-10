@@ -318,7 +318,7 @@ class WorkspaceRoleDataScopeAPIView(BaseAPIView):
         if role is None:
             return Response({"error": "Permission group not found."}, status=status.HTTP_404_NOT_FOUND)
         if not role.is_data_group:
-            return Response({"error": "只有数据权限能配置项目 / 产品范围。"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "只有数据权限组能配置项目 / 产品范围。"}, status=status.HTTP_400_BAD_REQUEST)
         try:
             role.data_scope = validate_data_scope(role.workspace, request.data.get("data_scope"))
         except DataScopeError as exc:

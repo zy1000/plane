@@ -66,8 +66,8 @@ function ProjectSummary(props: { permissions: IMyAccessProjectPermissions; visib
     parts.push(
       <span key="all">
         {groups.length > 0
-          ? `在 ${visibleProjectCount} 个可见项目上都有；进到具体项目还会并上那里绑定的模板`
-          : "没有来自工作区权限组的项目权限；进到具体项目会看到那里绑定的模板"}
+          ? `在 ${visibleProjectCount} 个可见项目上都有；进到具体项目还会并上那里绑定的标准权限组`
+          : "没有来自工作区权限组的项目权限；进到具体项目会看到那里绑定的标准权限组"}
       </span>
     );
   } else {
@@ -76,7 +76,7 @@ function ProjectSummary(props: { permissions: IMyAccessProjectPermissions; visib
     if (templates.length > 0) {
       parts.push(
         <span key="template" className="inline-flex flex-wrap items-center gap-1">
-          本项目绑定的模板
+          本项目绑定的标准权限组
           {templates.map((group) => (
             <Chip key={group.id} tone="green">
               {group.name}

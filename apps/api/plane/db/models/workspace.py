@@ -579,11 +579,11 @@ class WorkspaceRole(BaseModel):
         perms = self.permissions if isinstance(self.permissions, dict) else {}
         keys = perms.get("permission_keys") or []
         if self.kind == self.KIND_DATA and keys:
-            raise ValidationError("数据权限不能有操作权限。")
+            raise ValidationError("数据权限组不能有操作权限。")
         if self.kind == self.KIND_PROJECT_TEMPLATE and any(key.startswith("workspace.") for key in keys):
-            raise ValidationError("项目权限模板只能有项目权限。")
+            raise ValidationError("项目标准权限组只能有项目权限。")
         if self.kind != self.KIND_DATA and self.data_scope != default_data_scope():
-            raise ValidationError("只有数据权限能配置白名单。")
+            raise ValidationError("只有数据权限组能配置白名单。")
 
 
 class WorkspaceRoleProjectExclusion(BaseModel):
@@ -636,7 +636,7 @@ class WorkspaceMemberRole(BaseModel):
             if self.workspace_id != self.role.workspace_id:
                 raise ValidationError("The role does not belong to this workspace.")
             if not self.role.can_have_members:
-                raise ValidationError("项目权限模板不能直接绑定成员，请在项目里绑定。")
+                raise ValidationError("项目标准权限组不能直接绑定成员，请在项目里绑定。")
 
     def save(self, *args, **kwargs):
         if self.member_id:
@@ -740,7 +740,7 @@ class WorkspaceGroupRole(BaseModel):
             if self.group.workspace_id != self.role.workspace_id:
                 raise ValidationError("The role does not belong to this workspace.")
             if not self.role.can_have_members:
-                raise ValidationError("项目权限模板不能绑定团队，请在项目里绑定。")
+                raise ValidationError("项目标准权限组不能绑定团队，请在项目里绑定。")
 
     def save(self, *args, **kwargs):
         self.full_clean(exclude=["created_by", "updated_by"])

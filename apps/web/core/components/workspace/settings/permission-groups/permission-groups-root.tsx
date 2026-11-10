@@ -44,7 +44,7 @@ const CREATED_NEXT_STEP: Record<TPermissionGroupKind, string> = {
   data: "接着设置它的可见范围",
 };
 
-/** 工作区设置 › 权限组（列表页）：三段「工作区权限组 / 项目权限模板 / 数据权限」，当前段存 URL ?kind= */
+/** 工作区设置 › 权限组（列表页）：三段「工作区权限组 / 数据权限组 / 项目标准权限组」，当前段存 URL ?kind= */
 export const PermissionGroupsRoot = observer(function PermissionGroupsRoot(props: { workspaceSlug: string }) {
   const { workspaceSlug } = props;
   const navigate = useNavigate();

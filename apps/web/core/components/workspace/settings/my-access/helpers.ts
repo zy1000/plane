@@ -26,7 +26,7 @@ export const isPassthroughSource = (source: TMyAccessSource): source is TMyAcces
 export const describeSource = (source: TMyAccessSource): string => {
   if (isPassthroughSource(source)) return PASSTHROUGH_LABELS[source.type];
   const name = source.role?.name ?? "—";
-  if (source.type === "template") return `本项目绑定的模板「${name}」`;
+  if (source.type === "template") return `本项目绑定的标准权限组「${name}」`;
   if (source.type === "project_role") return `本项目的权限组「${name}」`;
   return source.team ? `${name}（经团队「${source.team.name}」）` : name;
 };
@@ -37,12 +37,12 @@ export const describeSources = (sources: TMyAccessSource[]): string => {
   return parts.length > 0 ? `来自 ${parts.join("、")}` : "已授予";
 };
 
-export type TGrantTag = "模板" | "本项目" | null;
+export type TGrantTag = "标准权限组" | "本项目" | null;
 
 /** 选了项目后，只来自模板 / 本项目组（没有工作区组、没有直通）的 chip 加小标 */
 export const getGrantTag = (sources: TMyAccessSource[]): TGrantTag => {
   if (sources.some((source) => source.type === "workspace_group" || isPassthroughSource(source))) return null;
-  if (sources.some((source) => source.type === "template")) return "模板";
+  if (sources.some((source) => source.type === "template")) return "标准权限组";
   if (sources.some((source) => source.type === "project_role")) return "本项目";
   return null;
 };

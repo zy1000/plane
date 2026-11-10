@@ -8,7 +8,7 @@ import type { TJobRoleOption, TProjectPermissionGroup } from "@plane/types";
 import type { TChipOption } from "@/components/permission-groups";
 
 const SOURCE_HINT: Record<TProjectPermissionGroup["source"], string> = {
-  template: "模板",
+  template: "标准权限组",
   project: "本项目",
 };
 

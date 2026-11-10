@@ -191,7 +191,7 @@ export const PermissionGroupMembersPanel = observer(function PermissionGroupMemb
         title={`把 ${getMemberDisplayName(pendingUser)} 移出「${group.name}」？`}
         content={
           group.kind === "data"
-            ? "移出后他不再拥有这个数据权限给的项目 / 产品可见范围；如果他所在的团队也绑了这个组，仍会通过团队拿到。"
+            ? "移出后他不再拥有这个数据权限组给的项目 / 产品可见范围；如果他所在的团队也绑了这个组，仍会通过团队拿到。"
             : "移出后他不再拥有这个权限组给的权限；如果他所在的团队也绑了这个组，仍会通过团队拿到。"
         }
         primaryButtonText={{ loading: "移出中", default: "移出" }}

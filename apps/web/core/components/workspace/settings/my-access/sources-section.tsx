@@ -98,7 +98,7 @@ export function SourcesSection({ workspaceSlug, data }: Props) {
             />
           ))}
         </SourceCard>
-        <SourceCard title="数据权限" count={data.data_groups.length}>
+        <SourceCard title="数据权限组" count={data.data_groups.length}>
           {data.data_groups.map((group) => (
             <GroupItem
               key={group.id}

@@ -369,7 +369,7 @@ class WorkspaceMemberCustomRolesSerializer(serializers.Serializer):
             )
         templates = [role.name for role in roles if not role.can_have_members]
         if templates:
-            raise serializers.ValidationError(f"项目权限模板不能直接绑定成员：{'、'.join(templates)}")
+            raise serializers.ValidationError(f"项目标准权限组不能直接绑定成员：{'、'.join(templates)}")
         self._roles = roles
         return normalized_ids
 
@@ -619,7 +619,7 @@ class WorkspaceGroupRoleSerializer(BaseSerializer):
         if value.deleted_at is not None:
             raise serializers.ValidationError("The role is no longer active.")
         if not value.can_have_members:
-            raise serializers.ValidationError("项目权限模板不能绑定团队，请在项目里绑定。")
+            raise serializers.ValidationError("项目标准权限组不能绑定团队，请在项目里绑定。")
 
         return value
 
