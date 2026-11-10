@@ -7,7 +7,9 @@ export const PERMISSION_KEYS = {
   WORKSPACE_SETTINGS_EDIT: "workspace.settings.edit",
   WORKSPACE_MEMBER_VIEW: "workspace.member.view",
   WORKSPACE_MEMBER_MANAGE: "workspace.member.manage",
+  WORKSPACE_DEPARTMENT_VIEW: "workspace.department.view",
   WORKSPACE_DEPARTMENT_MANAGE: "workspace.department.manage",
+  WORKSPACE_TEAM_VIEW: "workspace.team.view",
   WORKSPACE_TEAM_MANAGE: "workspace.team.manage",
   WORKSPACE_PERMISSION_GROUP_VIEW: "workspace.permission_group.view",
   WORKSPACE_PERMISSION_GROUP_MANAGE: "workspace.permission_group.manage",
@@ -26,15 +28,20 @@ export const PERMISSION_KEYS = {
   WORKSPACE_DEV_MODE_MANAGE: "workspace.dev_mode.manage",
   WORKSPACE_ISSUE_SCHEME_VIEW: "workspace.issue_scheme.view",
   WORKSPACE_ISSUE_SCHEME_MANAGE: "workspace.issue_scheme.manage",
+  WORKSPACE_DATA_DICTIONARY_VIEW: "workspace.data_dictionary.view",
   WORKSPACE_DATA_DICTIONARY_MANAGE: "workspace.data_dictionary.manage",
+  WORKSPACE_STAGE_TYPE_VIEW: "workspace.stage_type.view",
   WORKSPACE_STAGE_TYPE_MANAGE: "workspace.stage_type.manage",
+  WORKSPACE_REQUIREMENT_TYPE_VIEW: "workspace.requirement_type.view",
   WORKSPACE_REQUIREMENT_TYPE_MANAGE: "workspace.requirement_type.manage",
   WORKSPACE_TIMESHEET_VIEW_ALL: "workspace.timesheet.view_all",
   WORKSPACE_TIMESHEET_MANAGE: "workspace.timesheet.manage",
   WORKSPACE_ANALYTICS_VIEW: "workspace.analytics.view",
   WORKSPACE_EXPORT_MANAGE: "workspace.export.manage",
   WORKSPACE_VIEW_MANAGE: "workspace.view.manage",
+  WORKSPACE_WEBHOOK_VIEW: "workspace.webhook.view",
   WORKSPACE_WEBHOOK_MANAGE: "workspace.webhook.manage",
+  WORKSPACE_INTEGRATION_VIEW: "workspace.integration.view",
   WORKSPACE_INTEGRATION_MANAGE: "workspace.integration.manage",
   PROJECT_SETTINGS_EDIT: "project.settings.edit",
   PROJECT_SETTINGS_ARCHIVE: "project.settings.archive",
@@ -255,6 +262,12 @@ export const PERMISSION_CATALOG: TPermissionCatalog = {
           "label": "部门",
           "actions": [
             {
+              "key": "workspace.department.view",
+              "action": "view",
+              "label": "查看",
+              "type_limitable": false
+            },
+            {
               "key": "workspace.department.manage",
               "action": "manage",
               "label": "管理",
@@ -266,6 +279,12 @@ export const PERMISSION_CATALOG: TPermissionCatalog = {
           "key": "workspace.team",
           "label": "团队",
           "actions": [
+            {
+              "key": "workspace.team.view",
+              "action": "view",
+              "label": "查看",
+              "type_limitable": false
+            },
             {
               "key": "workspace.team.manage",
               "action": "manage",
@@ -447,6 +466,12 @@ export const PERMISSION_CATALOG: TPermissionCatalog = {
           "label": "数据字典",
           "actions": [
             {
+              "key": "workspace.data_dictionary.view",
+              "action": "view",
+              "label": "查看",
+              "type_limitable": false
+            },
+            {
               "key": "workspace.data_dictionary.manage",
               "action": "manage",
               "label": "管理",
@@ -459,6 +484,12 @@ export const PERMISSION_CATALOG: TPermissionCatalog = {
           "label": "阶段类型",
           "actions": [
             {
+              "key": "workspace.stage_type.view",
+              "action": "view",
+              "label": "查看",
+              "type_limitable": false
+            },
+            {
               "key": "workspace.stage_type.manage",
               "action": "manage",
               "label": "管理",
@@ -470,6 +501,12 @@ export const PERMISSION_CATALOG: TPermissionCatalog = {
           "key": "workspace.requirement_type",
           "label": "需求类型",
           "actions": [
+            {
+              "key": "workspace.requirement_type.view",
+              "action": "view",
+              "label": "查看",
+              "type_limitable": false
+            },
             {
               "key": "workspace.requirement_type.manage",
               "action": "manage",
@@ -549,6 +586,12 @@ export const PERMISSION_CATALOG: TPermissionCatalog = {
           "label": "Webhooks",
           "actions": [
             {
+              "key": "workspace.webhook.view",
+              "action": "view",
+              "label": "查看",
+              "type_limitable": false
+            },
+            {
               "key": "workspace.webhook.manage",
               "action": "manage",
               "label": "管理",
@@ -560,6 +603,12 @@ export const PERMISSION_CATALOG: TPermissionCatalog = {
           "key": "workspace.integration",
           "label": "集成",
           "actions": [
+            {
+              "key": "workspace.integration.view",
+              "action": "view",
+              "label": "查看",
+              "type_limitable": false
+            },
             {
               "key": "workspace.integration.manage",
               "action": "manage",

@@ -39,11 +39,15 @@ function WebhooksListPage({ params }: Route.ComponentProps) {
   const { fetchWebhooks, webhooks, clearSecretKey, webhookSecretKey, createWebhook } = useWebhook();
   const { currentWorkspace } = useWorkspace();
   // derived values
-  const canPerformWorkspaceAdminActions = allowWorkspacePermissionKeys([PERMISSION_KEYS.WORKSPACE_WEBHOOK_MANAGE], workspaceSlug);
+  const canView = allowWorkspacePermissionKeys(
+    [PERMISSION_KEYS.WORKSPACE_WEBHOOK_VIEW, PERMISSION_KEYS.WORKSPACE_WEBHOOK_MANAGE],
+    workspaceSlug
+  );
+  const canManage = allowWorkspacePermissionKeys([PERMISSION_KEYS.WORKSPACE_WEBHOOK_MANAGE], workspaceSlug);
 
   useSWR(
-    canPerformWorkspaceAdminActions ? `WEBHOOKS_LIST_${workspaceSlug}` : null,
-    canPerformWorkspaceAdminActions ? () => fetchWebhooks(workspaceSlug) : null
+    canView ? `WEBHOOKS_LIST_${workspaceSlug}` : null,
+    canView ? () => fetchWebhooks(workspaceSlug) : null
   );
 
   const pageTitle = currentWorkspace?.name
@@ -55,7 +59,7 @@ function WebhooksListPage({ params }: Route.ComponentProps) {
     if (!showCreateWebhookModal && webhookSecretKey) clearSecretKey();
   }, [showCreateWebhookModal, webhookSecretKey, clearSecretKey]);
 
-  if (workspaceUserInfo && !canPerformWorkspaceAdminActions) {
+  if (workspaceUserInfo && !canView) {
     return <NotAuthorizedView section="settings" className="h-auto" />;
   }
 
@@ -78,9 +82,11 @@ function WebhooksListPage({ params }: Route.ComponentProps) {
           title={t("workspace_settings.settings.webhooks.title")}
           description={t("workspace_settings.settings.webhooks.description")}
           control={
-            <Button variant="primary" size="lg" onClick={() => setShowCreateWebhookModal(true)}>
-              {t("workspace_settings.settings.webhooks.add_webhook")}
-            </Button>
+            canManage ? (
+              <Button variant="primary" size="lg" onClick={() => setShowCreateWebhookModal(true)}>
+                {t("workspace_settings.settings.webhooks.add_webhook")}
+              </Button>
+            ) : undefined
           }
         />
         {Object.keys(webhooks).length > 0 ? (
@@ -94,14 +100,18 @@ function WebhooksListPage({ params }: Route.ComponentProps) {
                 assetKey="webhook"
                 title={t("settings_empty_state.webhooks.title")}
                 description={t("settings_empty_state.webhooks.description")}
-                actions={[
-                  {
-                    label: t("settings_empty_state.webhooks.cta_primary"),
-                    onClick: () => {
-                      setShowCreateWebhookModal(true);
-                    },
-                  },
-                ]}
+                actions={
+                  canManage
+                    ? [
+                        {
+                          label: t("settings_empty_state.webhooks.cta_primary"),
+                          onClick: () => {
+                            setShowCreateWebhookModal(true);
+                          },
+                        },
+                      ]
+                    : undefined
+                }
                 align="start"
                 rootClassName="py-20"
               />

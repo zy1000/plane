@@ -28,6 +28,8 @@ type Props = {
   data?: Partial<IWebhook>;
   onSubmit: (data: IWebhook, webhookEventType: TWebhookEventTypes) => Promise<void>;
   handleClose?: () => void;
+  /** 只有查看权限：控件整体禁用，不显示密钥区和更新按钮 */
+  readOnly?: boolean;
 };
 
 const initialWebhookPayload: Partial<IWebhook> = {
@@ -40,7 +42,7 @@ const initialWebhookPayload: Partial<IWebhook> = {
 };
 
 export const WebhookForm = observer(function WebhookForm(props: Props) {
-  const { data, onSubmit, handleClose } = props;
+  const { data, onSubmit, handleClose, readOnly = false } = props;
   // states
   const [webhookEventType, setWebhookEventType] = useState<TWebhookEventTypes>("all");
   // store hooks
@@ -68,7 +70,7 @@ export const WebhookForm = observer(function WebhookForm(props: Props) {
 
   return (
     <form onSubmit={handleSubmit(handleFormSubmit)}>
-      <div className="space-y-5">
+      <fieldset disabled={readOnly} className="min-w-0 space-y-5">
         <div className="text-18 font-medium text-secondary">
           {data
             ? t("workspace_settings.settings.webhooks.modal.details")
@@ -94,8 +96,8 @@ export const WebhookForm = observer(function WebhookForm(props: Props) {
         <div className="mt-4">
           {webhookEventType === "individual" && <WebhookIndividualEventOptions control={control} />}
         </div>
-      </div>
-      {data ? (
+      </fieldset>
+      {readOnly ? null : data ? (
         <div className="space-y-5 pt-0">
           <WebhookSecretKey data={data} />
           <Button

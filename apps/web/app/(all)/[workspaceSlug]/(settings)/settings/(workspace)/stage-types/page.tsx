@@ -1,5 +1,6 @@
 import { observer } from "mobx-react";
 // plane imports
+import { PERMISSION_KEYS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 // components
 import { PageHead } from "@/components/core/page-title";
@@ -15,11 +16,11 @@ import { StageTypesWorkspaceSettingsHeader } from "./header";
 const WorkspaceStageTypesPage = observer(function WorkspaceStageTypesPage({ params }: Route.ComponentProps) {
   const { workspaceSlug } = params;
   const { t } = useTranslation();
-  const { workspaceInfoBySlug } = useUserPermissions();
+  const { allowWorkspacePermissionKeys } = useUserPermissions();
   const { currentWorkspace } = useWorkspace();
 
-  // 后端对工作区成员读写全开（同数据字典），这里只看是否是成员
-  const canEdit = Boolean(workspaceSlug && workspaceInfoBySlug(workspaceSlug));
+  // 与后端写接口同一把 key
+  const canEdit = allowWorkspacePermissionKeys([PERMISSION_KEYS.WORKSPACE_STAGE_TYPE_MANAGE], workspaceSlug);
 
   return (
     <SettingsContentWrapper header={<StageTypesWorkspaceSettingsHeader />}>

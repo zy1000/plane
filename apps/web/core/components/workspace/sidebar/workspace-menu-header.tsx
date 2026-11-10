@@ -40,7 +40,7 @@ export const SidebarWorkspaceMenuHeader = observer(function SidebarWorkspaceMenu
 
   useOutsideClickDetector(actionSectionRef, () => setIsMenuActive(false));
 
-  // 工作区设置入口：同设置区导航的口径（工作区成员可进，页内按 key 控制能否修改）
+  // 工作区设置入口：这里直达常规页，只给能看常规页的人；其他人从「我的权限」进设置区
   const isAdmin = allowWorkspacePermissionKeys([WORKSPACE_SETTINGS_VIEW_PERMISSION_KEY]);
 
   return (

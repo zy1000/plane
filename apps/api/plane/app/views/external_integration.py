@@ -15,7 +15,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from plane.app.permissions import allow_workspace_member, PermissionKey, has_workspace_permission
+from plane.app.permissions import allow_fine_permission, allow_workspace_member, PermissionKey, has_workspace_permission
 from plane.app.views import BaseAPIView
 from plane.bgtasks.external_integration_sync_task import run_external_integration
 from plane.db.models import Workspace
@@ -42,7 +42,9 @@ def _get_workspace(slug):
 
 
 class ExternalIntegrationListAPIView(BaseAPIView):
-    @allow_workspace_member
+    @allow_fine_permission(
+        PermissionKey.WORKSPACE_INTEGRATION_VIEW, PermissionKey.WORKSPACE_INTEGRATION_MANAGE, level="WORKSPACE"
+    )
     def get(self, request, slug):
         workspace = _get_workspace(slug)
         if workspace is None:

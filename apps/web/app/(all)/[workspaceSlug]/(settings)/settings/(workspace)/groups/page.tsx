@@ -13,7 +13,7 @@ import {
   WORKSPACE_GROUP_EDIT_PERMISSION_KEY,
   WORKSPACE_GROUP_MANAGE_MEMBER_PERMISSION_KEY,
   WORKSPACE_GROUP_MANAGE_ROLE_PERMISSION_KEY,
-  WORKSPACE_GROUP_VIEW_PERMISSION_KEY,
+  WORKSPACE_GROUP_VIEW_PERMISSION_KEYS,
 } from "@plane/constants";
 import type { IWorkspaceGroup } from "@plane/types";
 import { Button } from "@plane/propel/button";
@@ -47,7 +47,7 @@ const WorkspaceGroupsPage = observer(function WorkspaceGroupsPage({ params }: Ro
   const { currentWorkspace } = useWorkspace();
   const { workspace: workspaceMemberStore, memberMap } = useMember();
 
-  const canView = allowWorkspacePermissionKeys([WORKSPACE_GROUP_VIEW_PERMISSION_KEY], workspaceSlug);
+  const canView = allowWorkspacePermissionKeys(WORKSPACE_GROUP_VIEW_PERMISSION_KEYS, workspaceSlug);
   const canCreate = allowWorkspacePermissionKeys([WORKSPACE_GROUP_CREATE_PERMISSION_KEY], workspaceSlug);
   const canEdit = allowWorkspacePermissionKeys([WORKSPACE_GROUP_EDIT_PERMISSION_KEY], workspaceSlug);
   const canDelete = allowWorkspacePermissionKeys([WORKSPACE_GROUP_DELETE_PERMISSION_KEY], workspaceSlug);

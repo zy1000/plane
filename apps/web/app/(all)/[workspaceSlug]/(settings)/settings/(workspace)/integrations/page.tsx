@@ -1,6 +1,6 @@
 import { observer } from "mobx-react";
 // plane imports
-import { WORKSPACE_SETTINGS_EDIT_PERMISSION_KEY, WORKSPACE_SETTINGS_VIEW_PERMISSION_KEY } from "@plane/constants";
+import { PERMISSION_KEYS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 // components
 import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
@@ -21,9 +21,12 @@ const WorkspaceIntegrationsPage = observer(function WorkspaceIntegrationsPage({ 
   const { allowWorkspacePermissionKeys, workspaceUserInfo } = useUserPermissions();
   const { currentWorkspace } = useWorkspace();
 
-  // 侧边栏只是隐藏入口，直接敲 URL 仍能进来：与后端 GET / POST 的权限 key 一一对应再判一次
-  const canView = allowWorkspacePermissionKeys([WORKSPACE_SETTINGS_VIEW_PERMISSION_KEY], workspaceSlug);
-  const canSync = allowWorkspacePermissionKeys([WORKSPACE_SETTINGS_EDIT_PERMISSION_KEY], workspaceSlug);
+  // 侧边栏只是隐藏入口，直接敲 URL 仍能进来：与后端列表 / 同步接口的 key 一一对应再判一次
+  const canView = allowWorkspacePermissionKeys(
+    [PERMISSION_KEYS.WORKSPACE_INTEGRATION_VIEW, PERMISSION_KEYS.WORKSPACE_INTEGRATION_MANAGE],
+    workspaceSlug
+  );
+  const canSync = allowWorkspacePermissionKeys([PERMISSION_KEYS.WORKSPACE_INTEGRATION_MANAGE], workspaceSlug);
   const integrationsState = useExternalIntegrations(canView ? workspaceSlug : undefined);
 
   if (workspaceUserInfo[workspaceSlug] && !canView)

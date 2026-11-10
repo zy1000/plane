@@ -1,6 +1,6 @@
 import { observer } from "mobx-react";
 // plane imports
-import { WORKSPACE_SETTINGS_EDIT_PERMISSION_KEY, WORKSPACE_SETTINGS_VIEW_PERMISSION_KEY } from "@plane/constants";
+import { PERMISSION_KEYS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 // components
 import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
@@ -21,9 +21,15 @@ const WorkspaceDepartmentsPage = observer(function WorkspaceDepartmentsPage({ pa
   const { allowWorkspacePermissionKeys, workspaceUserInfo } = useUserPermissions();
   const { currentWorkspace } = useWorkspace();
 
-  // 与后端 GET departments（WORKSPACE_SETTINGS_VIEW）、同步接口（WORKSPACE_SETTINGS_EDIT）一一对应
-  const canView = allowWorkspacePermissionKeys([WORKSPACE_SETTINGS_VIEW_PERMISSION_KEY], workspaceSlug);
-  const canSync = allowWorkspacePermissionKeys([WORKSPACE_SETTINGS_EDIT_PERMISSION_KEY], workspaceSlug);
+  // 与后端部门树 / 人员接口同一口径；同步接口对人员名单认部门管理或集成管理
+  const canView = allowWorkspacePermissionKeys(
+    [PERMISSION_KEYS.WORKSPACE_DEPARTMENT_VIEW, PERMISSION_KEYS.WORKSPACE_DEPARTMENT_MANAGE],
+    workspaceSlug
+  );
+  const canSync = allowWorkspacePermissionKeys(
+    [PERMISSION_KEYS.WORKSPACE_DEPARTMENT_MANAGE, PERMISSION_KEYS.WORKSPACE_INTEGRATION_MANAGE],
+    workspaceSlug
+  );
   const departmentsState = useDepartments(canView ? workspaceSlug : undefined);
 
   if (workspaceUserInfo[workspaceSlug] && !canView) return <NotAuthorizedView section="settings" className="h-auto" />;

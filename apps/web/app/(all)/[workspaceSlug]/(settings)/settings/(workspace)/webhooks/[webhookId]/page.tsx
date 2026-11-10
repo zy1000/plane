@@ -39,12 +39,16 @@ function WebhookDetailsPage({ params }: Route.ComponentProps) {
   //   if (isCreated !== "true") clearSecretKey();
   // }, [clearSecretKey, isCreated]);
   // derived values
-  const isAdmin = allowWorkspacePermissionKeys([PERMISSION_KEYS.WORKSPACE_WEBHOOK_MANAGE], workspaceSlug);
+  const canView = allowWorkspacePermissionKeys(
+    [PERMISSION_KEYS.WORKSPACE_WEBHOOK_VIEW, PERMISSION_KEYS.WORKSPACE_WEBHOOK_MANAGE],
+    workspaceSlug
+  );
+  const canManage = allowWorkspacePermissionKeys([PERMISSION_KEYS.WORKSPACE_WEBHOOK_MANAGE], workspaceSlug);
   const pageTitle = currentWorkspace?.name ? `${currentWorkspace.name} - Webhook` : undefined;
 
   useSWR(
-    isAdmin ? `WEBHOOK_DETAILS_${workspaceSlug}_${webhookId}` : null,
-    isAdmin ? () => fetchWebhookById(workspaceSlug, webhookId) : null
+    canView ? `WEBHOOK_DETAILS_${workspaceSlug}_${webhookId}` : null,
+    canView ? () => fetchWebhookById(workspaceSlug, webhookId) : null
   );
 
   const handleUpdateWebhook = async (formData: IWebhook) => {
@@ -77,7 +81,7 @@ function WebhookDetailsPage({ params }: Route.ComponentProps) {
     }
   };
 
-  if (!isAdmin)
+  if (!canView)
     return (
       <>
         <PageHead title={pageTitle} />
@@ -100,9 +104,9 @@ function WebhookDetailsPage({ params }: Route.ComponentProps) {
       <DeleteWebhookModal isOpen={deleteWebhookModal} onClose={() => setDeleteWebhookModal(false)} />
       <div className="w-full space-y-8 overflow-y-auto">
         <div>
-          <WebhookForm onSubmit={handleUpdateWebhook} data={currentWebhook} />
+          <WebhookForm onSubmit={handleUpdateWebhook} data={currentWebhook} readOnly={!canManage} />
         </div>
-        {currentWebhook && <WebhookDeleteSection openDeleteModal={() => setDeleteWebhookModal(true)} />}
+        {currentWebhook && canManage && <WebhookDeleteSection openDeleteModal={() => setDeleteWebhookModal(true)} />}
       </div>
     </SettingsContentWrapper>
   );

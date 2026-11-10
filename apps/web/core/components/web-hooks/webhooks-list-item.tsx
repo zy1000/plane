@@ -7,10 +7,12 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 // Plane imports
+import { PERMISSION_KEYS } from "@plane/constants";
 import type { IWebhook } from "@plane/types";
 import { ToggleSwitch } from "@plane/ui";
 // hooks
 import { useWebhook } from "@/hooks/store/use-webhook";
+import { useUserPermissions } from "@/hooks/store/user";
 
 interface IWebhookListItem {
   webhook: IWebhook;
@@ -22,6 +24,8 @@ export function WebhooksListItem(props: IWebhookListItem) {
   const { workspaceSlug } = useParams();
   // store hooks
   const { updateWebhook } = useWebhook();
+  const { allowWorkspacePermissionKeys } = useUserPermissions();
+  const canManage = allowWorkspacePermissionKeys([PERMISSION_KEYS.WORKSPACE_WEBHOOK_MANAGE], workspaceSlug?.toString());
 
   const handleToggle = async () => {
     if (!workspaceSlug || !webhook.id) return;
@@ -36,7 +40,7 @@ export function WebhooksListItem(props: IWebhookListItem) {
       >
         <h5 className="truncate text-body-sm-medium">{webhook.url}</h5>
         <div className="shrink-0">
-          <ToggleSwitch value={webhook.is_active} onChange={handleToggle} />
+          <ToggleSwitch value={webhook.is_active} onChange={handleToggle} disabled={!canManage} />
         </div>
       </Link>
     </div>

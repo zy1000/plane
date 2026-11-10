@@ -81,8 +81,8 @@ _WORKSPACE = [
         [
             ("workspace.settings", "工作区", _actions("edit")),
             ("workspace.member", "成员", _actions("view", "manage")),
-            ("workspace.department", "部门", _actions("manage")),
-            ("workspace.team", "团队", _actions("manage")),
+            ("workspace.department", "部门", _actions("view", "manage")),
+            ("workspace.team", "团队", _actions("view", "manage")),
             ("workspace.permission_group", "权限组", _actions("view", "manage")),
         ],
     ),
@@ -106,9 +106,9 @@ _WORKSPACE = [
     (
         "配置",
         [
-            ("workspace.data_dictionary", "数据字典", _actions("manage")),
-            ("workspace.stage_type", "阶段类型", _actions("manage")),
-            ("workspace.requirement_type", "需求类型", _actions("manage")),
+            ("workspace.data_dictionary", "数据字典", _actions("view", "manage")),
+            ("workspace.stage_type", "阶段类型", _actions("view", "manage")),
+            ("workspace.requirement_type", "需求类型", _actions("view", "manage")),
         ],
     ),
     (
@@ -123,8 +123,8 @@ _WORKSPACE = [
     (
         "开发者",
         [
-            ("workspace.webhook", "Webhooks", _actions("manage")),
-            ("workspace.integration", "集成", _actions("manage")),
+            ("workspace.webhook", "Webhooks", _actions("view", "manage")),
+            ("workspace.integration", "集成", _actions("view", "manage")),
         ],
     ),
 ]

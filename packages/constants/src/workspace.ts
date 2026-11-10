@@ -77,7 +77,8 @@ export const RESTRICTED_URLS: string[] = [
   "instance",
 ];
 
-export const WORKSPACE_SETTINGS_VIEW_PERMISSION_KEY = WORKSPACE_MEMBER_ACCESS;
+// 常规页没有单独的查看 key：能改常规信息的人才看得到；「设置」入口据此决定落到常规页还是「我的权限」
+export const WORKSPACE_SETTINGS_VIEW_PERMISSION_KEY = "workspace.settings.edit" as const;
 export const WORKSPACE_SETTINGS_EDIT_PERMISSION_KEY = "workspace.settings.edit" as const;
 export const WORKSPACE_SETTINGS_DELETE_PERMISSION_KEY = WORKSPACE_OWNER_ACCESS;
 export const WORKSPACE_MEMBER_VIEW_PERMISSION_KEY = "workspace.member.view" as const;
@@ -89,7 +90,12 @@ export const WORKSPACE_ROLE_VIEW_PERMISSION_KEY = "workspace.permission_group.vi
 export const WORKSPACE_ROLE_CREATE_PERMISSION_KEY = "workspace.permission_group.manage" as const;
 export const WORKSPACE_ROLE_EDIT_PERMISSION_KEY = "workspace.permission_group.manage" as const;
 export const WORKSPACE_ROLE_DELETE_PERMISSION_KEY = "workspace.permission_group.manage" as const;
-export const WORKSPACE_GROUP_VIEW_PERMISSION_KEY = WORKSPACE_MEMBER_ACCESS;
+// 团队页：查看 / 管理团队的人，以及要给团队分配权限组的人
+export const WORKSPACE_GROUP_VIEW_PERMISSION_KEYS: string[] = [
+  PERMISSION_KEYS.WORKSPACE_TEAM_VIEW,
+  PERMISSION_KEYS.WORKSPACE_TEAM_MANAGE,
+  PERMISSION_KEYS.WORKSPACE_PERMISSION_GROUP_MANAGE,
+];
 export const WORKSPACE_GROUP_CREATE_PERMISSION_KEY = "workspace.team.manage" as const;
 export const WORKSPACE_GROUP_EDIT_PERMISSION_KEY = "workspace.team.manage" as const;
 export const WORKSPACE_GROUP_DELETE_PERMISSION_KEY = "workspace.team.manage" as const;
@@ -174,7 +180,7 @@ export const WORKSPACE_SETTINGS = {
     key: "groups",
     i18n_label: "workspace_settings.settings.groups.title",
     href: `/settings/groups`,
-    permissionKeys: [WORKSPACE_GROUP_VIEW_PERMISSION_KEY],
+    permissionKeys: WORKSPACE_GROUP_VIEW_PERMISSION_KEYS,
     highlight: (pathname: string, baseUrl: string) => pathname === `${baseUrl}/settings/groups/`,
   },
   roles: {
@@ -197,59 +203,58 @@ export const WORKSPACE_SETTINGS = {
     key: "export",
     i18n_label: "workspace_settings.settings.exports.title",
     href: `/settings/exports`,
-    requiresMembership: true,
+    permissionKeys: [PERMISSION_KEYS.WORKSPACE_EXPORT_MANAGE],
     highlight: (pathname: string, baseUrl: string) => pathname === `${baseUrl}/settings/exports/`,
   },
   webhooks: {
     key: "webhooks",
     i18n_label: "workspace_settings.settings.webhooks.title",
     href: `/settings/webhooks`,
-    // 原来只给整数管理员看，现在按 key：与后端 webhook 接口同一把
-    permissionKeys: [PERMISSION_KEYS.WORKSPACE_WEBHOOK_MANAGE],
+    // 与后端 webhook 读接口同一口径；新建 / 修改 / 删除页内另看 manage
+    permissionKeys: [PERMISSION_KEYS.WORKSPACE_WEBHOOK_VIEW, PERMISSION_KEYS.WORKSPACE_WEBHOOK_MANAGE],
     highlight: (pathname: string, baseUrl: string) => pathname === `${baseUrl}/settings/webhooks/`,
   },
   departments: {
     key: "departments",
     i18n_label: "workspace_settings.settings.departments.title",
     href: `/settings/departments`,
-    // 与后端 GET departments 的权限 key 一致；「立即同步」另看 WORKSPACE_SETTINGS_EDIT
-    permissionKeys: [WORKSPACE_SETTINGS_VIEW_PERMISSION_KEY],
+    // 与后端部门树 / 人员接口同一口径；「立即同步」页内另判
+    permissionKeys: [PERMISSION_KEYS.WORKSPACE_DEPARTMENT_VIEW, PERMISSION_KEYS.WORKSPACE_DEPARTMENT_MANAGE],
     highlight: (pathname: string, baseUrl: string) => pathname.startsWith(`${baseUrl}/settings/departments`),
   },
   integrations: {
     key: "integrations",
     i18n_label: "workspace_settings.settings.integrations.title",
     href: `/settings/integrations`,
-    // 与后端 GET external-integrations 的权限 key 一致；「立即同步」另看 WORKSPACE_SETTINGS_EDIT
-    permissionKeys: [WORKSPACE_SETTINGS_VIEW_PERMISSION_KEY],
+    permissionKeys: [PERMISSION_KEYS.WORKSPACE_INTEGRATION_VIEW, PERMISSION_KEYS.WORKSPACE_INTEGRATION_MANAGE],
     highlight: (pathname: string, baseUrl: string) => pathname.startsWith(`${baseUrl}/settings/integrations`),
   },
   "issue-type-categories": {
     key: "issue-type-categories",
     i18n_label: "workspace_settings.settings.issue_type_categories.title",
     href: `/settings/issue-type-categories`,
-    requiresMembership: true,
+    permissionKeys: [PERMISSION_KEYS.WORKSPACE_ISSUE_SCHEME_VIEW, PERMISSION_KEYS.WORKSPACE_ISSUE_SCHEME_MANAGE],
     highlight: (pathname: string, baseUrl: string) => pathname.startsWith(`${baseUrl}/settings/issue-type-categories`),
   },
   "requirement-types": {
     key: "requirement-types",
     i18n_label: "workspace_settings.settings.requirement_types.title",
     href: `/settings/requirement-types`,
-    requiresMembership: true,
+    permissionKeys: [PERMISSION_KEYS.WORKSPACE_REQUIREMENT_TYPE_VIEW, PERMISSION_KEYS.WORKSPACE_REQUIREMENT_TYPE_MANAGE],
     highlight: (pathname: string, baseUrl: string) => pathname.startsWith(`${baseUrl}/settings/requirement-types`),
   },
   "data-dictionaries": {
     key: "data-dictionaries",
     i18n_label: "workspace_settings.settings.data_dictionaries.title",
     href: `/settings/data-dictionaries`,
-    requiresMembership: true,
+    permissionKeys: [PERMISSION_KEYS.WORKSPACE_DATA_DICTIONARY_VIEW, PERMISSION_KEYS.WORKSPACE_DATA_DICTIONARY_MANAGE],
     highlight: (pathname: string, baseUrl: string) => pathname.startsWith(`${baseUrl}/settings/data-dictionaries`),
   },
   "stage-types": {
     key: "stage-types",
     i18n_label: "workspace_settings.settings.stage_types.title",
     href: `/settings/stage-types`,
-    requiresMembership: true,
+    permissionKeys: [PERMISSION_KEYS.WORKSPACE_STAGE_TYPE_VIEW, PERMISSION_KEYS.WORKSPACE_STAGE_TYPE_MANAGE],
     highlight: (pathname: string, baseUrl: string) => pathname.startsWith(`${baseUrl}/settings/stage-types`),
   },
   changelog: {

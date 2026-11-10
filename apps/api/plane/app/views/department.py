@@ -5,7 +5,7 @@ import uuid
 from rest_framework import status
 from rest_framework.response import Response
 
-from plane.app.permissions import allow_workspace_member, PermissionKey, allow_fine_permission
+from plane.app.permissions import PermissionKey, allow_fine_permission
 from plane.app.views import BaseAPIView
 from plane.db.models import Workspace
 from plane.integrations.base import get_last_sync
@@ -35,8 +35,12 @@ def _positive_int(value, default):
     return number if number > 0 else default
 
 
+#: 部门树与人员列表只有设置「部门」页在读，跟页面同一口径
+DEPARTMENT_READ_KEYS = (PermissionKey.WORKSPACE_DEPARTMENT_VIEW, PermissionKey.WORKSPACE_DEPARTMENT_MANAGE)
+
+
 class DepartmentTreeAPIView(BaseAPIView):
-    @allow_workspace_member
+    @allow_fine_permission(*DEPARTMENT_READ_KEYS, level="WORKSPACE")
     def get(self, request, slug):
         workspace = _get_workspace(slug)
         if workspace is None:
@@ -51,7 +55,7 @@ class DepartmentTreeAPIView(BaseAPIView):
 
 
 class DepartmentPeopleAPIView(BaseAPIView):
-    @allow_workspace_member
+    @allow_fine_permission(*DEPARTMENT_READ_KEYS, level="WORKSPACE")
     def get(self, request, slug):
         workspace = _get_workspace(slug)
         if workspace is None:

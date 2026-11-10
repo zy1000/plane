@@ -16,6 +16,9 @@ from ..base import BaseAPIView
 from plane.app.permissions import allow_fine_permission, PermissionKey
 from plane.app.serializers import WebhookSerializer, WebhookLogSerializer
 
+#: 看列表 / 详情 / 日志：查看或管理都行；改动类接口仍只认管理
+WEBHOOK_READ_KEYS = (PermissionKey.WORKSPACE_WEBHOOK_VIEW, PermissionKey.WORKSPACE_WEBHOOK_MANAGE)
+
 
 class WebhookEndpoint(BaseAPIView):
     @allow_fine_permission(PermissionKey.WORKSPACE_WEBHOOK_MANAGE, level="WORKSPACE")
@@ -35,7 +38,7 @@ class WebhookEndpoint(BaseAPIView):
                 )
             raise IntegrityError
 
-    @allow_fine_permission(PermissionKey.WORKSPACE_WEBHOOK_MANAGE, level="WORKSPACE")
+    @allow_fine_permission(*WEBHOOK_READ_KEYS, level="WORKSPACE")
     def get(self, request, slug, pk=None):
         if pk is None:
             webhooks = Webhook.objects.filter(workspace__slug=slug)
@@ -55,7 +58,10 @@ class WebhookEndpoint(BaseAPIView):
                 ),
                 many=True,
             )
-            return Response(serializer.data, status=status.HTTP_200_OK)
+            data = serializer.data
+            for item in data:
+                item.pop("secret_key", None)
+            return Response(data, status=status.HTTP_200_OK)
         else:
             webhook = Webhook.objects.get(workspace__slug=slug, pk=pk)
             serializer = WebhookSerializer(
@@ -73,7 +79,9 @@ class WebhookEndpoint(BaseAPIView):
                     "issue_comment",
                 ),
             )
-            return Response(serializer.data, status=status.HTTP_200_OK)
+            data = serializer.data
+            data.pop("secret_key", None)
+            return Response(data, status=status.HTTP_200_OK)
 
     @allow_fine_permission(PermissionKey.WORKSPACE_WEBHOOK_MANAGE, level="WORKSPACE")
     def patch(self, request, slug, pk):
@@ -119,7 +127,7 @@ class WebhookSecretRegenerateEndpoint(BaseAPIView):
 
 
 class WebhookLogsEndpoint(BaseAPIView):
-    @allow_fine_permission(PermissionKey.WORKSPACE_WEBHOOK_MANAGE, level="WORKSPACE")
+    @allow_fine_permission(*WEBHOOK_READ_KEYS, level="WORKSPACE")
     def get(self, request, slug, webhook_id):
         webhook_logs = WebhookLog.objects.filter(workspace__slug=slug, webhook=webhook_id)
         serializer = WebhookLogSerializer(webhook_logs, many=True)
