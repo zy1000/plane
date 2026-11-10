@@ -55,7 +55,7 @@ export function LayoutPreview({
             <section className="mb-6 space-y-3 border-t border-subtle pt-5">
               <h4 className="text-13 font-semibold text-primary">描述</h4>
               <p className="text-14 leading-relaxed text-secondary">
-                工作项的背景和目标显示在这里。切换下方业务页签时，标题与描述始终保留。
+                工作项的背景和目标显示在这里。
               </p>
             </section>
             <IssueFieldLayout

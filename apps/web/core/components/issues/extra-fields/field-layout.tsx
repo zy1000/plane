@@ -7,14 +7,17 @@ import { useIssueLayoutPreferences } from "@/hooks/use-issue-layout-preferences"
 import type { TTypeExtraField } from "@/services/project/project-issue-type.service";
 import type {
   TIssueFieldPlacement,
+  TIssueLayoutArea,
   TIssueLayoutContext,
+  TIssueLayoutGroup,
   TStoredIssueTypeFieldLayout,
 } from "@/services/project/issue-type-layout.types";
 import {
   ISSUE_LAYOUT_ERROR_EVENT,
   ISSUE_LAYOUT_VALIDATE_EVENT,
-  layoutFieldsForContext,
-  layoutFieldSpan,
+  layoutFieldClass,
+  layoutForContext,
+  layoutGridClass,
   resolveIssueTypeLayout,
 } from "@/utils/issue-type-layout";
 import { findValueForField, isValueEmpty } from "./extra-field-control";
@@ -32,7 +35,11 @@ type TProps = {
 };
 const EMPTY_VALUES: TIssueExtraFieldValue[] = [];
 
-/** All pages remain mounted so changing tabs or collapsing a group preserves drafts. */
+/**
+ * 按类型布局渲染自定义字段：未分组字段直接排在最前（没有分组和页面时就是描述下方的一片网格），
+ * 其后是分组，再往下是页面页签和页内内容。
+ * All pages remain mounted so changing tabs or collapsing a group preserves drafts.
+ */
 export function IssueFieldLayout({
   layout,
   fields,
@@ -56,36 +63,46 @@ export function IssueFieldLayout({
   const errorKey = Object.keys(allErrors)
     .filter((fieldId) => fields.some((field) => field.id === fieldId))
     .join(",");
-  const pages = useMemo(
-    () => layoutFieldsForContext(resolved, fields, context, errorKey.split(",")),
+  const visible = useMemo(
+    () => layoutForContext(resolved, fields, context, errorKey.split(",")),
     [resolved, fields, context, errorKey]
   );
+  const pages = visible.pages;
   const fieldMap = new Map(fields.map((field) => [field.id, field]));
   const isEmpty = (fieldId: string) => isValueEmpty(findValueForField(values, fieldId));
   const hiddenEmpty = context === "detail" && preferences.hideEmpty;
-  const locations = pages.flatMap((page) =>
-    page.groups.flatMap((group) => group.fields.map((entry) => ({ page, group, entry })))
-  );
+  // 每个字段的落点：所在页面（根上的为 null）和分组（未分组的为 null）
+  const locations = useMemo(() => {
+    const locate = (area: TIssueLayoutArea, pageId: string | null, group: TIssueLayoutGroup | null) =>
+      area.fields.map((entry) => ({ pageId, group, entry }));
+    return [
+      ...locate(visible, null, null),
+      ...visible.groups.flatMap((group) => locate(group, null, group)),
+      ...visible.pages.flatMap((page) => [
+        ...locate(page, page.id, null),
+        ...page.groups.flatMap((group) => locate(group, page.id, group)),
+      ]),
+    ];
+  }, [visible]);
+  const allGroups = [...visible.groups, ...pages.flatMap((page) => page.groups)];
   const missingRequired = locations.filter(
     ({ entry }) => fieldMap.get(entry.field_id)?.is_required && isEmpty(entry.field_id)
   );
   const selectedPage = pages.some((page) => page.id === activePage) ? activePage : pages[0]?.id;
   const openField = useCallback(
     (fieldId: string) => {
-      const location = pages
-        .flatMap((page) => page.groups.map((group) => ({ page, group })))
-        .find(({ group }) => group.fields.some((entry) => entry.field_id === fieldId));
+      const location = locations.find(({ entry }) => entry.field_id === fieldId);
       if (!location) return;
-      setActivePage(location.page.id);
+      if (location.pageId) setActivePage(location.pageId);
       update((previous) => ({
         ...previous,
         hideEmpty: false,
-        collapsed: { ...previous.collapsed, [location.group.id]: false },
+        collapsed: location.group ? { ...previous.collapsed, [location.group.id]: false } : previous.collapsed,
       }));
       setFocusField(fieldId);
       setAttempt((value) => value + 1);
     },
-    [pages, update]
+    [locations, update]
   );
 
   useEffect(() => {
@@ -154,35 +171,131 @@ export function IssueFieldLayout({
     });
 
   const emptyCount = locations.filter(({ entry }) => isEmpty(entry.field_id)).length;
-  const pageMissing = (pageId: string) => missingRequired.filter(({ page }) => page.id === pageId).length;
-  const pageCount = (pageId: string) => locations.filter(({ page }) => page.id === pageId).length;
+  const pageMissing = (pageId: string) => missingRequired.filter((item) => item.pageId === pageId).length;
+  const pageCount = (pageId: string) => locations.filter((item) => item.pageId === pageId).length;
   const navigation = pages.map((page) => ({ id: page.id, name: page.name }));
 
-  return (
-    <div ref={rootRef} className="@container/layout min-w-0 space-y-3">
-      <div className="flex flex-wrap items-center justify-end gap-3 text-12 text-secondary">
-        <button
-          type="button"
-          onClick={() =>
-            update((previous) => ({
-              ...previous,
-              collapsed: Object.fromEntries(pages.flatMap((page) => page.groups.map((group) => [group.id, false]))),
-            }))
-          }
-        >
-          全部展开
-        </button>
-        {context === "detail" && emptyCount > 0 && (
+  const hasCollapsible = allGroups.some((group) => group.collapsible);
+  const showHideEmpty = context === "detail" && emptyCount > 0;
+
+  const renderGrid = (area: TIssueLayoutArea) => (
+    <div className={cn("grid gap-x-6 gap-y-4", layoutGridClass(area.columns))}>
+      {area.fields.map((entry) => {
+        const field = fieldMap.get(entry.field_id);
+        if (!field) return null;
+        return (
+          <div
+            key={entry.field_id}
+            data-layout-field={entry.field_id}
+            tabIndex={-1}
+            hidden={hiddenEmpty && isEmpty(entry.field_id)}
+            className={cn("min-w-0 py-1 outline-offset-2", layoutFieldClass(entry.width, area.columns))}
+          >
+            {renderField(field, entry, () => clearFieldError(entry.field_id))}
+            {serverErrors[entry.field_id] && (
+              <p role="alert" className="mt-1 text-12 text-danger-primary">
+                {serverErrors[entry.field_id]}
+              </p>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+  /** 不在分组里的字段：没有标题，直接一片网格；隐藏未填后一个都不剩就不占位 */
+  const renderUngrouped = (area: TIssueLayoutArea) =>
+    area.fields.some((entry) => !(hiddenEmpty && isEmpty(entry.field_id))) && renderGrid(area);
+  const renderGroup = (group: TIssueLayoutGroup) => {
+    const collapsed = group.collapsible && (preferences.collapsed[group.id] ?? group.default_collapsed);
+    const missing = group.fields.filter(
+      (entry) => fieldMap.get(entry.field_id)?.is_required && isEmpty(entry.field_id)
+    ).length;
+    const filled = group.fields.filter((entry) => !isEmpty(entry.field_id)).length;
+    return (
+      <section key={group.id} className="border-b border-subtle pb-4">
+        <div className="flex min-h-9 items-center justify-between gap-3 text-14">
           <button
             type="button"
-            className="flex items-center gap-1"
-            onClick={() => update((previous) => ({ ...previous, hideEmpty: !previous.hideEmpty }))}
+            aria-expanded={!collapsed}
+            aria-controls={`${id}-group-${group.id}`}
+            disabled={!group.collapsible}
+            className="flex min-w-0 flex-1 items-center gap-2 py-3 text-left font-medium text-primary"
+            onClick={() =>
+              update((previous) => ({
+                ...previous,
+                collapsed: { ...previous.collapsed, [group.id]: !collapsed },
+              }))
+            }
           >
-            {hiddenEmpty ? <Eye className="size-3.5" /> : <EyeOff className="size-3.5" />}
-            {hiddenEmpty ? `显示未填 ${emptyCount}` : "隐藏未填"}
+            {group.collapsible &&
+              (collapsed ? (
+                <ChevronRight className="size-3.5 shrink-0" />
+              ) : (
+                <ChevronDown className="size-3.5 shrink-0" />
+              ))}
+            <span className="break-words">{group.name}</span>
+            <span className="text-12 text-tertiary">{group.fields.length}</span>
           </button>
-        )}
-      </div>
+          {context !== "detail" && missing > 0 ? (
+            <button
+              type="button"
+              className="shrink-0 text-12 text-danger-primary"
+              onClick={() => {
+                const target = missingRequired.find((item) => item.group?.id === group.id);
+                if (target) openField(target.entry.field_id);
+              }}
+            >
+              {missing} 项必填待补充
+            </button>
+          ) : (
+            collapsed && (
+              <span className="shrink-0 text-12 text-tertiary">
+                已填 {filled} / {group.fields.length}
+              </span>
+            )
+          )}
+        </div>
+        <div id={`${id}-group-${group.id}`} hidden={collapsed}>
+          <div className="pt-2 pl-5">{renderGrid(group)}</div>
+          {hiddenEmpty && filled === 0 && (
+            <p className="px-2 py-3 text-13 text-tertiary">此分组暂无已填字段，可通过「显示未填」查看。</p>
+          )}
+        </div>
+      </section>
+    );
+  };
+
+  return (
+    <div ref={rootRef} className="@container/layout min-w-0 space-y-4">
+      {(hasCollapsible || showHideEmpty) && (
+        <div className="flex flex-wrap items-center justify-end gap-3 text-12 text-secondary">
+          {hasCollapsible && (
+            <button
+              type="button"
+              onClick={() =>
+                update((previous) => ({
+                  ...previous,
+                  collapsed: Object.fromEntries(allGroups.map((group) => [group.id, false])),
+                }))
+              }
+            >
+              全部展开
+            </button>
+          )}
+          {showHideEmpty && (
+            <button
+              type="button"
+              className="flex items-center gap-1"
+              onClick={() => update((previous) => ({ ...previous, hideEmpty: !previous.hideEmpty }))}
+            >
+              {hiddenEmpty ? <Eye className="size-3.5" /> : <EyeOff className="size-3.5" />}
+              {hiddenEmpty ? `显示未填 ${emptyCount}` : "隐藏未填"}
+            </button>
+          )}
+        </div>
+      )}
+      {renderUngrouped(visible)}
+      {visible.groups.map(renderGroup)}
       {navigation.length > 0 && (
         <div
           role="tablist"
@@ -230,100 +343,20 @@ export function IssueFieldLayout({
           ))}
         </div>
       )}
-      <div className="@container/layout min-w-0 space-y-4">
-        {pages.map((page) => (
-          <div
-            key={page.id}
-            id={`${id}-page-${page.id}`}
-            role="tabpanel"
-            aria-labelledby={`${id}-tab-${page.id}`}
-            hidden={selectedPage !== page.id}
-            className="space-y-4"
-          >
-            {page.groups.map((group) => {
-              const collapsed = group.collapsible && (preferences.collapsed[group.id] ?? group.default_collapsed);
-              const missing = group.fields.filter(
-                (entry) => fieldMap.get(entry.field_id)?.is_required && isEmpty(entry.field_id)
-              ).length;
-              const filled = group.fields.filter((entry) => !isEmpty(entry.field_id)).length;
-              return (
-                <section key={group.id} className="border-b border-subtle pb-4">
-                  <div className="flex min-h-9 items-center justify-between gap-3 text-14">
-                    <button
-                      type="button"
-                      aria-expanded={!collapsed}
-                      aria-controls={`${id}-group-${group.id}`}
-                      disabled={!group.collapsible}
-                      className="flex min-w-0 flex-1 items-center gap-2 py-3 text-left font-medium text-primary"
-                      onClick={() =>
-                        update((previous) => ({
-                          ...previous,
-                          collapsed: { ...previous.collapsed, [group.id]: !collapsed },
-                        }))
-                      }
-                    >
-                      {group.collapsible &&
-                        (collapsed ? (
-                          <ChevronRight className="size-3.5 shrink-0" />
-                        ) : (
-                          <ChevronDown className="size-3.5 shrink-0" />
-                        ))}
-                      <span className="break-words">{group.name}</span>
-                      <span className="text-12 text-tertiary">{group.fields.length}</span>
-                    </button>
-                    {context !== "detail" && missing > 0 ? (
-                      <button
-                        type="button"
-                        className="shrink-0 text-12 text-danger-primary"
-                        onClick={() => {
-                          const target = missingRequired.find((item) => item.group.id === group.id);
-                          if (target) openField(target.entry.field_id);
-                        }}
-                      >
-                        {missing} 项必填待补充
-                      </button>
-                    ) : (
-                      collapsed && (
-                        <span className="shrink-0 text-12 text-tertiary">
-                          已填 {filled} / {group.fields.length}
-                        </span>
-                      )
-                    )}
-                  </div>
-                  <div id={`${id}-group-${group.id}`} hidden={collapsed}>
-                    <div className="grid grid-cols-6 gap-x-6 gap-y-4 pt-2 pl-5">
-                      {group.fields.map((entry) => {
-                        const field = fieldMap.get(entry.field_id);
-                        if (!field) return null;
-                        return (
-                          <div
-                            key={entry.field_id}
-                            data-layout-field={entry.field_id}
-                            tabIndex={-1}
-                            hidden={hiddenEmpty && isEmpty(entry.field_id)}
-                            className={cn("min-w-0 py-1 outline-offset-2", layoutFieldSpan(entry.width, group.columns))}
-                          >
-                            {renderField(field, entry, () => clearFieldError(entry.field_id))}
-                            {serverErrors[entry.field_id] && (
-                              <p role="alert" className="mt-1 text-12 text-danger-primary">
-                                {serverErrors[entry.field_id]}
-                              </p>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                    {hiddenEmpty && filled === 0 && (
-                      <p className="px-2 py-3 text-13 text-tertiary">此分组暂无已填字段，可通过「显示未填」查看。</p>
-                    )}
-                  </div>
-                </section>
-              );
-            })}
-          </div>
-        ))}
-        {pages.length === 0 && <p className="py-4 text-13 text-secondary">当前场景没有可展示的自定义字段</p>}
-      </div>
+      {pages.map((page) => (
+        <div
+          key={page.id}
+          id={`${id}-page-${page.id}`}
+          role="tabpanel"
+          aria-labelledby={`${id}-tab-${page.id}`}
+          hidden={selectedPage !== page.id}
+          className="space-y-4"
+        >
+          {renderUngrouped(page)}
+          {page.groups.map(renderGroup)}
+        </div>
+      ))}
+      {locations.length === 0 && <p className="py-4 text-13 text-secondary">当前场景没有可展示的自定义字段</p>}
     </div>
   );
 }

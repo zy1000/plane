@@ -216,6 +216,9 @@ class IssueTypeSerializer(BaseSerializer):
     def validate_field_layout(self, value):
         from django.core.exceptions import ValidationError as DjangoValidationError
         from plane.utils.issue_type_layout import validate_field_layout
+        # 没改布局就不校验：存量的旧版布局随整份表单回传时，不应挡住其他字段的保存
+        if self.instance and value == self.instance.field_layout:
+            return value
         fields = self.instance.extra_fields.all() if self.instance else []
         try:
             validate_field_layout(value, fields)
