@@ -30,8 +30,8 @@ export const OnboardingRoot = observer(function OnboardingRoot({ invitations = [
 
   const workspacesList = Object.values(workspaces ?? {});
 
-  // Calculate total steps based on whether invitations are available
-  const hasInvitations = invitations.length > 0;
+  // the workspace step only exists for users who are not in any workspace yet
+  const totalSteps = workspacesList.length > 0 && currentStep === EOnboardingSteps.PROFILE_SETUP ? 1 : 2;
 
   // complete onboarding
   const finishOnboarding = useCallback(async () => {
@@ -65,28 +65,16 @@ export const OnboardingRoot = observer(function OnboardingRoot({ invitations = [
   );
 
   const handleStepChange = useCallback(
-    (step: EOnboardingSteps, skipInvites?: boolean) => {
+    (step: EOnboardingSteps) => {
       switch (step) {
         case EOnboardingSteps.PROFILE_SETUP:
-          setCurrentStep(EOnboardingSteps.ROLE_SETUP);
-          break;
-        case EOnboardingSteps.ROLE_SETUP:
-          setCurrentStep(EOnboardingSteps.USE_CASE_SETUP);
-          break;
-        case EOnboardingSteps.USE_CASE_SETUP:
-          stepChange({ profile_complete: true });
           if (workspacesList.length > 0) finishOnboarding();
-          else setCurrentStep(EOnboardingSteps.WORKSPACE_CREATE_OR_JOIN);
-          break;
-        case EOnboardingSteps.WORKSPACE_CREATE_OR_JOIN:
-          if (skipInvites) finishOnboarding();
           else {
-            setCurrentStep(EOnboardingSteps.INVITE_MEMBERS);
-            stepChange({ workspace_create: true });
+            stepChange({ profile_complete: true });
+            setCurrentStep(EOnboardingSteps.WORKSPACE_CREATE_OR_JOIN);
           }
           break;
-        case EOnboardingSteps.INVITE_MEMBERS:
-          stepChange({ workspace_invite: true });
+        case EOnboardingSteps.WORKSPACE_CREATE_OR_JOIN:
           finishOnboarding();
           break;
       }
@@ -105,13 +93,6 @@ export const OnboardingRoot = observer(function OnboardingRoot({ invitations = [
       ) {
         setCurrentStep(EOnboardingSteps.WORKSPACE_CREATE_OR_JOIN);
       }
-      if (
-        userProfile?.onboarding_step?.profile_complete &&
-        userProfile?.onboarding_step?.workspace_create &&
-        !userProfile?.onboarding_step?.workspace_invite
-      ) {
-        setCurrentStep(EOnboardingSteps.INVITE_MEMBERS);
-      }
     };
 
     handleInitialStep();
@@ -121,11 +102,7 @@ export const OnboardingRoot = observer(function OnboardingRoot({ invitations = [
   return (
     <div className="flex h-full flex-col">
       {/* Header with progress */}
-      <OnboardingHeader
-        currentStep={currentStep}
-        updateCurrentStep={updateCurrentStep}
-        hasInvitations={hasInvitations}
-      />
+      <OnboardingHeader currentStep={currentStep} updateCurrentStep={updateCurrentStep} totalSteps={totalSteps} />
 
       {/* Main content area */}
       <OnboardingStepRoot currentStep={currentStep} invitations={invitations} handleStepChange={handleStepChange} />

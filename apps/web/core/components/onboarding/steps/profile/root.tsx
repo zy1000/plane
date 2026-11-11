@@ -28,7 +28,7 @@ import { MarketingConsent } from "./consent";
 import { SetPasswordRoot } from "./set-password";
 
 type Props = {
-  handleStepChange: (step: EOnboardingSteps, skipInvites?: boolean) => void;
+  handleStepChange: (step: EOnboardingSteps) => void;
 };
 
 export type TProfileSetupFormValues = {
@@ -37,8 +37,6 @@ export type TProfileSetupFormValues = {
   avatar_url?: string | null;
   password?: string;
   confirm_password?: string;
-  role?: string;
-  use_case?: string[];
   has_marketing_email_consent?: boolean;
 };
 

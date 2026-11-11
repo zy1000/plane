@@ -16,7 +16,7 @@ import { WorkspaceCreateStep, WorkspaceJoinInvitesStep } from "./";
 
 type Props = {
   invitations: IWorkspaceMemberInvitation[];
-  handleStepChange: (step: EOnboardingSteps, skipInvites?: boolean) => void;
+  handleStepChange: (step: EOnboardingSteps) => void;
 };
 
 export const WorkspaceSetupStep = observer(function WorkspaceSetupStep({ invitations, handleStepChange }: Props) {
@@ -39,14 +39,14 @@ export const WorkspaceSetupStep = observer(function WorkspaceSetupStep({ invitat
         <WorkspaceJoinInvitesStep
           invitations={invitations}
           handleNextStep={async () => {
-            handleStepChange(EOnboardingSteps.WORKSPACE_CREATE_OR_JOIN, true);
+            handleStepChange(EOnboardingSteps.WORKSPACE_CREATE_OR_JOIN);
           }}
           handleCurrentViewChange={() => setCurrentView(ECreateOrJoinWorkspaceViews.WORKSPACE_CREATE)}
         />
       ) : (
         <WorkspaceCreateStep
           user={user}
-          onComplete={(skipInvites) => handleStepChange(EOnboardingSteps.WORKSPACE_CREATE_OR_JOIN, skipInvites)}
+          onComplete={() => handleStepChange(EOnboardingSteps.WORKSPACE_CREATE_OR_JOIN)}
           handleCurrentViewChange={() => setCurrentView(ECreateOrJoinWorkspaceViews.WORKSPACE_JOIN)}
           hasInvitations={invitations.length > 0}
         />

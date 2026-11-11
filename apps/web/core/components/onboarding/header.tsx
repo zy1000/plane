@@ -9,7 +9,6 @@ import { observer } from "mobx-react";
 // plane imports
 import { PlaneLockup, ChevronLeftIcon } from "@plane/propel/icons";
 import { Tooltip } from "@plane/propel/tooltip";
-import type { TOnboardingStep } from "@plane/types";
 import { EOnboardingSteps } from "@plane/types";
 import { cn } from "@plane/utils";
 // hooks
@@ -20,48 +19,22 @@ import { SwitchAccountDropdown } from "./switch-account-dropdown";
 type OnboardingHeaderProps = {
   currentStep: EOnboardingSteps;
   updateCurrentStep: (step: EOnboardingSteps) => void;
-  hasInvitations: boolean;
+  totalSteps: number;
 };
 
 export const OnboardingHeader = observer(function OnboardingHeader(props: OnboardingHeaderProps) {
-  const { currentStep, updateCurrentStep, hasInvitations } = props;
+  const { currentStep, updateCurrentStep, totalSteps } = props;
   // store hooks
   const { data: user } = useUser();
 
   // handle step back
-  const handleStepBack = () => {
-    switch (currentStep) {
-      case EOnboardingSteps.ROLE_SETUP:
-        updateCurrentStep(EOnboardingSteps.PROFILE_SETUP);
-        break;
-      case EOnboardingSteps.USE_CASE_SETUP:
-        updateCurrentStep(EOnboardingSteps.ROLE_SETUP);
-        break;
-      case EOnboardingSteps.WORKSPACE_CREATE_OR_JOIN:
-        updateCurrentStep(EOnboardingSteps.USE_CASE_SETUP);
-        break;
-    }
-  };
+  const handleStepBack = () => updateCurrentStep(EOnboardingSteps.PROFILE_SETUP);
 
   // can go back
-  const canGoBack = ![EOnboardingSteps.PROFILE_SETUP, EOnboardingSteps.INVITE_MEMBERS].includes(currentStep);
-
-  // Get current step number for progress tracking
-  const getCurrentStepNumber = (): number => {
-    const stepOrder: TOnboardingStep[] = [
-      EOnboardingSteps.PROFILE_SETUP,
-      EOnboardingSteps.ROLE_SETUP,
-      EOnboardingSteps.USE_CASE_SETUP,
-      ...(hasInvitations
-        ? [EOnboardingSteps.WORKSPACE_CREATE_OR_JOIN]
-        : [EOnboardingSteps.WORKSPACE_CREATE_OR_JOIN, EOnboardingSteps.INVITE_MEMBERS]),
-    ];
-    return stepOrder.indexOf(currentStep) + 1;
-  };
+  const canGoBack = currentStep === EOnboardingSteps.WORKSPACE_CREATE_OR_JOIN;
 
   // derived values
-  const currentStepNumber = getCurrentStepNumber();
-  const totalSteps = hasInvitations ? 4 : 5; // 4 if invites available, 5 if not
+  const currentStepNumber = currentStep === EOnboardingSteps.WORKSPACE_CREATE_OR_JOIN ? 2 : 1;
   const userName = user?.display_name
     ? user?.display_name
     : user?.first_name
