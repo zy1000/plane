@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { ChevronDown, ChevronRight, Eye, EyeOff } from "lucide-react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import type { TIssueExtraFieldValue } from "@plane/types";
 import { cn } from "@plane/utils";
 import { useIssueLayoutPreferences } from "@/hooks/use-issue-layout-preferences";
@@ -211,35 +211,38 @@ export function IssueFieldLayout({
       (entry) => fieldMap.get(entry.field_id)?.is_required && isEmpty(entry.field_id)
     ).length;
     const filled = group.fields.filter((entry) => !isEmpty(entry.field_id)).length;
+    const toggle = () =>
+      update((previous) => ({
+        ...previous,
+        collapsed: { ...previous.collapsed, [group.id]: !collapsed },
+      }));
+    const title = (
+      <>
+        <span className="break-words font-semibold text-primary">{group.name}</span>
+        <span className="text-13 text-tertiary tabular-nums">{group.fields.length}</span>
+      </>
+    );
+    // 组名在框上方，和页面上「描述」标题 + 描述框同一写法，组名与框外字段左对齐；框里只放字段，折叠箭头在标题行最右
     return (
-      <section key={group.id} className="border-b border-subtle pb-4">
-        <div className="flex min-h-9 items-center justify-between gap-3 text-14">
-          <button
-            type="button"
-            aria-expanded={!collapsed}
-            aria-controls={`${id}-group-${group.id}`}
-            disabled={!group.collapsible}
-            className="flex min-w-0 flex-1 items-center gap-2 py-3 text-left font-medium text-primary"
-            onClick={() =>
-              update((previous) => ({
-                ...previous,
-                collapsed: { ...previous.collapsed, [group.id]: !collapsed },
-              }))
-            }
-          >
-            {group.collapsible &&
-              (collapsed ? (
-                <ChevronRight className="size-3.5 shrink-0" />
-              ) : (
-                <ChevronDown className="size-3.5 shrink-0" />
-              ))}
-            <span className="break-words">{group.name}</span>
-            <span className="text-12 text-tertiary">{group.fields.length}</span>
-          </button>
+      <section key={group.id} className="pt-3">
+        <div className="flex min-h-[30px] items-center gap-3 text-14">
+          {group.collapsible ? (
+            // 点标题也能收起；键盘操作走右侧箭头按钮，这里不再占一个 Tab 位
+            <button
+              type="button"
+              tabIndex={-1}
+              className="flex min-w-0 flex-1 items-center gap-2.5 self-stretch text-left"
+              onClick={toggle}
+            >
+              {title}
+            </button>
+          ) : (
+            <span className="flex min-w-0 flex-1 items-center gap-2.5">{title}</span>
+          )}
           {context !== "detail" && missing > 0 ? (
             <button
               type="button"
-              className="shrink-0 text-12 text-danger-primary"
+              className="shrink-0 text-13 text-danger-primary"
               onClick={() => {
                 const target = missingRequired.find((item) => item.group?.id === group.id);
                 if (target) openField(target.entry.field_id);
@@ -249,98 +252,116 @@ export function IssueFieldLayout({
             </button>
           ) : (
             collapsed && (
-              <span className="shrink-0 text-12 text-tertiary">
+              <span className="shrink-0 text-13 text-tertiary">
                 已填 {filled} / {group.fields.length}
               </span>
             )
           )}
+          {group.collapsible && (
+            <button
+              type="button"
+              aria-expanded={!collapsed}
+              aria-controls={`${id}-group-${group.id}`}
+              aria-label={`${collapsed ? "展开" : "收起"}${group.name}`}
+              className="grid size-[30px] shrink-0 place-items-center rounded-md text-secondary hover:bg-layer-1"
+              onClick={toggle}
+            >
+              {collapsed ? <ChevronRight className="size-4" /> : <ChevronDown className="size-4" />}
+            </button>
+          )}
         </div>
-        <div id={`${id}-group-${group.id}`} hidden={collapsed}>
-          <div className="pt-2 pl-5">{renderGrid(group)}</div>
+        <div
+          id={`${id}-group-${group.id}`}
+          hidden={collapsed}
+          className="mt-2 rounded-[10px] border border-subtle px-[18px] pt-4 pb-[18px]"
+        >
+          {renderGrid(group)}
           {hiddenEmpty && filled === 0 && (
-            <p className="px-2 py-3 text-13 text-tertiary">此分组暂无已填字段，可通过「显示未填」查看。</p>
+            <p className="text-13 text-tertiary">此分组暂无已填字段，可通过「显示未填」查看。</p>
           )}
         </div>
       </section>
     );
   };
 
+  const toolbar = (hasCollapsible || showHideEmpty) && (
+    <div className="flex shrink-0 flex-wrap items-center justify-end gap-4 text-13 text-secondary">
+      {hasCollapsible && (
+        <button
+          type="button"
+          onClick={() =>
+            update((previous) => ({
+              ...previous,
+              collapsed: Object.fromEntries(allGroups.map((group) => [group.id, false])),
+            }))
+          }
+        >
+          全部展开
+        </button>
+      )}
+      {showHideEmpty && (
+        <button type="button" onClick={() => update((previous) => ({ ...previous, hideEmpty: !previous.hideEmpty }))}>
+          {hiddenEmpty ? `显示未填 ${emptyCount}` : "隐藏未填"}
+        </button>
+      )}
+    </div>
+  );
+  // 页面页签是最上面一行时，操作并到页签行右侧，不再单独占一行
+  const toolbarInTabs = navigation.length > 0 && visible.fields.length === 0 && visible.groups.length === 0;
+
   return (
     <div ref={rootRef} className="@container/layout min-w-0 space-y-4">
-      {(hasCollapsible || showHideEmpty) && (
-        <div className="flex flex-wrap items-center justify-end gap-3 text-12 text-secondary">
-          {hasCollapsible && (
-            <button
-              type="button"
-              onClick={() =>
-                update((previous) => ({
-                  ...previous,
-                  collapsed: Object.fromEntries(allGroups.map((group) => [group.id, false])),
-                }))
-              }
-            >
-              全部展开
-            </button>
-          )}
-          {showHideEmpty && (
-            <button
-              type="button"
-              className="flex items-center gap-1"
-              onClick={() => update((previous) => ({ ...previous, hideEmpty: !previous.hideEmpty }))}
-            >
-              {hiddenEmpty ? <Eye className="size-3.5" /> : <EyeOff className="size-3.5" />}
-              {hiddenEmpty ? `显示未填 ${emptyCount}` : "隐藏未填"}
-            </button>
-          )}
-        </div>
-      )}
+      {!toolbarInTabs && toolbar}
       {renderUngrouped(visible)}
       {visible.groups.map(renderGroup)}
       {navigation.length > 0 && (
-        <div
-          role="tablist"
-          aria-label="工作项业务页面"
-          className="flex gap-5 overflow-x-auto border-b border-subtle"
-          onKeyDown={(event) => {
-            if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
-            event.preventDefault();
-            const index = navigation.findIndex((page) => page.id === selectedPage);
-            const next =
-              event.key === "Home"
-                ? 0
-                : event.key === "End"
-                  ? navigation.length - 1
-                  : (index + (event.key === "ArrowRight" ? 1 : -1) + navigation.length) % navigation.length;
-            setActivePage(navigation[next].id);
-            (event.currentTarget.children[next] as HTMLElement)?.focus();
-          }}
-        >
-          {navigation.map((page) => (
-            <button
-              key={page.id}
-              type="button"
-              role="tab"
-              id={`${id}-tab-${page.id}`}
-              aria-controls={`${id}-page-${page.id}`}
-              aria-selected={selectedPage === page.id}
-              tabIndex={selectedPage === page.id ? 0 : -1}
-              onClick={() => setActivePage(page.id)}
-              className={cn(
-                "flex shrink-0 items-center gap-1.5 border-b-2 px-1 py-2.5 text-14",
-                selectedPage === page.id
-                  ? "border-accent-primary font-medium text-accent-primary"
-                  : "border-transparent text-secondary"
-              )}
-            >
-              {page.name}
-              {pageCount(page.id) > 0 && <span className="text-12 text-tertiary">{pageCount(page.id)}</span>}
-              {context !== "detail" && pageMissing(page.id) > 0 && (
-                <span className="text-12 text-danger-primary" aria-label={`${pageMissing(page.id)} 项必填待补充`}>
-                  · {pageMissing(page.id)}
-                </span>
-              )}
-            </button>
-          ))}
+        <div className="flex items-center gap-4 border-b border-subtle">
+          <div
+            role="tablist"
+            aria-label="工作项业务页面"
+            className="flex min-w-0 flex-1 gap-5 overflow-x-auto"
+            onKeyDown={(event) => {
+              if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+              event.preventDefault();
+              const index = navigation.findIndex((page) => page.id === selectedPage);
+              const next =
+                event.key === "Home"
+                  ? 0
+                  : event.key === "End"
+                    ? navigation.length - 1
+                    : (index + (event.key === "ArrowRight" ? 1 : -1) + navigation.length) % navigation.length;
+              setActivePage(navigation[next].id);
+              (event.currentTarget.children[next] as HTMLElement)?.focus();
+            }}
+          >
+            {navigation.map((page) => (
+              <button
+                key={page.id}
+                type="button"
+                role="tab"
+                id={`${id}-tab-${page.id}`}
+                aria-controls={`${id}-page-${page.id}`}
+                aria-selected={selectedPage === page.id}
+                tabIndex={selectedPage === page.id ? 0 : -1}
+                onClick={() => setActivePage(page.id)}
+                className={cn(
+                  "flex shrink-0 items-center gap-1.5 border-b-2 px-1 py-2.5 text-14",
+                  selectedPage === page.id
+                    ? "border-accent-primary font-medium text-accent-primary"
+                    : "border-transparent text-secondary"
+                )}
+              >
+                {page.name}
+                {pageCount(page.id) > 0 && <span className="text-12 text-tertiary">{pageCount(page.id)}</span>}
+                {context !== "detail" && pageMissing(page.id) > 0 && (
+                  <span className="text-12 text-danger-primary" aria-label={`${pageMissing(page.id)} 项必填待补充`}>
+                    · {pageMissing(page.id)}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+          {toolbarInTabs && toolbar}
         </div>
       )}
       {pages.map((page) => (
