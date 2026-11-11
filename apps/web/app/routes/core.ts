@@ -653,6 +653,15 @@ export const coreRoutes: RouteConfigEntry[] = [
             ":workspaceSlug/settings/departments",
             "./(all)/[workspaceSlug]/(settings)/settings/(workspace)/departments/page.tsx"
           ),
+          // Workspace job roles（角色 = 数据字典 job_role 的值）
+          route(
+            ":workspaceSlug/settings/job-roles",
+            "./(all)/[workspaceSlug]/(settings)/settings/(workspace)/job-roles/page.tsx"
+          ),
+          route(
+            ":workspaceSlug/settings/job-roles/:jobRoleId",
+            "./(all)/[workspaceSlug]/(settings)/settings/(workspace)/job-roles/[jobRoleId]/page.tsx"
+          ),
           // Workspace third-party integrations
           route(
             ":workspaceSlug/settings/integrations",

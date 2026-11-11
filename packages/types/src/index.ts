@@ -16,6 +16,7 @@ export * from "./common";
 export * from "./cycle";
 export * from "./dashboard";
 export * from "./data-dictionary";
+export * from "./job-role";
 export * from "./external-integration";
 export * from "./department";
 export * from "./test-case";

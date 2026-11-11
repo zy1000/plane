@@ -8,6 +8,7 @@ import { SettingsFullBleedContentWrapper } from "@/components/settings/content-w
 import { DataDictionariesRoot } from "@/components/workspace/settings/data-dictionaries";
 // hooks
 import { useDataDictionaries } from "@/hooks/store/use-data-dictionaries";
+import { JOB_ROLE_DICTIONARY_KEY } from "@/hooks/store/use-job-roles";
 import { useWorkspace } from "@/hooks/store/use-workspace";
 import { useUserPermissions } from "@/hooks/store/user";
 // local imports
@@ -52,7 +53,8 @@ const WorkspaceDataDictionariesPage = observer(function WorkspaceDataDictionarie
         <DataDictionariesRoot
           workspaceSlug={workspaceSlug}
           canEdit={canEdit}
-          dictionaries={dictionaries}
+          // 「角色」字典改在 设置 › 角色 维护，这里不再露出
+          dictionaries={dictionaries.filter((dictionary) => dictionary.key !== JOB_ROLE_DICTIONARY_KEY)}
           isLoading={isLoading}
           error={error}
           fetchDictionaries={fetchDictionaries}

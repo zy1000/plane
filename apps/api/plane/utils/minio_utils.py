@@ -74,7 +74,7 @@ class MinIOUtils:
             scheme = "https" if os.environ.get("MINIO_ENDPOINT_SSL") == "1" else getattr(request, "scheme", "http")
             return scheme, request.get_host()
 
-        web_url = os.environ.get("WEB_URL")
+        web_url = getattr(settings, "WEB_URL", None)
         if web_url:
             parsed_web = urlparse(web_url)
             if parsed_web.netloc:

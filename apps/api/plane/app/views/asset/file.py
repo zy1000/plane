@@ -4,7 +4,7 @@ import hmac
 import tempfile
 import time
 import uuid
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 
 from django.conf import settings
 from django.core.exceptions import ValidationError as DjangoValidationError
@@ -481,8 +481,34 @@ def _has_active_onlyoffice_session(asset: FileAsset) -> bool:
     return has_active_session(asset.attributes)
 
 
+def _onlyoffice_browser_url(request) -> str:
+    """浏览器加载文档服务的地址；配成 /onlyoffice 这类相对路径时按用户实际访问的地址补全（大网 / 小网各走各的）。"""
+    url = settings.ONLYOFFICE_DOCUMENT_SERVER_URL.rstrip("/")
+    if url.startswith("/"):
+        return request.build_absolute_uri(url).rstrip("/")
+    return url
+
+
+def _onlyoffice_internal_url() -> str:
+    """后端直接访问文档服务（命令服务等）用的地址；同一 compose 里走容器内网。"""
+    internal = getattr(settings, "ONLYOFFICE_INTERNAL_URL", "") or settings.ONLYOFFICE_DOCUMENT_SERVER_URL
+    return internal.rstrip("/")
+
+
+def _onlyoffice_fetchable_url(file_url: str) -> str:
+    """回调给的文件地址按浏览器访问地址拼（如 http://10.32.232.104/onlyoffice/cache/...），
+    文档服务挂在相对路径下时换成内网地址取，免得 api 容器绕回宿主机对外 IP。"""
+    public_path = urlparse(settings.ONLYOFFICE_DOCUMENT_SERVER_URL).path.rstrip("/")
+    internal = (getattr(settings, "ONLYOFFICE_INTERNAL_URL", "") or "").rstrip("/")
+    parsed = urlparse(file_url)
+    if not public_path or not internal or not parsed.path.startswith(public_path + "/"):
+        return file_url
+    query = f"?{parsed.query}" if parsed.query else ""
+    return f"{internal}{parsed.path[len(public_path):]}{query}"
+
+
 def _download_onlyoffice_file(file_url: str) -> dict:
-    response = requests.get(file_url, stream=True, timeout=(5, 120))
+    response = requests.get(_onlyoffice_fetchable_url(file_url), stream=True, timeout=(5, 120))
     temp_file = None
     try:
         response.raise_for_status()
@@ -1143,9 +1169,7 @@ class FilestoreAssetOnlyOfficeConfigAPIView(BaseAPIView):
 
         return Response(
             {
-                "document_server_url": settings.ONLYOFFICE_DOCUMENT_SERVER_URL.rstrip(
-                    "/"
-                ),
+                "document_server_url": _onlyoffice_browser_url(request),
                 "config": config,
             },
             status=status.HTTP_200_OK,
@@ -1324,9 +1348,7 @@ class RequirementAssetOnlyOfficePreviewConfigAPIView(BaseAPIView):
 
         return Response(
             {
-                "document_server_url": settings.ONLYOFFICE_DOCUMENT_SERVER_URL.rstrip(
-                    "/"
-                ),
+                "document_server_url": _onlyoffice_browser_url(request),
                 "config": config,
             },
             status=status.HTTP_200_OK,
@@ -2230,7 +2252,7 @@ class FilestoreAssetOnlyOfficeForceSaveAPIView(BaseAPIView):
             body["token"] = token
             headers[_onlyoffice_jwt_header()] = f"Bearer {token}"
 
-        document_server_url = settings.ONLYOFFICE_DOCUMENT_SERVER_URL.rstrip("/")
+        document_server_url = _onlyoffice_internal_url()
         command_urls = [
             f"{document_server_url}/command",
             f"{document_server_url}/coauthoring/CommandService.ashx",

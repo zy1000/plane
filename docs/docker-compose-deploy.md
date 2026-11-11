@@ -28,34 +28,28 @@ cp .env.example .env
 
 然后编辑 `.env`，优先核对以下变量：
 
-- `WEB_URL`
-- `APP_BASE_URL`
-- `ADMIN_BASE_URL`
-- `SPACE_BASE_URL`
-- `LIVE_BASE_URL`
-- `CORS_ALLOWED_ORIGINS`
+- `CORS_ALLOWED_ORIGINS`（对外地址，唯一必填的地址项）
 - `SECRET_KEY`
 - `LIVE_SERVER_SECRET_KEY`
 - `POSTGRES_PASSWORD`
 - `AWS_ACCESS_KEY_ID`
 - `AWS_SECRET_ACCESS_KEY`
 
-若为单机 HTTP 部署，请将所有 `http://127.0.0.1` 替换为服务器 IP 或域名，例如：
+对外地址只填 `CORS_ALLOWED_ORIGINS` 一项，服务器有几个对外地址就写几个，逗号分隔，非 80 端口要带端口。例如大网 / 小网双地址：
 
 ```env
-WEB_URL="http://203.0.113.10"
-APP_BASE_URL="http://203.0.113.10"
-ADMIN_BASE_URL="http://203.0.113.10"
-SPACE_BASE_URL="http://203.0.113.10"
-LIVE_BASE_URL="http://203.0.113.10"
-CORS_ALLOWED_ORIGINS="http://203.0.113.10"
+CORS_ALLOWED_ORIGINS="http://10.32.232.104,http://192.168.100.104"
 ```
 
 说明：
 
+- 前端镜像不含地址（同源相对路径），同一套镜像所有地址通用，换地址不用重新构建。
+- 第一个地址作默认地址（定时提醒等没有访问地址可看时用）；登录等跳转回到用户实际访问的那个地址，不在清单里的地址一律不认。
+- 邮件链接按收件人所属网段选地址，大网 / 小网按 IP 自动认；用域名（看不出网段）时另填 `NETWORK_ZONE_WAN_WEB_URL` / `NETWORK_ZONE_LAN_WEB_URL`。
+- `WEB_URL`、`APP_BASE_URL`、`ADMIN_BASE_URL`、`SPACE_BASE_URL`、`LIVE_BASE_URL`、`VITE_WEBSITE_URL`、`DOCS_BASE_URL` 留空即可，旧 `.env` 里有就删掉。
 - 除非有意修改代理路由，否则保持 `ADMIN_BASE_PATH="/god-mode"`、`SPACE_BASE_PATH="/spaces"`、`LIVE_BASE_PATH="/live"`。
 - 使用内置 MinIO 时保持 `AWS_S3_ENDPOINT_URL="http://plane-minio:9000"`。
-- `ONLYOFFICE_DOCUMENT_SERVER_URL` 为可选项；未单独部署 OnlyOffice 时可保持默认。
+- OnlyOffice 随 compose 一起启动，经代理挂在 `/onlyoffice/` 下，`ONLYOFFICE_*_URL` 保持默认即可。
 
 ## 2. 构建镜像
 
@@ -72,17 +66,17 @@ docker compose build
 - `live`
 - `proxy`
 
-前端构建参数来自根目录同一 `.env`，迁移到其他服务器时无需改源码。
+镜像不含部署地址，迁移到其他服务器时无需改源码，也无需因地址不同重新构建。
 
-### 多机部署：按 IP/域名一键改 `.env` 并构建前端
+### 按 IP/域名一键改 `.env`
 
-前端会把构建时的 `WEB_URL` 等写进静态资源。换一台机器部署时，在**仓库根目录**执行：
+在**仓库根目录**执行，可传多个地址（第一个作默认地址）：
 
 ```bash
-./scripts/build-for-host.sh 10.0.0.5
+./scripts/build-for-host.sh --no-build 10.32.232.104 192.168.100.104
 ```
 
-脚本会更新根目录 `.env` 中的 `WEB_URL`、`APP_BASE_URL`、`ADMIN_BASE_URL`、`SPACE_BASE_URL`、`LIVE_BASE_URL`、`CORS_ALLOWED_ORIGINS`、`VITE_WEBSITE_URL`，并执行 `docker compose build web admin space`。域名或 HTTPS 示例：`./scripts/build-for-host.sh --https plane.example.com`。仅改配置不构建：`./scripts/build-for-host.sh --no-build 10.0.0.5`。需全量构建：`./scripts/build-for-host.sh --all 10.0.0.5`。
+脚本会把这些地址写入根目录 `.env` 的 `CORS_ALLOWED_ORIGINS`，并删掉旧版脚本写过的 `WEB_URL`、`*_BASE_URL`、`VITE_WEBSITE_URL`、`DOCS_BASE_URL`。不加 `--no-build` 时会顺带构建（默认 `web api`，`--services` 指定、`--all` 全量）。HTTPS 示例：`./scripts/build-for-host.sh --https plane.example.com`。容器已在运行时，改完地址执行 `docker compose up -d --force-recreate api worker beat-worker live` 生效。
 
 ## 3. 启动栈
 
@@ -136,8 +130,8 @@ docker compose logs -f proxy
 
 基于域名部署时：
 
-- 将 `*_BASE_URL` 与 `WEB_URL` 改为最终域名
-- 更新 `CORS_ALLOWED_ORIGINS`
+- 将 `CORS_ALLOWED_ORIGINS` 改为最终域名
+- 域名看不出大网 / 小网时，按需填 `NETWORK_ZONE_WAN_WEB_URL` / `NETWORK_ZONE_LAN_WEB_URL`
 - 按需设置 `SITE_ADDRESS` 及与证书相关的代理变量
 
 该迁移通常不需要改代码。

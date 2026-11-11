@@ -63,6 +63,11 @@ def get_allowed_hosts() -> list[str]:
         # Get only the host
         host = urlparse(settings.SPACE_BASE_URL).netloc
         allowed_hosts.append(host)
+    # 多个对外地址（如大网 / 小网各一个 IP）都登记在 CORS_ALLOWED_ORIGINS 里，跳回哪个都算本站
+    for allowed_origin in getattr(settings, "CORS_ALLOWED_ORIGINS", None) or []:
+        host = urlparse(allowed_origin).netloc
+        if host:
+            allowed_hosts.append(host)
     return allowed_hosts
 
 

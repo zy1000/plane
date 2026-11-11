@@ -335,7 +335,9 @@ JIANDAOYUN_API_BASE_URL = os.environ.get("JIANDAOYUN_API_BASE_URL", "")
 JIANDAOYUN_API_TOKEN = os.environ.get("JIANDAOYUN_API_TOKEN", "")
 JIANDAOYUN_APP_KEY = os.environ.get("JIANDAOYUN_APP_KEY", "")
 JIANDAOYUN_PROJECT_CODE_APP_ID = os.environ.get("JIANDAOYUN_PROJECT_CODE_APP_ID", "")
-JIANDAOYUN_PROJECT_CODE_ENTRY_ID = os.environ.get("JIANDAOYUN_PROJECT_CODE_ENTRY_ID", "")
+JIANDAOYUN_PROJECT_CODE_ENTRY_ID = os.environ.get(
+    "JIANDAOYUN_PROJECT_CODE_ENTRY_ID", ""
+)
 JIANDAOYUN_RD_PROJECT_APP_ID = os.environ.get("JIANDAOYUN_RD_PROJECT_APP_ID", "")
 JIANDAOYUN_RD_PROJECT_ENTRY_ID = os.environ.get("JIANDAOYUN_RD_PROJECT_ENTRY_ID", "")
 # 风险双向同步（plane/integrations/risk_sync.py）。网关每个接口一个编号，写接口各自一个 base URL；
@@ -413,8 +415,10 @@ LIVE_BASE_PATH = os.environ.get("LIVE_BASE_PATH", "/live/")
 
 LIVE_URL = urljoin(LIVE_BASE_URL, LIVE_BASE_PATH) if LIVE_BASE_URL else None
 
-# WEB URL
-WEB_URL = os.environ.get("WEB_URL")
+# WEB URL：不填就取 CORS_ALLOWED_ORIGINS 里的第一个地址（单入口部署时对外地址只需登记这一处）
+WEB_URL = os.environ.get("WEB_URL") or (
+    cors_allowed_origins[0] if cors_allowed_origins else None
+)
 
 HARD_DELETE_AFTER_DAYS = int(os.environ.get("HARD_DELETE_AFTER_DAYS", 60))
 
@@ -533,6 +537,8 @@ ONLYOFFICE_DOCUMENT_SERVER_URL = os.environ.get(
 ONLYOFFICE_API_BASE_URL = os.environ.get("ONLYOFFICE_API_BASE_URL") or os.environ.get(
     "ONLYOFFICE_APP_BASE_URL", ""
 )
+# 后端直接访问文档服务（命令服务、取回调文件）用的地址；DOCUMENT_SERVER_URL 配成 /onlyoffice 这类相对路径时必填
+ONLYOFFICE_INTERNAL_URL = os.environ.get("ONLYOFFICE_INTERNAL_URL", "")
 ONLYOFFICE_JWT_ENABLED = os.environ.get("ONLYOFFICE_JWT_ENABLED", "0").lower() in {
     "1",
     "true",
@@ -558,3 +564,7 @@ NETWORK_ZONE_LAN_CIDRS = os.environ.get("NETWORK_ZONE_LAN_CIDRS", "192.168.0.0/1
 TRUSTED_PROXY_CIDRS = os.environ.get(
     "TRUSTED_PROXY_CIDRS", "127.0.0.0/8,::1/128,172.16.0.0/12"
 )
+# 大网 / 小网各自的站点地址，邮件链接按收件人网段选。一般不用填：按 IP 从 CORS_ALLOWED_ORIGINS 里自动认；
+# 用域名（看不出网段）时才手动填
+NETWORK_ZONE_WAN_WEB_URL = os.environ.get("NETWORK_ZONE_WAN_WEB_URL", "")
+NETWORK_ZONE_LAN_WEB_URL = os.environ.get("NETWORK_ZONE_LAN_WEB_URL", "")

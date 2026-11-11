@@ -81,6 +81,12 @@ export interface IBaseProjectMemberStore {
     userId: string,
     data: { custom_role_ids?: string[]; job_role_ids?: string[] }
   ) => Promise<void>;
+  /** 批量设置角色：append 追加 / replace 替换原有角色 */
+  bulkSetMemberJobRoles: (
+    workspaceSlug: string,
+    projectId: string,
+    data: { member_ids: string[]; job_role_ids: string[]; mode: "append" | "replace" }
+  ) => Promise<void>;
   removeMemberFromProject: (workspaceSlug: string, projectId: string, userId: string) => Promise<void>;
 }
 
@@ -120,6 +126,7 @@ export abstract class BaseProjectMemberStore implements IBaseProjectMemberStore 
       updateProjectUserProperties: action,
       bulkAddMembersToProject: action,
       updateMemberAccess: action,
+      bulkSetMemberJobRoles: action,
       removeMemberFromProject: action,
     });
     // root store
@@ -343,6 +350,19 @@ export abstract class BaseProjectMemberStore implements IBaseProjectMemberStore 
       });
       throw error;
     }
+  };
+
+  bulkSetMemberJobRoles = async (
+    workspaceSlug: string,
+    projectId: string,
+    data: { member_ids: string[]; job_role_ids: string[]; mode: "append" | "replace" }
+  ): Promise<void> => {
+    const response = await this.projectMemberService.bulkSetJobRoles(workspaceSlug, projectId, data);
+    runInAction(() => {
+      Object.entries(response).forEach(([userId, jobRoleIds]) => {
+        set(this.projectMemberMap, [projectId, userId, "job_role_ids"], jobRoleIds);
+      });
+    });
   };
 
   /**

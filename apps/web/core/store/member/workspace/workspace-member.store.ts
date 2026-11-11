@@ -68,7 +68,9 @@ export interface IWorkspaceMemberStore {
     userId: string,
     payload: { custom_role_ids?: string[]; job_role_ids?: string[] }
   ) => Promise<{ custom_role_ids: string[]; job_role_ids: string[] }>;
-  updateMemberNetworkZone: (workspaceSlug: string, userId: string, networkZone: TNetworkZone | null) => Promise<void>;
+  /** 角色页在角色上加人 / 移人后，只同步本地的角色列表（接口已调过） */
+  setMemberJobRoleIds: (workspaceSlug: string, userId: string, jobRoleIds: string[]) => void;
+  updateMemberNetworkZone:(workspaceSlug: string, userId: string, networkZone: TNetworkZone | null) => Promise<void>;
   updateMemberGroups: (
     workspaceSlug: string,
     userId: string,
@@ -114,6 +116,7 @@ export class WorkspaceMemberStore implements IWorkspaceMemberStore {
       fetchWorkspaceMembers: action,
       updateMemberCustomRoles: action,
       updateMemberAccess: action,
+      setMemberJobRoleIds: action,
       updateMemberGroups: action,
       removeMemberFromWorkspace: action,
       fetchWorkspaceMemberInvitations: action,
@@ -293,6 +296,11 @@ export class WorkspaceMemberStore implements IWorkspaceMemberStore {
   updateMemberCustomRoles = async (workspaceSlug: string, userId: string, customRoleIds: string[]) => {
     const response = await this.updateMemberAccess(workspaceSlug, userId, { custom_role_ids: customRoleIds });
     return response.custom_role_ids;
+  };
+
+  setMemberJobRoleIds = (workspaceSlug: string, userId: string, jobRoleIds: string[]) => {
+    if (!this.workspaceMemberMap?.[workspaceSlug]?.[userId]) return;
+    set(this.workspaceMemberMap, [workspaceSlug, userId, "job_role_ids"], jobRoleIds);
   };
 
   updateMemberAccess = async (

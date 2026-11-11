@@ -8,6 +8,7 @@
 
 # Python imports
 import logging
+from urllib.parse import urlparse
 
 # Django imports
 from django.conf import settings
@@ -107,6 +108,46 @@ def set_user_zone(user, zone: str | None) -> None:
     user.network_zone = zone or None
     user.save(update_fields=["network_zone"])
     Session.objects.filter(user_id=str(user.id)).delete()
+
+
+def zone_web_urls() -> tuple[str, str]:
+    """大网 / 小网各自的站点地址 (wan, lan)。
+
+    显式配了 NETWORK_ZONE_*_WEB_URL 就用配置；否则从 CORS_ALLOWED_ORIGINS 里按主机 IP 落在哪个网段认，
+    各取第一个。域名看不出网段，认不出来的那边返回空串。
+    """
+    wan = (getattr(settings, "NETWORK_ZONE_WAN_WEB_URL", "") or "").rstrip("/")
+    lan = (getattr(settings, "NETWORK_ZONE_LAN_WEB_URL", "") or "").rstrip("/")
+    for origin in getattr(settings, "CORS_ALLOWED_ORIGINS", None) or []:
+        zone = zone_for_ip(urlparse(origin).hostname)
+        if zone == NetworkZone.WAN and not wan:
+            wan = origin.rstrip("/")
+        elif zone == NetworkZone.LAN and not lan:
+            lan = origin.rstrip("/")
+    return wan, lan
+
+
+def link_base_for_user(user, fallback: str | None) -> str | None:
+    """邮件里链接用的站点地址：按收件人所属网段选大网 / 小网地址。
+
+    没绑定的按最近登录 IP 推断，还判断不了（含查无此人）就用大网地址；
+    哪边地址都认不出来时原样返回 fallback，即发起操作时的访问地址。
+    """
+    wan, lan = zone_web_urls()
+    if not wan and not lan:
+        return fallback
+    zone = user_zone(user) or zone_for_ip(getattr(user, "last_login_ip", None))
+    if zone == NetworkZone.LAN:
+        return lan or fallback
+    return wan or fallback
+
+
+def link_base_for_email(email, fallback: str | None) -> str | None:
+    """同 link_base_for_user，收件人只知道邮箱时用（邀请可能发给还没注册的人）。"""
+    from plane.db.models import User
+
+    user = User.objects.filter(email__iexact=(email or "").strip()).first() if email else None
+    return link_base_for_user(user, fallback)
 
 
 def upload_zone_for_user(user) -> str:

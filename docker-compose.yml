@@ -23,19 +23,25 @@ x-public-env: &public-env
   DEBUG: ${DEBUG:-0}
   SECRET_KEY: ${SECRET_KEY:-change-me-to-a-long-random-string}
   ALLOWED_HOSTS: ${ALLOWED_HOSTS:-*}
-  CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://10.32.190.212}
-  WEB_URL: ${WEB_URL:-http://10.32.190.212}
-  APP_BASE_URL: ${APP_BASE_URL:-http://10.32.190.212}
+  # 对外地址清单（逗号分隔），唯一必填的地址项；第一个作默认地址，大网 / 小网按 IP 自动认
+  CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:?请在 .env 里填 CORS_ALLOWED_ORIGINS，例如 http://10.32.232.104,http://192.168.100.104}
+  # 以下地址一般留空：WEB_URL 取清单第一个，其余跟随 WEB_URL（单入口部署都是同一个地址）
+  WEB_URL: ${WEB_URL:-}
+  APP_BASE_URL: ${APP_BASE_URL:-}
   APP_BASE_PATH: ${APP_BASE_PATH:-}
-  ADMIN_BASE_URL: ${ADMIN_BASE_URL:-http://10.32.190.212}
+  ADMIN_BASE_URL: ${ADMIN_BASE_URL:-}
   ADMIN_BASE_PATH: ${ADMIN_BASE_PATH:-/god-mode}
-  SPACE_BASE_URL: ${SPACE_BASE_URL:-http://10.32.190.212}
+  SPACE_BASE_URL: ${SPACE_BASE_URL:-}
   SPACE_BASE_PATH: ${SPACE_BASE_PATH:-/spaces}
-  LIVE_BASE_URL: ${LIVE_BASE_URL:-http://10.32.190.212}
+  # 后端调 live 转换内容（复制带图的工作项 / 页面）用，走 compose 内网
+  LIVE_BASE_URL: ${LIVE_BASE_URL:-http://live:3000}
   LIVE_BASE_PATH: ${LIVE_BASE_PATH:-/live}
   LIVE_SERVER_SECRET_KEY: ${LIVE_SERVER_SECRET_KEY:-change-me-live-secret}
-  ONLYOFFICE_DOCUMENT_SERVER_URL: ${ONLYOFFICE_DOCUMENT_SERVER_URL:-http://10.32.190.212:89}
-  ONLYOFFICE_API_BASE_URL: ${ONLYOFFICE_API_BASE_URL:-http://10.32.190.212}
+  # 浏览器经 nginx 的 /onlyoffice/ 访问文档服务；相对路径由后端按用户访问的地址补全
+  ONLYOFFICE_DOCUMENT_SERVER_URL: ${ONLYOFFICE_DOCUMENT_SERVER_URL:-/onlyoffice}
+  # 后端调文档服务、文档服务拉文件 / 回调保存，都走 compose 内网，不依赖服务器对外 IP
+  ONLYOFFICE_INTERNAL_URL: ${ONLYOFFICE_INTERNAL_URL:-http://onlyoffice}
+  ONLYOFFICE_API_BASE_URL: ${ONLYOFFICE_API_BASE_URL:-http://api:8000}
   ONLYOFFICE_JWT_ENABLED: ${ONLYOFFICE_JWT_ENABLED:-0}
   ONLYOFFICE_JWT_SECRET: ${ONLYOFFICE_JWT_SECRET:-}
   ONLYOFFICE_JWT_HEADER: ${ONLYOFFICE_JWT_HEADER:-AuthorizationJwt}
@@ -62,6 +68,14 @@ x-public-env: &public-env
   JIANDAOYUN_TIMEOUT_SECONDS: ${JIANDAOYUN_TIMEOUT_SECONDS:-30}
   PERSON_INFO_API_URL: ${PERSON_INFO_API_URL:-}
   PERSON_INFO_APP_KEY: ${PERSON_INFO_APP_KEY:-}
+  # 大网 / 小网隔离：按客户端 IP 判网段；只信任来自 compose 内网（nginx）的 X-Real-IP
+  NETWORK_ZONE_ENABLED: ${NETWORK_ZONE_ENABLED:-0}
+  NETWORK_ZONE_WAN_CIDRS: ${NETWORK_ZONE_WAN_CIDRS:-10.0.0.0/8}
+  NETWORK_ZONE_LAN_CIDRS: ${NETWORK_ZONE_LAN_CIDRS:-192.168.0.0/16}
+  TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:-127.0.0.0/8,::1/128,172.16.0.0/12}
+  # 邮件链接按收件人网段选地址。一般留空：按 IP 从 CORS_ALLOWED_ORIGINS 里自动认，用域名时才手动填
+  NETWORK_ZONE_WAN_WEB_URL: ${NETWORK_ZONE_WAN_WEB_URL:-}
+  NETWORK_ZONE_LAN_WEB_URL: ${NETWORK_ZONE_LAN_WEB_URL:-}
 
 x-aws-s3-env: &aws-s3-env
   AWS_REGION: ${AWS_REGION:-}
@@ -70,20 +84,23 @@ x-aws-s3-env: &aws-s3-env
   AWS_S3_ENDPOINT_URL: ${AWS_S3_ENDPOINT_URL:-http://plane-minio:9000}
   AWS_S3_BUCKET_NAME: ${AWS_S3_BUCKET_NAME:-uploads}
 
+# 前端地址默认留空 = 同源相对路径：页面从哪个地址打开就请求哪个地址，
+# 一套镜像大网 / 小网两个地址通用，换 IP 也不用重新构建
 x-web-build-args: &web-build-args
   DOCKER_BUILDKIT: 1
-  VITE_API_BASE_URL: ${WEB_URL:-http://10.32.190.212}
+  VITE_API_BASE_URL: ${VITE_API_BASE_URL:-}
   VITE_API_BASE_PATH: /api
-  VITE_WEB_BASE_URL: ${APP_BASE_URL:-http://10.32.190.212}
+  VITE_WEB_BASE_URL: ${VITE_WEB_BASE_URL:-}
   VITE_WEB_BASE_PATH: ${APP_BASE_PATH:-}
-  VITE_ADMIN_BASE_URL: ${ADMIN_BASE_URL:-http://10.32.190.212}
+  VITE_ADMIN_BASE_URL: ${VITE_ADMIN_BASE_URL:-}
   VITE_ADMIN_BASE_PATH: ${ADMIN_BASE_PATH:-/god-mode}
-  VITE_SPACE_BASE_URL: ${SPACE_BASE_URL:-http://10.32.190.212}
+  VITE_SPACE_BASE_URL: ${VITE_SPACE_BASE_URL:-}
   VITE_SPACE_BASE_PATH: ${SPACE_BASE_PATH:-/spaces}
-  VITE_LIVE_BASE_URL: ${LIVE_BASE_URL:-http://10.32.190.212}
+  VITE_LIVE_BASE_URL: ${VITE_LIVE_BASE_URL:-}
   VITE_LIVE_BASE_PATH: ${LIVE_BASE_PATH:-/live}
-  VITE_WEBSITE_URL: ${VITE_WEBSITE_URL:-http://10.32.190.212}
-  VITE_DOCS_BASE_URL: ${DOCS_BASE_URL:-${VITE_WEBSITE_URL:-http://10.32.190.212}}
+  # 这两个留空会回落到 plane.so，填 "/" 才是本站相对路径
+  VITE_WEBSITE_URL: ${VITE_WEBSITE_URL:-/}
+  VITE_DOCS_BASE_URL: ${DOCS_BASE_URL:-/}
   VITE_DOCS_BASE_PATH: ${DOCS_BASE_PATH:-/docs}
   VITE_SUPPORT_EMAIL: ${VITE_SUPPORT_EMAIL:-support@example.com}
 
@@ -235,8 +252,8 @@ services:
     environment:
       PORT: 3000
       API_BASE_URL: http://api:8000
-      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://10.32.190.212}
-      LIVE_BASE_URL: ${LIVE_BASE_URL:-http://10.32.190.212}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:?请在 .env 里填 CORS_ALLOWED_ORIGINS}
+      LIVE_BASE_URL: ${LIVE_BASE_URL:-}
       LIVE_BASE_PATH: ${LIVE_BASE_PATH:-/live}
       LIVE_SERVER_SECRET_KEY: ${LIVE_SERVER_SECRET_KEY:-change-me-live-secret}
       REDIS_URL: ${REDIS_URL:-redis://plane-redis:6379/0}
@@ -250,7 +267,7 @@ services:
 
   plane-db:
     container_name: plane-db
-    image: postgres:15.7-alpine
+    image: postgres:17.11
     restart: always
     command: postgres -c 'max_connections=1000'
     volumes:
@@ -268,7 +285,7 @@ services:
 
   plane-redis:
     container_name: plane-redis
-    image: valkey/valkey:7.2.5-alpine
+    image: valkey/valkey:8.1-alpine
     restart: always
     volumes:
       - redisdata:/data
@@ -316,6 +333,23 @@ services:
       - "19000:9000"
       - "19090:9090"
 
+  # 文档预览 / 在线编辑；不直接对外开端口，浏览器经 proxy 的 /onlyoffice/ 访问
+  onlyoffice:
+    container_name: plane-onlyoffice
+    image: registry.cn-hangzhou.aliyuncs.com/186184848/documentserver-ce:9.1.0
+    restart: always
+    environment:
+      JWT_ENABLED: "false"
+      # 允许从内网地址（api:8000）拉文件
+      ALLOW_PRIVATE_IP_ADDRESS: "true"
+      ALLOW_META_IP_ADDRESS: "true"
+    volumes:
+      - onlyoffice_data:/var/www/onlyoffice/Data
+      - onlyoffice_lib:/var/lib/onlyoffice
+      - onlyoffice_db:/var/lib/postgresql
+      - onlyoffice_fonts:/usr/share/fonts/truetype/custom
+      - onlyoffice_logs:/var/log/onlyoffice
+
   # Comment this if you already have a reverse proxy running
   proxy:
     container_name: proxy
@@ -347,6 +381,8 @@ services:
       live:
         condition: service_started
       docs:
+        condition: service_started
+      onlyoffice:
         condition: service_started
   docs:
     container_name: plane-docs
@@ -381,3 +417,16 @@ volumes:
       type: none
       device: /data/plane-data/rabbitmq_data
       o: bind
+  onlyoffice_data:
+  onlyoffice_lib:
+  onlyoffice_db:
+  onlyoffice_fonts:
+  onlyoffice_logs:
+
+# 固定内部网段：后端只信任 172.16.0.0/12 来的代理头（TRUSTED_PROXY_CIDRS），
+# 让 Docker 自动分配万一分到 192.168.x，会把所有人都判成小网
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: ${PLANE_NETWORK_SUBNET:-172.29.0.0/24}

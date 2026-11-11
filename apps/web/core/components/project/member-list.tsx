@@ -8,8 +8,10 @@ import { useEffect, useMemo, useState } from "react";
 import { observer } from "mobx-react";
 import { Search } from "lucide-react";
 // plane imports
+import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 // components
+import { BulkJobRoleModal } from "@/components/project/settings/members/bulk-job-role-modal";
 import { MemberFilterSelect } from "@/components/project/settings/members/filter-select";
 import { buildGroupOptions } from "@/components/project/settings/members/helpers";
 import { ProjectMemberAccessModal } from "@/components/project/settings/members/member-access-modal";
@@ -43,12 +45,15 @@ export const ProjectMemberList = observer(function ProjectMemberList(props: TPro
   const router = useAppRouter();
   const [editingRow, setEditingRow] = useState<TProjectMemberRow | null>(null);
   const [removingRow, setRemovingRow] = useState<TProjectMemberRow | null>(null);
+  /** 勾选的成员（用户 id），批量设置角色用 */
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [isBulkRoleOpen, setIsBulkRoleOpen] = useState(false);
 
   const { data: currentUser } = useUser();
   const { leaveProject } = useUserPermissions();
   const { getProjectById } = useProject();
   const {
-    project: { removeMemberFromProject, updateMemberAccess },
+    project: { removeMemberFromProject, updateMemberAccess, bulkSetMemberJobRoles },
   } = useMember();
   const { roles: groups, fetchRoles } = useProjectRoles(workspaceSlug, projectId);
   const { jobRoles, jobRoleMap, isColored } = useJobRoles(workspaceSlug);
@@ -65,6 +70,24 @@ export const ProjectMemberList = observer(function ProjectMemberList(props: TPro
     () => buildGroupOptions(groups).map((option) => ({ id: option.id, label: option.label })),
     [groups]
   );
+
+  // 批量操作只作用于当前列表里看得见的勾选项：换了筛选后被筛掉的人不算
+  const selectedVisibleIds = table.filteredRows.map((row) => row.user.id).filter((userId) => selectedIds.has(userId));
+
+  const toggleSelect = (userId: string) =>
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(userId)) next.delete(userId);
+      else next.add(userId);
+      return next;
+    });
+
+  const toggleSelectAll = (checked: boolean) =>
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      table.filteredRows.forEach((row) => (checked ? next.add(row.user.id) : next.delete(row.user.id)));
+      return next;
+    });
 
   const handleRemove = async (row: TProjectMemberRow) => {
     const isSelf = row.user.id === currentUser?.id;
@@ -109,7 +132,19 @@ export const ProjectMemberList = observer(function ProjectMemberList(props: TPro
           value={table.groupFilter}
           onChange={table.setGroupFilter}
         />
-        <span className="ml-auto text-13 text-tertiary tabular-nums">{table.filteredRows.length} 人</span>
+        {selectedVisibleIds.length > 0 ? (
+          <span className="ml-auto flex items-center gap-2">
+            <span className="text-13 text-secondary tabular-nums">已选 {selectedVisibleIds.length} 人</span>
+            <Button variant="secondary" size="lg" onClick={() => setIsBulkRoleOpen(true)}>
+              设置角色
+            </Button>
+            <Button variant="tertiary" size="lg" onClick={() => setSelectedIds(new Set())}>
+              取消选择
+            </Button>
+          </span>
+        ) : (
+          <span className="ml-auto text-13 text-tertiary tabular-nums">{table.filteredRows.length} 人</span>
+        )}
       </div>
 
       <div className="mt-3">
@@ -122,10 +157,25 @@ export const ProjectMemberList = observer(function ProjectMemberList(props: TPro
           currentUserId={currentUser?.id}
           projectLeadId={projectLeadId}
           canManage={canManage}
+          selectedIds={selectedIds}
+          onToggleSelect={toggleSelect}
+          onToggleSelectAll={toggleSelectAll}
           onEdit={setEditingRow}
           onRemove={setRemovingRow}
         />
       </div>
+
+      <BulkJobRoleModal
+        isOpen={isBulkRoleOpen}
+        memberCount={selectedVisibleIds.length}
+        jobRoles={jobRoles}
+        onClose={() => setIsBulkRoleOpen(false)}
+        onSubmit={async (data) => {
+          await bulkSetMemberJobRoles(workspaceSlug, projectId, { member_ids: selectedVisibleIds, ...data });
+          setSelectedIds(new Set());
+        }}
+      />
+
 
       <SendProjectInvitationModal
         isOpen={isAddModalOpen}

@@ -8,7 +8,6 @@ import uuid
 from django.utils import timezone
 
 from plane.db.models import (
-    ApprovalType,
     DataDictionary,
     DataDictionaryItem,
     Project,
@@ -16,8 +15,6 @@ from plane.db.models import (
     ProjectUserProperty,
     State,
     WorkspaceMember,
-    Workflow,
-    WorkflowTransition,
     User,
 )
 from plane.tests.factories import project_code_label, project_required_payload
@@ -147,47 +144,6 @@ class TestProjectAPIPost(TestProjectBase):
 
         # Verify both have ProjectUserProperty
         assert ProjectUserProperty.objects.filter(project=project).count() == 2
-
-    @pytest.mark.django_db
-    def test_create_project_creates_default_bug_workflow(self, session_client, workspace):
-        url = self.get_project_url(workspace.slug)
-        project_data = self.project_payload(
-            workspace, workspace.owner, name="Project With Bug Workflow", identifier="PWB"
-        )
-
-        response = session_client.post(url, project_data, format="json")
-
-        assert response.status_code == status.HTTP_201_CREATED
-
-        project = Project.objects.get(name=project_data["name"])
-        workflow = Workflow.objects.get(
-            scheme_id=project.issue_scheme_id,
-            issue_type__name="缺陷",
-            is_active=True,
-        )
-
-        assert workflow.name == "缺陷默认工作流"
-
-        transitions = WorkflowTransition.objects.filter(workflow=workflow)
-        assert transitions.count() == 10
-        assert transitions.filter(approval_type=ApprovalType.ALL).count() == 10
-
-        transition_pairs = set(
-            transitions.values_list("from_state__name", "to_state__name")
-        )
-        expected_pairs = {
-            ("Open", "Fixed"),
-            ("Open", "Pending-Reject"),
-            ("Fixed", "Reopen"),
-            ("Fixed", "Closed"),
-            ("Pending-Reject", "Rejected"),
-            ("Pending-Reject", "Closed"),
-            ("Pending-Reject", "Suspend"),
-            ("Pending-Reject", "Reopen"),
-            ("Suspend", "Closed"),
-            ("Suspend", "Reopen"),
-        }
-        assert transition_pairs == expected_pairs
 
     @pytest.mark.django_db
     def test_create_project_guest_forbidden(self, session_client, workspace):

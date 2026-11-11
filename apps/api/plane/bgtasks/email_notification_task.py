@@ -22,6 +22,7 @@ from plane.license.utils.instance_value import get_email_configuration
 from plane.settings.redis import redis_instance
 from plane.utils.email import generate_plain_text_from_html
 from plane.utils.exception_logger import log_exception
+from plane.utils.network_zone import link_base_for_user
 
 
 def remove_unwanted_characters(input_text):
@@ -284,6 +285,7 @@ def send_email_notification(issue_id, notification_data, receiver_id, email_noti
             ) = get_email_configuration()
 
             receiver = User.objects.get(pk=receiver_id)
+            base_api = link_base_for_user(receiver, base_api)
             issue = Issue.objects.get(pk=issue_id)
             template_data = []
             total_changes = 0
@@ -424,6 +426,25 @@ def send_email_notification(issue_id, notification_data, receiver_id, email_noti
         return
 
 
+def _with_link_base(context, base, link_base):
+    """把状态邮件 context 里以 base 开头的链接换成 link_base 开头（按收件人网段换站点地址）。"""
+    if link_base == base:
+        return context
+
+    def swap(url):
+        return link_base + url[len(base):] if isinstance(url, str) and url.startswith(base) else url
+
+    swapped = dict(
+        context,
+        project_url=swap(context.get("project_url")),
+        user_preference=swap(context.get("user_preference")),
+        entity=dict(context["entity"], url=swap(context["entity"].get("url"))),
+    )
+    if context.get("actor"):
+        swapped["actor"] = dict(context["actor"], avatar_url=swap(context["actor"].get("avatar_url")))
+    return swapped
+
+
 def _send_entity_status_email(
     *,
     entity_kind,
@@ -484,7 +505,9 @@ def _send_entity_status_email(
 
         receiver_map = {
             str(user.id): user
-            for user in User.objects.filter(pk__in=normalized_receiver_ids).only("id", "email")
+            for user in User.objects.filter(pk__in=normalized_receiver_ids).only(
+                "id", "email", "network_zone", "last_login_ip"
+            )
         }
         receiver_emails = [
             receiver_map[receiver_id].email
@@ -611,8 +634,12 @@ def _send_entity_status_email(
             template_map[(entity_kind, "status_changed")],
         )
 
-        html_content = render_to_string(template_name, context)
-        text_content = generate_plain_text_from_html(html_content)
+        # 收件人可能分属大网 / 小网，链接地址不同就拆成几封发
+        receiver_groups = {}
+        for receiver_id in normalized_receiver_ids:
+            receiver = receiver_map.get(receiver_id)
+            if receiver is not None and receiver.email:
+                receiver_groups.setdefault(link_base_for_user(receiver, base_api), []).append(receiver.email)
 
         try:
             connection = get_connection(
@@ -623,15 +650,18 @@ def _send_entity_status_email(
                 use_tls=EMAIL_USE_TLS == "1",
                 use_ssl=EMAIL_USE_SSL == "1",
             )
-            msg = EmailMultiAlternatives(
-                subject=remove_unwanted_characters(subject),
-                body=text_content,
-                from_email=EMAIL_FROM,
-                to=receiver_emails,
-                connection=connection,
-            )
-            msg.attach_alternative(html_content, "text/html")
-            msg.send()
+            for link_base, group_emails in receiver_groups.items():
+                html_content = render_to_string(template_name, _with_link_base(context, base_api, link_base))
+                text_content = generate_plain_text_from_html(html_content)
+                msg = EmailMultiAlternatives(
+                    subject=remove_unwanted_characters(subject),
+                    body=text_content,
+                    from_email=EMAIL_FROM,
+                    to=group_emails,
+                    connection=connection,
+                )
+                msg.attach_alternative(html_content, "text/html")
+                msg.send()
             logging.getLogger("plane.worker").info(
                 "%s status email sent successfully", entity_kind.capitalize()
             )

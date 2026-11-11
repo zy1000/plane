@@ -1,6 +1,8 @@
 .git
 *.pyc
 .env
+# 各 app 下的开发用 .env（带开发机地址），不能被打进镜像
+**/.env
 venv
 .venv
 node_modules/

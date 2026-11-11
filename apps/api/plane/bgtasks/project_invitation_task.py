@@ -18,11 +18,13 @@ from plane.db.models import Project, ProjectMemberInvite, User
 from plane.license.utils.instance_value import get_email_configuration
 from plane.utils.email import generate_plain_text_from_html
 from plane.utils.exception_logger import log_exception
+from plane.utils.network_zone import link_base_for_email
 
 
 @shared_task
 def project_invitation(email, project_id, token, current_site, invitor):
     try:
+        current_site = link_base_for_email(email, current_site)
         user = User.objects.get(email=invitor)
         project = Project.objects.get(pk=project_id)
         project_member_invite = ProjectMemberInvite.objects.get(token=token, email=email)

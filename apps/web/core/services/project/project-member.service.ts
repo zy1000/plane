@@ -92,6 +92,22 @@ export class ProjectMemberService extends APIService {
       });
   }
 
+  /**
+   * 批量设置角色：member_ids 是用户 id；mode=append 在各自原有角色上追加，replace 整份替换。
+   * 返回 {用户 id: 角色 id 列表}。
+   */
+  async bulkSetJobRoles(
+    workspaceSlug: string,
+    projectId: string,
+    data: { member_ids: string[]; job_role_ids: string[]; mode: "append" | "replace" }
+  ): Promise<Record<string, string[]>> {
+    return this.post(`/api/workspaces/${workspaceSlug}/projects/${projectId}/members/job-roles/`, data)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
   async getMyPermissionKeys(workspaceSlug: string, projectId: string): Promise<string[]> {
     return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/my-permission-keys/`)
       .then((response) => (response?.data?.permission_keys as string[]) ?? [])

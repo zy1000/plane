@@ -11,6 +11,7 @@ export type TWorkspaceSettingsTabs =
   | "general"
   | "members"
   | "departments"
+  | "job-roles"
   | "groups"
   | "roles"
   | "templates"

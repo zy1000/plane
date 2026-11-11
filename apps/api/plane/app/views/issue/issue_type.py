@@ -48,10 +48,7 @@ def with_linked_dev_modes(data, issue_types):
         row["linked_dev_modes"] = modes.get(issue_type.id, [])
     return data
 from plane.utils.scheme_views import prune_mode_view_references
-from plane.utils.project.defaults import (
-    bulk_create_issue_state,
-    create_default_bug_workflow,
-)
+from plane.utils.project.defaults import bulk_create_issue_state
 
 
 class ProjectIssueTypeListCreateAPIEndpoint(IssueSchemeScopeMixin, BaseAPIView):

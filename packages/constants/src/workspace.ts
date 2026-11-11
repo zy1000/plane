@@ -222,6 +222,14 @@ export const WORKSPACE_SETTINGS = {
     permissionKeys: [PERMISSION_KEYS.WORKSPACE_DEPARTMENT_VIEW, PERMISSION_KEYS.WORKSPACE_DEPARTMENT_MANAGE],
     highlight: (pathname: string, baseUrl: string) => pathname.startsWith(`${baseUrl}/settings/departments`),
   },
+  // 角色（数据字典 job_role 的值）：原来在数据字典页维护，读写口径沿用数据字典的 key
+  "job-roles": {
+    key: "job-roles",
+    i18n_label: "workspace_settings.settings.job_roles.title",
+    href: `/settings/job-roles`,
+    permissionKeys: [PERMISSION_KEYS.WORKSPACE_DATA_DICTIONARY_VIEW, PERMISSION_KEYS.WORKSPACE_DATA_DICTIONARY_MANAGE],
+    highlight: (pathname: string, baseUrl: string) => pathname.startsWith(`${baseUrl}/settings/job-roles`),
+  },
   integrations: {
     key: "integrations",
     i18n_label: "workspace_settings.settings.integrations.title",

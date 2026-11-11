@@ -4,7 +4,9 @@
 
 # Third Party imports
 from rest_framework.response import Response
+from rest_framework import serializers as drf_serializers
 from rest_framework import status
+from django.db import transaction
 from django.db.models import Min, Prefetch
 
 # Module imports
@@ -19,7 +21,12 @@ from plane.app.serializers import (
 from plane.app.permissions import allow_project_member, WorkspaceUserPermission, PermissionKey
 from plane.app.permissions.base import resolve_project_grant
 from plane.app.serializers.user import UserLiteSerializer
-from plane.utils.job_role import member_job_role_map, set_member_job_roles, validate_job_role_ids
+from plane.utils.job_role import (
+    bulk_set_project_member_job_roles,
+    member_job_role_map,
+    set_member_job_roles,
+    validate_job_role_ids,
+)
 from plane.utils.permission_groups import PermissionGroupError, resolve_project_group_ids
 from plane.utils.project.member import copy_workspace_job_roles
 
@@ -411,6 +418,32 @@ class ProjectMemberCustomRolesAPIView(BaseAPIView):
                 return Response({"error": "角色不存在。"}, status=status.HTTP_400_BAD_REQUEST)
             set_member_job_roles(project_member, valid, project=True)
         return Response(self._payload(project_member), status=status.HTTP_200_OK)
+
+
+class ProjectMemberBulkJobRolesAPIView(BaseAPIView):
+    """成员表批量设置角色：member_ids（用户 id）+ job_role_ids，mode=append 追加 / replace 替换原有角色。"""
+
+    @allow_fine_permission(PermissionKey.PROJECT_MEMBER_MANAGE)
+    def post(self, request, slug, project_id):
+        project = Project.objects.filter(pk=project_id, workspace__slug=slug).first()
+        if project is None:
+            return Response({"error": "Project not found."}, status=status.HTTP_404_NOT_FOUND)
+        mode = request.data.get("mode", "append")
+        id_list = drf_serializers.ListField(child=drf_serializers.UUIDField())
+        try:
+            member_ids = id_list.run_validation(request.data.get("member_ids"))
+            job_role_ids = id_list.run_validation(request.data.get("job_role_ids"))
+        except drf_serializers.ValidationError:
+            return Response({"error": "member_ids / job_role_ids 必须是 id 列表。"}, status=status.HTTP_400_BAD_REQUEST)
+        if mode not in ("append", "replace") or not member_ids or (mode == "append" and not job_role_ids):
+            return Response({"error": "参数不完整。"}, status=status.HTTP_400_BAD_REQUEST)
+        valid, invalid = validate_job_role_ids(project.workspace_id, job_role_ids)
+        if invalid:
+            return Response({"error": "角色不存在。"}, status=status.HTTP_400_BAD_REQUEST)
+        project_members = ProjectMember.objects.filter(project=project, member_id__in=member_ids, is_active=True)
+        with transaction.atomic():
+            result = bulk_set_project_member_job_roles(project_members, valid, append=mode == "append")
+        return Response(result, status=status.HTTP_200_OK)
 
 
 class ProjectMyPermissionKeysAPIView(BaseAPIView):

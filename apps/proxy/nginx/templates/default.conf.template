@@ -41,6 +41,18 @@ server {
         include /etc/nginx/proxy_params.plane;
     }
 
+    # OnlyOffice 文档服务挂在同一入口的 /onlyoffice/ 下，大网 / 小网各用自己的地址访问
+    location = /onlyoffice {
+        return 301 /onlyoffice/;
+    }
+
+    location ^~ /onlyoffice/ {
+        proxy_pass http://onlyoffice:80/;
+        include /etc/nginx/proxy_params.plane;
+        # 文档服务按这个头拼回自身对外地址（带虚拟路径）
+        proxy_set_header X-Forwarded-Host $http_host/onlyoffice;
+    }
+
     location ^~ /api/ {
         proxy_pass http://api:8000;
         include /etc/nginx/proxy_params.plane;

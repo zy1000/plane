@@ -32,6 +32,7 @@ export const GROUPED_WORKSPACE_SETTINGS = {
     WORKSPACE_SETTINGS["general"],
     WORKSPACE_SETTINGS["members"],
     WORKSPACE_SETTINGS["departments"],
+    WORKSPACE_SETTINGS["job-roles"],
     WORKSPACE_SETTINGS["groups"],
     WORKSPACE_SETTINGS["roles"],
     WORKSPACE_SETTINGS["export"],

@@ -6030,6 +6030,9 @@ export default {
           },
         },
       },
+      job_roles: {
+        title: "角色",
+      },
       integrations: {
         title: "第三方集成",
         description: "查看本工作区与外部系统之间的数据对应关系，并手动触发同步。地址与密钥由运维在服务端环境变量里配置。",

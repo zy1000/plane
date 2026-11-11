@@ -10,6 +10,7 @@ from django.http import HttpRequest
 from rest_framework.request import Request
 
 # Module imports
+from plane.utils.host import request_origin
 from plane.utils.ip_address import get_client_ip
 
 
@@ -21,7 +22,8 @@ def base_host(
 ) -> str:
     """Utility function to return host / origin from the request"""
     # Calculate the base origin from request
-    base_origin = settings.WEB_URL or settings.APP_BASE_URL
+    origin = request_origin(request)
+    base_origin = origin or settings.WEB_URL or settings.APP_BASE_URL
 
     # Admin redirection
     if is_admin:
@@ -33,7 +35,7 @@ def base_host(
         if not admin_base_path.endswith("/"):
             admin_base_path += "/"
 
-        if settings.ADMIN_BASE_URL:
+        if settings.ADMIN_BASE_URL and not origin:
             return settings.ADMIN_BASE_URL + admin_base_path
         else:
             return base_origin + admin_base_path
@@ -48,14 +50,14 @@ def base_host(
         if not space_base_path.endswith("/"):
             space_base_path += "/"
 
-        if settings.SPACE_BASE_URL:
+        if settings.SPACE_BASE_URL and not origin:
             return settings.SPACE_BASE_URL + space_base_path
         else:
             return base_origin + space_base_path
 
     # App Redirection
     if is_app:
-        if settings.APP_BASE_URL:
+        if settings.APP_BASE_URL and not origin:
             return settings.APP_BASE_URL
         else:
             return base_origin

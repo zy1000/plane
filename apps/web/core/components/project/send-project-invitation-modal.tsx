@@ -14,6 +14,7 @@ import { cn, getFileURL } from "@plane/utils";
 import { ModalFieldError, ModalFieldLabel } from "@/components/common/form-modal";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { OptionMultiSelect } from "@/components/permission-groups";
+import type { TChipOption } from "@/components/permission-groups";
 import { errorMessage } from "@/components/project/settings/permission-groups/shared";
 import { buildGroupOptions, buildJobRoleOptions } from "@/components/project/settings/members/helpers";
 import { useJobRoles } from "@/hooks/store/use-job-roles";
@@ -79,9 +80,40 @@ const SelectedMemberChips = observer(function SelectedMemberChips({
   );
 });
 
+/** 「角色」里的一行：一个人在本项目的角色，默认带出他的工作区角色，可逐人调整 */
+const MemberJobRoleRow = observer(function MemberJobRoleRow(props: {
+  memberId: string;
+  options: TChipOption[];
+  value: string[];
+  onChange: (value: string[]) => void;
+  portalContainerRef: React.RefObject<HTMLElement>;
+}) {
+  const { memberId, options, value, onChange, portalContainerRef } = props;
+  const { getUserDetails } = useMember();
+  const user = getUserDetails(memberId);
+  return (
+    <div className="grid grid-cols-[150px_minmax(0,1fr)] items-center gap-3 px-3 py-1.5">
+      <span className="flex min-w-0 items-center gap-2 text-13 text-primary">
+        <Avatar name={user?.display_name} src={getFileURL(user?.avatar_url ?? "")} size="sm" />
+        <span className="truncate">{user?.display_name ?? "未知成员"}</span>
+      </span>
+      <OptionMultiSelect
+        options={options}
+        value={value}
+        onChange={onChange}
+        placeholder="未设置"
+        searchPlaceholder="搜索角色"
+        portalContainerRef={portalContainerRef}
+        className="min-h-9 border-transparent bg-transparent hover:border-subtle"
+      />
+    </div>
+  );
+});
+
 /**
- * 添加项目成员（效果图「添加成员」弹窗）：一次选多个人，统一给角色和权限组。
- * 「项目成员」权限组每人都有，固定显示；角色不选时后端默认带上每个人在工作区的角色。
+ * 添加项目成员（效果图「添加成员」弹窗）：一次选多个人，权限组统一给，角色逐人设置。
+ * 「项目成员」权限组每人都有，固定显示；每个人的角色默认带出他在工作区的角色，显示出来可以改，
+ * 留空就是不设——提交时总是带上 job_role_ids（空数组 = 不设），不走后端「没传就带工作区角色」的兜底。
  */
 export const SendProjectInvitationModal = observer(function SendProjectInvitationModal({
   isOpen,
@@ -93,7 +125,8 @@ export const SendProjectInvitationModal = observer(function SendProjectInvitatio
   const containerRef = useRef<HTMLDivElement>(null);
   const [view, setView] = useState<"form" | "team-picker">("form");
   const [memberIds, setMemberIds] = useState<string[]>([]);
-  const [jobRoleIds, setJobRoleIds] = useState<string[]>([]);
+  /** 只记手动改过的人；没改过的显示他的工作区角色 */
+  const [jobRoleOverrides, setJobRoleOverrides] = useState<Record<string, string[]>>({});
   const [groupIds, setGroupIds] = useState<string[]>([]);
   const [memberError, setMemberError] = useState<string>();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -123,6 +156,13 @@ export const SendProjectInvitationModal = observer(function SendProjectInvitatio
     [getProjectMemberDetails, getWorkspaceMemberDetails, projectId, workspaceMemberIds]
   );
 
+  const jobRoleOptions = useMemo(() => buildJobRoleOptions(jobRoles), [jobRoles]);
+  const getJobRoleIds = (memberId: string) => {
+    if (jobRoleOverrides[memberId]) return jobRoleOverrides[memberId];
+    const available = new Set(jobRoles.map((role) => role.id));
+    return (getWorkspaceMemberDetails(memberId)?.job_role_ids ?? []).filter((id) => available.has(id));
+  };
+
   useEffect(() => {
     if (!isOpen) return;
     void fetchRoles();
@@ -131,7 +171,7 @@ export const SendProjectInvitationModal = observer(function SendProjectInvitatio
 
   const reset = () => {
     setMemberIds([]);
-    setJobRoleIds([]);
+    setJobRoleOverrides({});
     setGroupIds([]);
     setMemberError(undefined);
     setView("form");
@@ -153,7 +193,7 @@ export const SendProjectInvitationModal = observer(function SendProjectInvitatio
         members: memberIds.map((memberId) => ({
           member_id: memberId,
           role_ids: groupIds,
-          ...(jobRoleIds.length > 0 ? { job_role_ids: jobRoleIds } : {}),
+          job_role_ids: getJobRoleIds(memberId),
         })),
       });
       setToast({ type: TOAST_TYPE.SUCCESS, title: `已添加 ${memberIds.length} 人` });
@@ -227,15 +267,25 @@ export const SendProjectInvitationModal = observer(function SendProjectInvitatio
               <ModalFieldError message={memberError} />
             </div>
             <div>
-              <ModalFieldLabel note="不选则带上每个人在工作区的角色">角色</ModalFieldLabel>
-              <OptionMultiSelect
-                options={buildJobRoleOptions(jobRoles)}
-                value={jobRoleIds}
-                onChange={setJobRoleIds}
-                placeholder="选择角色"
-                searchPlaceholder="搜索角色"
-                portalContainerRef={containerRef}
-              />
+              <ModalFieldLabel note="默认带出工作区角色，可按本项目调整">角色</ModalFieldLabel>
+              {memberIds.length === 0 ? (
+                <div className="flex min-h-10 items-center rounded-lg border border-dashed border-subtle px-3 text-13 text-placeholder">
+                  选择成员后设置各自在本项目的角色
+                </div>
+              ) : (
+                <div className="max-h-64 divide-y divide-subtle overflow-y-auto rounded-lg border border-subtle">
+                  {memberIds.map((memberId) => (
+                    <MemberJobRoleRow
+                      key={memberId}
+                      memberId={memberId}
+                      options={jobRoleOptions}
+                      value={getJobRoleIds(memberId)}
+                      onChange={(value) => setJobRoleOverrides((current) => ({ ...current, [memberId]: value }))}
+                      portalContainerRef={containerRef}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
             <div>
               <ModalFieldLabel>权限组</ModalFieldLabel>

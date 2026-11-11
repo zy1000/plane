@@ -19,6 +19,7 @@ from plane.utils.email import generate_plain_text_from_html
 from plane.utils.exception_logger import log_exception
 from plane.db.models import ProjectMember
 from plane.db.models import User
+from plane.utils.network_zone import link_base_for_user
 
 
 @shared_task
@@ -33,6 +34,7 @@ def project_add_user_email(current_site, project_member_id, invitor_id):
         project_name = project_member.project.name
         workspace_name = project_member.workspace.name
         member_email = project_member.member.email
+        current_site = link_base_for_user(project_member.member, current_site)
         project_url = f"{current_site}/{project_member.workspace.slug}/projects/{project_member.project_id}/issues"
         # set the context
         context = {

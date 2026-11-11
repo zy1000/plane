@@ -17,6 +17,7 @@ from plane.db.models import User
 from plane.license.utils.instance_value import get_email_configuration
 from plane.utils.email import generate_plain_text_from_html
 from plane.utils.exception_logger import log_exception
+from plane.utils.network_zone import link_base_for_user
 
 
 @shared_task
@@ -24,6 +25,7 @@ def user_deactivation_email(current_site, user_id):
     try:
         # Send email to user when account is deactivated
         user = User.objects.get(id=user_id)
+        current_site = link_base_for_user(user, current_site)
         subject = f"{user.display_name or user.first_name or user.email} has been deactivated on Plane"
 
         context = {"email": str(user.email), "login_url": current_site + "/login"}

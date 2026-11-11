@@ -5866,6 +5866,9 @@ export default {
           },
         },
       },
+      job_roles: {
+        title: "Job roles",
+      },
       integrations: {
         title: "Integrations",
         description:

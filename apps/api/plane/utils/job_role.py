@@ -123,6 +123,18 @@ def set_member_job_roles(member, job_role_ids, *, project=False):
         )
 
 
+def bulk_set_project_member_job_roles(project_members, job_role_ids, *, append):
+    """给一批项目成员设角色：``append`` 在各自原有角色上追加，否则整份替换。
+    返回 {成员用户 id: [角色 id, ...]}。``job_role_ids`` 已校验。"""
+    project_members = list(project_members)
+    existing = member_job_role_map([member.id for member in project_members], project=True) if append else {}
+    for member in project_members:
+        wanted = [*(str(value) for value in existing.get(member.id, [])), *job_role_ids] if append else job_role_ids
+        set_member_job_roles(member, wanted, project=True)
+    current = member_job_role_map([member.id for member in project_members], project=True)
+    return {str(member.member_id): [str(value) for value in current.get(member.id, [])] for member in project_members}
+
+
 def default_project_job_roles(workspace_id, user_id):
     """新加进项目时默认带上他在工作区的角色。"""
     member = WorkspaceMember.objects.filter(

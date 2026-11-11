@@ -47,9 +47,6 @@ ISSUE_SCHEME_DETACH_BLOCKED_BY_PENDING_APPROVALS = "ISSUE_SCHEME_DETACH_BLOCKED_
 #: 删除被引用的类型 / 状态 / 字段
 ISSUE_SCHEME_OBJECT_IN_USE = "ISSUE_SCHEME_OBJECT_IN_USE"
 
-#: 建项目时一并加进项目的成员：沿用原缺陷默认工作流里写死的四个人（其中三个是审批人）
-DEFAULT_PROJECT_MEMBER_NAMES = ["欧秋洁", "何洽", "钟长会", "杨玉柱"]
-
 
 def project_scheme_id(project_id):
     """项目当前所用方案的 id：跟随 = 模式方案，自定义 = 项目方案。项目不存在返回 None。"""
@@ -210,17 +207,15 @@ def mode_type_issue_counts(dev_mode_id, type_ids=None):
 # ---------------------------------------------------------------------------
 
 
-def seed_issue_scheme(scheme, created_by=None, project=None):
-    """给还没有任何类型的方案生成种子内容（五个类型、默认状态、缺陷字段、缺陷默认工作流）。
+def seed_issue_scheme(scheme, created_by=None):
+    """给还没有任何类型的方案生成种子内容（五个类型、默认状态、缺陷字段）。不生成工作流。
 
     返回是否生成了。「没有任何类型」即视为从未生成过：默认类型不允许删，生成过的方案至少剩一个类型。
     锁方案行串行化并发调用（两个项目同时建、同时打开模板中心）。
-    ``project`` 只在项目方案时传：缺陷工作流的角色审批人按该项目的同名角色找；模式方案按同名角色模板找。
     """
     from plane.utils.project.defaults import (
         bulk_create_issue_state,
         create_default_bug_extra_field,
-        create_default_bug_workflow,
         create_scheme_issue_types,
     )
 
@@ -231,12 +226,11 @@ def seed_issue_scheme(scheme, created_by=None, project=None):
             return False
         bulk_create_issue_state(issue_types=issue_types, created_by=created_by)
         create_default_bug_extra_field(issue_types=issue_types)
-        create_default_bug_workflow(issue_types=issue_types, project=project, created_by=created_by)
     return True
 
 
 def add_scheme_members_to_project(project):
-    """把方案工作流里的指定成员与默认的四个人加进项目（需求 4.4）。已是成员的跳过。"""
+    """把方案工作流里的指定成员加进项目（需求 4.4）。已是成员的跳过。"""
     from plane.utils.project.member import add_user_to_project
 
     member_ids = set(
@@ -247,7 +241,7 @@ def add_scheme_members_to_project(project):
             deleted_at__isnull=True,
         ).values_list("member_id", flat=True)
     )
-    users = list(User.objects.filter(Q(id__in=member_ids) | Q(display_name__in=DEFAULT_PROJECT_MEMBER_NAMES)))
+    users = list(User.objects.filter(id__in=member_ids))
     if users:
         add_user_to_project(users, project)
 
@@ -543,4 +537,4 @@ def prepare_project_issue_scheme(project, creator=None):
                 ensure_mode_type_links(dev_mode)
         add_scheme_members_to_project(project)
     else:
-        seed_issue_scheme(scheme, created_by=creator, project=project)
+        seed_issue_scheme(scheme, created_by=creator)

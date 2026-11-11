@@ -310,10 +310,24 @@ export const PrincipalSelect: FC<TPrincipalSelectProps> = ({
                     </button>
                   );
                 })
-              ) : (
+              ) : isJobRolesLoading || query ? (
                 <p className="px-2 py-2 text-center text-xs text-tertiary">
-                  {isJobRolesLoading ? "正在加载角色..." : query ? "无匹配角色" : "工作区还没有角色，请在数据字典「角色」里添加"}
+                  {isJobRolesLoading ? "正在加载角色..." : "无匹配角色"}
                 </p>
+              ) : (
+                <div className="flex flex-col items-center gap-2 px-2 py-4 text-center">
+                  <span className="text-13 font-medium text-primary">工作区暂无角色</span>
+                  {workspaceSlug && (
+                    <a
+                      href={`/${workspaceSlug}/settings/job-roles`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex h-7 items-center rounded-md border border-subtle px-2.5 text-xs font-medium text-accent-primary hover:bg-layer-1-hover"
+                    >
+                      前往角色设置
+                    </a>
+                  )}
+                </div>
               ))}
 
             {tab === "member" &&

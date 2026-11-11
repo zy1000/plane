@@ -1,7 +1,6 @@
 from django.db.models import Model
 
 from plane.db.models import (
-    ApprovalType,
     DEFAULT_BUG_STATES,
     DEFAULT_STATES,
     IssueType,
@@ -9,59 +8,10 @@ from plane.db.models import (
     State,
     StateGroup,
     TypeExtraField,
-    Workflow,
-    WorkflowPrincipalDimension,
-    WorkflowPrincipalKind,
-    WorkflowTransition,
-    WorkflowTransitionPrincipal,
-    WorkflowTransitionRequiredField,
     IssueTypeCategory, User, Workspace
 )
 from plane.db.seed_data.issue_scheme import BUG, EPIC, FEATURE, STORY, TASK
 from plane.utils.data_model import IssueTypeModel
-from plane.utils.project.member import add_user_to_project
-
-QA_ROLE_SET = ['软件测试工程师', '软件测试负责人']
-RD_ROLE_SET = ['软件研发工程师', '软件研发负责人']
-BUG_REQUIRED_FIELD = ["修复版本", "技术原因", "解决方案"]
-TRANSITION_RULES = [
-    dict(from_state='Backlog', to_state='Open', initiator=None, assignee=dict(role_name=RD_ROLE_SET)),
-    dict(from_state='Open', to_state='Fixed', initiator=dict(role_name=RD_ROLE_SET),
-         assignee=dict(role_name=QA_ROLE_SET), required_field=['修复版本', '技术原因', '解决方案', '缺陷原因']),
-    dict(from_state='Open', to_state='Pending-Reject', initiator=dict(role_name=RD_ROLE_SET),
-         assignee=dict(role_name=QA_ROLE_SET), required_field=['技术原因', '解决方案']),
-    dict(from_state='Fixed', to_state='Reopen', initiator=dict(role_name=QA_ROLE_SET),
-         assignee=dict(role_name=RD_ROLE_SET)),
-    dict(from_state='Fixed', to_state='Closed', initiator=dict(role_name=QA_ROLE_SET),
-         assignee=dict(dynamic_target=['created_by']), required_field=BUG_REQUIRED_FIELD),
-    dict(from_state='Pending-Reject', to_state='Rejected',
-         initiator=dict(role_name=QA_ROLE_SET),
-         assignee=dict(dynamic_target=['created_by']),
-         approver=dict(role_name=['软件测试负责人'], member_name=['欧秋洁', '何洽', '钟长会']),
-         required_field=['技术原因', '解决方案'], approval_type=ApprovalType.N_OF_M, required_count=2
-         ),
-    dict(from_state='Pending-Reject', to_state='Suspend',
-         initiator=dict(role_name=QA_ROLE_SET),
-         assignee=dict(dynamic_target=['created_by']),
-         approver=dict(role_name=['软件测试负责人'], member_name=['欧秋洁', '何洽', '钟长会']),
-         required_field=['技术原因', '解决方案'], approval_type=ApprovalType.N_OF_M, required_count=2
-         ),
-    dict(from_state='Pending-Reject', to_state='Reopen', initiator=dict(role_name=QA_ROLE_SET),
-         assignee=dict(role_name=RD_ROLE_SET)),
-    dict(from_state='Suspend', to_state='Closed', initiator=dict(dynamic_target=['created_by']),
-         assignee=dict(dynamic_target=['created_by']), required_field=BUG_REQUIRED_FIELD),
-    dict(from_state='Suspend', to_state='Reopen', initiator=dict(dynamic_target=['created_by']),
-         assignee=dict(role_name=RD_ROLE_SET)),
-    dict(from_state='Reopen', to_state='Fixed', initiator=dict(role_name=RD_ROLE_SET),
-         assignee=dict(role_name=QA_ROLE_SET), required_field=BUG_REQUIRED_FIELD),
-    dict(from_state='Reopen', to_state='Pending-Reject', initiator=dict(role_name=RD_ROLE_SET),
-         assignee=dict(role_name=QA_ROLE_SET), required_field=['技术原因', '解决方案']),
-]
-
-
-def get_bug_issue_type(issue_types: list[IssueType]):
-    return next((issue_type for issue_type in issue_types if getattr(issue_type.category, "name", None) == "缺陷"),
-                None)
 
 
 def init_issue_type() -> list[IssueTypeModel]:
@@ -375,108 +325,6 @@ def create_default_bug_extra_field(issue_types: list[IssueType]):
         name="解决方案",
         options={"text_mode": "paragraph"},
     )
-
-
-def add_principal(rule_info: dict, project: Project | None, transition: WorkflowTransition):
-    """添加工作流的审批人、目标人、发起人。
-
-    ``role_name`` 按角色字典（job_role）的名字找角色，运行时解析成项目里挂了这个角色的人；
-    项目方案与模式方案写法一样。
-    """
-    from plane.utils.job_role import job_role_ids_by_label
-
-    bulk_object = []
-
-    def add(data: dict, dimension: str):
-        for key, value in data.items():
-            if key == 'role_name':
-                for job_role_id in job_role_ids_by_label(transition.workspace_id, value):
-                    bulk_object.append(
-                        WorkflowTransitionPrincipal(transition=transition, job_role_id=job_role_id,
-                                                    dimension=dimension, kind=WorkflowPrincipalKind.ROLE))
-            elif key == 'member_name':
-                member_ids = list(
-                    User.objects.filter(display_name__in=value).values_list('id', flat=True)
-                )
-                for member_id in member_ids:
-                    bulk_object.append(
-                        WorkflowTransitionPrincipal(transition=transition, member_id=member_id, dimension=dimension,
-                                                    kind=WorkflowPrincipalKind.MEMBER))
-            elif key == 'dynamic_target':
-                for dynamic_target in value:
-                    bulk_object.append(
-                        WorkflowTransitionPrincipal(transition=transition, dynamic_target=dynamic_target,
-                                                    dimension=dimension,
-                                                    kind=WorkflowPrincipalKind.DYNAMIC))
-
-    if initiator := rule_info.get('initiator'):
-        add(initiator, WorkflowPrincipalDimension.INITIATOR)
-    if assignee := rule_info.get('assignee'):
-        add(assignee, WorkflowPrincipalDimension.ASSIGNEE)
-    if approver := rule_info.get('approver'):
-        add(approver, WorkflowPrincipalDimension.APPROVER)
-
-    # 批量生成操作人记录
-    WorkflowTransitionPrincipal.objects.bulk_create(bulk_object)
-
-
-def create_default_bug_workflow(issue_types: list[IssueType], **kwargs):
-    """``project`` 为空表示给模式方案生成：不往项目里加人，角色审批人按角色模板写（见 add_principal）。"""
-    defect_issue_type = get_bug_issue_type(issue_types)
-    if defect_issue_type is None:
-        return None
-
-    project = kwargs.get("project")
-
-    # 将三人添加进项目里面（模式方案在建项目时由 add_scheme_members_to_project 加）
-    if project is not None:
-        approver_users = User.objects.filter(display_name__in=['欧秋洁', '何洽', '钟长会','杨玉柱'])
-        add_user_to_project(approver_users, project)
-
-    # 创建默认缺陷工作流（方案由 Workflow.save() 从类型带出）
-    workflow = Workflow.objects.create(
-        issue_type=defect_issue_type,
-        name="缺陷默认工作流",
-        is_active=True,
-        created_by=kwargs.get("created_by"),
-    )
-
-    states = State.objects.filter(
-        scheme_id=defect_issue_type.scheme_id, issue_type=defect_issue_type, deleted_at__isnull=True
-    )
-    state_map = {state.name: state for state in states}
-
-    for rule_info in TRANSITION_RULES:
-        from_state = state_map.get(rule_info["from_state"])
-        to_state = state_map.get(rule_info["to_state"])
-        # 创建工作流规则
-        transition = WorkflowTransition.objects.create(
-            workflow=workflow,
-            from_state=from_state,
-            to_state=to_state,
-            approval_type=rule_info.get('approval_type', ApprovalType.ALL),
-            required_count=rule_info.get('required_count'),
-        )
-
-        add_principal(rule_info, project, transition)
-
-        # 创建必须字段
-        if required_field := rule_info.get('required_field'):
-            extra_fields = TypeExtraField.objects.filter(
-                issue_type=defect_issue_type,
-                name__in=required_field,
-                deleted_at__isnull=True,
-            )
-            required_field_records = [
-                WorkflowTransitionRequiredField(
-                    workflow=transition,
-                    extra_field=field,
-                )
-                for field in extra_fields
-            ]
-            WorkflowTransitionRequiredField.objects.bulk_create(required_field_records)
-
-    return workflow
 
 
 def setup_new_project(project: Project, creator: User):

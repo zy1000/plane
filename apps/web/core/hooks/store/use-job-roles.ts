@@ -18,6 +18,11 @@ type TJobRolesState = { items: TDataDictionaryItem[]; isColored: boolean };
 const cacheBySlug = new Map<string, TJobRolesState>();
 const inFlightBySlug = new Map<string, Promise<TJobRolesState>>();
 
+/** 角色页增删改排序后调用：之后打开的成员表、审批人选择等重新拉角色 */
+export const clearJobRolesCache = (workspaceSlug: string) => {
+  cacheBySlug.delete(workspaceSlug);
+};
+
 const loadJobRoles = (workspaceSlug: string) => {
   const pending = inFlightBySlug.get(workspaceSlug);
   if (pending) return pending;

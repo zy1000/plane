@@ -147,10 +147,12 @@ export function PermissionGroupTiles<K extends string>(props: {
   tiles: TDetailTile<K>[];
   active: K;
   onSelect: (key: K) => void;
+  /** 覆盖列数（默认 2 / 大屏 4） */
+  className?: string;
 }) {
-  const { tiles, active, onSelect } = props;
+  const { tiles, active, onSelect, className } = props;
   return (
-    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4" role="tablist">
+    <div className={cn("grid grid-cols-2 gap-3 lg:grid-cols-4", className)} role="tablist">
       {tiles.map((tile) => {
         const isActive = tile.key === active;
         return (
