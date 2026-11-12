@@ -515,6 +515,8 @@ class TestCaseRepositoryDetailSerializer(ModelSerializer):
     # 不让 depth=1 把整个产品模板对象嵌进来，与标准库同形：id + {id, name}
     product_category_id = serializers.UUIDField(read_only=True, allow_null=True)
     product_category_detail = serializers.SerializerMethodField()
+    # 只有列表接口 annotate 了这个值；新建 / 修改的返回里没有，字段自动省略
+    case_count = serializers.IntegerField(read_only=True, required=False)
 
     class Meta:
         model = TestCaseRepository

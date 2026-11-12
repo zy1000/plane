@@ -318,6 +318,18 @@ class RepositoryAPIView(BaseAPIView):
         if not repository_ids and not product_ids:
             # 都没指定：只列这个人能读的库
             queryset = queryset.filter(readable_repository_q(request, slug, field="id"))
+        # 每个库的用例数（项目里切换产品 / 用例库的下拉要显示）。
+        # 用子查询而不是 Count("cases")：聚合会带上 GROUP BY，模型默认的 -created_at 排序就丢了
+        case_counts = (
+            TestCase.objects.filter(repository=OuterRef("pk"))
+            .order_by()
+            .values("repository")
+            .annotate(total=Count("id"))
+            .values("total")
+        )
+        queryset = queryset.annotate(
+            case_count=Coalesce(Subquery(case_counts, output_field=IntegerField()), 0)
+        )
         repositories = self.filter_queryset(queryset)
         paginator = self.pagination_class()
         paginated_queryset = paginator.paginate_queryset(repositories, request)

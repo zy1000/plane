@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { useCaseBasePath } from "@/components/qa/shared/testhub/use-case-base-path";
 import { Breadcrumbs } from "@plane/ui";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { PageHead } from "@/components/core/page-title";
@@ -12,6 +13,7 @@ import { FileText } from "lucide-react";
 /** 用例全屏（独立页面）详情：与抽屉共用同一套展示结构（UpdateModal 的 page 形态） */
 export default function TestCaseDetailPage() {
   const { workspaceSlug, productId, caseId } = useParams();
+  const caseBase = useCaseBasePath();
   const router = useRouter();
   const ws = String(workspaceSlug || "");
   const pid = String(productId || "");
@@ -30,10 +32,9 @@ export default function TestCaseDetailPage() {
 
   if (!ws || !pid || !id) return null;
 
-  const testhubUrl = `/${ws}/products/${pid}/testhub`;
   const repositoryCasesUrl = repositoryId
-    ? `${testhubUrl}/cases?repositoryId=${encodeURIComponent(repositoryId)}`
-    : `${testhubUrl}/cases`;
+    ? `${caseBase}/cases?repositoryId=${encodeURIComponent(repositoryId)}`
+    : `${caseBase}/cases`;
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">

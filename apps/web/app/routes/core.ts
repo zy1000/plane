@@ -536,6 +536,43 @@ export const coreRoutes: RouteConfigEntry[] = [
               ":workspaceSlug/projects/:projectId/testhub",
               "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/page.tsx"
             ),
+            // 关联产品的用例 / 评审：入口页挑默认产品，产品 id 进路径后与产品入口共用页面
+            route(
+              ":workspaceSlug/projects/:projectId/testhub/cases",
+              "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/cases/page.tsx"
+            ),
+            route(
+              ":workspaceSlug/projects/:projectId/testhub/reviews",
+              "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/reviews/page.tsx"
+            ),
+            route(
+              ":workspaceSlug/projects/:projectId/testhub/products/:productId/cases",
+              "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/products/[productId]/cases/page.tsx"
+            ),
+            route(
+              ":workspaceSlug/projects/:projectId/testhub/products/:productId/cases/mind",
+              "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/products/[productId]/cases/mind/page.tsx"
+            ),
+            route(
+              ":workspaceSlug/projects/:projectId/testhub/products/:productId/cases/compare",
+              "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/products/[productId]/cases/compare/page.tsx"
+            ),
+            route(
+              ":workspaceSlug/projects/:projectId/testhub/products/:productId/cases/:caseId",
+              "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/products/[productId]/cases/[caseId]/page.tsx"
+            ),
+            route(
+              ":workspaceSlug/projects/:projectId/testhub/products/:productId/reviews",
+              "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/products/[productId]/reviews/page.tsx"
+            ),
+            route(
+              ":workspaceSlug/projects/:projectId/testhub/products/:productId/caseManagementReviewDetail",
+              "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/products/[productId]/caseManagementReviewDetail/page.tsx"
+            ),
+            route(
+              ":workspaceSlug/projects/:projectId/testhub/products/:productId/case-review",
+              "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/products/[productId]/case-review/page.tsx"
+            ),
             route(
               ":workspaceSlug/projects/:projectId/testhub/plans",
               "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/plans/page.tsx"

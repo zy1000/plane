@@ -3,6 +3,7 @@ import React from "react";
 import useSWR from "swr";
 import { Transition } from "@headlessui/react";
 import { useParams, useSearchParams, useRouter, usePathname } from "next/navigation";
+import { useCaseBasePath } from "@/components/qa/shared/testhub/use-case-base-path";
 import { PageHead } from "@/components/core/page-title";
 import { Breadcrumbs } from "@plane/ui";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
@@ -117,6 +118,7 @@ const normalizeId = (v: any): string | undefined => {
 export default function CaseReview() {
   const { t } = useTranslation();
   const { workspaceSlug, productId } = useParams();
+  const caseBase = useCaseBasePath();
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -768,7 +770,7 @@ export default function CaseReview() {
         <Breadcrumbs.Item
           component={
             <BreadcrumbLink
-              href={`/${workspaceSlug}/products/${productId}/testhub/caseManagementReviewDetail?review_id=${encodeURIComponent(String(reviewId))}`}
+              href={`${caseBase}/caseManagementReviewDetail?review_id=${encodeURIComponent(String(reviewId))}`}
               label={reviewName || "用例评审详情"}
             />
           }

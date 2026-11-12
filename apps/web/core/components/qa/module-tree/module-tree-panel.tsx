@@ -44,6 +44,8 @@ export type TModuleTreePanelProps = Omit<TModuleTreeProps, "query" | "className"
   title?: string;
   /** 树头左侧自定义内容（用例库切换 / 分组切换） */
   headerLeft?: ReactNode;
+  /** 树头上方的整行内容（项目里看产品用例时放产品 / 用例库切换器） */
+  top?: ReactNode;
   /** 传了才显示「新建一级模块」按钮 */
   onAddRoot?: () => void;
   searchable?: boolean;
@@ -62,6 +64,7 @@ export type TModuleTreePanelProps = Omit<TModuleTreeProps, "query" | "className"
 export const ModuleTreePanel = ({
   title = "模块",
   headerLeft,
+  top,
   onAddRoot,
   searchable = true,
   collapsible = true,
@@ -147,6 +150,7 @@ export const ModuleTreePanel = ({
       className={cn("relative flex h-full shrink-0 flex-col border-r border-subtle bg-surface-1", className)}
       style={{ width }}
     >
+      {top && <div className="shrink-0 px-2 pt-2.5">{top}</div>}
       <div className="flex h-10 shrink-0 items-center gap-0.5 pt-1 pr-1.5 pl-3">
         {searchOpen ? (
           <>

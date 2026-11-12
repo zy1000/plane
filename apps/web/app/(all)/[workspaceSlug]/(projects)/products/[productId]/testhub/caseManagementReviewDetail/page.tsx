@@ -1,6 +1,7 @@
 "use client";
 
 import { useParams, useSearchParams, useRouter } from "next/navigation";
+import { useCaseBasePath } from "@/components/qa/shared/testhub/use-case-base-path";
 import { useEffect, useRef, useState, useMemo } from "react";
 import { PageHead } from "@/components/core/page-title";
 import { Breadcrumbs } from "@plane/ui";
@@ -68,6 +69,7 @@ const EMPTY_REVIEW_CASE_FILTER_EXPRESSION: TReviewCaseFilterExpression = {};
 export default function CaseManagementReviewDetailPage() {
   const { t } = useTranslation();
   const { workspaceSlug, productId } = useParams<{ workspaceSlug: string; productId: string }>();
+  const caseBase = useCaseBasePath();
   const searchParams = useSearchParams();
   const reviewId = searchParams.get("review_id") ?? "";
   const repositoryIdFromUrl = searchParams.get("repositoryId");
@@ -424,7 +426,7 @@ export default function CaseManagementReviewDetailPage() {
     // 排序随 URL 带到评审页，让评审页用例顺序沿用当前列表；默认值不带参数
     const orderingQuery =
       ordering !== DEFAULT_REVIEW_CASE_ORDERING ? `&ordering=${encodeURIComponent(ordering)}` : "";
-    const href = `/${workspaceSlug}/products/${productId}/testhub/case-review?review_id=${encodeURIComponent(
+    const href = `${caseBase}/case-review?review_id=${encodeURIComponent(
       reviewId
     )}&case_id=${encodeURIComponent(record.case_id)}${orderingQuery}`;
     router.push(href);
@@ -482,7 +484,7 @@ export default function CaseManagementReviewDetailPage() {
     }
     const params = new URLSearchParams(searchParams.toString());
     params.set("review_id", String(nextReviewId));
-    router.push(`/${workspaceSlug}/products/${productId}/testhub/caseManagementReviewDetail?${params.toString()}`);
+    router.push(`${caseBase}/caseManagementReviewDetail?${params.toString()}`);
   };
 
   function getTreeNodeKey(node: any): string {

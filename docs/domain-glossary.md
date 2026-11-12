@@ -188,7 +188,7 @@
 - 计划 / 报告留在**项目**：`workspaces/<slug>/projects/<pid>/test/{plane,report}/`。项目能用的用例 = **项目已关联产品（`ProductProject`）下的用例库**，口径只在 `plane/utils/qa.py::project_case_repository_ids` —— 计划加用例、按迭代/模块/发布导入、工作项关联用例、工时挂用例、项目概览/分析统计都走它。
 - 新用例编号 `{产品开发编号}-TC-{n}`（产品内流水）；存量编号不动。删产品时若其用例在任何计划里 → 409 `PRODUCT_HAS_PLAN_CASES`。
 - 存量迁移：`python manage.py move_cases_to_product --export 清单.csv` → 填「目标产品开发编号」→ `--apply 清单.csv [--commit]`（一个项目整体迁到一个产品，顺带补 ProductProject）。
-- 前端：产品页「测试」tab（`products/[productId]/testhub/`，用例 / 用例评审）；项目「测试」只剩计划 / 报告。共用页签栏与外壳在 `core/components/qa/shared/testhub/`。
+- 前端：产品页「测试」tab（`products/[productId]/testhub/`，用例 / 用例评审）；项目「测试」四个页签：测试用例 / 用例评审 / 测试计划 / 测试报告。前两个只是**入口**，数据仍归产品（2026-11-12）：路径把产品 id 带进项目路由 `projects/<pid>/testhub/products/<productId>/{cases,reviews,…}`，页面与弹窗照常从路由取 `productId`，与产品入口共用同一套页面；没带产品的 `testhub/cases`、`testhub/reviews` 是入口页，挑「上次看的 / 第一个」关联产品再跳。跳转根路径统一用 `route-helpers.ts::tmCaseBasePath` / `use-case-base-path.ts`，不要再写死 `/products/<id>/testhub`。共用页签栏与外壳在 `core/components/qa/shared/testhub/`。
 
 结构分四块：
 - 用例：`TestCaseRepository`（根容器）→ `CaseModule`（目录树）/ `CaseLabel` → `TestCase` → `TestCaseVersion` / `TestCaseComment` / `TestCaseActivity`

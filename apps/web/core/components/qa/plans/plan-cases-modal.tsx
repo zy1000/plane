@@ -8,6 +8,8 @@ import { Layers, Plus, Search, X } from "lucide-react";
 import { ModalCore, EModalPosition, EModalWidth } from "@plane/ui";
 import { Button } from "@plane/propel/button";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
+import { CreateCaseModal } from "@/components/qa/cases/create-modal";
+import { RepositoryService } from "@/services/qa";
 import { CaseService } from "@/services/qa/case.service";
 import { PlanService } from "@/services/qa/plan.service";
 import { useTranslation } from "@plane/i18n";
@@ -40,7 +42,11 @@ type TestCase = {
   updated_at?: string;
   repository?: string;
   labels?: TLabel[];
+  module?: { id?: string; name?: string } | string | null;
 };
+type TRepositoryOption = { id: string; name: string };
+/** 新建用例落到哪个库 / 目录 */
+type TCreateTarget = { repositoryId: string; repositoryName: string; moduleId: string | null };
 type TestCaseResponse = { count: number; data: TestCase[] };
 
 type Props = {
@@ -70,6 +76,7 @@ export const PlanCasesModal: React.FC<Props> = ({
   const { t } = useTranslation();
   const caseService = useRef(new CaseService()).current;
   const planService = useRef(new PlanService()).current;
+  const repositoryService = useRef(new RepositoryService()).current;
   // 用例归产品：只能从项目已关联的产品里选，一次看一个产品（选中的用例跨产品保留）
   const {
     links: linkedProducts,
@@ -109,6 +116,12 @@ export const PlanCasesModal: React.FC<Props> = ({
       ),
     []
   );
+
+  // 就地新建用例：规划时发现缺用例，不用离开弹窗去产品里建
+  const [productRepositories, setProductRepositories] = useState<TRepositoryOption[]>([]);
+  const [createTarget, setCreateTarget] = useState<TCreateTarget | null>(null);
+  /** 本次打开期间在这里新建的用例：排在列表最前、带「新建」标记，并自动勾选 */
+  const [createdCases, setCreatedCases] = useState<{ productId: string; row: TestCase }[]>([]);
 
   const [leftWidth, setLeftWidth] = useState<number>(280);
   const isDraggingRef = useRef<boolean>(false);
@@ -158,6 +171,8 @@ export const PlanCasesModal: React.FC<Props> = ({
     setSelectedRepositoryId(null);
     setSelectedModuleId(null);
     setSelectedAssignee(null);
+    setCreateTarget(null);
+    setCreatedCases([]);
   }, [isOpen]);
 
   // 切产品：树与列表都换成该产品的用例；已勾选的用例保留
@@ -167,6 +182,7 @@ export const PlanCasesModal: React.FC<Props> = ({
     setSelectedTreeKey("root");
     setSelectedRepositoryId(null);
     setSelectedModuleId(null);
+    setProductRepositories([]);
     if (!isOpen || !workspaceSlug || !planId || !productId) {
       setPlanTree(null);
       setCases([]);
@@ -175,6 +191,7 @@ export const PlanCasesModal: React.FC<Props> = ({
     }
     fetchPlanTree();
     fetchCases(1, undefined, undefined);
+    fetchProductRepositories(productId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, productId]);
 
@@ -199,7 +216,7 @@ export const PlanCasesModal: React.FC<Props> = ({
     return [getTreeNodeKey(node)];
   };
 
-  const fetchPlanTree = async () => {
+  const fetchPlanTree = async (keepExpanded = false) => {
     if (!workspaceSlug || !planId) return;
     try {
       if (!productId) return;
@@ -208,11 +225,60 @@ export const PlanCasesModal: React.FC<Props> = ({
         product_id: productId,
       });
       setPlanTree(data || null);
+      // 新建用例后只是刷新计数，不动用户已展开的目录
+      if (keepExpanded) return;
       setExpandedKeys(data ? collectFirstLevelExpandedKeys(data) : []);
       setAutoExpandParent(true);
     } catch {
       setPlanTree(null);
     }
+  };
+
+  const fetchProductRepositories = async (targetProductId: string) => {
+    try {
+      const resp = await repositoryService.getRepositories(String(workspaceSlug), {
+        product_id: targetProductId,
+        page_size: 100,
+      });
+      const rows: any[] = Array.isArray(resp?.data) ? resp.data : [];
+      setProductRepositories(rows.map((row) => ({ id: String(row.id), name: String(row.name ?? "") })));
+    } catch {
+      setProductRepositories([]);
+    }
+  };
+
+  const handleOpenCreate = () => {
+    // 新用例建到左侧选中的库 / 目录下；没选时产品只有一个库就用它
+    const repository =
+      productRepositories.find((item) => item.id === selectedRepositoryId) ??
+      (productRepositories.length === 1 ? productRepositories[0] : undefined);
+    if (!repository) {
+      qaCaseSetToastWarning(productRepositories.length === 0 ? "该产品暂无用例库" : "请先在左侧选择用例库或目录");
+      return;
+    }
+    setCreateTarget({
+      repositoryId: repository.id,
+      repositoryName: repository.name,
+      moduleId: selectedRepositoryId === repository.id ? selectedModuleId : null,
+    });
+  };
+
+  const handleCaseCreated = (created?: any) => {
+    const createdCase = created?.case ?? created;
+    if (createdCase?.id && productId) {
+      const id = String(createdCase.id);
+      setCreatedCases((prev) => [
+        { productId, row: { ...createdCase, id } },
+        ...prev.filter((item) => item.row.id !== id),
+      ]);
+      setSelectedNewIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
+    }
+    // 目录计数、各节点下的用例 id、列表总数都变了
+    nodeCaseIdsCacheRef.current = {};
+    fetchPlanTree(true);
+    const keyword = searchName.trim();
+    if (keyword) fetchCases(currentPage, undefined, undefined, keyword);
+    else fetchCases(currentPage, selectedRepositoryId || undefined, selectedModuleId || undefined);
   };
 
   const fetchCases = async (
@@ -397,6 +463,20 @@ export const PlanCasesModal: React.FC<Props> = ({
     return [buildTreeNode(planTree)];
   }, [planTree]);
 
+  /** 刚建的用例接口只回模块 id 时，从目录树里找名字 */
+  const moduleNameById = (moduleId: string): string => {
+    const walk = (node: any): string | null => {
+      if (!node) return null;
+      if (String(node.kind) === "module" && String(node.id) === moduleId) return String(node.name ?? "");
+      for (const child of Array.isArray(node.children) ? node.children : []) {
+        const found = walk(child);
+        if (found !== null) return found;
+      }
+      return null;
+    };
+    return walk(planTree) ?? "";
+  };
+
   const columns: TableProps<TestCase>["columns"] = [
     {
       title: "编号",
@@ -411,12 +491,19 @@ export const PlanCasesModal: React.FC<Props> = ({
       dataIndex: "name",
       key: "name",
       ellipsis: { showTitle: false },
-      render: (v?: string) => {
+      render: (v: string | undefined, record: TestCase) => {
         const value = v ?? "";
         return (
-          <Tooltip title={value}>
-            <div className="truncate text-primary">{value}</div>
-          </Tooltip>
+          <div className="flex min-w-0 items-center gap-2">
+            <Tooltip title={value}>
+              <div className="truncate text-primary">{value}</div>
+            </Tooltip>
+            {createdIdSet.has(record.id) && (
+              <span className="shrink-0 rounded bg-accent-subtle px-1.5 py-px text-12 font-medium text-accent-primary">
+                新建
+              </span>
+            )}
+          </div>
         );
       },
     },
@@ -426,7 +513,9 @@ export const PlanCasesModal: React.FC<Props> = ({
       key: "module",
       width: 130,
       ellipsis: true,
-      render: (v: any) => <span className="text-secondary">{v && v.name ? v.name : ""}</span>,
+      render: (v: any) => (
+        <span className="text-secondary">{v && v.name ? v.name : typeof v === "string" ? moduleNameById(v) : ""}</span>
+      ),
     },
     {
       title: "类型",
@@ -446,6 +535,16 @@ export const PlanCasesModal: React.FC<Props> = ({
       render: (v: number) => <PlanCasePriorityBadge value={v} />,
     },
   ];
+
+  const createdRows = useMemo(
+    () => createdCases.filter((item) => item.productId === productId).map((item) => item.row),
+    [createdCases, productId]
+  );
+  const createdIdSet = useMemo(() => new Set(createdRows.map((row) => row.id)), [createdRows]);
+  const tableRows = useMemo(
+    () => (createdRows.length > 0 ? [...createdRows, ...cases.filter((row) => !createdIdSet.has(row.id))] : cases),
+    [createdRows, createdIdSet, cases]
+  );
 
   const closeModal = () => {
     onClose();
@@ -483,8 +582,14 @@ export const PlanCasesModal: React.FC<Props> = ({
     }
   };
 
-  return (
-    <ModalCore isOpen={isOpen} handleClose={closeModal} position={EModalPosition.CENTER} width={EModalWidth.VIIXL}>
+  // 新建表单打开时先收起本弹窗（两层弹窗叠着会被这层的焦点锁住），建完再回来，已选和筛选都还在
+  const picker = (
+    <ModalCore
+      isOpen={isOpen && !createTarget}
+      handleClose={closeModal}
+      position={EModalPosition.CENTER}
+      width={EModalWidth.VIIXL}
+    >
       <div className={`${CASE_PICKER_MODAL_CLASS} flex w-full flex-col text-sm text-primary`}>
         <CasePickerModalStyles />
         <ModuleTreeSkinStyles />
@@ -576,7 +681,18 @@ export const PlanCasesModal: React.FC<Props> = ({
                     />
                   </div>
                 </div>
-                <span className="shrink-0 text-13 text-tertiary tabular-nums">共 {total} 条</span>
+                <div className="flex shrink-0 items-center gap-3">
+                  <span className="text-13 text-tertiary tabular-nums">共 {total} 条</span>
+                  {!hasNoLinkedProduct && !linkedProductsError && (
+                    <button
+                      type="button"
+                      onClick={handleOpenCreate}
+                      className="flex items-center justify-center rounded border border-accent-strong bg-transparent px-3 py-1.5 text-xs font-medium whitespace-nowrap text-accent-primary transition-all hover:bg-accent-subtle"
+                    >
+                      新建用例
+                    </button>
+                  )}
+                </div>
               </div>
 
               <div className="flex flex-1 min-h-0 flex-col">
@@ -597,7 +713,7 @@ export const PlanCasesModal: React.FC<Props> = ({
                 {hasNoLinkedProduct && projectId && (
                   <NoLinkedProductHint workspaceSlug={workspaceSlug} projectId={projectId} />
                 )}
-                {!hasNoLinkedProduct && !linkedProductsError && !loading && !error && cases.length === 0 && (
+                {!hasNoLinkedProduct && !linkedProductsError && !loading && !error && tableRows.length === 0 && (
                   <div className="flex h-full flex-col items-center justify-center gap-3 py-12 text-center">
                     <span className="flex size-12 items-center justify-center rounded-full bg-layer-1 text-tertiary">
                       <Layers className="size-6" />
@@ -605,11 +721,11 @@ export const PlanCasesModal: React.FC<Props> = ({
                     <div className="text-sm text-secondary">暂无可关联的用例</div>
                   </div>
                 )}
-                {!loading && !error && cases.length > 0 && (
+                {!loading && !error && tableRows.length > 0 && (
                   <>
                     <div className="table-scroll flex-1 min-h-0">
                       <Table
-                        dataSource={cases}
+                        dataSource={tableRows}
                         columns={columns}
                         rowKey="id"
                         tableLayout="fixed"
@@ -627,7 +743,7 @@ export const PlanCasesModal: React.FC<Props> = ({
                               key: "select-all",
                               text: "本页全选",
                               onSelect: () => {
-                                const nextKeys = Array.from(new Set([...selectedNewIds, ...cases.map((c) => c.id)]));
+                                const nextKeys = Array.from(new Set([...selectedNewIds, ...tableRows.map((c) => c.id)]));
                                 setSelectedNewIds(nextKeys);
                                 syncTreeCheckState(nextKeys);
                               },
@@ -712,6 +828,24 @@ export const PlanCasesModal: React.FC<Props> = ({
         </div>
       </div>
     </ModalCore>
+  );
+
+  return (
+    <>
+      {picker}
+      {createTarget && productId && (
+        <CreateCaseModal
+          isOpen
+          handleClose={() => setCreateTarget(null)}
+          workspaceSlug={workspaceSlug}
+          productId={productId}
+          repositoryId={createTarget.repositoryId}
+          repositoryName={createTarget.repositoryName}
+          initialModuleId={createTarget.moduleId}
+          onSuccess={handleCaseCreated}
+        />
+      )}
+    </>
   );
 };
 

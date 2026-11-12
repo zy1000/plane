@@ -1,6 +1,7 @@
 "use client";
 
 import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { useCaseBasePath } from "@/components/qa/shared/testhub/use-case-base-path";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { PageHead } from "@/components/core/page-title";
 import { Breadcrumbs } from "@plane/ui";
@@ -33,6 +34,7 @@ import {
 export default function TestCasesMindPage() {
   const { t } = useTranslation();
   const { workspaceSlug, productId } = useParams();
+  const caseBase = useCaseBasePath();
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -730,11 +732,10 @@ export default function TestCasesMindPage() {
               try {
                 await caseModuleService.deleteCaseModule(ws, moduleId);
                 setSelectedModuleIds([]);
-                const pid = String(productId || "");
                 const params = new URLSearchParams();
                 params.set("repositoryId", repoId);
                 params.set("moduleId", "all");
-                router.push(`/${ws}/products/${pid}/testhub/cases/mind?${params.toString()}`);
+                router.push(`${caseBase}/cases/mind?${params.toString()}`);
                 await refreshAll();
                 qaCaseSetToastSuccess("删除成功");
               } catch (e: any) {
@@ -809,12 +810,10 @@ export default function TestCasesMindPage() {
   };
 
   const listUrl = useMemo(() => {
-    const ws = String(workspaceSlug || "");
-    const pid = String(productId || "");
     const params = new URLSearchParams();
     if (repositoryId) params.set("repositoryId", String(repositoryId));
-    return `/${ws}/products/${pid}/testhub/cases${params.toString() ? `?${params.toString()}` : ""}`;
-  }, [workspaceSlug, productId, repositoryId]);
+    return `${caseBase}/cases${params.toString() ? `?${params.toString()}` : ""}`;
+  }, [caseBase, repositoryId]);
 
   return (
     <>
@@ -851,14 +850,9 @@ export default function TestCasesMindPage() {
                   labelClassName="max-w-[240px] leading-4"
                   defaultRepositoryId={repositoryId}
                   onRepositoryChange={({ id, name }) => {
-                    const ws = String(workspaceSlug || "");
-                    const pid = String(productId || "");
                     setRepositoryName(name ? String(name) : "");
-                    if (id)
-                      router.push(
-                        `/${ws}/products/${pid}/testhub/cases/mind?repositoryId=${encodeURIComponent(String(id))}`
-                      );
-                    else router.push(`/${ws}/products/${pid}/testhub/cases/mind`);
+                    if (id) router.push(`${caseBase}/cases/mind?repositoryId=${encodeURIComponent(String(id))}`);
+                    else router.push(`${caseBase}/cases/mind`);
                   }}
                 />
               }
@@ -904,24 +898,20 @@ export default function TestCasesMindPage() {
                   checkStrictly
                   onSelect={(selectedKeys) => {
                     const key = String((selectedKeys as any[])?.[0] ?? "");
-                    const ws = String(workspaceSlug || "");
-                    const pid = String(productId || "");
                     const params = new URLSearchParams();
                     if (repositoryId) params.set("repositoryId", String(repositoryId));
                     if (!key || key === "all") {
                       setSelectedModuleIds(allModuleIds);
                       params.set("moduleId", "all");
-                      router.push(`/${ws}/products/${pid}/testhub/cases/mind?${params.toString()}`);
+                      router.push(`${caseBase}/cases/mind?${params.toString()}`);
                       return;
                     }
                     setSelectedModuleIds([key]);
                     params.append("moduleId", key);
-                    router.push(`/${ws}/products/${pid}/testhub/cases/mind?${params.toString()}`);
+                    router.push(`${caseBase}/cases/mind?${params.toString()}`);
                   }}
                   onCheck={(checkedKeys, info) => {
                     const nextKeys = Array.isArray(checkedKeys) ? checkedKeys : (checkedKeys as any)?.checked || [];
-                    const ws = String(workspaceSlug || "");
-                    const pid = String(productId || "");
                     const params = new URLSearchParams();
                     if (repositoryId) params.set("repositoryId", String(repositoryId));
                     const normalizedKeys = (nextKeys as any[]).map((k) => String(k));
@@ -935,7 +925,7 @@ export default function TestCasesMindPage() {
                         setSelectedModuleIds([]);
                       }
                       const query = params.toString();
-                      router.push(`/${ws}/products/${pid}/testhub/cases/mind${query ? `?${query}` : ""}`);
+                      router.push(`${caseBase}/cases/mind${query ? `?${query}` : ""}`);
                       return;
                     }
                     const moduleIds = normalizedKeys.filter((k) => k && k !== "all");
@@ -943,7 +933,7 @@ export default function TestCasesMindPage() {
                       setSelectedModuleIds(allModuleIds);
                       params.set("moduleId", "all");
                       const query = params.toString();
-                      router.push(`/${ws}/products/${pid}/testhub/cases/mind${query ? `?${query}` : ""}`);
+                      router.push(`${caseBase}/cases/mind${query ? `?${query}` : ""}`);
                       return;
                     }
                     setSelectedModuleIds(moduleIds);
@@ -951,7 +941,7 @@ export default function TestCasesMindPage() {
                       for (const mid of moduleIds) params.append("moduleId", mid);
                     }
                     const query = params.toString();
-                    router.push(`/${ws}/products/${pid}/testhub/cases/mind${query ? `?${query}` : ""}`);
+                    router.push(`${caseBase}/cases/mind${query ? `?${query}` : ""}`);
                   }}
                   onExpand={onExpand}
                   expandedKeys={expandedKeys}

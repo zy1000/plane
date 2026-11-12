@@ -99,7 +99,8 @@ type Props = {
   repositoryName: string;
   initialModuleId?: string | null;
   // 创建成功回调（用于刷新列表或其它联动）
-  onSuccess?: () => void | Promise<void>;
+  /** 回传刚建好的用例（接口原样返回），调用方可据此就地回显 */
+  onSuccess?: (createdCase?: any) => void | Promise<void>;
 };
 
 const caseService = new CaseService();
@@ -1063,7 +1064,7 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
         });
       }
 
-      await onSuccess?.();
+      await onSuccess?.(createdCase);
       setAttachmentFiles([]);
       setAttachmentAssetIds([]);
       setAttachmentUploading({});

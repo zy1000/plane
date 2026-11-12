@@ -10,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { getDate, renderFormattedDate } from "@plane/utils";
 import { getReleaseStatusDetails as getReleaseStatusMeta } from "@/components/releases/release-status-config";
 import { ProjectStatisticService, type TProjectOverviewStatisticResponse } from "@/services/project";
+import { tmProjectProductBasePath } from "@/components/qa/shared/testhub/route-helpers";
 
 const projectStatisticService = new ProjectStatisticService();
 const MODAL_PAGE_SIZE = 20;
@@ -126,9 +127,9 @@ const SECTION_CONFIG: Record<
     emptyLabel: "暂无评审数据",
     pageParamKey: "review_page",
     dataKey: "case_reviews",
-    // 用例评审归产品：跳到评审所属产品下的详情页
-    getNavigateUrl: (itemId, workspaceSlug, _projectId, item) =>
-      `/${workspaceSlug}/products/${item.product_id}/testhub/caseManagementReviewDetail?review_id=${itemId}`,
+    // 用例评审归产品，但从项目概览点进去留在项目里看（项目「测试 › 用例评审」同一个页面）
+    getNavigateUrl: (itemId, workspaceSlug, projectId, item) =>
+      `${tmProjectProductBasePath(workspaceSlug, projectId, String(item.product_id))}/caseManagementReviewDetail?review_id=${itemId}`,
   },
 };
 

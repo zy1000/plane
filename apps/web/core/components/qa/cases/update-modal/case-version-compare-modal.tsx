@@ -3,6 +3,7 @@
 import React from "react";
 import { Modal, Select, Spin, Tag } from "antd";
 import { useParams } from "next/navigation";
+import { tmCaseBasePath } from "@/components/qa/shared/testhub/route-helpers";
 import { Maximize2, X } from "lucide-react";
 import { CaseService } from "../../../../services/qa/case.service";
 import { RichTextEditor, formatCNDateTime } from "../util";
@@ -46,7 +47,10 @@ export function CaseVersionCompareModal({
   width = 920,
   height = "70vh",
 }: Props) {
-  const { productId: routeProductId } = useParams() as { productId?: string };
+  const { productId: routeProductId, projectId: routeProjectId } = useParams() as {
+    productId?: string;
+    projectId?: string;
+  };
   const productId = propProductId || routeProductId;
   const { setPeekIssue } = useIssueDetail();
   const caseService = React.useMemo(() => new CaseService(), []);
@@ -278,13 +282,13 @@ export function CaseVersionCompareModal({
     if (latestVersion === undefined) return;
     if (baseVersion === undefined) return;
 
+    // 在项目里打开的用例，全屏对比页也留在项目里
     const url =
-      `/${encodeURIComponent(String(workspaceSlug))}` +
-      `/products/${encodeURIComponent(String(productId))}` +
-      `/testhub/cases/compare?caseId=${encodeURIComponent(String(caseId))}` +
+      `${tmCaseBasePath(String(workspaceSlug), String(productId), routeProjectId)}` +
+      `/cases/compare?caseId=${encodeURIComponent(String(caseId))}` +
       `&baseVersion=${encodeURIComponent(String(baseVersion))}`;
     window.open(url, "_blank", "noopener,noreferrer");
-  }, [compareBaseVersion, historyVersionOptions, workspaceSlug, caseId, productId, latestVersion]);
+  }, [compareBaseVersion, historyVersionOptions, workspaceSlug, caseId, productId, latestVersion, routeProjectId]);
 
   const canOpenFullscreen =
     !!workspaceSlug &&

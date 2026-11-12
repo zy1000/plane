@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
+import { useCaseBasePath } from "@/components/qa/shared/testhub/use-case-base-path";
+import { ProjectProductSwitcher } from "@/components/qa/shared/testhub/case-scope-switcher";
+import { tmProjectProductBasePath } from "@/components/qa/shared/testhub/route-helpers";
 import { PageHead } from "@/components/core/page-title";
 import { Modal, Pagination } from "antd";
 import { FolderPlus, Pencil, Trash2 } from "lucide-react";
@@ -99,7 +102,13 @@ const normalizeReviewsResponse = (response: unknown): { count: number; data: Rev
 
 export default function ReviewsPage() {
   const { t } = useTranslation();
-  const { workspaceSlug, productId } = useParams<{ workspaceSlug: string; productId: string }>();
+  // 项目入口（…/projects/:projectId/testhub/products/:productId/reviews）同用这个页面，多一个 projectId
+  const { workspaceSlug, productId, projectId } = useParams<{
+    workspaceSlug: string;
+    productId: string;
+    projectId?: string;
+  }>();
+  const caseBase = useCaseBasePath();
   const searchParams = useSearchParams();
   const router = useAppRouter();
   const repositoryIdFromUrl = searchParams.get("repositoryId");
@@ -439,7 +448,7 @@ export default function ReviewsPage() {
     try {
       sessionStorage.setItem("selectedReviewName", record.name || "");
     } catch {}
-    router.push(`/${workspaceSlug}/products/${productId}/testhub/caseManagementReviewDetail?review_id=${record.id}`);
+    router.push(`${caseBase}/caseManagementReviewDetail?review_id=${record.id}`);
   };
 
   const handleEditReview = (record: TReviewTableRecord) => {
@@ -477,6 +486,18 @@ export default function ReviewsPage() {
       <PageHead title="评审" />
       <div className={styles.split}>
         <ModuleTreePanel
+          top={
+            projectId ? (
+              <ProjectProductSwitcher
+                workspaceSlug={workspaceSlug}
+                projectId={projectId}
+                productId={productId}
+                onSelect={(nextProductId) =>
+                  router.push(`${tmProjectProductBasePath(workspaceSlug, projectId, nextProductId)}/reviews`)
+                }
+              />
+            ) : undefined
+          }
           root={{ label: "全部评审", count: totalReviews }}
           nodes={treeNodes}
           selectedKey={selectedModuleId ?? MODULE_TREE_ROOT_KEY}

@@ -8,6 +8,7 @@ import { CaseService } from "../../../services/qa/case.service";
 import { CaseService as ReviewApiService } from "../../../services/qa/review.service";
 import { Tag, Spin, Tooltip, Input, Table, Select, Button } from "antd";
 import { getEnums } from "@/components/qa/shared/testhub/util";
+import { tmCaseDetailPath } from "@/components/qa/shared/testhub/route-helpers";
 import { useMember } from "@/hooks/store/use-member";
 import * as LucideIcons from "lucide-react";
 import { ModalHeader } from "./update-modal/modal-header";
@@ -80,7 +81,7 @@ function UpdateModalBody({
   const [isRequirementModalOpen, setIsRequirementModalOpen] = useState(false);
   const [requirementReloadToken, setRequirementReloadToken] = useState(0);
   // 增加：本地状态与失焦更新逻辑
-  const params = useParams() as { workspaceSlug?: string; productId?: string };
+  const params = useParams() as { workspaceSlug?: string; productId?: string; projectId?: string };
   const workspaceSlug = propWorkspaceSlug || params.workspaceSlug;
   // 产品下的用例暂不细分权限（等权限重构），调用方没传 canEdit 就可编辑
   const canEditCase = canEdit ?? true;
@@ -870,7 +871,8 @@ function UpdateModalBody({
       ? templateMode
         ? `/${workspaceSlug}/templates/test-cases/case/${caseId}`
         : productIdStr
-          ? `/${workspaceSlug}/products/${productIdStr}/testhub/cases/${caseId}`
+          ? // 在项目里打开的用例，全屏页也留在项目里
+            tmCaseDetailPath(workspaceSlug, productIdStr, caseId, params.projectId)
           : undefined
       : undefined;
 

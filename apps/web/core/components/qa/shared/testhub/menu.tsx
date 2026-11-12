@@ -13,6 +13,9 @@ import {
   isTMOverviewMenuActive,
   isTMPlansActive,
   isTMPlansMenuActive,
+  isTMProjectCasesMenuActive,
+  isTMProjectReviewsActive,
+  isTMProjectReviewsMenuActive,
   isTMReviewsActive,
   isTMReviewsMenuActive,
   isTMReportsActive,
@@ -32,15 +35,19 @@ type TMenuItem = {
   isActive: (pathname: string, base: string) => boolean;
   /** 项目侧页签按项目权限显示；产品侧暂不细分权限（等权限重构） */
   permissionKey?: string;
+  /** 项目侧的用例 / 评审：内容是关联产品的，路径里要带产品 id（权限也按产品，不设项目权限键） */
+  productScoped?: boolean;
 };
 
-// 产品下：用例 / 评审；项目下：计划 / 报告
+// 产品下：用例 / 评审；项目下：关联产品的用例 / 评审 + 本项目的计划 / 报告
 const MENU_ITEMS: Record<TTestHubScopeKind, TMenuItem[]> = {
   product: [
     { key: "overview", label: "测试用例", sub: "", isActive: isTMOverviewMenuActive },
     { key: "reviews", label: "用例评审", sub: "/reviews", isActive: isTMReviewsMenuActive },
   ],
   project: [
+    { key: "cases", label: "测试用例", sub: "/cases", isActive: isTMProjectCasesMenuActive, productScoped: true },
+    { key: "reviews", label: "用例评审", sub: "/reviews", isActive: isTMProjectReviewsMenuActive, productScoped: true },
     {
       key: "plans",
       label: "测试计划",
@@ -87,7 +94,8 @@ export const TestManagementMenuBar = ({ scope }: { scope: TTestHubScopeKind }) =
   const isProduct = scope === "product";
 
   const isOverviewActive = isProduct && !!pathname && !!base && isTMOverviewActive(pathname, base);
-  const isReviewsActive = isProduct && !!pathname && !!base && isTMReviewsActive(pathname, base);
+  const isReviewsActive =
+    !!pathname && !!base && (isProduct ? isTMReviewsActive(pathname, base) : isTMProjectReviewsActive(pathname, base));
   const isPlansActive = !isProduct && !!pathname && !!base && isTMPlansActive(pathname, base);
   const isReportsActive = !isProduct && !!pathname && !!base && isTMReportsActive(pathname, base);
   const canCreatePlan = !!ws && !!pid && allowProjectPermissionKeys([PROJECT_QA_PLAN_CREATE_PERMISSION_KEY], ws, pid);
@@ -115,7 +123,9 @@ export const TestManagementMenuBar = ({ scope }: { scope: TTestHubScopeKind }) =
       <div className="-ml-3 flex w-full items-center">
         <div className="no-scrollbar flex flex-1 items-center overflow-x-auto">
           {visibleMenuItems.map((item) => {
-            const href = `${base}${item.sub}`;
+            // 项目侧的用例 / 评审：当前路径里已有产品就留在这个产品，没有则交给入口页挑默认产品
+            const href =
+              item.productScoped && productId ? `${base}/products/${productId}${item.sub}` : `${base}${item.sub}`;
             const active = !!base && item.isActive(pathname, base);
             const finalHref =
               // 选中的用例库只对产品侧（用例 / 评审）有意义

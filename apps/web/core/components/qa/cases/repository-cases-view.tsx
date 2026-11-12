@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
@@ -36,6 +36,7 @@ import {
   formatDateTime,
   globalEnums,
 } from "@/components/qa/shared/testhub/util";
+import { tmCaseBasePath } from "@/components/qa/shared/testhub/route-helpers";
 import { ChevronDownIcon } from "@plane/propel/icons";
 import { isProjectPermissionError } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
@@ -124,6 +125,7 @@ export type TRepositoryCasesViewProps = {
   repositoryName?: string;
   mode?: "product" | "template";
   treeHeader?: ReactNode; // 树头左侧内容（产品页放用例库切换器），由壳层传入
+  treeTop?: ReactNode; // 树头上方整行内容（项目入口放产品 / 用例库切换器）
   toolbarPortalEl?: HTMLElement | null; // 传入后搜索/筛选/操作按钮挂到页头右侧
   /** 模板库绑了产品模板时传模板名：第一层由产品模板统一维护（不传时行为不变） */
   lockedRootCategoryName?: string;
@@ -135,6 +137,7 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
     repositoryId,
     repositoryName,
     treeHeader,
+    treeTop,
     toolbarPortalEl,
     mode = "product",
     lockedRootCategoryName,
@@ -146,6 +149,9 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
   const { t } = useTranslation();
   const router = useRouter();
   const searchParams = useSearchParams();
+  // 项目入口（路由带 projectId）下，跳脑图等二级页时留在项目里
+  const { projectId: routeProjectIdParam } = useParams();
+  const routeProjectId = routeProjectIdParam ? String(routeProjectIdParam) : undefined;
   const { updateQueryParams } = useQueryParams();
   const workspaceSlugString = String(workspaceSlug || "");
   // 模板模式走工作区级模板权限（与后端 workspace.case_template.* 口径一致）；
@@ -863,7 +869,7 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
             const params = new URLSearchParams();
             params.set("repositoryId", String(repositoryId));
             if (selectedRealModuleId) params.set("moduleId", String(selectedRealModuleId));
-            router.push(`/${ws}/products/${pid}/testhub/cases/mind?${params.toString()}`);
+            router.push(`${tmCaseBasePath(ws, pid, routeProjectId)}/cases/mind?${params.toString()}`);
           }}
           disabled={!repositoryId}
           className="flex h-8 w-8 items-center justify-center rounded border border-subtle text-secondary hover:bg-layer-1 hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
@@ -960,6 +966,7 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
           <Row wrap={false} className="flex-1 overflow-hidden pb-0" gutter={[0, 16]}>
             <ModuleTreePanel
               headerLeft={treeHeader}
+              top={treeTop}
               root={{ label: "全部用例", count: allTotal }}
               nodes={treeNodes}
               selectedKey={selectedModuleId ?? MODULE_TREE_ROOT_KEY}
