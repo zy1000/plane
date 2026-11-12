@@ -54,7 +54,8 @@ class IssueExtraViewSet(IssueSchemeScopeMixin, BaseViewSet):
         return context
 
     def destroy(self, request, *args, **kwargs):
-        # 删除保护（需求 4.3）：字段归方案，任一项目（含已脱离的）有这个字段的值就不能删，只能停用
+        # 删除保护（需求 4.3）：字段归方案，任一项目（含已脱离的）有这个字段的值就不能删，只能停用；
+        # 已删除工作项的值不算
         field = self.get_object()
         from plane.utils.field_linkage import dependent_names
         names = dependent_names(field)
@@ -62,6 +63,9 @@ class IssueExtraViewSet(IssueSchemeScopeMixin, BaseViewSet):
             return Response({"error": f"请先调整依赖此字段的联动规则：{'、'.join(names)}"}, status=status.HTTP_409_CONFLICT)
         refs = extra_field_references(field.id)
         if is_referenced(refs):
+            if field.library_field_id:
+                # 字段库字段在类型上不能单独停用，提示只说明在用情况
+                return Response(in_use_response_data(refs, "字段", advice="不能移除"), status=status.HTTP_409_CONFLICT)
             return Response(in_use_response_data(refs, "字段"), status=status.HTTP_409_CONFLICT)
         return super().destroy(request, *args, **kwargs)
 

@@ -297,12 +297,16 @@ def state_references(state_id):
 
 
 def extra_field_references(extra_field_id):
-    """字段被多少条字段值（含软删）引用。"""
-    rows = list(TypeExtraFieldValue.all_objects.filter(extra_field_id=extra_field_id).values_list("project_id", flat=True))
+    """字段被多少条字段值引用。已删除工作项的值不算：工作项删了就不会再用到这个字段。"""
+    rows = list(
+        TypeExtraFieldValue.objects.filter(extra_field_id=extra_field_id, issue__deleted_at__isnull=True).values_list(
+            "project_id", flat=True
+        )
+    )
     return {"project_count": len(set(rows)), "issue_count": len(rows)}
 
 
-def in_use_response_data(refs, noun):
+def in_use_response_data(refs, noun, advice="不能删除，请改为停用"):
     """409 的响应体：前端 toast 直接显示 error，计数单独给。"""
     parts = []
     if refs.get("issue_count"):
@@ -310,7 +314,7 @@ def in_use_response_data(refs, noun):
     if refs.get("record_count"):
         parts.append(f"{refs['record_count']} 条审批记录")
     return {
-        "error": f"{refs['project_count']} 个项目的 {'、'.join(parts)}在用该{noun}，不能删除，请改为停用",
+        "error": f"{refs['project_count']} 个项目的 {'、'.join(parts)}在用该{noun}，{advice}",
         "code": ISSUE_SCHEME_OBJECT_IN_USE,
         **refs,
     }
