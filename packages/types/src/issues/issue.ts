@@ -51,9 +51,20 @@ export type TIssueExtraFieldValue = {
   field_type?: TIssueExtraFieldType;
 };
 
+/** 联动条件：选择字段选中其中任一值 */
+export type TLinkageFieldCondition = { field_id: string; values: string[] };
+/** 联动条件：工作项类型是其中之一（类型库类型的 id）。只出现在字段库的规则里，绑定到类型后由后端去掉 */
+export type TLinkageTypeCondition = { type_ids: string[] };
+export type TLinkageCondition = TLinkageFieldCondition | TLinkageTypeCondition;
+/** 一条规则内的条件全部满足才命中 */
+export type TLinkageRule = { conditions: TLinkageCondition[] };
+export type TLinkageOptionsRule = TLinkageRule & { options: string[] };
+
 export type TFieldLinkage = {
-  visibility?: { field_id: string; values: string[] };
-  options?: { field_id: string; mappings: Record<string, string[]> };
+  /** 命中任一规则时显示 */
+  visibility?: { rules: TLinkageRule[] };
+  /** 取命中规则可选项的并集，都不命中时无可选项 */
+  options?: { rules: TLinkageOptionsRule[] };
 };
 
 export type TIssueTypeExtraField = {

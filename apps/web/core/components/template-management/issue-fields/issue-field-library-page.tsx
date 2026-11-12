@@ -7,6 +7,8 @@ import { AlertModalCore } from "@plane/ui";
 import { ContentWrapper } from "@/components/core/content-wrapper";
 import { PageHead } from "@/components/core/page-title";
 import { useIssueFieldLibrary } from "@/hooks/store/use-issue-field-library";
+import { useIssueTypeLibrary } from "@/hooks/store/use-issue-type-library";
+import { useProjectIssueTypes } from "@/hooks/store/use-project-issue-types";
 import { useTemplatePermissions } from "../permissions";
 import { getIssueFieldErrorMessage } from "./helpers";
 import { IssueFieldFormModal } from "./issue-field-form-modal";
@@ -25,6 +27,9 @@ export const IssueFieldLibraryPage = observer(function IssueFieldLibraryPage({
   const { canManageDevModes: canManage } = useTemplatePermissions(workspaceSlug);
   const { fields, isLoading, hasLoaded, error, fetchFields, createField, updateField, deleteField } =
     useIssueFieldLibrary(workspaceSlug);
+  // 联动规则的「工作项类型」条件选的是类型库里的类型
+  const { scopeKey: libraryScopeKey } = useIssueTypeLibrary(workspaceSlug);
+  const { issueTypes = [] } = useProjectIssueTypes(workspaceSlug, libraryScopeKey);
   // 关闭时保留 field，离场动画期间不闪成「新建字段」
   const [modal, setModal] = useState<{ isOpen: boolean; field: TIssueFieldLibraryItem | null }>({
     isOpen: false,
@@ -69,6 +74,7 @@ export const IssueFieldLibraryPage = observer(function IssueFieldLibraryPage({
       <ContentWrapper className="bg-surface-1">
         <IssueFieldLibraryContent
           fields={fields}
+          issueTypes={issueTypes}
           isLoading={isLoading}
           hasLoaded={hasLoaded}
           error={error}
@@ -82,6 +88,7 @@ export const IssueFieldLibraryPage = observer(function IssueFieldLibraryPage({
 
       <IssueFieldFormModal
         fields={fields}
+        issueTypes={issueTypes}
         isOpen={modal.isOpen}
         field={modal.field}
         onClose={() => setModal((current) => ({ ...current, isOpen: false }))}

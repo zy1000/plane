@@ -5,7 +5,8 @@ import type { TIssueFieldLibraryItem } from "@plane/types";
 import { CustomMenu } from "@plane/ui";
 import { getFieldKindIcon, getFieldKindLabel } from "@/components/project-issue-types/field-display";
 import { getSelectionMode, getTextMode } from "@/components/project-issue-types/field-form";
-import { linkageChoices } from "@/utils/field-linkage";
+import { describeLinkageConditions, linkageChoices } from "@/utils/field-linkage";
+import type { TLinkageIssueType } from "@/utils/field-linkage";
 import { AnchoredPopover } from "./anchored-popover";
 import { IssueFieldUsedBy } from "./issue-field-used-by";
 
@@ -60,18 +61,21 @@ function FieldOptions({ field }: { field: TIssueFieldLibraryItem }) {
   );
 }
 
-function FieldRules({ field, fields }: { field: TIssueFieldLibraryItem; fields: TIssueFieldLibraryItem[] }) {
+function FieldRules({
+  field,
+  fields,
+  issueTypes,
+}: {
+  field: TIssueFieldLibraryItem;
+  fields: TIssueFieldLibraryItem[];
+  issueTypes: TLinkageIssueType[];
+}) {
   const id = useId();
   const visibility = field.linkage?.visibility;
   const options = field.linkage?.options;
   if (!visibility && !options) return <span className="text-secondary">—</span>;
-  const visibilitySource = fields.find((source) => source.id === visibility?.field_id);
-  const optionsSource = fields.find((source) => source.id === options?.field_id);
-  const labelsFor = (source?: TIssueFieldLibraryItem) =>
-    new Map(source ? linkageChoices(source).map((c) => [c.key, c.label]) : []);
-  const visibilityLabels = labelsFor(visibilitySource);
-  const sourceLabels = labelsFor(optionsSource);
-  const targetLabels = labelsFor(field);
+  const targetLabels = new Map(linkageChoices(field).map((c) => [c.key, c.label]));
+  const hasTypes = issueTypes.length > 0;
 
   return (
     <div className="flex flex-col items-start gap-1.5">
@@ -80,10 +84,16 @@ function FieldRules({ field, fields }: { field: TIssueFieldLibraryItem; fields: 
           position="top"
           tooltipHeading="条件显示"
           tooltipContent={
-            <span id={`${id}-visibility`} role="tooltip">
-              {visibilitySource
-                ? `当「${visibilitySource.name}」选中「${visibility.values.map((value) => visibilityLabels.get(value) ?? value).join("、")}」中的任一值时显示，否则隐藏并清空已填值。`
-                : "来源字段已失效，请编辑规则。"}
+            <span id={`${id}-visibility`} role="tooltip" className="block max-h-60 space-y-1 overflow-y-auto">
+              <span className="block">满足任一规则时显示：</span>
+              {visibility.rules.map((rule, index) => (
+                <span key={index} className="block">
+                  规则 {index + 1}：{describeLinkageConditions(rule.conditions, fields, issueTypes)}
+                </span>
+              ))}
+              <span className="block">
+                未满足任何规则时隐藏，并清空已填值。{hasTypes && "规则未涉及的工作项类型始终显示。"}
+              </span>
             </span>
           }
         >
@@ -104,16 +114,18 @@ function FieldRules({ field, fields }: { field: TIssueFieldLibraryItem; fields: 
           tooltipHeading="选项联动"
           tooltipContent={
             <span id={`${id}-options`} role="tooltip" className="block max-h-60 space-y-1 overflow-y-auto">
-              <span className="block">
-                {optionsSource ? `根据「${optionsSource.name}」限制可选范围：` : "来源字段已失效，请编辑规则。"}
-              </span>
-              {Object.entries(options.mappings).map(([source, targets]) => (
-                <span key={source} className="block">
-                  {sourceLabels.get(source) ?? source} →{" "}
-                  {targets.length ? targets.map((target) => targetLabels.get(target) ?? target).join("、") : "无可选项"}
+              <span className="block">按规则限制可选范围：</span>
+              {options.rules.map((rule, index) => (
+                <span key={index} className="block">
+                  规则 {index + 1}：{describeLinkageConditions(rule.conditions, fields, issueTypes)} →{" "}
+                  {rule.options.length
+                    ? rule.options.map((target) => targetLabels.get(target) ?? target).join("、")
+                    : "无可选项"}
                 </span>
               ))}
-              <span className="block">未匹配时无可选项，失效值自动清空。</span>
+              <span className="block">
+                均不满足时无可选项，失效值自动清空。{hasTypes && "规则未涉及的工作项类型不受限制。"}
+              </span>
             </span>
           }
         >
@@ -134,6 +146,7 @@ function FieldRules({ field, fields }: { field: TIssueFieldLibraryItem; fields: 
 
 type Props = {
   fields: TIssueFieldLibraryItem[];
+  issueTypes: TLinkageIssueType[];
   visibleFields: TIssueFieldLibraryItem[];
   canManage: boolean;
   onEdit: (field: TIssueFieldLibraryItem) => void;
@@ -141,7 +154,15 @@ type Props = {
   onResetFilters: () => void;
 };
 
-export function IssueFieldLibraryTable({ fields, visibleFields, canManage, onEdit, onDelete, onResetFilters }: Props) {
+export function IssueFieldLibraryTable({
+  fields,
+  issueTypes,
+  visibleFields,
+  canManage,
+  onEdit,
+  onDelete,
+  onResetFilters,
+}: Props) {
   return (
     <div className="overflow-x-auto rounded-lg border border-subtle">
       <table className="w-full min-w-[1040px] table-fixed border-collapse text-left text-13" aria-label="通用字段库">
@@ -210,7 +231,7 @@ export function IssueFieldLibraryTable({ fields, visibleFields, canManage, onEdi
                   <FieldOptions field={field} />
                 </td>
                 <td className="px-4 py-3">
-                  <FieldRules field={field} fields={fields} />
+                  <FieldRules field={field} fields={fields} issueTypes={issueTypes} />
                 </td>
                 <td className="px-4 py-3">
                   <IssueFieldUsedBy field={field} maxVisible={2} />

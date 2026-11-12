@@ -57,6 +57,7 @@ import type {
 // local imports
 import { buildFieldPayload, DEFAULT_FIELD_FORM, fieldToFormState, getFieldRowLabel, InlineFieldForm } from "./field-form";
 import type { TFieldFormState, TFieldPayloadBase } from "./field-form";
+import { FieldLinkageModal } from "./field-linkage-modal";
 import { LibraryFieldPickerModal } from "./library-field-picker-modal";
 import { IssueTypeLayoutEditor } from "./layout/editor";
 
@@ -233,10 +234,14 @@ export const IssueTypeFieldList = observer(function IssueTypeFieldList({
   const [editingField, setEditingField] = useState<TTypeExtraField | undefined>();
   const [fieldForm, setFieldForm] = useState<TFieldFormState>(DEFAULT_FIELD_FORM);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLinkageOpen, setIsLinkageOpen] = useState(false);
   const inlineFormRef = useRef<HTMLDivElement>(null);
   const isFormOpen = isAdding || Boolean(editingField);
+  const cachedIssueType = scopeKey ? projectIssueTypesCache.get(scopeKey)?.[issueTypeId] : undefined;
+  const issueTypeInfo = issueTypeProp ?? cachedIssueType;
 
   const resetFieldForm = () => {
+    setIsLinkageOpen(false);
     setIsAdding(false);
     setEditingField(undefined);
     setFieldForm(DEFAULT_FIELD_FORM);
@@ -303,7 +308,8 @@ export const IssueTypeFieldList = observer(function IssueTypeFieldList({
       <LibraryFieldPickerModal
         isOpen={isPickerOpen}
         workspaceSlug={workspaceSlug}
-        issueType={issueTypeProp ?? projectIssueTypesCache.get(scopeKey)?.[issueTypeId]}
+        issueType={issueTypeInfo}
+        linkageTypeId={cachedIssueType?.library_type_id ?? issueTypeId}
         typeFields={fields}
         onClose={() => setIsPickerOpen(false)}
         onSubmit={(libraryFieldIds) =>
@@ -356,8 +362,7 @@ export const IssueTypeFieldList = observer(function IssueTypeFieldList({
               return (
                 <div key={field.id} ref={inlineFormRef}>
                   <InlineFieldForm
-                    linkageFields={fields}
-                    fieldId={field.id}
+                    onConfigureLinkage={() => setIsLinkageOpen(true)}
                     form={fieldForm}
                     isSubmitting={isSubmitting}
                     submitLabel="更新"
@@ -427,7 +432,7 @@ export const IssueTypeFieldList = observer(function IssueTypeFieldList({
           {isAdding && (
             <div ref={inlineFormRef}>
               <InlineFieldForm
-                linkageFields={fields}
+                onConfigureLinkage={() => setIsLinkageOpen(true)}
                 form={fieldForm}
                 isSubmitting={isSubmitting}
                 submitLabel="创建"
@@ -460,6 +465,15 @@ export const IssueTypeFieldList = observer(function IssueTypeFieldList({
         {isLoading && <p className="mt-2 text-xs text-secondary">正在同步属性...</p>}
       </div>
       {libraryPicker}
+      <FieldLinkageModal
+        isOpen={isLinkageOpen}
+        form={fieldForm}
+        fieldId={editingField?.id}
+        fields={fields}
+        issueType={issueTypeInfo}
+        onClose={() => setIsLinkageOpen(false)}
+        onConfirm={(linkage) => setFieldForm((current) => ({ ...current, linkage }))}
+      />
     </>
   );
 });

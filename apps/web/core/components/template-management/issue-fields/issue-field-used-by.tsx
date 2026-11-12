@@ -64,19 +64,3 @@ export function IssueFieldUsedBy({
     </span>
   );
 }
-
-/** 编辑弹窗底部「同步到」后面的类型列表 */
-export function IssueFieldSyncTargets({ field }: { field: TIssueFieldLibraryItem }) {
-  const usedBy = field.used_by ?? [];
-  const extraCount = Math.max(field.binding_count - usedBy.length, 0);
-  if (usedBy.length === 0 && extraCount === 0) return null;
-  return (
-    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 text-13 text-secondary">
-      <span className="shrink-0">同步到</span>
-      {usedBy.map((type) => (
-        <IssueTypeTag key={type.issue_type_id} name={type.name} icon={type.logo_props?.icon} className="max-w-40" />
-      ))}
-      {extraCount > 0 && <span className="text-tertiary">自定义项目 {extraCount} 处</span>}
-    </div>
-  );
-}

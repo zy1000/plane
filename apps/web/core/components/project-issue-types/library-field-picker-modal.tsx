@@ -34,6 +34,8 @@ type Props = {
   workspaceSlug: string;
   /** 标题旁的类型标签 */
   issueType?: Pick<TIssueType, "name" | "logo_props">;
+  /** 匹配联动规则类型条件用的类型 id：类型库类型是自己的 id，项目里的副本是它指回的库类型 id */
+  linkageTypeId: string;
   /** 当前类型已有的字段：已绑定的库字段、同名私有字段都不能再选 */
   typeFields: TTypeExtraField[];
   onClose: () => void;
@@ -52,7 +54,15 @@ const getErrorMessage = (error: unknown, fallback: string) => {
 };
 
 /** 「从字段库添加」：勾选工作区通用字段批量绑定到当前类型 */
-export function LibraryFieldPickerModal({ isOpen, workspaceSlug, issueType, typeFields, onClose, onSubmit }: Props) {
+export function LibraryFieldPickerModal({
+  isOpen,
+  workspaceSlug,
+  issueType,
+  linkageTypeId,
+  typeFields,
+  onClose,
+  onSubmit,
+}: Props) {
   const { fields, isLoading, hasLoaded, error } = useIssueFieldLibrary(isOpen ? workspaceSlug : undefined);
   const [search, setSearch] = useState("");
   const [kind, setKind] = useState<TKindFilter>("all");
@@ -95,7 +105,8 @@ export function LibraryFieldPickerModal({ isOpen, workspaceSlug, issueType, type
       current.includes(fieldId) ? current.filter((id) => id !== fieldId) : [...current, fieldId]
     );
 
-  const dependencies = dependencyClosure(fields, selectedIds).filter((field) =>
+  // 只带上这个类型的规则引用到的依赖字段（后端按类型绑定，口径一致）
+  const dependencies = dependencyClosure(fields, selectedIds, linkageTypeId).filter((field) =>
     !selectedIds.includes(field.id) && !typeFields.some((bound) => bound.library_field_id === field.id));
 
   const handleSubmit = async () => {

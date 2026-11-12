@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import type { RefObject } from "react";
-import { ChevronRight, GripVertical, Plus, X } from "lucide-react";
+import { GripVertical, X } from "lucide-react";
 import { ToggleSwitch } from "@plane/ui";
 import { cn } from "@plane/utils";
 import {
@@ -12,7 +12,8 @@ import type { TFieldFormState } from "@/components/project-issue-types/field-for
 import { FieldChoiceSelect } from "@/components/project-issue-types/field-choice-select";
 
 const INPUT =
-  "h-9 w-full rounded-md border border-subtle bg-surface-1 px-3 text-13 text-primary outline-none placeholder:text-secondary focus:border-accent-strong";
+  "h-10 w-full rounded-lg border border-subtle bg-surface-1 px-3 text-14 text-primary outline-none placeholder:text-secondary focus:border-accent-strong";
+const LABEL = "text-14 font-medium text-primary";
 const TYPES = [
   { key: "select", label: "下拉选择" },
   { key: "text", label: "文本" },
@@ -34,17 +35,17 @@ function Segments({
   onChange: (value: string) => void;
 }) {
   return (
-    <div role="group" aria-label={label} className="flex h-9 rounded-md border border-subtle bg-surface-1 p-0.5">
+    <div role="group" aria-label={label} className="flex h-10 gap-0.5 rounded-lg bg-layer-1 p-[3px]">
       {options.map((option) => (
         <button
           key={option.key}
           type="button"
           aria-pressed={value === option.key}
           className={cn(
-            "flex-1 rounded px-3 text-13 outline-none focus-visible:ring-2 focus-visible:ring-accent-strong",
+            "flex-1 rounded-md px-3 text-14 outline-none focus-visible:ring-2 focus-visible:ring-accent-strong",
             value === option.key
-              ? "bg-accent-primary font-medium text-on-color"
-              : "text-secondary hover:bg-layer-1-hover"
+              ? "bg-surface-1 font-medium text-primary shadow-raised-100"
+              : "text-secondary hover:text-primary"
           )}
           onClick={() => onChange(option.key)}
         >
@@ -68,7 +69,6 @@ export function IssueFieldSettings({
   isEditing: boolean;
   disabled: boolean;
 }) {
-  const [showDescription, setShowDescription] = useState(Boolean(form.description));
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const options = getNormalizedSelectOptions(form.select_options).map((key) => ({ key, label: key }));
@@ -88,13 +88,10 @@ export function IssueFieldSettings({
         ? {
             ...form.linkage,
             options: {
-              ...form.linkage.options,
-              mappings: Object.fromEntries(
-                Object.entries(form.linkage.options.mappings).map(([key, values]) => [
-                  key,
-                  values.map((v) => (previous && v === previous ? next : v)),
-                ])
-              ),
+              rules: form.linkage.options.rules.map((rule) => ({
+                ...rule,
+                options: rule.options.map((v) => (previous && v === previous ? next : v)),
+              })),
             },
           }
         : form.linkage,
@@ -112,9 +109,9 @@ export function IssueFieldSettings({
       );
   };
   return (
-    <fieldset disabled={disabled} className="min-w-0 space-y-4 disabled:opacity-60">
+    <fieldset disabled={disabled} className="min-w-0 space-y-[22px] disabled:opacity-60">
       <label className="flex flex-col gap-2">
-        <span className="text-13 font-medium text-primary">
+        <span className={LABEL}>
           字段名称<span className="ml-1 text-danger-primary">*</span>
         </span>
         <input
@@ -130,12 +127,13 @@ export function IssueFieldSettings({
       <div
         className={cn(
           "grid gap-5",
-          (isSelect || form.field_type === "user" || form.field_type === "text") &&
-            "sm:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]"
+          isSelect || form.field_type === "user" || form.field_type === "text"
+            ? "sm:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_72px]"
+            : "sm:grid-cols-[minmax(0,1fr)_72px]"
         )}
       >
-        <div className="space-y-2">
-          <p className="text-13 font-medium text-primary">字段类型</p>
+        <div className="min-w-0 space-y-2">
+          <p className={LABEL}>字段类型</p>
           <FieldChoiceSelect
             label="字段类型"
             value={form.field_type}
@@ -145,8 +143,8 @@ export function IssueFieldSettings({
           />
         </div>
         {(isSelect || form.field_type === "user") && (
-          <div className="space-y-2">
-            <p className="text-13 font-medium text-primary">选择方式</p>
+          <div className="min-w-0 space-y-2">
+            <p className={LABEL}>选择方式</p>
             <Segments
               label="选择方式"
               value={isMultiple ? "multiple" : "single"}
@@ -170,8 +168,8 @@ export function IssueFieldSettings({
           </div>
         )}
         {form.field_type === "text" && (
-          <div className="space-y-2">
-            <p className="text-13 font-medium text-primary">文本格式</p>
+          <div className="min-w-0 space-y-2">
+            <p className={LABEL}>文本格式</p>
             <Segments
               label="文本格式"
               value={form.text_is_paragraph ? "paragraph" : "single"}
@@ -183,30 +181,23 @@ export function IssueFieldSettings({
             />
           </div>
         )}
+        <div className="space-y-2">
+          <p className={LABEL}>必填</p>
+          <div className="flex h-10 items-center">
+            <ToggleSwitch
+              label="必填"
+              size="md"
+              value={form.is_required}
+              disabled={disabled}
+              onChange={(is_required) => onChange({ ...form, is_required })}
+            />
+          </div>
+        </div>
       </div>
       {isSelect && (
-        <section className="space-y-2.5" aria-label="字段选项">
-          <div className="flex items-center justify-between gap-2">
-            <h3 className="flex items-center gap-2 text-13 font-medium text-primary">
-              选项<span className="rounded bg-layer-1 px-1.5 text-12 text-secondary">{options.length}</span>
-            </h3>
-            <button
-              type="button"
-              className="inline-flex items-center gap-1 text-13 text-accent-primary hover:underline"
-              onClick={() => {
-                onChange({ ...form, select_options: [...form.select_options, ""] });
-                requestAnimationFrame(() =>
-                  listRef.current
-                    ?.querySelector<HTMLInputElement>(`[data-option-input="${form.select_options.length}"]`)
-                    ?.focus()
-                );
-              }}
-            >
-              <Plus className="size-3.5" />
-              添加选项
-            </button>
-          </div>
-          <div ref={listRef} className="max-h-60 space-y-2 overflow-y-auto" data-modal-wheel-scroll>
+        <section className="space-y-2" aria-label="字段选项">
+          <h3 className={LABEL}>选项</h3>
+          <div ref={listRef} className="space-y-2">
             {form.select_options.map((option, index) => (
               <div
                 key={index}
@@ -257,35 +248,48 @@ export function IssueFieldSettings({
                   type="button"
                   aria-label={`删除选项 ${index + 1}`}
                   disabled={form.select_options.length <= 1}
-                  className="grid size-7 shrink-0 place-items-center rounded text-tertiary hover:bg-layer-1-hover hover:text-danger-primary disabled:opacity-30"
+                  className="grid size-8 shrink-0 place-items-center rounded-lg text-tertiary hover:bg-layer-1-hover hover:text-danger-primary disabled:opacity-30"
                   onClick={() => {
                     const next = removeSelectOption(form, index);
                     if (next.linkage.options)
                       next.linkage = {
                         ...next.linkage,
                         options: {
-                          ...next.linkage.options,
-                          mappings: Object.fromEntries(
-                            Object.entries(next.linkage.options.mappings).map(([key, values]) => [
-                              key,
-                              values.filter((v) => v !== option.trim()),
-                            ])
-                          ),
+                          rules: next.linkage.options.rules.map((rule) => ({
+                            ...rule,
+                            options: rule.options.filter((v) => v !== option.trim()),
+                          })),
                         },
                       };
                     onChange(next);
                   }}
                 >
-                  <X className="size-3.5" />
+                  <X className="size-4" />
                 </button>
               </div>
             ))}
+          </div>
+          <div className="pt-1 pl-6">
+            <button
+              type="button"
+              className="rounded text-14 font-medium text-accent-primary hover:underline"
+              onClick={() => {
+                onChange({ ...form, select_options: [...form.select_options, ""] });
+                requestAnimationFrame(() =>
+                  listRef.current
+                    ?.querySelector<HTMLInputElement>(`[data-option-input="${form.select_options.length}"]`)
+                    ?.focus()
+                );
+              }}
+            >
+              添加选项
+            </button>
           </div>
         </section>
       )}
       {isSelect && (
         <div className="space-y-2">
-          <p className="text-13 font-medium text-primary">默认值</p>
+          <p className={LABEL}>默认值</p>
           {form.select_is_multiple ? (
             <FieldChoiceSelect
               multiple
@@ -309,50 +313,26 @@ export function IssueFieldSettings({
         </div>
       )}
       {form.field_type === "number" && (
-        <label className="flex flex-col gap-2 text-13 font-medium text-primary">
+        <label className={`flex flex-col gap-2 ${LABEL}`}>
           默认值
           <input
             type="number"
             value={form.number_default_value}
             onChange={(event) => onChange({ ...form, number_default_value: event.target.value })}
-            className={INPUT}
+            className={cn(INPUT, "font-normal")}
             placeholder="不设置默认值"
           />
         </label>
       )}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-13 font-medium text-primary">设为必填</p>
-          <p className="mt-1 text-12 text-secondary">显示此字段时必须填写</p>
-        </div>
-        <ToggleSwitch
-          label="设为必填"
-          size="md"
-          value={form.is_required}
-          disabled={disabled}
-          onChange={(is_required) => onChange({ ...form, is_required })}
+      <label className="flex flex-col gap-2">
+        <span className={LABEL}>字段说明</span>
+        <textarea
+          value={form.description}
+          onChange={(event) => onChange({ ...form, description: event.target.value })}
+          placeholder="填写字段的用途或填写提示"
+          className={cn(INPUT, "h-auto min-h-[72px] resize-y py-2.5")}
         />
-      </div>
-      <div className="space-y-2">
-        <button
-          type="button"
-          aria-expanded={showDescription}
-          onClick={() => setShowDescription(!showDescription)}
-          className="inline-flex items-center gap-1.5 text-13 text-secondary hover:text-primary"
-        >
-          <ChevronRight className={cn("size-3.5", showDescription && "rotate-90")} />
-          {showDescription ? "字段说明" : form.description ? "查看字段说明" : "添加字段说明"}
-        </button>
-        {showDescription && (
-          <textarea
-            aria-label="字段说明"
-            value={form.description}
-            onChange={(event) => onChange({ ...form, description: event.target.value })}
-            placeholder="填写字段的用途或填写提示"
-            className={cn(INPUT, "min-h-20 resize-y py-2")}
-          />
-        )}
-      </div>
+      </label>
     </fieldset>
   );
 }

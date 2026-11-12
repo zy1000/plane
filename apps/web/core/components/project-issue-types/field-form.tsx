@@ -5,8 +5,7 @@
  */
 
 import type { TFieldLinkage } from "@plane/types";
-import { FieldLinkageEditor } from "./field-linkage-editor";
-import type { TLinkageField } from "@/utils/field-linkage";
+import { compactLinkage, getLinkageError } from "@/utils/field-linkage";
 
 /**
  * 工作项类型字段（属性）的表单：表单状态、字段 ↔ 表单互转、校验与请求体、行内编辑表单 UI。
@@ -254,8 +253,9 @@ export type TFieldPayloadBase = Omit<TTypeExtraFieldPayload, "issue_type_id">;
  */
 export function buildFieldPayload(fieldForm: TFieldFormState): { error: string } | { payload: TFieldPayloadBase } {
   const name = fieldForm.name.trim();
-  if (fieldForm.linkage.visibility && !fieldForm.linkage.visibility.values.length) return { error: "请选择触发显示的选项。" };
-  if (fieldForm.linkage.options && !Object.keys(fieldForm.linkage.options.mappings).length) return { error: "请配置至少一组选项映射。" };
+  const linkage = compactLinkage(fieldForm.linkage);
+  const linkageError = getLinkageError(linkage);
+  if (linkageError) return { error: linkageError };
 
   let numberDefaultPayload: number | null | undefined;
   if (fieldForm.field_type === "number") {
@@ -292,7 +292,7 @@ export function buildFieldPayload(fieldForm: TFieldFormState): { error: string }
   return {
     payload: {
       name,
-      linkage: fieldForm.linkage,
+      linkage,
       description: fieldForm.description.trim(),
       field_type: fieldForm.field_type,
       is_required: fieldForm.is_required,
@@ -658,8 +658,7 @@ export function InlineFieldForm({
   isSubmitting,
   submitLabel = "创建",
   fieldTypeLocked = false,
-  linkageFields = [],
-  fieldId,
+  onConfigureLinkage,
   onChange,
   onCancel,
   onSubmit,
@@ -669,13 +668,22 @@ export function InlineFieldForm({
   submitLabel?: string;
   /** 编辑已有属性时为 true，禁止修改属性类型 */
   fieldTypeLocked?: boolean;
-  linkageFields?: TLinkageField[];
-  fieldId?: string;
+  /** 打开联动规则弹窗（右栏放不下规则列表，这里只显示摘要）；不传不显示联动规则 */
+  onConfigureLinkage?: () => void;
   onChange: (form: TFieldFormState) => void;
   onCancel: () => void;
   onSubmit: () => void;
 }) {
   const selectOptions = getNormalizedSelectOptions(form.select_options);
+  const visibilityRuleCount = form.linkage.visibility?.rules.length ?? 0;
+  const optionRuleCount = form.linkage.options?.rules.length ?? 0;
+  const linkageSummary =
+    [
+      visibilityRuleCount ? `条件显示 ${visibilityRuleCount} 条` : "",
+      optionRuleCount ? `可选项联动 ${optionRuleCount} 条` : "",
+    ]
+      .filter(Boolean)
+      .join("，") || "未配置";
 
   return (
     <div className="grid grid-cols-1 gap-0 divide-y divide-subtle rounded-lg border border-subtle bg-surface-1 md:grid-cols-[1fr_360px] md:divide-x md:divide-y-0">
@@ -867,11 +875,22 @@ export function InlineFieldForm({
             </div>
           )}
         </div>
-        <div className="mb-4">
-          <FieldLinkageEditor fieldId={fieldId} fieldType={form.field_type} fieldName={form.name} fields={linkageFields}
-            choices={selectOptions.map((key) => ({ key, label: key }))} value={form.linkage}
-            onChange={(linkage) => onChange({ ...form, linkage })} disabled={isSubmitting} />
-        </div>
+        {onConfigureLinkage && (
+          <div className="mb-4">
+            <div className="mb-1 text-xs font-medium text-secondary">联动规则</div>
+            <div className="flex items-center justify-between gap-3 text-xs">
+              <span className="min-w-0 truncate text-secondary">{linkageSummary}</span>
+              <button
+                type="button"
+                className="shrink-0 font-medium text-accent-primary hover:underline disabled:cursor-not-allowed disabled:opacity-60"
+                onClick={onConfigureLinkage}
+                disabled={isSubmitting}
+              >
+                配置
+              </button>
+            </div>
+          </div>
+        )}
         <div className="mt-auto flex justify-end gap-2 border-t border-subtle pt-3">
           <Button variant="neutral-primary" size="sm" onClick={onCancel} disabled={isSubmitting}>
             取消

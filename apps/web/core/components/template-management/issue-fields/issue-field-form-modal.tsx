@@ -7,16 +7,17 @@ import { cn } from "@plane/utils";
 import { buildFieldPayload, DEFAULT_FIELD_FORM, fieldToFormState } from "@/components/project-issue-types/field-form";
 import type { TFieldFormState } from "@/components/project-issue-types/field-form";
 import { FieldLinkageEditor } from "@/components/project-issue-types/field-linkage-editor";
-import { dependencyClosure, linkageSources } from "@/utils/field-linkage";
+import type { TLinkageIssueType } from "@/utils/field-linkage";
 import { getIssueFieldErrorMessage } from "./helpers";
 import { IssueFieldPreview } from "./issue-field-preview";
 import { IssueFieldSettings } from "./issue-field-settings";
-import { IssueFieldSyncTargets } from "./issue-field-used-by";
 
 type Props = {
   isOpen: boolean;
   fields: TIssueFieldLibraryItem[];
   field: TIssueFieldLibraryItem | null;
+  /** 类型库里的类型：联动规则的「工作项类型」条件从这里选 */
+  issueTypes: TLinkageIssueType[];
   onClose: () => void;
   onSubmit: (payload: TIssueFieldLibraryPayload) => Promise<unknown>;
 };
@@ -26,8 +27,8 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "linkage", label: "联动规则" },
 ];
 
-/** Fixed header/footer with independently scrollable editing and live preview panes. */
-export function IssueFieldFormModal({ isOpen, field, fields, onClose, onSubmit }: Props) {
+/** 单栏弹窗：页头和页脚固定，中间随内容长高、超出后滚动。联动规则页签下方带一张预览卡片。 */
+export function IssueFieldFormModal({ isOpen, field, fields, issueTypes, onClose, onSubmit }: Props) {
   const [form, setForm] = useState<TFieldFormState>(DEFAULT_FIELD_FORM);
   const [activeTab, setActiveTab] = useState<Tab>("settings");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -50,7 +51,6 @@ export function IssueFieldFormModal({ isOpen, field, fields, onClose, onSubmit }
   const close = () => {
     if (!isSubmitting) onClose();
   };
-  const dependencyNames = dependencyClosure(fields, linkageSources(form.linkage)).map((source) => source.name);
   const handleSubmit = async () => {
     if (isSubmitting) return;
     if (!form.name.trim()) {
@@ -61,13 +61,8 @@ export function IssueFieldFormModal({ isOpen, field, fields, onClose, onSubmit }
     }
     const built = buildFieldPayload(form);
     if ("error" in built) {
-      setActiveTab(/显示|映射/.test(built.error) ? "linkage" : "settings");
+      setActiveTab(built.error.includes("联动") ? "linkage" : "settings");
       setError(built.error);
-      return;
-    }
-    if (linkageSources(form.linkage).length !== Object.keys(form.linkage).length) {
-      setActiveTab("linkage");
-      setError("请为已开启的联动规则选择来源字段。");
       return;
     }
     const { name, description, field_type, is_required, is_active, options, default_value, linkage } = built.payload;
@@ -98,36 +93,32 @@ export function IssueFieldFormModal({ isOpen, field, fields, onClose, onSubmit }
       isOpen={isOpen}
       handleClose={close}
       position={EModalPosition.CENTER}
-      width={EModalWidth.XXXXL}
+      width={EModalWidth.XXXL}
       initialFocus={nameInputRef}
       className="overflow-hidden border border-subtle"
     >
       <form
-        className="flex h-[min(820px,calc(100dvh-2rem))] min-h-0 flex-col"
+        className="flex max-h-[min(860px,calc(100dvh-2rem))] min-h-0 flex-col"
         aria-label={field ? "编辑字段" : "新建字段"}
         onSubmit={(event) => {
           event.preventDefault();
           void handleSubmit();
         }}
       >
-        <header className="shrink-0 px-6 pt-5 sm:px-7">
+        <header className="shrink-0 px-6 pt-6 sm:px-8">
           <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2.5">
-              <h2 className="text-20 font-semibold text-primary">{field ? "编辑字段" : "新建字段"}</h2>
-              <span className="rounded bg-layer-1 px-2 py-0.5 text-12 font-medium text-secondary">通用字段</span>
-            </div>
+            <h2 className="text-18 font-semibold text-primary">{field ? "编辑字段" : "新建字段"}</h2>
             <button
               type="button"
               aria-label="关闭"
               disabled={isSubmitting}
               onClick={close}
-              className="-mr-1 grid size-7 place-items-center rounded text-secondary hover:bg-layer-1-hover disabled:opacity-50"
+              className="-mr-1 grid size-8 place-items-center rounded-lg text-secondary hover:bg-layer-1-hover disabled:opacity-50"
             >
-              <X className="size-4" />
+              <X className="size-[18px]" />
             </button>
           </div>
-          <p className="mt-1.5 text-13 text-secondary">定义字段内容与填写规则</p>
-          <div role="tablist" aria-label="字段配置" className="mt-5 flex gap-7">
+          <div role="tablist" aria-label="字段配置" className="mt-5 flex gap-8">
             {TABS.map((tab, index) => (
               <button
                 key={tab.id}
@@ -161,80 +152,69 @@ export function IssueFieldFormModal({ isOpen, field, fields, onClose, onSubmit }
           </div>
         </header>
         <div
-          className="grid min-h-0 flex-1 overflow-y-auto border-t border-subtle md:grid-cols-[minmax(0,1.75fr)_minmax(0,1fr)] md:overflow-hidden"
+          className="min-h-0 flex-1 overflow-y-auto border-t border-subtle px-6 py-7 sm:px-8"
           data-modal-wheel-scroll
         >
-          <div className="min-w-0 px-6 py-6 sm:px-7 md:overflow-y-auto" data-modal-wheel-scroll>
-            <div
-              role="tabpanel"
-              id={`${id}-settings-panel`}
-              aria-labelledby={`${id}-settings-tab`}
-              hidden={activeTab !== "settings"}
-            >
-              <IssueFieldSettings
-                key={`${field?.id ?? "new"}-${isOpen}`}
-                form={form}
-                onChange={updateForm}
-                nameInputRef={nameInputRef}
-                isEditing={Boolean(field)}
-                disabled={isSubmitting}
-              />
-            </div>
-            <div
-              role="tabpanel"
-              id={`${id}-linkage-panel`}
-              aria-labelledby={`${id}-linkage-tab`}
-              hidden={activeTab !== "linkage"}
-            >
-              <FieldLinkageEditor
-                fieldId={field?.id}
-                fieldType={form.field_type}
-                fieldName={form.name}
-                fields={fields}
-                choices={form.select_options
-                  .map((option) => option.trim())
-                  .filter(Boolean)
-                  .map((key) => ({ key, label: key }))}
-                value={form.linkage}
-                onChange={(linkage) => updateForm({ ...form, linkage })}
-                disabled={isSubmitting}
-              />
-              {dependencyNames.length > 0 && (
-                <p className="mt-6 border-t border-subtle pt-4 text-12 leading-5 text-secondary">
-                  依赖字段：{dependencyNames.join("、")}。引用类型中缺少的依赖会一并添加。
-                </p>
-              )}
-              {field && field.binding_count > 0 && (
-                <div className="mt-4 space-y-2 text-12 leading-5 text-secondary">
-                  <IssueFieldSyncTargets field={field} />
-                  <p>保存后同步至 {field.binding_count} 处引用；遇到同名冲突时整次保存取消。</p>
-                </div>
-              )}
-            </div>
+          <div
+            role="tabpanel"
+            id={`${id}-settings-panel`}
+            aria-labelledby={`${id}-settings-tab`}
+            hidden={activeTab !== "settings"}
+          >
+            <IssueFieldSettings
+              key={`${field?.id ?? "new"}-${isOpen}`}
+              form={form}
+              onChange={updateForm}
+              nameInputRef={nameInputRef}
+              isEditing={Boolean(field)}
+              disabled={isSubmitting}
+            />
           </div>
-          <IssueFieldPreview
-            key={`${field?.id ?? "new"}-${isOpen}`}
-            form={form}
-            fields={fields}
-            fieldId={field?.id}
-            showLinkage={activeTab === "linkage"}
-          />
+          <div
+            role="tabpanel"
+            id={`${id}-linkage-panel`}
+            aria-labelledby={`${id}-linkage-tab`}
+            hidden={activeTab !== "linkage"}
+            className="space-y-6"
+          >
+            <FieldLinkageEditor
+              key={`editor-${field?.id ?? "new"}-${isOpen}`}
+              fieldId={field?.id}
+              fieldType={form.field_type}
+              fields={fields}
+              issueTypes={issueTypes}
+              choices={form.select_options
+                .map((option) => option.trim())
+                .filter(Boolean)
+                .map((key) => ({ key, label: key }))}
+              value={form.linkage}
+              onChange={(linkage) => updateForm({ ...form, linkage })}
+              disabled={isSubmitting}
+            />
+            <IssueFieldPreview
+              key={`preview-${field?.id ?? "new"}-${isOpen}`}
+              form={form}
+              fields={fields}
+              fieldId={field?.id}
+              issueTypes={issueTypes}
+            />
+          </div>
         </div>
         {error && (
-          <p role="alert" className="shrink-0 border-t border-subtle px-6 py-2 text-13 text-danger-primary sm:px-7">
+          <p role="alert" className="shrink-0 border-t border-subtle px-6 py-2.5 text-14 text-danger-primary sm:px-8">
             {error}
           </p>
         )}
-        <footer className="flex shrink-0 items-center justify-between gap-3 border-t border-subtle px-6 py-4 sm:px-7">
-          <span className="hidden text-12 text-secondary sm:block">
-            {field ? `保存后同步到 ${field.binding_count} 处引用` : "创建后可添加到工作项类型"}
+        <footer className="flex shrink-0 items-center justify-between gap-3 border-t border-subtle px-6 py-4 sm:px-8">
+          <span className="hidden text-13 text-secondary sm:block">
+            {field && field.binding_count > 0 ? `保存后同步到 ${field.binding_count} 个类型` : ""}
           </span>
           <div className="ml-auto flex gap-2.5">
             <Button
               type="button"
               variant="secondary"
               size="xl"
-              className="h-9 px-3"
+              className="px-3"
               onClick={close}
               disabled={isSubmitting}
             >
@@ -244,11 +224,11 @@ export function IssueFieldFormModal({ isOpen, field, fields, onClose, onSubmit }
               type="submit"
               variant="primary"
               size="xl"
-              className="h-9 px-3"
+              className="px-3"
               loading={isSubmitting}
               disabled={isSubmitting}
             >
-              {field ? "保存修改" : "创建字段"}
+              {field ? "保存" : "创建"}
             </Button>
           </div>
         </footer>

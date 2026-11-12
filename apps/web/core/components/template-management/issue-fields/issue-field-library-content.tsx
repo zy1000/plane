@@ -5,12 +5,15 @@ import type { TIssueFieldLibraryItem } from "@plane/types";
 import { CustomMenu, Loader } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { FIELD_KIND_FILTERS } from "@/components/project-issue-types/field-display";
+import type { TLinkageIssueType } from "@/utils/field-linkage";
 import { IssueFieldLibraryTable } from "./issue-field-library-table";
 
 type Filter = "all" | "linked" | "unused";
 type Kind = "all" | TIssueFieldLibraryItem["field_type"];
 type Props = {
   fields: TIssueFieldLibraryItem[];
+  /** 类型库里的类型：联动规则列要显示规则里的类型名 */
+  issueTypes: TLinkageIssueType[];
   isLoading: boolean;
   hasLoaded: boolean;
   error: string | null;
@@ -26,6 +29,7 @@ const isUnused = (field: TIssueFieldLibraryItem) => field.binding_count === 0 &&
 /** Presentation and local filters; fetching and mutations stay in the library hook. */
 export function IssueFieldLibraryContent({
   fields,
+  issueTypes,
   isLoading,
   hasLoaded,
   error,
@@ -106,6 +110,7 @@ export function IssueFieldLibraryContent({
     return (
       <IssueFieldLibraryTable
         fields={fields}
+        issueTypes={issueTypes}
         visibleFields={visibleFields}
         canManage={canManage}
         onEdit={onEdit}
