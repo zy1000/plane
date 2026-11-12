@@ -31,6 +31,7 @@ import {
 import { useOutsideClickDetector } from "@plane/hooks";
 import { Button, Input, TextArea } from "@plane/ui";
 import type { TTypeExtraField, TTypeExtraFieldPayload } from "@/services/project/project-issue-type.service";
+import { FieldOptionsBulkEdit } from "./field-options-bulk-edit";
 
 /** 字段定义的公共部分：类型字段（TTypeExtraField）与字段库字段（TIssueFieldLibraryItem）都满足 */
 export type TFieldDefinition = Pick<TTypeExtraField, "field_type" | "options" | "default_value" | "linkage"> & {
@@ -796,7 +797,14 @@ export function InlineFieldForm({
               </div>
 
               <div>
-                <label className="mb-1 block text-xs font-medium text-secondary">选项</label>
+                <div className="mb-1 flex items-center justify-between gap-2">
+                  <label className="block text-xs font-medium text-secondary">选项</label>
+                  <FieldOptionsBulkEdit
+                    form={form}
+                    onChange={onChange}
+                    className="text-xs font-medium text-accent-primary hover:underline"
+                  />
+                </div>
                 <div className="space-y-2">
                   {form.select_options.map((option, index) => (
                     <div key={index} className="flex min-w-0 items-center gap-2">

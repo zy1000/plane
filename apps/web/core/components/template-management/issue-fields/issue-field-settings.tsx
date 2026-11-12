@@ -10,6 +10,7 @@ import {
 } from "@/components/project-issue-types/field-form";
 import type { TFieldFormState } from "@/components/project-issue-types/field-form";
 import { FieldChoiceSelect } from "@/components/project-issue-types/field-choice-select";
+import { FieldOptionsBulkEdit } from "@/components/project-issue-types/field-options-bulk-edit";
 
 const INPUT =
   "h-10 w-full rounded-lg border border-subtle bg-surface-1 px-3 text-14 text-primary outline-none placeholder:text-secondary focus:border-accent-strong";
@@ -196,7 +197,14 @@ export function IssueFieldSettings({
       </div>
       {isSelect && (
         <section className="space-y-2" aria-label="字段选项">
-          <h3 className={LABEL}>选项</h3>
+          <div className="flex items-center justify-between gap-2">
+            <h3 className={LABEL}>选项</h3>
+            <FieldOptionsBulkEdit
+              form={form}
+              onChange={onChange}
+              className="rounded text-14 font-medium text-accent-primary outline-none hover:underline focus-visible:ring-2 focus-visible:ring-accent-strong"
+            />
+          </div>
           <div ref={listRef} className="space-y-2">
             {form.select_options.map((option, index) => (
               <div
