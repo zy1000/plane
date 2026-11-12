@@ -6,13 +6,16 @@
 
 import type { ReactNode } from "react";
 import { observer } from "mobx-react";
+import Link from "next/link";
 // i18n
 import { useTranslation } from "@plane/i18n";
+import { Logo } from "@plane/propel/emoji-icon-picker";
 // icons
 import {
   DueDatePropertyIcon,
   MembersPropertyIcon,
   PriorityPropertyIcon,
+  ProjectIcon,
   StartDatePropertyIcon,
   StatePropertyIcon,
   WorkItemsIcon,
@@ -27,6 +30,7 @@ import { StateDropdown } from "@/components/dropdowns/state/dropdown";
 import { WorkItemTypeIcon } from "@/components/issues/work-item-type-icon";
 // hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
+import { useProject } from "@/hooks/store/use-project";
 import { useProjectIssueTypes } from "@/hooks/store/use-project-issue-types";
 import { useProjectState } from "@/hooks/store/use-project-state";
 import { useStateTransitionAssigneeGuard } from "@/hooks/store/use-state-transition-assignee-guard";
@@ -63,8 +67,9 @@ const BUTTON_CONTAINER = "w-full text-left h-7.5 rounded-sm";
 const ARROW = "h-3.5 w-3.5 hidden group-hover:inline";
 
 /**
- * 右栏「基本」组：类型（只读）、状态、优先级、负责人，后接工时、标签（children）。
- * 前四项与标题下的 PeekOverviewCorePropertyBar 重复，属性条可见时用 core 隐藏；改状态同样走执行人确认弹窗。
+ * 右栏「基本」组：所属项目（点击进入项目）、类型（只读）、状态、优先级、负责人，后接工时、标签（children）。
+ * 类型到负责人四项与标题下的 PeekOverviewCorePropertyBar 重复，属性条可见时用 core 隐藏；改状态同样走执行人确认弹窗。
+ * 所属项目不在属性条里，始终显示：从首页、我的工作等跨项目入口打开时靠它分辨归属。
  */
 export const PeekOverviewBasicProperties = observer(function PeekOverviewBasicProperties(
   props: TPeekOverviewBasicProperties
@@ -73,12 +78,15 @@ export const PeekOverviewBasicProperties = observer(function PeekOverviewBasicPr
   const { t } = useTranslation();
   const {
     issue: { getIssueById },
+    setPeekIssue,
   } = useIssueDetail();
   const stateTransitionGuard = useStateTransitionAssigneeGuard(workspaceSlug, projectId);
   const { issueTypes } = useProjectIssueTypes(workspaceSlug, projectId);
+  const { getProjectById } = useProject();
 
   const issue = getIssueById(issueId);
   if (!issue) return null;
+  const projectDetails = getProjectById(issue.project_id);
   const issueTypeLogoIcon = issue.type_id
     ? (issueTypes?.find((issueType) => issueType.id === issue.type_id)?.logo_props?.icon ??
       (issue.project_id ? projectIssueTypesCache.get(issue.project_id)?.[issue.type_id]?.logo_props?.icon : undefined))
@@ -94,6 +102,25 @@ export const PeekOverviewBasicProperties = observer(function PeekOverviewBasicPr
   return (
     <>
       <PropertyGroupSection title="基本">
+        {projectDetails && (
+          <div className="grid w-full grid-cols-[minmax(7.5rem,max-content)_minmax(0,1fr)] gap-x-2">
+            <StructureFieldLabel icon={ProjectIcon} label="所属项目" />
+            <StructureFieldValue>
+              {/* 落点同项目列表点项目名；抽屉的开合存在 store 里、不随路由变，跳走前要自己关掉 */}
+              <Link
+                href={`/${workspaceSlug}/projects/${projectDetails.id}/overview`}
+                onClick={() => setPeekIssue(undefined)}
+                title={projectDetails.name}
+                className="flex h-7.5 w-full min-w-0 items-center gap-1.5 rounded-sm px-2 text-body-xs-medium text-secondary hover:bg-layer-transparent-hover hover:text-primary"
+              >
+                <span className="grid size-3.5 flex-shrink-0 place-items-center">
+                  <Logo logo={projectDetails.logo_props} size={14} />
+                </span>
+                <span className="min-w-0 truncate">{projectDetails.name}</span>
+              </Link>
+            </StructureFieldValue>
+          </div>
+        )}
         {core !== false && (
           // 显隐 class 可能带 xx:block，不能直接挂在 grid 上
           <div className={typeof core === "string" ? core : undefined}>
