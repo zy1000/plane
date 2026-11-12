@@ -65,6 +65,30 @@ export type TExternalIntegrationProjectSyncSummary = {
   pages: number;
 };
 
+/** 产品集成一次同步的汇总；details 里每类明细最多 100 条 */
+export type TExternalIntegrationProductSyncSummary = {
+  remote_total: number;
+  created: number;
+  updated: number;
+  unchanged: number;
+  /** 本地未绑定的产品和远端撞开发编号 / 名称，被改掉的字段数（开发编号加 L、名称加「（本地）」） */
+  local_renamed: number;
+  skipped: number;
+  /** 本地已同步、远端已删除（本地不删） */
+  remote_missing: number;
+  product_owner_unmatched: number;
+  project_lead_unmatched: number;
+  dictionary_added: { category: string[]; status: string[]; project_code: string[] };
+  details: {
+    local_renamed: { field: "identifier" | "name"; from: string; to: string }[];
+    skipped: { name: string; identifier: string; reason: string }[];
+    remote_missing: string[];
+    unmatched_people: { employee_id: string; name: string; owner: number; project_lead: number }[];
+    unmatched_values: Record<string, string[]>;
+  };
+  pages: number;
+};
+
 /** 风险集成一次导入 / 对账的汇总；details 里每类明细最多 100 条 */
 export type TExternalIntegrationRiskSyncSummary = {
   remote_total: number;
@@ -97,6 +121,7 @@ export type TExternalIntegrationSyncSummary =
   | TExternalIntegrationDictionarySyncSummary
   | TExternalIntegrationPersonSyncSummary
   | TExternalIntegrationProjectSyncSummary
+  | TExternalIntegrationProductSyncSummary
   | TExternalIntegrationRiskSyncSummary;
 
 export type TExternalIntegrationSyncSnapshot = {
@@ -131,6 +156,12 @@ export type TExternalIntegrationProjectsTarget = {
   synced_count: number;
 };
 
+export type TExternalIntegrationProductsTarget = {
+  kind: "products";
+  /** 本工作区已和远端绑定的产品数 */
+  synced_count: number;
+};
+
 export type TExternalIntegrationRisksTarget = {
   kind: "risks";
   /** 本工作区已和简道云绑定的风险数 */
@@ -141,6 +172,7 @@ export type TExternalIntegrationTarget =
   | TExternalIntegrationDictionaryTarget
   | TExternalIntegrationWorkspaceMembersTarget
   | TExternalIntegrationProjectsTarget
+  | TExternalIntegrationProductsTarget
   | TExternalIntegrationRisksTarget;
 
 export type TExternalIntegration = {

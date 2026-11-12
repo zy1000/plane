@@ -6055,6 +6055,11 @@ export default {
             description:
               "从简道云「研发项目」表单同步项目：名称取研发项目编号，项目ID 取研发项目ID，代号、BU、状态、类型、负责人、产品经理、计划日期、描述以简道云为准覆盖；简道云删除的项目本地保留。手动同步在后台执行，同步过的工作区每天定时跟进一次。",
           },
+          jiandaoyun_product: {
+            name: "产品",
+            description:
+              "从简道云「产品」表单同步产品：名称取 PMS项目名称，开发编号、项目代号、产品类别、产品状态、研发等级、型号、启动日期、O/V 阶段关闭日期、产品负责人、项目负责人、描述以简道云为准覆盖；简道云删除的产品本地保留，产品与项目的关联不同步。手动同步在后台执行，同步过的工作区每天定时跟进一次。",
+          },
           jiandaoyun_risk: {
             name: "风险",
             description:
@@ -6072,6 +6077,8 @@ export default {
           mapping_to_members: "本工作区成员",
           mapping_to_projects: "本工作区项目",
           projects_count: "（已同步 {count} 个）",
+          mapping_to_products: "本工作区产品",
+          products_count: "（已同步 {count} 个）",
           mapping_to_risks: "各项目的风险",
           risks_count: "（已同步 {count} 条）",
           members_count: "（{count} 人，其中 {synced} 人已带工号）",
@@ -6106,6 +6113,8 @@ export default {
           remote_missing: "远端已删 {count}",
           lead_unmatched: "负责人未匹配 {count}",
           product_manager_unmatched: "产品经理未匹配 {count}",
+          product_owner_unmatched: "产品负责人未匹配 {count}",
+          project_lead_unmatched: "项目负责人未匹配 {count}",
           recovered: "恢复 {count}",
           local_unsynced: "本地待推送 {count}",
           requeued: "重新排队 {count}",

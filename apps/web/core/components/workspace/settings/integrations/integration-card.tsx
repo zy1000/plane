@@ -55,6 +55,16 @@ export function IntegrationCard(props: Props) {
         </>
       );
     }
+    if (target?.kind === "products") {
+      return (
+        <>
+          <Link to={`/${workspaceSlug}/products`} className="text-accent-primary hover:underline">
+            {t(`${I18N}.card.mapping_to_products`)}
+          </Link>
+          <span className="text-tertiary">{t(`${I18N}.card.products_count`, { count: target.synced_count })}</span>
+        </>
+      );
+    }
     if (target?.kind === "risks") {
       return (
         <>

@@ -113,6 +113,9 @@ class Product(BaseModel):
         verbose_name="评审人",
     )
     logo_props = models.JSONField(default=dict)
+    # 外部来源（如 "jiandaoyun_product" = 简道云同步来的产品）与远端记录 _id，见 plane/integrations/product_sync.py
+    external_source = models.CharField(max_length=255, null=True, blank=True)
+    external_id = models.CharField(max_length=255, blank=True, null=True)
 
     def save(self, *args, **kwargs):
         # 最后一道防线 —— 真正的归一化在 ProductSerializer.validate_identifier，

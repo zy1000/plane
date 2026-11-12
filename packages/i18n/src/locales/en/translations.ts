@@ -5893,6 +5893,11 @@ export default {
             description:
               "Syncs projects from the Jiandaoyun R&D project form: the name comes from the R&D project number and the project ID from the R&D project ID; code, BU, status, type, lead, product manager, planned dates and description are overwritten from Jiandaoyun. Projects deleted in Jiandaoyun are kept locally. Manual syncs run in the background; synced workspaces are refreshed daily.",
           },
+          jiandaoyun_product: {
+            name: "Products",
+            description:
+              "Syncs products from the Jiandaoyun product form: the development number and the name (PMS project name) come from Jiandaoyun; project code, category, status, R&D levels, model numbers, start date, O/V phase close dates, product owner, project lead and description are overwritten from Jiandaoyun. Products deleted in Jiandaoyun are kept locally; product–project links are not synced. Manual syncs run in the background; synced workspaces are refreshed daily.",
+          },
           jiandaoyun_risk: {
             name: "Risks",
             description:
@@ -5910,6 +5915,8 @@ export default {
           mapping_to_members: "Members of this workspace",
           mapping_to_projects: "Projects in this workspace",
           projects_count: "({count} synced)",
+          mapping_to_products: "Products in this workspace",
+          products_count: "({count} synced)",
           mapping_to_risks: "Risks across projects",
           risks_count: "({count} synced)",
           members_count: "({count} members, {synced} with employee id)",
@@ -5944,6 +5951,8 @@ export default {
           remote_missing: "{count} deleted remotely",
           lead_unmatched: "{count} leads unmatched",
           product_manager_unmatched: "{count} product managers unmatched",
+          product_owner_unmatched: "{count} product owners unmatched",
+          project_lead_unmatched: "{count} project leads unmatched",
           recovered: "{count} restored",
           local_unsynced: "{count} pending local pushes",
           requeued: "{count} requeued",

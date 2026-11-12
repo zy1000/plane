@@ -1,6 +1,7 @@
 import type {
   TExternalIntegration,
   TExternalIntegrationPersonSyncSummary,
+  TExternalIntegrationProductSyncSummary,
   TExternalIntegrationProjectSyncSummary,
   TExternalIntegrationRiskSyncSummary,
   TExternalIntegrationSyncSummary,
@@ -11,7 +12,13 @@ export const INTEGRATIONS_I18N = "workspace_settings.settings.integrations";
 type TTranslate = (key: string, params?: Record<string, unknown>) => string;
 
 /** 前端已知的集成 key / 来源：名称与描述走 i18n；后端新加了集成但前端还没补词条时回落后端文案 */
-const CATALOG_KEYS = new Set(["jiandaoyun_project_code", "jiandaoyun_rd_project", "jiandaoyun_risk", "mdm_person_info"]);
+const CATALOG_KEYS = new Set([
+  "jiandaoyun_project_code",
+  "jiandaoyun_rd_project",
+  "jiandaoyun_product",
+  "jiandaoyun_risk",
+  "mdm_person_info",
+]);
 const PROVIDER_KEYS = new Set(["jiandaoyun", "mdm"]);
 const ERROR_CODES = new Set([
   "INTEGRATION_NOT_FOUND",
@@ -96,6 +103,31 @@ const formatProjectSummary = (summary: TExternalIntegrationProjectSyncSummary, t
   return parts.join(" · ");
 };
 
+// 产品摘要也有 unchanged，要先于项目摘要判断
+const isProductSummary = (summary: TExternalIntegrationSyncSummary): summary is TExternalIntegrationProductSyncSummary =>
+  "product_owner_unmatched" in summary;
+
+/** 产品：「远端 2334 条 · 新增 3 · 更新 20 · 未变 2311 · 本地改名 2 · 产品负责人未匹配 119」，为 0 的尾项不显示 */
+const formatProductSummary = (summary: TExternalIntegrationProductSyncSummary, t: TTranslate) => {
+  const parts = [
+    t(`${INTEGRATIONS_I18N}.summary.remote_total`, { count: summary.remote_total }),
+    t(`${INTEGRATIONS_I18N}.summary.created`, { count: summary.created }),
+    t(`${INTEGRATIONS_I18N}.summary.updated`, { count: summary.updated }),
+    t(`${INTEGRATIONS_I18N}.summary.unchanged`, { count: summary.unchanged }),
+  ];
+  const tails = [
+    ["local_renamed", summary.local_renamed],
+    ["skipped", summary.skipped],
+    ["remote_missing", summary.remote_missing],
+    ["product_owner_unmatched", summary.product_owner_unmatched],
+    ["project_lead_unmatched", summary.project_lead_unmatched],
+  ] as const;
+  for (const [key, count] of tails) {
+    if (count > 0) parts.push(t(`${INTEGRATIONS_I18N}.summary.${key}`, { count }));
+  }
+  return parts.join(" · ");
+};
+
 // 风险摘要也有 unchanged，要先于项目摘要判断
 const isRiskSummary = (summary: TExternalIntegrationSyncSummary): summary is TExternalIntegrationRiskSyncSummary =>
   "owner_unmatched" in summary;
@@ -128,6 +160,7 @@ const formatRiskSummary = (summary: TExternalIntegrationRiskSyncSummary, t: TTra
 export const formatSyncSummary = (summary: TExternalIntegrationSyncSummary, t: TTranslate) => {
   if (isPersonSummary(summary)) return formatPersonSummary(summary, t);
   if (isRiskSummary(summary)) return formatRiskSummary(summary, t);
+  if (isProductSummary(summary)) return formatProductSummary(summary, t);
   if (isProjectSummary(summary)) return formatProjectSummary(summary, t);
   const parts = [
     t(`${INTEGRATIONS_I18N}.summary.remote_total`, { count: summary.remote_total }),

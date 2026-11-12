@@ -338,6 +338,8 @@ JIANDAOYUN_PROJECT_CODE_APP_ID = os.environ.get("JIANDAOYUN_PROJECT_CODE_APP_ID"
 JIANDAOYUN_PROJECT_CODE_ENTRY_ID = os.environ.get("JIANDAOYUN_PROJECT_CODE_ENTRY_ID", "")
 JIANDAOYUN_RD_PROJECT_APP_ID = os.environ.get("JIANDAOYUN_RD_PROJECT_APP_ID", "")
 JIANDAOYUN_RD_PROJECT_ENTRY_ID = os.environ.get("JIANDAOYUN_RD_PROJECT_ENTRY_ID", "")
+JIANDAOYUN_PRODUCT_APP_ID = os.environ.get("JIANDAOYUN_PRODUCT_APP_ID", "")
+JIANDAOYUN_PRODUCT_ENTRY_ID = os.environ.get("JIANDAOYUN_PRODUCT_ENTRY_ID", "")
 # 风险双向同步（plane/integrations/risk_sync.py）。网关每个接口一个编号，写接口各自一个 base URL；
 # 三个写地址都填了才会往简道云推（相当于开关）—— 简道云只有一张正式表单，**只能有一个环境填**
 JIANDAOYUN_RISK_APP_ID = os.environ.get("JIANDAOYUN_RISK_APP_ID", "")
