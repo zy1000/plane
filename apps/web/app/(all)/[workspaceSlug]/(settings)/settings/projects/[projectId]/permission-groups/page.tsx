@@ -143,9 +143,9 @@ function ProjectPermissionGroupsPage({ params }: Route.ComponentProps) {
             <PermissionGroupSegmented<TProjectGroupFilter>
               items={[
                 { key: "all", label: "全部", count: groups.length + inheritedGroups.length },
-                { key: "project", label: "本项目", count: groups.length - templateCount },
-                { key: "template", label: "标准权限组", count: templateCount },
-                { key: "workspace", label: "工作区权限组", count: inheritedGroups.length },
+                { key: "project", label: "自定义", count: groups.length - templateCount },
+                { key: "template", label: "标准", count: templateCount },
+                { key: "workspace", label: "工作区继承", count: inheritedGroups.length },
               ]}
               value={sourceFilter}
               onChange={setSourceFilter}

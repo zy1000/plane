@@ -39,9 +39,9 @@ const OP_BUTTON = "text-14 hover:underline disabled:cursor-not-allowed disabled:
 const MAX_NAMES = 2;
 
 const SECTION_META: Record<TProjectGroupSection, { label: string; dot: string; hint?: string }> = {
-  project: { label: "本项目", dot: "bg-success-primary" },
-  template: { label: "标准权限组", dot: "bg-accent-primary", hint: "由工作区统一维护，本项目仅分配成员" },
-  workspace: { label: "工作区权限组", dot: "bg-current text-placeholder", hint: "对可访问本项目的组内成员生效" },
+  project: { label: "自定义", dot: "bg-success-primary" },
+  template: { label: "标准", dot: "bg-accent-primary", hint: "由工作区统一维护，本项目仅分配成员" },
+  workspace: { label: "工作区继承", dot: "bg-current text-placeholder", hint: "对可访问本项目的组内成员生效" },
 };
 
 /** 模板：绑了人的在前，再按权限数从多到少 */

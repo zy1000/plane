@@ -8,8 +8,8 @@ import type { TProjectPermissionGroup, TProjectPermissionGroupSource } from "@pl
 import { cn } from "@plane/utils";
 
 export const GROUP_SOURCE_LABEL: Record<TProjectPermissionGroupSource, string> = {
-  template: "标准权限组",
-  project: "本项目",
+  template: "标准",
+  project: "自定义",
 };
 
 const GROUP_SOURCE_CLASS: Record<TProjectPermissionGroupSource, string> = {
