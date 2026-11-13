@@ -7,7 +7,6 @@ from rest_framework import status
 from rest_framework.response import Response
 
 # Module imports
-from plane.app.serializers import StateSerializer
 from plane.app.views.base import BaseAPIView
 from django.db.models import Q, Subquery
 
@@ -48,19 +47,53 @@ class WorkspaceStatesEndpoint(BaseAPIView):
                     )
                 )
             )
-            .select_related("scheme")
+            # 工作区下有几万个状态（每个项目方案 × 每个类型各一套）：只取要输出的列、直接拼字典，
+            # 不建模型对象、不逐行走 serializer。输出字段与顺序同 StateSerializer，那边加字段这里要跟着加。
+            .values(
+                "id",
+                "scheme__project_id",
+                "scheme_id",
+                "workspace_id",
+                "name",
+                "color",
+                "group",
+                "default",
+                "description",
+                "sequence",
+                "issue_type_id",
+            )
+            # sequence 大量并列（几千个状态同一个值），order 取决于并列行的先后。原先 SELECT DISTINCT 整行
+            # 时数据库顺带按 created_at 等列排了并列行，这里把并列顺序写明，只取部分列后 order 才不会变
+            .order_by("sequence", "created_at", "id")
             .distinct()
         )
 
         grouped_states = defaultdict(list)
         for state in states:
-            grouped_states[state.group].append(state)
+            grouped_states[state["group"]].append(state)
 
-        for group, group_states in grouped_states.items():
+        orders = {}
+        for group_states in grouped_states.values():
             count = len(group_states)
 
             for index, state in enumerate(group_states, start=1):
-                state.order = index / count
+                orders[state["id"]] = index / count
 
-        serializer = StateSerializer(states, many=True).data
-        return Response(serializer, status=status.HTTP_200_OK)
+        data = [
+            {
+                "id": state["id"],
+                "project_id": state["scheme__project_id"],
+                "scheme_id": state["scheme_id"],
+                "workspace_id": state["workspace_id"],
+                "name": state["name"],
+                "color": state["color"],
+                "group": state["group"],
+                "default": state["default"],
+                "description": state["description"],
+                "sequence": state["sequence"],
+                "order": orders[state["id"]],
+                "issue_type_id": state["issue_type_id"],
+            }
+            for state in states
+        ]
+        return Response(data, status=status.HTTP_200_OK)

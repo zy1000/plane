@@ -4,6 +4,17 @@ import { ProductService } from "@/services/product.service";
 
 const productService = new ProductService();
 
+const inFlightBySlug = new Map<string, Promise<TProduct[]>>();
+
+/** 同一工作区的列表请求还没回来时复用它：开发模式下 effect 执行两遍、多处同时调用都只发一次 */
+const listProducts = (workspaceSlug: string) => {
+  const pending = inFlightBySlug.get(workspaceSlug);
+  if (pending) return pending;
+  const request = productService.list(workspaceSlug).finally(() => inFlightBySlug.delete(workspaceSlug));
+  inFlightBySlug.set(workspaceSlug, request);
+  return request;
+};
+
 const upsertProduct = (products: TProduct[], productToUpsert: TProduct) => {
   const productIndex = products.findIndex((product) => product.id === productToUpsert.id);
   if (productIndex === -1) return [productToUpsert, ...products];
@@ -35,7 +46,7 @@ export const useProducts = (workspaceSlug: string | undefined) => {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await productService.list(workspaceSlug);
+      const response = await listProducts(workspaceSlug);
       setProducts(response);
       return response;
     } catch (requestError) {

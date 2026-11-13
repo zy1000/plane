@@ -12,6 +12,17 @@ import { DataDictionaryService } from "@/services/data-dictionary.service";
 
 const dataDictionaryService = new DataDictionaryService();
 
+const inFlightBySlug = new Map<string, Promise<TDataDictionary[]>>();
+
+/** 同一工作区的列表请求还没回来时复用它：开发模式下 effect 执行两遍、同一页多处调用都只发一次 */
+const listDictionaries = (workspaceSlug: string) => {
+  const pending = inFlightBySlug.get(workspaceSlug);
+  if (pending) return pending;
+  const request = dataDictionaryService.list(workspaceSlug).finally(() => inFlightBySlug.delete(workspaceSlug));
+  inFlightBySlug.set(workspaceSlug, request);
+  return request;
+};
+
 /** 与 Label.sort_order 同一套步长：追加到末尾时 +10000，拖拽时取邻居中点 */
 const SORT_ORDER_STEP = 10000;
 
@@ -63,7 +74,7 @@ export const useDataDictionaries = (workspaceSlug: string | undefined, options?:
     setIsLoading(true);
     setError(null);
     try {
-      const response = await dataDictionaryService.list(workspaceSlug);
+      const response = await listDictionaries(workspaceSlug);
       setDictionaries(response);
       return response;
     } catch (requestError) {

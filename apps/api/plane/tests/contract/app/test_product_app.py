@@ -95,7 +95,7 @@ class TestProductApp:
         list_response = api_client.get(self.list_url)
         detail_response = api_client.get(detail_url)
         assert list_response.status_code == status.HTTP_200_OK
-        assert [item["id"] for item in list_response.data] == [product_id]
+        assert [str(item["id"]) for item in list_response.data["products"]] == [str(product_id)]
         assert detail_response.status_code == status.HTTP_200_OK
 
         # 改负责人要求新负责人已是产品成员（PRODUCT_OWNER_NOT_MEMBER），先把 owner 加进去
@@ -215,14 +215,14 @@ class TestProductApp:
             self.authenticate(api_client, user)
             list_response = api_client.get(self.list_url)
             assert list_response.status_code == status.HTTP_200_OK
-            assert str(product.id) in [str(item["id"]) for item in list_response.data]
+            assert str(product.id) in [str(item["id"]) for item in list_response.data["products"]]
             assert api_client.get(detail_url).status_code == status.HTTP_200_OK
 
         for user in (unrelated_member, unrelated_guest):
             self.authenticate(api_client, user)
             list_response = api_client.get(self.list_url)
             assert list_response.status_code == status.HTTP_200_OK
-            assert str(product.id) not in [str(item["id"]) for item in list_response.data]
+            assert str(product.id) not in [str(item["id"]) for item in list_response.data["products"]]
             assert api_client.get(detail_url).status_code == status.HTTP_404_NOT_FOUND
 
     def test_workspace_role_permission_matrix(self, api_client):

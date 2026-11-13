@@ -589,6 +589,23 @@ def linked_project_ids(product) -> list:
     )
 
 
+def prime_linked_project_ids(user, products) -> None:
+    """列表一次查出一批产品的关联项目并写进按请求缓存，算产品 key 时不再逐个产品查。
+    过滤条件与 linked_project_ids 相同。"""
+    links = {product.id: [] for product in products}
+    rows = ProductProject.objects.filter(
+        product_id__in=links,
+        deleted_at__isnull=True,
+        project__deleted_at__isnull=True,
+        project__archived_at__isnull=True,
+    ).values_list("product_id", "project_id")
+    for product_id, project_id in rows:
+        links[product_id].append(project_id)
+    cache = _cache(user)
+    for product_id, project_ids in links.items():
+        cache[("product_links", product_id)] = project_ids
+
+
 def _get_user_product_permission_keys(user, product) -> set:
     """产品上生效的 key：workspace.* 部分照工作区，project.* 部分取各关联项目的并集。
     project.* 全开只给直通身份和产品负责人；workspace.product.edit 只管产品基本信息，
@@ -610,12 +627,42 @@ def _get_user_product_permission_keys(user, product) -> set:
     if context.passthrough or product.owner_id == user.id:
         keys |= PROJECT_KEYS - _inactive_keys(user)
     else:
-        for project_id in linked_project_ids(product):
+        project_ids = cache.get(("product_links", product.id))
+        if project_ids is None:
+            project_ids = linked_project_ids(product)
+        for project_id in project_ids:
             grant = resolve_project_grant(user, None, project_id)
             if grant.is_member:
                 keys |= grant.keys
     cache[cache_key] = keys
     return keys
+
+
+def bulk_product_permission_keys(user, products) -> dict:
+    """列表一次算一批产品的 key（{产品 id: key 集合}），不逐个产品走 _get_user_product_permission_keys。
+    规则与它相同：直通身份全部一样；其余只取决于「是不是产品负责人」和「关联了哪些项目」，
+    按这两项分组、每组只算一个产品。那边的判断条件变了，这里的分组依据要跟着改。"""
+    products = list(products)
+    if _is_anonymous(user):
+        return {product.id: frozenset() for product in products}
+    prime_linked_project_ids(user, products)
+    cache = _cache(user)
+    passthrough_by_workspace, keys_by_group, result = {}, {}, {}
+    for product in products:
+        passthrough = passthrough_by_workspace.get(product.workspace_id)
+        if passthrough is None:
+            passthrough = workspace_context(user, product.workspace).passthrough
+            passthrough_by_workspace[product.workspace_id] = passthrough
+        group = (
+            (product.workspace_id,)
+            if passthrough
+            else (product.workspace_id, product.owner_id == user.id, frozenset(cache[("product_links", product.id)]))
+        )
+        keys = keys_by_group.get(group)
+        if keys is None:
+            keys = keys_by_group[group] = frozenset(_get_user_product_permission_keys(user, product))
+        result[product.id] = keys
+    return result
 
 
 def is_product_linked_member(user, product) -> bool:

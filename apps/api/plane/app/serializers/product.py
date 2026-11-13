@@ -1,4 +1,6 @@
 import re
+from collections import defaultdict
+from operator import attrgetter
 
 from rest_framework import serializers
 
@@ -9,7 +11,7 @@ from plane.db.models import (
     User,
     WorkspaceMember,
 )
-from plane.app.permissions.base import _get_user_product_permission_keys
+from plane.app.permissions.base import _get_user_product_permission_keys, bulk_product_permission_keys
 from plane.utils.content_validator import validate_html_content
 from plane.utils.data_dictionary import PRODUCT_DICTIONARY_FIELD_KEYS
 
@@ -269,3 +271,97 @@ class ProductSerializer(BaseSerializer):
             "updated_by",
             "my_permission_keys",
         ]
+
+
+# ---------------------------------------------------------------------------
+# 列表接口：仍然全量返回，但人员 / 字典值 / 权限键集合只输出一次，行里只带标量和 id。
+# 前端 product.service.ts 的 hydrateProductList 按 id 还原成完整产品对象。
+# ---------------------------------------------------------------------------
+
+_USER_FIELDS = ("owner", "project_lead", "test_lead")
+_USER_ATTNAMES = tuple(f"{field}_id" for field in _USER_FIELDS)
+_DICTIONARY_ATTNAMES = tuple(f"{field}_id" for field in PRODUCT_DICTIONARY_FIELD_KEYS)
+_DATETIME = serializers.DateTimeField()
+
+# 列表行里不输出、改放进公共表的字段
+PRODUCT_LIST_SHARED_FIELDS = frozenset(
+    {"reviewer_details", "my_permission_keys"}
+    | {f"{field}_detail" for field in (*_USER_FIELDS, *PRODUCT_DICTIONARY_FIELD_KEYS)}
+)
+
+# 列表行的字段 -> 取值。几千行不逐行走 ProductSerializer，输出的值与格式和它一致
+_PRODUCT_LIST_ROW_GETTERS = {
+    "id": attrgetter("id"),
+    "name": attrgetter("name"),
+    "identifier": attrgetter("identifier"),
+    "code": attrgetter("code"),
+    "description_html": attrgetter("description_html"),
+    "workspace": attrgetter("workspace_id"),
+    "owner": attrgetter("owner_id"),
+    "stage": attrgetter("stage_id"),
+    "category": attrgetter("category_id"),
+    "status": attrgetter("status_id"),
+    "hardware_level": attrgetter("hardware_level_id"),
+    "structure_level": attrgetter("structure_level_id"),
+    "software_level": attrgetter("software_level_id"),
+    "start_date": attrgetter("start_date"),
+    "project_lead": attrgetter("project_lead_id"),
+    "test_lead": attrgetter("test_lead_id"),
+    "model_number": attrgetter("model_number"),
+    "external_model": attrgetter("external_model"),
+    "o_phase_close_date": attrgetter("o_phase_close_date"),
+    "v_phase_close_date": attrgetter("v_phase_close_date"),
+    "logo_props": attrgetter("logo_props"),
+    "created_at": lambda product: _DATETIME.to_representation(product.created_at),
+    "updated_at": lambda product: _DATETIME.to_representation(product.updated_at),
+    "created_by": attrgetter("created_by_id"),
+    "updated_by": attrgetter("updated_by_id"),
+}
+
+# 给产品加了字段却漏了列表行：服务启动就报错，不要等前端发现列表里缺字段
+if set(_PRODUCT_LIST_ROW_GETTERS) | {"reviewers"} | PRODUCT_LIST_SHARED_FIELDS != set(ProductSerializer.Meta.fields):
+    raise RuntimeError("产品列表行的字段与 ProductSerializer.Meta.fields 不一致，请同步 _PRODUCT_LIST_ROW_GETTERS")
+
+
+def build_product_list_payload(products, user):
+    """产品列表响应：products 是行，users / dictionary_items / permission_sets 是行里 id、下标指向的公共表。"""
+    # 评审人只要 id；顺序同 product.reviewers 的默认顺序（User 按 -created_at）
+    reviewer_ids = defaultdict(list)
+    reviewer_rows = (
+        Product.reviewers.through.objects.filter(product_id__in=[product.id for product in products])
+        .order_by("-user__created_at")
+        .values_list("product_id", "user_id")
+    )
+    for product_id, user_id in reviewer_rows:
+        reviewer_ids[product_id].append(user_id)
+
+    user_ids = {user_id for ids in reviewer_ids.values() for user_id in ids}
+    item_ids = set()
+    for product in products:
+        user_ids.update(getattr(product, attname) for attname in _USER_ATTNAMES)
+        item_ids.update(getattr(product, attname) for attname in _DICTIONARY_ATTNAMES)
+    user_ids.discard(None)
+    item_ids.discard(None)
+    # 与详情接口同口径：头像资源、字典头各自 JOIN，字典值不滤软删
+    users = User.objects.filter(id__in=user_ids).select_related("avatar_asset")
+    items = DataDictionaryItem.all_objects.filter(id__in=item_ids).select_related("dictionary")
+
+    keys_by_product = bulk_product_permission_keys(user, products)
+    permission_sets, set_index, rows = [], {}, []
+    for product in products:
+        keys = keys_by_product[product.id]
+        index = set_index.get(keys)
+        if index is None:
+            index = set_index[keys] = len(permission_sets)
+            permission_sets.append(sorted(keys))
+        row = {field: getter(product) for field, getter in _PRODUCT_LIST_ROW_GETTERS.items()}
+        row["reviewers"] = reviewer_ids.get(product.id, [])
+        row["permission_set"] = index
+        rows.append(row)
+
+    return {
+        "products": rows,
+        "users": {str(row["id"]): row for row in UserLiteSerializer(users, many=True).data},
+        "dictionary_items": {str(row["id"]): row for row in DataDictionaryItemLiteSerializer(items, many=True).data},
+        "permission_sets": permission_sets,
+    }
