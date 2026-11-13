@@ -11,6 +11,7 @@ import { cn } from "@plane/utils";
 // components
 import { TypeIcon } from "@/components/common/type-icon-picker";
 import type { TTypeIconProps } from "@/components/common/type-icon-picker";
+import { formatNumberFieldValue, getNumberConfigSummary, getNumberFieldConfig } from "@/utils/number-field";
 // local imports
 import { getSelectChoices, getSelectionMode, getTextMode } from "./field-form";
 import type { TFieldDefinition } from "./field-form";
@@ -74,7 +75,7 @@ export const getFieldKindLabel = (field: TFieldDefinition): string => {
 const SUMMARY_MAX_CHOICES = 6;
 const SUMMARY_HEAD_CHOICES = 5;
 
-/** 选项摘要：下拉列选项，人员写单 / 多选；其他类型没有选项，返回空串 */
+/** 选项摘要：下拉列选项，人员写单 / 多选，数字写格式 / 小数位数 / 单位 / 取值范围；其他类型没有选项，返回空串 */
 export const getFieldOptionsSummary = (field: TFieldDefinition): string => {
   if (field.field_type === "select") {
     const choices = getSelectChoices(field);
@@ -82,6 +83,7 @@ export const getFieldOptionsSummary = (field: TFieldDefinition): string => {
     return `${choices.slice(0, SUMMARY_HEAD_CHOICES).join(" · ")} 等 ${choices.length} 项`;
   }
   if (field.field_type === "user") return isMultiple(field) ? "多选" : "单选";
+  if (field.field_type === "number") return getNumberConfigSummary(getNumberFieldConfig(field));
   return "";
 };
 
@@ -90,6 +92,7 @@ export const getFieldDefaultLabel = (field: TFieldDefinition): string => {
   const value = field.default_value;
   if (value === null || value === undefined || value === "") return "";
   if (Array.isArray(value)) return value.map((item) => String(item)).join("、");
+  if (field.field_type === "number") return formatNumberFieldValue(value, getNumberFieldConfig(field));
   if (typeof value === "string" || typeof value === "number") return String(value);
   return "";
 };

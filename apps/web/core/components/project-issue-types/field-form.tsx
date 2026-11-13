@@ -6,6 +6,14 @@
 
 import type { TFieldLinkage } from "@plane/types";
 import { compactLinkage, getLinkageError } from "@/utils/field-linkage";
+import {
+  getNumberFieldConfig,
+  getNumberRangeError,
+  NUMBER_FORMAT_OPTIONS,
+  NUMBER_PRECISION_MAX,
+  NUMBER_UNIT_MAX_LENGTH,
+} from "@/utils/number-field";
+import type { TNumberFormat } from "@/utils/number-field";
 
 /**
  * 工作项类型字段（属性）的表单：表单状态、字段 ↔ 表单互转、校验与请求体、行内编辑表单 UI。
@@ -36,7 +44,10 @@ import { FieldOptionsBulkEdit } from "./field-options-bulk-edit";
 import { useFieldOptionSource } from "./use-field-option-source";
 
 /** 字段定义的公共部分：类型字段（TTypeExtraField）与字段库字段（TIssueFieldLibraryItem）都满足 */
-export type TFieldDefinition = Pick<TTypeExtraField, "field_type" | "options" | "default_value" | "linkage"> & {
+export type TFieldDefinition = Pick<
+  TTypeExtraField,
+  "field_type" | "options" | "default_value" | "linkage" | "validation"
+> & {
   dictionary_id?: string | null;
   name?: string | null;
   description?: string | null;
@@ -109,6 +120,15 @@ export type TFieldFormState = {
   text_is_paragraph: boolean;
   /** 仅当 field_type 为 number 时使用；空字符串表示不设置默认值 */
   number_default_value: string;
+  /** 仅当 field_type 为 number 时使用：显示格式 */
+  number_format: TNumberFormat;
+  /** 仅当 field_type 为 number 时使用：小数位数，空字符串表示不限 */
+  number_precision: string;
+  /** 仅当 field_type 为 number 时使用：单位；百分比固定为 %，不存 */
+  number_unit: string;
+  /** 仅当 field_type 为 number 时使用：取值范围，空字符串表示不限 */
+  number_min: string;
+  number_max: string;
   /** 仅当 field_type 为 select 时使用 */
   select_options: string[];
   /** 仅当 field_type 为 select 时使用：true 表示多选 */
@@ -138,6 +158,11 @@ export const DEFAULT_FIELD_FORM: TFieldFormState = {
   field_type: "text",
   text_is_paragraph: false,
   number_default_value: "",
+  number_format: "number",
+  number_precision: "",
+  number_unit: "",
+  number_min: "",
+  number_max: "",
   select_options: [""],
   select_is_multiple: false,
   select_default_value: "",
@@ -170,6 +195,29 @@ function parseNumberFieldDefaultPayload(raw: string): { ok: true; value: number 
   if (!Number.isFinite(n)) return { ok: false };
   return { ok: true, value: n };
 }
+
+/** 数字字段的格式 / 范围 → 表单项；其他类型返回缺省值 */
+function formatNumberConfigForForm(
+  field: TFieldDefinition
+): Pick<TFieldFormState, "number_format" | "number_precision" | "number_unit" | "number_min" | "number_max"> {
+  const config = getNumberFieldConfig(field.field_type === "number" ? field : {});
+  return {
+    number_format: config.format,
+    number_precision: config.precision === null ? "" : String(config.precision),
+    number_unit: config.format === "percent" ? "" : config.unit,
+    number_min: config.min === null ? "" : String(config.min),
+    number_max: config.max === null ? "" : String(config.max),
+  };
+}
+
+/** 小数位数下拉的选项：不限 + 0–6 */
+export const NUMBER_PRECISION_CHOICES: { key: string; label: string }[] = [
+  { key: "", label: "不限" },
+  ...Array.from({ length: NUMBER_PRECISION_MAX + 1 }, (_, digits) => ({
+    key: String(digits),
+    label: digits === 0 ? "0（整数）" : String(digits),
+  })),
+];
 
 function formatSelectOptionsForForm(field: TFieldDefinition): string[] {
   if (!isSelectFieldType(field.field_type)) return [""];
@@ -226,6 +274,7 @@ export function fieldToFormState(field: TFieldDefinition): TFieldFormState {
     field_type: field.field_type,
     text_is_paragraph: formatTextIsParagraphForForm(field),
     number_default_value: formatNumberFieldDefaultForForm(field),
+    ...formatNumberConfigForForm(field),
     select_options: formatSelectOptionsForForm(field),
     select_is_multiple: formatSelectIsMultipleForForm(field),
     select_default_value: formatSelectDefaultValueForForm(field),
@@ -247,7 +296,16 @@ export function changeFieldType(form: TFieldFormState, fieldType: TTypeExtraFiel
     field_type: fieldType,
     linkage: fieldType === "select" ? form.linkage : { ...(form.linkage.visibility ? { visibility: form.linkage.visibility } : {}) },
     ...(fieldType !== "text" ? { text_is_paragraph: false } : {}),
-    ...(fieldType !== "number" ? { number_default_value: "" } : {}),
+    ...(fieldType !== "number"
+      ? {
+          number_default_value: "",
+          number_format: "number" as const,
+          number_precision: "",
+          number_unit: "",
+          number_min: "",
+          number_max: "",
+        }
+      : {}),
     ...(!isSelectFieldType(fieldType)
       ? { select_default_value: "", select_default_values: [], select_is_multiple: false }
       : {}),
@@ -280,10 +338,32 @@ export function buildFieldPayload(fieldForm: TFieldFormState): { error: string }
   if (linkageError) return { error: linkageError };
 
   let numberDefaultPayload: number | null | undefined;
+  let numberOptionsPayload: Record<string, unknown> | undefined;
+  let numberValidationPayload: Record<string, unknown> | undefined;
   if (fieldForm.field_type === "number") {
     const parsed = parseNumberFieldDefaultPayload(fieldForm.number_default_value);
     if (!parsed.ok) return { error: "默认值必须是有效数字，或留空表示不设默认值。" };
     numberDefaultPayload = parsed.value;
+
+    const min = parseNumberFieldDefaultPayload(fieldForm.number_min);
+    const max = parseNumberFieldDefaultPayload(fieldForm.number_max);
+    if (!min.ok || !max.ok) return { error: "最小值和最大值必须是有效数字，或留空表示不限。" };
+    if (min.value !== null && max.value !== null && min.value > max.value) return { error: "最小值不能大于最大值。" };
+    const unit = fieldForm.number_format === "percent" ? "" : fieldForm.number_unit.trim();
+    if (unit.length > NUMBER_UNIT_MAX_LENGTH) return { error: `单位不能超过 ${NUMBER_UNIT_MAX_LENGTH} 个字符。` };
+    if (parsed.value !== null) {
+      const rangeError = getNumberRangeError(parsed.value, { min: min.value, max: max.value });
+      if (rangeError) return { error: `默认值${rangeError}。` };
+    }
+    numberOptionsPayload = {
+      number_format: fieldForm.number_format,
+      ...(fieldForm.number_precision === "" ? {} : { precision: Number(fieldForm.number_precision) }),
+      ...(unit ? { unit } : {}),
+    };
+    numberValidationPayload = {
+      ...(min.value === null ? {} : { min: min.value }),
+      ...(max.value === null ? {} : { max: max.value }),
+    };
   }
 
   let selectOptionsPayload: { choices: string[]; selection_mode: "single" | "multiple" } | undefined;
@@ -326,7 +406,13 @@ export function buildFieldPayload(fieldForm: TFieldFormState): { error: string }
       is_required: fieldForm.is_required,
       is_active: fieldForm.is_active,
       ...(fieldForm.field_type === "text" ? { options: textOptionsPayload } : {}),
-      ...(fieldForm.field_type === "number" ? { default_value: numberDefaultPayload ?? null } : {}),
+      ...(fieldForm.field_type === "number"
+        ? {
+            options: numberOptionsPayload,
+            validation: numberValidationPayload,
+            default_value: numberDefaultPayload ?? null,
+          }
+        : {}),
       ...(isSelectFieldType(fieldForm.field_type)
         ? { options: selectOptionsPayload, default_value: selectDefaultPayload ?? null, dictionary_id: dictionaryPayload }
         : {}),
@@ -790,16 +876,83 @@ export function InlineFieldForm({
             </div>
           )}
           {form.field_type === "number" && (
-            <div>
-              <label className="mb-1 block text-xs font-medium text-secondary">默认值</label>
-              <Input
-                type="number"
-                inputMode="decimal"
-                value={form.number_default_value}
-                onChange={(e) => onChange({ ...form, number_default_value: e.target.value })}
-                placeholder="可选，留空表示无默认值"
-                className="w-full"
-              />
+            <div className="space-y-3">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-secondary">数字格式</label>
+                <div className="flex items-center gap-4 text-xs text-secondary">
+                  {NUMBER_FORMAT_OPTIONS.map((option) => (
+                    <label key={option.key} className="flex items-center gap-1.5">
+                      <input
+                        type="radio"
+                        checked={form.number_format === option.key}
+                        onChange={() => onChange({ ...form, number_format: option.key })}
+                        className="size-3.5"
+                      />
+                      {option.label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-secondary">小数位数</label>
+                  <select
+                    value={form.number_precision}
+                    onChange={(e) => onChange({ ...form, number_precision: e.target.value })}
+                    className="block w-full rounded-md border-[0.5px] border-subtle-1 bg-layer-2 px-3 py-2 text-13 text-primary focus:outline-none"
+                  >
+                    {NUMBER_PRECISION_CHOICES.map((choice) => (
+                      <option key={choice.key} value={choice.key}>
+                        {choice.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-secondary">单位</label>
+                  <Input
+                    value={form.number_format === "percent" ? "%" : form.number_unit}
+                    onChange={(e) => onChange({ ...form, number_unit: e.target.value })}
+                    maxLength={NUMBER_UNIT_MAX_LENGTH}
+                    disabled={form.number_format === "percent"}
+                    placeholder={form.number_format === "currency" ? "如 元、万元" : "如 人天、个"}
+                    className="w-full"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-secondary">最小值</label>
+                  <Input
+                    type="number"
+                    inputMode="decimal"
+                    value={form.number_min}
+                    onChange={(e) => onChange({ ...form, number_min: e.target.value })}
+                    placeholder="不限"
+                    className="w-full"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-secondary">最大值</label>
+                  <Input
+                    type="number"
+                    inputMode="decimal"
+                    value={form.number_max}
+                    onChange={(e) => onChange({ ...form, number_max: e.target.value })}
+                    placeholder="不限"
+                    className="w-full"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-secondary">默认值</label>
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  value={form.number_default_value}
+                  onChange={(e) => onChange({ ...form, number_default_value: e.target.value })}
+                  placeholder="可选，留空表示无默认值"
+                  className="w-full"
+                />
+              </div>
             </div>
           )}
           {isSelectFieldType(form.field_type) && (

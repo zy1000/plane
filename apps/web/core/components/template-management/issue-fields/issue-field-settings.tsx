@@ -6,6 +6,7 @@ import { cn } from "@plane/utils";
 import {
   changeFieldType,
   getNormalizedSelectOptions,
+  NUMBER_PRECISION_CHOICES,
   removeSelectOption,
 } from "@/components/project-issue-types/field-form";
 import type { TFieldFormState } from "@/components/project-issue-types/field-form";
@@ -17,6 +18,8 @@ import {
 } from "@/components/project-issue-types/field-dictionary-source";
 import { FieldOptionsBulkEdit } from "@/components/project-issue-types/field-options-bulk-edit";
 import { useFieldOptionSource } from "@/components/project-issue-types/use-field-option-source";
+import { NUMBER_FORMAT_OPTIONS, NUMBER_UNIT_MAX_LENGTH } from "@/utils/number-field";
+import type { TNumberFormat } from "@/utils/number-field";
 
 const INPUT =
   "h-10 w-full rounded-lg border border-subtle bg-surface-1 px-3 text-14 text-primary outline-none placeholder:text-secondary focus:border-accent-strong";
@@ -136,7 +139,7 @@ export function IssueFieldSettings({
       <div
         className={cn(
           "grid gap-5",
-          isSelect || form.field_type === "user" || form.field_type === "text"
+          isSelect || form.field_type === "user" || form.field_type === "text" || form.field_type === "number"
             ? "sm:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_72px]"
             : "sm:grid-cols-[minmax(0,1fr)_72px]"
         )}
@@ -187,6 +190,17 @@ export function IssueFieldSettings({
                 { key: "paragraph", label: "多行" },
               ]}
               onChange={(value) => onChange({ ...form, text_is_paragraph: value === "paragraph" })}
+            />
+          </div>
+        )}
+        {form.field_type === "number" && (
+          <div className="min-w-0 space-y-2">
+            <p className={LABEL}>数字格式</p>
+            <Segments
+              label="数字格式"
+              value={form.number_format}
+              options={NUMBER_FORMAT_OPTIONS}
+              onChange={(value) => onChange({ ...form, number_format: value as TNumberFormat })}
             />
           </div>
         )}
@@ -370,16 +384,63 @@ export function IssueFieldSettings({
         </div>
       )}
       {form.field_type === "number" && (
-        <label className={`flex flex-col gap-2 ${LABEL}`}>
-          默认值
-          <input
-            type="number"
-            value={form.number_default_value}
-            onChange={(event) => onChange({ ...form, number_default_value: event.target.value })}
-            className={cn(INPUT, "font-normal")}
-            placeholder="不设置默认值"
-          />
-        </label>
+        <>
+          <div className="grid gap-5 sm:grid-cols-2">
+            <div className="min-w-0 space-y-2">
+              <p className={LABEL}>小数位数</p>
+              <FieldChoiceSelect
+                label="小数位数"
+                value={form.number_precision}
+                choices={NUMBER_PRECISION_CHOICES}
+                disabled={disabled}
+                onChange={(number_precision) => onChange({ ...form, number_precision })}
+              />
+            </div>
+            <label className={`flex min-w-0 flex-col gap-2 ${LABEL}`}>
+              单位
+              <input
+                value={form.number_format === "percent" ? "%" : form.number_unit}
+                onChange={(event) => onChange({ ...form, number_unit: event.target.value })}
+                maxLength={NUMBER_UNIT_MAX_LENGTH}
+                disabled={form.number_format === "percent"}
+                className={cn(INPUT, "font-normal disabled:cursor-not-allowed disabled:bg-layer-1")}
+                placeholder={form.number_format === "currency" ? "如 元、万元" : "如 人天、个"}
+              />
+            </label>
+          </div>
+          <div className="grid gap-5 sm:grid-cols-3">
+            <label className={`flex min-w-0 flex-col gap-2 ${LABEL}`}>
+              最小值
+              <input
+                type="number"
+                value={form.number_min}
+                onChange={(event) => onChange({ ...form, number_min: event.target.value })}
+                className={cn(INPUT, "font-normal")}
+                placeholder="不限"
+              />
+            </label>
+            <label className={`flex min-w-0 flex-col gap-2 ${LABEL}`}>
+              最大值
+              <input
+                type="number"
+                value={form.number_max}
+                onChange={(event) => onChange({ ...form, number_max: event.target.value })}
+                className={cn(INPUT, "font-normal")}
+                placeholder="不限"
+              />
+            </label>
+            <label className={`flex min-w-0 flex-col gap-2 ${LABEL}`}>
+              默认值
+              <input
+                type="number"
+                value={form.number_default_value}
+                onChange={(event) => onChange({ ...form, number_default_value: event.target.value })}
+                className={cn(INPUT, "font-normal")}
+                placeholder="不设置默认值"
+              />
+            </label>
+          </div>
+        </>
       )}
       <label className="flex flex-col gap-2">
         <span className={LABEL}>字段说明</span>

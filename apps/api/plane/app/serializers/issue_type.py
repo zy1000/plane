@@ -352,6 +352,7 @@ def _validate_linkage_candidate(serializer, attrs, **scope):
     from django.core.exceptions import ValidationError as DjangoValidationError
     from plane.utils.dictionary_field import apply_dictionary
     from plane.utils.field_linkage import validate_field
+    from plane.utils.number_field import normalize_number_config
     candidate = copy(serializer.instance) if serializer.instance else serializer.Meta.model(**scope)
     for key, value in attrs.items():
         setattr(candidate, key, value)
@@ -362,6 +363,11 @@ def _validate_linkage_candidate(serializer, attrs, **scope):
     if candidate.dictionary_id:
         # 引用数据字典：选项以字典值为准，联动规则也按它校验
         attrs["options"] = candidate.options
+    try:
+        # 数字字段的格式 / 取值范围 / 默认值；模型 clean() 还会再规整一遍，这里先报出来免得被归到联动错误里
+        normalize_number_config(candidate)
+    except DjangoValidationError as exc:
+        raise serializers.ValidationError({"options": exc.messages}) from exc
     try:
         validate_field(candidate)
     except DjangoValidationError as exc:

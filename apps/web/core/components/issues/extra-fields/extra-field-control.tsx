@@ -18,6 +18,7 @@ import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import type { TTypeExtraField } from "@/services/project/project-issue-type.service";
 // utils
 import { cn, getDate, renderFormattedPayloadDate } from "@plane/utils";
+import { getNumberFieldConfig } from "@/utils/number-field";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -192,10 +193,13 @@ export const ExtraFieldControl = (props: TExtraFieldControlProps) => {
   }
 
   if (fieldType === "number") {
-    return (
+    const numberConfig = getNumberFieldConfig(field);
+    const numberInput = (
       <Input
         id={inputId}
         type="number"
+        // 小数位数和取值范围由后端把关（多余小数四舍五入、超范围报在字段下），这里只放开浏览器默认的整数步长
+        step="any"
         value={value === null || value === undefined || value === "" ? "" : String(value)}
         onChange={(e) => {
           const raw = e.target.value;
@@ -210,7 +214,7 @@ export const ExtraFieldControl = (props: TExtraFieldControlProps) => {
         disabled={disabled}
         hasError={!!error}
         className={cn(
-          "w-full",
+          "w-full min-w-0",
           sidebar &&
             cn(
               "h-7.5 !border-transparent !bg-transparent px-1.5 py-1 hover:!border-subtle focus:!border-subtle",
@@ -219,6 +223,15 @@ export const ExtraFieldControl = (props: TExtraFieldControlProps) => {
           isMd && mdInputClass
         )}
       />
+    );
+    if (!numberConfig.unit) return numberInput;
+    return (
+      <div className="flex w-full min-w-0 items-center gap-2">
+        {numberInput}
+        <span className={cn("shrink-0 whitespace-nowrap text-tertiary", isMd ? "text-14" : "text-13")}>
+          {numberConfig.unit}
+        </span>
+      </div>
     );
   }
 

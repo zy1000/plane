@@ -30,6 +30,7 @@ import { IssueFieldLayout } from "../extra-fields/field-layout";
 import type { TTypeExtraField } from "@/services/project/project-issue-type.service";
 // utils
 import { cn, renderFormattedDate } from "@plane/utils";
+import { formatNumberFieldValue, getNumberFieldConfig } from "@/utils/number-field";
 import type { TIssueOperations } from "./root";
 
 const isParagraphField = (field: TTypeExtraField) =>
@@ -159,6 +160,12 @@ const ReadOnlyFieldValue = observer(function ReadOnlyFieldValue({
         toIdList(value)
           .map((id) => getUserDetails(id)?.display_name ?? id)
           .join("、")
+      );
+    case "number":
+      return (
+        <span className="font-medium text-primary tabular-nums">
+          {formatNumberFieldValue(value, getNumberFieldConfig(field))}
+        </span>
       );
     default:
       if (isParagraphField(field)) {

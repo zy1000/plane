@@ -190,7 +190,9 @@ class IssueFieldDefinition(BaseModel):
         super().clean()
         from plane.utils.dictionary_field import apply_dictionary
         from plane.utils.field_linkage import validate_field
+        from plane.utils.number_field import normalize_number_config
         apply_dictionary(self)
+        normalize_number_config(self)
         validate_field(self)
 
     def save(self, *args, **kwargs):
@@ -280,7 +282,9 @@ class TypeExtraField(SchemeBaseModel):
         super().clean()
         from plane.utils.dictionary_field import apply_dictionary
         from plane.utils.field_linkage import validate_field
+        from plane.utils.number_field import normalize_number_config
         apply_dictionary(self)
+        normalize_number_config(self)
         validate_field(self)
 
     @transaction.atomic

@@ -12,7 +12,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from django.db import IntegrityError, transaction
@@ -23,6 +23,7 @@ from plane.db.models import (
     TypeExtraFieldValue,
     User,
 )
+from plane.utils.number_field import coerce_number, is_same_number, number_range_error
 
 
 FIELD_TYPE_TEXT = "text"
@@ -68,10 +69,7 @@ def _coerce_value_for_field(
         return value, None
 
     if field_type == FIELD_TYPE_NUMBER:
-        try:
-            return Decimal(str(value)), None
-        except (InvalidOperation, TypeError, ValueError):
-            return None, "数值格式不合法"
+        return coerce_number(field, value)
 
     if field_type == FIELD_TYPE_DATE:
         if isinstance(value, date) and not isinstance(value, datetime):
@@ -269,7 +267,16 @@ def validate_extra_field_values(
             errors.setdefault(field_id, []).append("字段不属于该工作项类型")
             continue
 
-        normalized, err = _coerce_value_for_field(field, effective_values.get(field_id), project_id)
+        raw_value = effective_values.get(field_id)
+        normalized, err = _coerce_value_for_field(field, raw_value, project_id)
+        # 取值范围只卡本次改动的值：前端每次提交都带上全部字段，范围是后来才收紧的存量值不该挡住其他字段保存
+        if (
+            not err
+            and normalized is not None
+            and field.field_type == FIELD_TYPE_NUMBER
+            and not is_same_number(raw_value, (existing_values or {}).get(field_id))
+        ):
+            err = number_range_error(field, normalized)
         if err:
             errors.setdefault(field_id, []).append(err)
             continue
