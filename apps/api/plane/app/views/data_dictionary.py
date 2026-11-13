@@ -20,6 +20,12 @@ from plane.utils.data_dictionary import (
     is_dictionary_in_use,
     is_item_in_use,
 )
+from plane.utils.dictionary_field import (
+    dictionary_field_references,
+    is_dictionary_bound,
+    release_inactive_references,
+    sync_dictionary_fields,
+)
 
 # 一次批量新增最多接收的行数（前端粘贴多行）
 BULK_LABELS_MAX = 1000
@@ -130,9 +136,17 @@ class DataDictionaryViewSet(BaseViewSet):
                 "This dictionary has values still in use.",
                 "DATA_DICTIONARY_ITEM_IN_USE",
             )
+        if is_dictionary_bound(dictionary.id):
+            # 选择字段把它当选项来源：先到字段上改回手动维护或换字典
+            return _conflict(
+                "This dictionary is used as the option source of work item fields.",
+                "DATA_DICTIONARY_FIELD_BOUND",
+            )
         try:
             # 硬删（模型 delete 已强制 soft=False），级联硬删 items；Product FK 的 RESTRICT 兜并发
-            dictionary.delete()
+            with transaction.atomic():
+                release_inactive_references(dictionary.id)
+                dictionary.delete()
         except (ProtectedError, RestrictedError):
             return _conflict(
                 "This dictionary has values still in use.",
@@ -147,7 +161,10 @@ class DataDictionaryViewSet(BaseViewSet):
         dictionary = self._get_dictionary(pk)
         if dictionary is None:
             return _not_found("Data dictionary not found.")
-        return Response(dictionary_item_usage(dictionary), status=status.HTTP_200_OK)
+        data = dictionary_item_usage(dictionary)
+        # 「引用字段」：把这个字典当选项来源的选择字段
+        data["fields"] = dictionary_field_references(dictionary)
+        return Response(data, status=status.HTTP_200_OK)
 
 
 class DataDictionaryItemViewSet(BaseViewSet):
@@ -178,7 +195,9 @@ class DataDictionaryItemViewSet(BaseViewSet):
             return _not_found("Data dictionary not found.")
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        item = serializer.save(dictionary=dictionary, workspace=dictionary.workspace)
+        with transaction.atomic():
+            item = serializer.save(dictionary=dictionary, workspace=dictionary.workspace)
+            sync_dictionary_fields(dictionary.id)
         return Response(self.get_serializer(item).data, status=status.HTTP_201_CREATED)
 
     def bulk_create(self, request, slug, dictionary_id):
@@ -235,7 +254,12 @@ class DataDictionaryItemViewSet(BaseViewSet):
             return _not_found("Data dictionary item not found.")
         serializer = self.get_serializer(item, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
-        serializer.save()
+        old_label = item.label
+        with transaction.atomic():
+            item = serializer.save()
+            # 改名 / 调顺序要同步到引用该字典的选择字段；只改颜色不用
+            if {"label", "sort_order"} & set(serializer.validated_data):
+                sync_dictionary_fields(item.dictionary_id, renames={old_label: item.label})
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     def destroy(self, request, slug, dictionary_id, pk):
@@ -251,7 +275,10 @@ class DataDictionaryItemViewSet(BaseViewSet):
             )
         try:
             # 必须硬删：软删会被 deletion_task 当 CASCADE，把引用它的产品一起软删掉
-            item.delete()
+            with transaction.atomic():
+                item.delete()
+                # 引用该字典的选择字段不再提供这个值；已填在工作项上的原值不动
+                sync_dictionary_fields(item.dictionary_id)
         except (ProtectedError, RestrictedError):
             return _conflict(
                 "This dictionary value is still in use.",

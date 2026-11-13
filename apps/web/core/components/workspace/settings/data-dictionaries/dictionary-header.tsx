@@ -1,13 +1,16 @@
 import { MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Tooltip } from "@plane/propel/tooltip";
-import type { TDataDictionary } from "@plane/types";
+import type { TDataDictionary, TDataDictionaryFieldUsage } from "@plane/types";
 import { CustomMenu, ToggleSwitch } from "@plane/ui";
+import { DictionaryFieldUsage } from "./dictionary-field-usage";
 import { DictionaryTypeBadge } from "./dictionary-type-badge";
 
 type Props = {
   dictionary: TDataDictionary;
   canEdit: boolean;
+  /** 引用该字典作为选项来源的工作项字段；非空时不能删除字典 */
+  fieldUsage: TDataDictionaryFieldUsage[];
   /** 字典级「彩色显示」开关，切换即保存 */
   onToggleColored: (isColored: boolean) => Promise<unknown>;
   onEdit: () => void;
@@ -20,14 +23,21 @@ const ICON_BUTTON =
 
 /** 右栏头部：只有名称 + 徽标；改名改描述收进铅笔弹层，key 与描述不展示 */
 export function DictionaryHeader(props: Props) {
-  const { dictionary, canEdit, onToggleColored, onEdit, onDelete } = props;
+  const { dictionary, canEdit, fieldUsage, onToggleColored, onEdit, onDelete } = props;
   const { t } = useTranslation();
+  const isFieldBound = fieldUsage.length > 0;
+  const deleteBlockedReason = dictionary.is_system
+    ? t(`${I18N}.detail.system_locked`)
+    : isFieldBound
+      ? t(`${I18N}.detail.field_bound_locked`, { count: fieldUsage.length })
+      : undefined;
 
   return (
     <header className="flex items-center justify-between gap-4">
       <div className="flex min-w-0 items-center gap-2.5">
         <h2 className="truncate text-18 font-semibold text-primary">{dictionary.name}</h2>
         <DictionaryTypeBadge dictionary={dictionary} />
+        <DictionaryFieldUsage fields={fieldUsage} />
       </div>
       <div className="flex shrink-0 items-center gap-2">
         <label className="mr-1 flex items-center gap-2 text-12 text-secondary">
@@ -59,12 +69,8 @@ export function DictionaryHeader(props: Props) {
               }
               placement="bottom-end"
             >
-              <CustomMenu.MenuItem disabled={dictionary.is_system} onClick={onDelete}>
-                <Tooltip
-                  disabled={!dictionary.is_system}
-                  tooltipContent={t(`${I18N}.detail.system_locked`)}
-                  position="left"
-                >
+              <CustomMenu.MenuItem disabled={Boolean(deleteBlockedReason)} onClick={onDelete}>
+                <Tooltip disabled={!deleteBlockedReason} tooltipContent={deleteBlockedReason ?? ""} position="left">
                   <span className="flex items-center gap-2 text-danger-primary">
                     <Trash2 className="size-3.5" />
                     {t(`${I18N}.detail.delete`)}

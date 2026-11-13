@@ -65,6 +65,8 @@ export type TTypeExtraField = {
   is_active?: boolean;
   sort_order?: number;
   options?: Record<string, unknown>;
+  /** select 的选项来源：非空 = 引用该数据字典，`options.choices` 由后端按字典值填充；空 = 手动维护 */
+  dictionary_id?: string | null;
   default_value?: unknown;
   validation?: Record<string, unknown>;
   linkage?: TFieldLinkage;

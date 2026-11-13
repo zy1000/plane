@@ -305,6 +305,11 @@ def bulk_create_items(dictionary, labels, actor=None):
             "sort_order", "created_at", "id"
         )
     )
+    if created:
+        # 把这个字典当选项来源的选择字段跟着多出这些值（批量添加、简道云同步都走这里）
+        from plane.utils.dictionary_field import sync_dictionary_fields
+
+        sync_dictionary_fields(dictionary.id)
     return created, existing_labels
 
 

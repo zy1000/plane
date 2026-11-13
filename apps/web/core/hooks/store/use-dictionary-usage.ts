@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { TDataDictionaryItemUsage, TDataDictionaryUsageEntity } from "@plane/types";
+import type { TDataDictionaryFieldUsage, TDataDictionaryItemUsage, TDataDictionaryUsageEntity } from "@plane/types";
 import { DataDictionaryService } from "@/services/data-dictionary.service";
 
 const dataDictionaryService = new DataDictionaryService();
@@ -13,6 +13,8 @@ export type TDictionaryUsageMap = Map<string, TDataDictionaryItemUsage>;
 export const useDictionaryUsage = (workspaceSlug: string | undefined, dictionaryId: string | undefined) => {
   const [usage, setUsage] = useState<TDictionaryUsageMap | null>(null);
   const [entity, setEntity] = useState<TDataDictionaryUsageEntity>(null);
+  // 引用该字典作为选项来源的工作项字段：非空时字典不能删
+  const [fields, setFields] = useState<TDataDictionaryFieldUsage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<boolean>(false);
   const [version, setVersion] = useState(0);
@@ -21,6 +23,7 @@ export const useDictionaryUsage = (workspaceSlug: string | undefined, dictionary
     if (!workspaceSlug || !dictionaryId) {
       setUsage(null);
       setEntity(null);
+      setFields([]);
       return;
     }
     // 快速切换字典时，旧请求的响应不能覆盖新字典的数据
@@ -33,10 +36,12 @@ export const useDictionaryUsage = (workspaceSlug: string | undefined, dictionary
         if (cancelled) return;
         setEntity(response.entity);
         setUsage(new Map(response.items.map((item) => [item.item_id, item])));
+        setFields(response.fields ?? []);
       })
       .catch(() => {
         if (cancelled) return;
         setUsage(null);
+        setFields([]);
         setError(true);
       })
       .finally(() => {
@@ -49,5 +54,5 @@ export const useDictionaryUsage = (workspaceSlug: string | undefined, dictionary
 
   const refresh = useCallback(() => setVersion((current) => current + 1), []);
 
-  return { usage, entity, isLoading, error, refresh };
+  return { usage, entity, fields, isLoading, error, refresh };
 };

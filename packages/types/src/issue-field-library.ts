@@ -31,6 +31,8 @@ export type TIssueFieldLibraryItem = {
   field_type: TIssueFieldType;
   /** select：`choices` + `selection_mode`；text：`text_mode`；user：`selection_mode` */
   options: Record<string, unknown>;
+  /** select 的选项来源：非空 = 引用该数据字典，`options.choices` 由后端按字典值填充；null = 手动维护 */
+  dictionary_id: string | null;
   default_value: unknown;
   validation: Record<string, unknown>;
   linkage?: TFieldLinkage;
@@ -52,6 +54,7 @@ export type TIssueFieldLibraryPayload = Partial<
     | "description"
     | "field_type"
     | "options"
+    | "dictionary_id"
     | "default_value"
     | "validation"
     | "linkage"

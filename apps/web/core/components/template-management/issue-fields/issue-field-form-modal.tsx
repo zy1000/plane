@@ -78,6 +78,7 @@ export function IssueFieldFormModal({ isOpen, field, fields, issueTypes, onClose
         linkage,
         ...(options !== undefined ? { options } : {}),
         ...("default_value" in built.payload ? { default_value } : {}),
+        ...("dictionary_id" in built.payload ? { dictionary_id: built.payload.dictionary_id ?? null } : {}),
       });
       onClose();
     } catch (submitError) {

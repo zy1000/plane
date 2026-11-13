@@ -363,6 +363,7 @@ export const IssueTypeFieldList = observer(function IssueTypeFieldList({
                 <div key={field.id} ref={inlineFormRef}>
                   <InlineFieldForm
                     onConfigureLinkage={() => setIsLinkageOpen(true)}
+                    workspaceSlug={workspaceSlug}
                     form={fieldForm}
                     isSubmitting={isSubmitting}
                     submitLabel="更新"
@@ -433,6 +434,7 @@ export const IssueTypeFieldList = observer(function IssueTypeFieldList({
             <div ref={inlineFormRef}>
               <InlineFieldForm
                 onConfigureLinkage={() => setIsLinkageOpen(true)}
+                workspaceSlug={workspaceSlug}
                 form={fieldForm}
                 isSubmitting={isSubmitting}
                 submitLabel="创建"

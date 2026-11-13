@@ -86,9 +86,25 @@ export type TDataDictionaryItemUsage = {
 /** 引用方实体：产品字典 → product，项目字典（含 project_code）→ project，自定义字典没有引用方 */
 export type TDataDictionaryUsageEntity = "product" | "project" | null;
 
+/**
+ * 引用该字典作为选项来源的工作项字段。
+ * library = 通用字段库字段（binding_count 是绑定它的类型数）；type = 类型私有字段
+ * （issue_type_name 必有；project_name 为自定义项目名，类型库里的类型为 null）。
+ */
+export type TDataDictionaryFieldUsage = {
+  id: string;
+  name: string;
+  source: "library" | "type";
+  binding_count: number | null;
+  issue_type_name: string | null;
+  project_name: string | null;
+};
+
 export type TDataDictionaryUsageResponse = {
   entity: TDataDictionaryUsageEntity;
   items: TDataDictionaryItemUsage[];
+  /** 被字段引用的字典不能删除 */
+  fields?: TDataDictionaryFieldUsage[];
 };
 
 export type TBulkCreateDataDictionaryItemsSkipReason = "existing" | "blank" | "too_long";
@@ -115,4 +131,5 @@ export type TDataDictionaryErrorCode =
   | "DATA_DICTIONARY_NAME_ALREADY_EXISTS"
   | "DATA_DICTIONARY_ITEM_ALREADY_EXISTS"
   | "DATA_DICTIONARY_SYSTEM_PROTECTED"
-  | "DATA_DICTIONARY_ITEM_IN_USE";
+  | "DATA_DICTIONARY_ITEM_IN_USE"
+  | "DATA_DICTIONARY_FIELD_BOUND";

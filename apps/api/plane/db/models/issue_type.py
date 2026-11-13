@@ -123,6 +123,7 @@ LIBRARY_FIELD_DEFINITION_COLUMNS = (
     "options",
     "default_value",
     "validation",
+    "dictionary_id",
 )
 
 
@@ -156,6 +157,15 @@ class IssueFieldDefinition(BaseModel):
     default_value = models.JSONField(null=True, blank=True)
     validation = models.JSONField(default=dict, blank=True)
     linkage = models.JSONField(default=dict, blank=True)
+    # 选项来源：非空 = 选项取自该数据字典，options.choices 冗余存一份字典值（plane/utils/dictionary_field.py 负责同步）；
+    # 空 = 手动维护
+    dictionary = models.ForeignKey(
+        "db.DataDictionary",
+        on_delete=models.RESTRICT,
+        null=True,
+        blank=True,
+        related_name="issue_field_definitions",
+    )
 
     class Meta:
         constraints = [
@@ -178,7 +188,9 @@ class IssueFieldDefinition(BaseModel):
 
     def clean(self):
         super().clean()
+        from plane.utils.dictionary_field import apply_dictionary
         from plane.utils.field_linkage import validate_field
+        apply_dictionary(self)
         validate_field(self)
 
     def save(self, *args, **kwargs):
@@ -239,6 +251,14 @@ class TypeExtraField(SchemeBaseModel):
         blank=True,
         related_name="bindings",
     )
+    # 选项来源，同 IssueFieldDefinition.dictionary；库字段的绑定行随定义同步
+    dictionary = models.ForeignKey(
+        "db.DataDictionary",
+        on_delete=models.RESTRICT,
+        null=True,
+        blank=True,
+        related_name="type_extra_fields",
+    )
 
     class Meta:
         constraints = [
@@ -258,7 +278,9 @@ class TypeExtraField(SchemeBaseModel):
 
     def clean(self):
         super().clean()
+        from plane.utils.dictionary_field import apply_dictionary
         from plane.utils.field_linkage import validate_field
+        apply_dictionary(self)
         validate_field(self)
 
     @transaction.atomic

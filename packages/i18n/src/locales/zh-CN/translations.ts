@@ -6222,6 +6222,7 @@ export default {
           description_placeholder: "可选：说明该字典的用途",
           delete: "删除字典",
           system_locked: "系统字典由系统维护，不可删除",
+          field_bound_locked: "该字典被 {count} 个工作项字段引用，不可删除",
           add_value: "添加值",
           add_value_placeholder: "输入新值，回车添加",
           delete_value: "删除值",
@@ -6237,6 +6238,15 @@ export default {
         header: {
           edit: "编辑字典",
           more: "更多操作",
+        },
+        field_usage: {
+          trigger: "引用字段 {count}",
+          col_name: "字段名称",
+          col_owner: "所属",
+          owner_library: "字段库 · {count} 个类型",
+          owner_library_unbound: "字段库",
+          owner_type: "工作项类型 · {name}",
+          owner_type_project: "工作项类型 · {name}（{project}）",
         },
         edit_modal: {
           title: "编辑字典",
@@ -6313,6 +6323,7 @@ export default {
         delete_item_modal: {
           title: "删除此值？",
           description: "确定删除「{label}」吗？已被产品或项目引用的值无法删除。",
+          field_impact: "引用该字典的 {count} 个字段不再提供此选项，已填写的工作项保留原值。",
         },
         toast: {
           created: "字典已创建",
@@ -6336,6 +6347,7 @@ export default {
           item_already_exists: "该值已存在",
           system_protected: "系统字典不可删除",
           item_in_use: "该值已被引用，无法删除",
+          field_bound: "该字典被工作项字段引用，无法删除",
         },
       },
       api_tokens: {

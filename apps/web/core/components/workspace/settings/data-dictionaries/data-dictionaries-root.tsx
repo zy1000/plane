@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { BookText } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
@@ -69,7 +70,9 @@ export function DataDictionariesRoot(props: Props) {
     reorderItem,
   } = props;
   const { t } = useTranslation();
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+  // ?dictionary=<id>：字段表单的「前往数据字典」带着引用的字典过来，打开就停在它上面
+  const [selectedId, setSelectedId] = useState<string | null>(() => searchParams.get("dictionary"));
   const [sidebarSearch, setSidebarSearch] = useState("");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [pendingDeleteDictionary, setPendingDeleteDictionary] = useState<TDataDictionary | null>(null);
@@ -290,7 +293,13 @@ export function DataDictionariesRoot(props: Props) {
         isSubmitting={isDeleting}
         variant="danger"
         title={t(`${I18N}.delete_item_modal.title`)}
-        content={t(`${I18N}.delete_item_modal.description`, { label: pendingDeleteItem?.label ?? "" })}
+        content={
+          t(`${I18N}.delete_item_modal.description`, { label: pendingDeleteItem?.label ?? "" }) +
+          // 字典被字段引用时说明对字段和已填工作项的影响
+          (usage.fields.length > 0
+            ? t(`${I18N}.delete_item_modal.field_impact`, { count: usage.fields.length })
+            : "")
+        }
         secondaryButtonText={t("cancel")}
         primaryButtonText={{
           default: t(`${I18N}.delete_modal.confirm`),

@@ -10,7 +10,13 @@ import {
 } from "@/components/project-issue-types/field-form";
 import type { TFieldFormState } from "@/components/project-issue-types/field-form";
 import { FieldChoiceSelect } from "@/components/project-issue-types/field-choice-select";
+import {
+  FieldDictionaryMissingNotice,
+  FieldDictionarySelect,
+  FieldDictionaryValues,
+} from "@/components/project-issue-types/field-dictionary-source";
 import { FieldOptionsBulkEdit } from "@/components/project-issue-types/field-options-bulk-edit";
+import { useFieldOptionSource } from "@/components/project-issue-types/use-field-option-source";
 
 const INPUT =
   "h-10 w-full rounded-lg border border-subtle bg-surface-1 px-3 text-14 text-primary outline-none placeholder:text-secondary focus:border-accent-strong";
@@ -75,6 +81,8 @@ export function IssueFieldSettings({
   const options = getNormalizedSelectOptions(form.select_options).map((key) => ({ key, label: key }));
   const isSelect = form.field_type === "select";
   const isMultiple = isSelect ? form.select_is_multiple : form.user_is_multiple;
+  const optionSource = useFieldOptionSource(form, onChange);
+  const isDictionarySource = optionSource.isDictionarySource;
   const renameOption = (index: number, text: string) => {
     const previous = form.select_options[index]?.trim();
     const next = text.trim();
@@ -196,6 +204,47 @@ export function IssueFieldSettings({
         </div>
       </div>
       {isSelect && (
+        <div className="space-y-3">
+          <div className="grid gap-5 sm:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_72px]">
+            <div className="min-w-0 space-y-2">
+              <p className={LABEL}>选项来源</p>
+              <Segments
+                label="选项来源"
+                value={form.option_source}
+                options={[
+                  { key: "manual", label: "手动维护" },
+                  { key: "dictionary", label: "数据字典" },
+                ]}
+                onChange={(source) => optionSource.setSource(source as TFieldFormState["option_source"])}
+              />
+            </div>
+            {isDictionarySource && (
+              <div className="min-w-0 space-y-2 sm:col-span-2">
+                <p className={LABEL}>
+                  数据字典<span className="ml-1 text-danger-primary">*</span>
+                </p>
+                <FieldDictionarySelect
+                  dictionaries={optionSource.dictionaries}
+                  value={form.dictionary_id}
+                  fallbackLabel={optionSource.isLoading ? "加载中…" : "数据字典已不存在"}
+                  isLoading={optionSource.isLoading}
+                  disabled={disabled}
+                  onChange={optionSource.selectDictionary}
+                />
+              </div>
+            )}
+          </div>
+          <FieldDictionaryMissingNotice options={optionSource.missingOptions} />
+        </div>
+      )}
+      {isSelect && isDictionarySource && (
+        <FieldDictionaryValues
+          values={optionSource.values}
+          isEmptySelection={!form.dictionary_id}
+          href={optionSource.dictionaryPageHref}
+        />
+      )}
+      {isSelect && !isDictionarySource && (
         <section className="space-y-2" aria-label="字段选项">
           <div className="flex items-center justify-between gap-2">
             <h3 className={LABEL}>选项</h3>
@@ -305,7 +354,7 @@ export function IssueFieldSettings({
               value={form.select_default_values}
               choices={options}
               placeholder="不设置默认值"
-              disabled={disabled}
+              disabled={disabled || (isDictionarySource && !form.dictionary_id)}
               onChange={(select_default_values) => onChange({ ...form, select_default_values })}
             />
           ) : (
@@ -314,7 +363,7 @@ export function IssueFieldSettings({
               value={form.select_default_value}
               choices={[{ key: "", label: "不设置默认值" }, ...options]}
               placeholder="不设置默认值"
-              disabled={disabled}
+              disabled={disabled || (isDictionarySource && !form.dictionary_id)}
               onChange={(select_default_value) => onChange({ ...form, select_default_value })}
             />
           )}

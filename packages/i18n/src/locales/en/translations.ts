@@ -6062,6 +6062,7 @@ export default {
           description_placeholder: "Optional: describe what this dictionary is for",
           delete: "Delete dictionary",
           system_locked: "System dictionaries are managed by the system and cannot be deleted",
+          field_bound_locked: "Referenced by {count} work item fields; cannot be deleted",
           add_value: "Add value",
           add_value_placeholder: "Type a new value and press Enter",
           delete_value: "Delete value",
@@ -6077,6 +6078,15 @@ export default {
         header: {
           edit: "Edit dictionary",
           more: "More actions",
+        },
+        field_usage: {
+          trigger: "Fields {count}",
+          col_name: "Field",
+          col_owner: "Belongs to",
+          owner_library: "Field library · {count} types",
+          owner_library_unbound: "Field library",
+          owner_type: "Work item type · {name}",
+          owner_type_project: "Work item type · {name} ({project})",
         },
         edit_modal: {
           title: "Edit dictionary",
@@ -6154,6 +6164,8 @@ export default {
         delete_item_modal: {
           title: "Delete this value?",
           description: "Delete “{label}”? Values referenced by products or projects cannot be deleted.",
+          field_impact:
+            " The {count} fields that use this dictionary will no longer offer this option; work items already filled keep their value.",
         },
         toast: {
           created: "Dictionary created",
@@ -6178,6 +6190,7 @@ export default {
           item_already_exists: "That value already exists",
           system_protected: "System dictionaries cannot be deleted",
           item_in_use: "This value is already referenced and cannot be deleted",
+          field_bound: "This dictionary is referenced by work item fields and cannot be deleted",
         },
       },
       api_tokens: {

@@ -31,10 +31,13 @@ import {
 import { useOutsideClickDetector } from "@plane/hooks";
 import { Button, Input, TextArea } from "@plane/ui";
 import type { TTypeExtraField, TTypeExtraFieldPayload } from "@/services/project/project-issue-type.service";
+import { FieldDictionaryMissingNotice, FieldDictionarySelect, FieldDictionaryValues } from "./field-dictionary-source";
 import { FieldOptionsBulkEdit } from "./field-options-bulk-edit";
+import { useFieldOptionSource } from "./use-field-option-source";
 
 /** 字段定义的公共部分：类型字段（TTypeExtraField）与字段库字段（TIssueFieldLibraryItem）都满足 */
 export type TFieldDefinition = Pick<TTypeExtraField, "field_type" | "options" | "default_value" | "linkage"> & {
+  dictionary_id?: string | null;
   name?: string | null;
   description?: string | null;
   is_required?: boolean;
@@ -112,6 +115,16 @@ export type TFieldFormState = {
   select_is_multiple: boolean;
   select_default_value: string;
   select_default_values: string[];
+  /**
+   * 仅当 field_type 为 select 时使用：选项来源。`dictionary` = 引用数据字典，选项由字典决定
+   * （select_options 跟着字典值走，不能手改）；刚切过来还没选字典时 dictionary_id 为 null，保存会被拦下。
+   */
+  option_source: "manual" | "dictionary";
+  dictionary_id: string | null;
+  /** 仅前端：切到数据字典前的手动选项，切回手动维护时恢复 */
+  manual_options: string[] | null;
+  /** 仅前端：打开表单时字段已保存的选项，用来提示改用字典后哪些现有选项不在字典内；新建为空 */
+  saved_options: string[];
   /** 仅当 field_type 为 user 时使用：true 表示多选 */
   user_is_multiple: boolean;
   is_required: boolean;
@@ -129,6 +142,10 @@ export const DEFAULT_FIELD_FORM: TFieldFormState = {
   select_is_multiple: false,
   select_default_value: "",
   select_default_values: [],
+  option_source: "manual",
+  dictionary_id: null,
+  manual_options: null,
+  saved_options: [],
   user_is_multiple: false,
   is_required: false,
   is_active: true,
@@ -213,6 +230,10 @@ export function fieldToFormState(field: TFieldDefinition): TFieldFormState {
     select_is_multiple: formatSelectIsMultipleForForm(field),
     select_default_value: formatSelectDefaultValueForForm(field),
     select_default_values: formatSelectDefaultValuesForForm(field),
+    option_source: isSelectFieldType(field.field_type) && field.dictionary_id ? "dictionary" : "manual",
+    dictionary_id: isSelectFieldType(field.field_type) ? (field.dictionary_id ?? null) : null,
+    manual_options: null,
+    saved_options: getSelectChoices(field),
     user_is_multiple: formatUserIsMultipleForForm(field),
     is_required: field.is_required === true,
     is_active: field.is_active !== false,
@@ -267,11 +288,17 @@ export function buildFieldPayload(fieldForm: TFieldFormState): { error: string }
 
   let selectOptionsPayload: { choices: string[]; selection_mode: "single" | "multiple" } | undefined;
   let selectDefaultPayload: string | string[] | null | undefined;
+  let dictionaryPayload: string | null = null;
   if (isSelectFieldType(fieldForm.field_type)) {
+    const isDictionarySource = fieldForm.option_source === "dictionary";
+    if (isDictionarySource && !fieldForm.dictionary_id) return { error: "请选择数据字典。" };
+    dictionaryPayload = isDictionarySource ? fieldForm.dictionary_id : null;
     const filledOptions = fieldForm.select_options.map((option) => option.trim()).filter(Boolean);
     const selectOptions = getNormalizedSelectOptions(fieldForm.select_options);
-    if (selectOptions.length === 0) return { error: "下拉菜单至少需要添加一个选项。" };
-    if (filledOptions.length !== selectOptions.length) return { error: "下拉菜单选项不能重复。" };
+    if (selectOptions.length === 0)
+      return { error: isDictionarySource ? "所选数据字典尚无字典值，请先在数据字典中添加。" : "下拉菜单至少需要添加一个选项。" };
+    // 字典值由后端保证不重复，这里只查手填的
+    if (!isDictionarySource && filledOptions.length !== selectOptions.length) return { error: "下拉菜单选项不能重复。" };
 
     selectOptionsPayload = {
       choices: selectOptions,
@@ -301,7 +328,7 @@ export function buildFieldPayload(fieldForm: TFieldFormState): { error: string }
       ...(fieldForm.field_type === "text" ? { options: textOptionsPayload } : {}),
       ...(fieldForm.field_type === "number" ? { default_value: numberDefaultPayload ?? null } : {}),
       ...(isSelectFieldType(fieldForm.field_type)
-        ? { options: selectOptionsPayload, default_value: selectDefaultPayload ?? null }
+        ? { options: selectOptionsPayload, default_value: selectDefaultPayload ?? null, dictionary_id: dictionaryPayload }
         : {}),
       ...(fieldForm.field_type === "user" ? { options: userOptionsPayload, default_value: null } : {}),
     },
@@ -659,6 +686,7 @@ export function InlineFieldForm({
   isSubmitting,
   submitLabel = "创建",
   fieldTypeLocked = false,
+  workspaceSlug,
   onConfigureLinkage,
   onChange,
   onCancel,
@@ -667,6 +695,8 @@ export function InlineFieldForm({
   form: TFieldFormState;
   isSubmitting: boolean;
   submitLabel?: string;
+  /** 数据字典所在的工作区；不传取路由参数 */
+  workspaceSlug?: string;
   /** 编辑已有属性时为 true，禁止修改属性类型 */
   fieldTypeLocked?: boolean;
   /** 打开联动规则弹窗（右栏放不下规则列表，这里只显示摘要）；不传不显示联动规则 */
@@ -676,6 +706,8 @@ export function InlineFieldForm({
   onSubmit: () => void;
 }) {
   const selectOptions = getNormalizedSelectOptions(form.select_options);
+  const optionSource = useFieldOptionSource(form, onChange, workspaceSlug);
+  const isDictionarySource = optionSource.isDictionarySource;
   const visibilityRuleCount = form.linkage.visibility?.rules.length ?? 0;
   const optionRuleCount = form.linkage.options?.rules.length ?? 0;
   const linkageSummary =
@@ -797,51 +829,102 @@ export function InlineFieldForm({
               </div>
 
               <div>
-                <div className="mb-1 flex items-center justify-between gap-2">
-                  <label className="block text-xs font-medium text-secondary">选项</label>
-                  <FieldOptionsBulkEdit
-                    form={form}
-                    onChange={onChange}
-                    className="text-xs font-medium text-accent-primary hover:underline"
-                  />
+                <label className="mb-1 block text-xs font-medium text-secondary">选项来源</label>
+                <div className="flex items-center gap-4 text-xs text-secondary">
+                  <label className="flex items-center gap-1.5">
+                    <input
+                      type="radio"
+                      checked={!isDictionarySource}
+                      onChange={() => optionSource.setSource("manual")}
+                      className="size-3.5"
+                    />
+                    手动维护
+                  </label>
+                  <label className="flex items-center gap-1.5">
+                    <input
+                      type="radio"
+                      checked={isDictionarySource}
+                      onChange={() => optionSource.setSource("dictionary")}
+                      className="size-3.5"
+                    />
+                    数据字典
+                  </label>
                 </div>
-                <div className="space-y-2">
-                  {form.select_options.map((option, index) => (
-                    <div key={index} className="flex min-w-0 items-center gap-2">
-                      <Input
-                        value={option}
-                        onChange={(e) => {
-                          const nextOptions = [...form.select_options];
-                          nextOptions[index] = e.target.value;
-                          onChange({ ...form, select_options: nextOptions });
-                        }}
-                        placeholder="添加选项"
-                        className="min-w-0 flex-1"
-                      />
-                      {form.select_options.length > 1 && (
-                        <button
-                          type="button"
-                          className="rounded p-1 text-tertiary transition hover:bg-layer-1-hover hover:text-danger-primary"
-                          onClick={() => onChange(removeSelectOption(form, index))}
-                          aria-label="删除选项"
-                        >
-                          <Trash2 className="size-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-                <button
-                  type="button"
-                  className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-accent-primary"
-                  onClick={() => onChange({ ...form, select_options: [...form.select_options, ""] })}
-                >
-                  <Plus className="size-3" />
-                  添加选项
-                </button>
               </div>
 
+              {isDictionarySource && (
+                <>
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-secondary">数据字典</label>
+                    <FieldDictionarySelect
+                      dense
+                      dictionaries={optionSource.dictionaries}
+                      value={form.dictionary_id}
+                      fallbackLabel={optionSource.isLoading ? "加载中…" : "数据字典已不存在"}
+                      isLoading={optionSource.isLoading}
+                      disabled={isSubmitting}
+                      onChange={optionSource.selectDictionary}
+                    />
+                  </div>
+                  <FieldDictionaryMissingNotice dense options={optionSource.missingOptions} />
+                  <FieldDictionaryValues
+                    dense
+                    values={optionSource.values}
+                    isEmptySelection={!form.dictionary_id}
+                    href={optionSource.dictionaryPageHref}
+                  />
+                </>
+              )}
+
+              {!isDictionarySource && (
+                <div>
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <label className="block text-xs font-medium text-secondary">选项</label>
+                    <FieldOptionsBulkEdit
+                      form={form}
+                      onChange={onChange}
+                      className="text-xs font-medium text-accent-primary hover:underline"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    {form.select_options.map((option, index) => (
+                      <div key={index} className="flex min-w-0 items-center gap-2">
+                        <Input
+                          value={option}
+                          onChange={(e) => {
+                            const nextOptions = [...form.select_options];
+                            nextOptions[index] = e.target.value;
+                            onChange({ ...form, select_options: nextOptions });
+                          }}
+                          placeholder="添加选项"
+                          className="min-w-0 flex-1"
+                        />
+                        {form.select_options.length > 1 && (
+                          <button
+                            type="button"
+                            className="rounded p-1 text-tertiary transition hover:bg-layer-1-hover hover:text-danger-primary"
+                            onClick={() => onChange(removeSelectOption(form, index))}
+                            aria-label="删除选项"
+                          >
+                            <Trash2 className="size-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-accent-primary"
+                    onClick={() => onChange({ ...form, select_options: [...form.select_options, ""] })}
+                  >
+                    <Plus className="size-3" />
+                    添加选项
+                  </button>
+                </div>
+              )}
+
               {selectOptions.length > 0 &&
+                !(isDictionarySource && !form.dictionary_id) &&
                 (!form.select_is_multiple ? (
                   <SelectExtraFieldDefaultSingle
                     value={form.select_default_value}

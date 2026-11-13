@@ -4,7 +4,14 @@ from rest_framework import serializers
 
 # Module imports
 from .base import BaseSerializer
-from plane.db.models import IssueFieldDefinition, IssueType, Project, TypeExtraField, TypeExtraFieldValue
+from plane.db.models import (
+    DataDictionary,
+    IssueFieldDefinition,
+    IssueType,
+    Project,
+    TypeExtraField,
+    TypeExtraFieldValue,
+)
 from plane.db.models.issue_type import LIBRARY_FIELD_DEFINITION_COLUMNS, IssueTypeCategory
 
 #: 绑定了库字段的类型字段只能改这些
@@ -34,12 +41,17 @@ class TypeExtraFieldSerializer(LinkageSerializerMixin, BaseSerializer):
     )
     # 非空 = 绑定了通用字段库里的字段，定义由库统一维护
     library_field_id = serializers.UUIDField(read_only=True)
+    # 非空 = 选项取自该数据字典（options.choices 以字典值为准，请求里传的 choices 不作数）
+    dictionary_id = serializers.PrimaryKeyRelatedField(
+        queryset=DataDictionary.objects.all(), source="dictionary", required=False, allow_null=True
+    )
 
     class Meta:
         model = TypeExtraField
         fields = [
             "id",
             "library_field_id",
+            "dictionary_id",
             "project",
             "project_id",
             "scheme_id",
@@ -279,12 +291,17 @@ class IssueFieldDefinitionSerializer(LinkageSerializerMixin, BaseSerializer):
     """通用字段库的字段。``used_by`` / ``binding_count`` 由视图补。"""
 
     workspace_id = serializers.UUIDField(read_only=True)
+    # 同 TypeExtraFieldSerializer.dictionary_id
+    dictionary_id = serializers.PrimaryKeyRelatedField(
+        queryset=DataDictionary.objects.all(), source="dictionary", required=False, allow_null=True
+    )
 
     class Meta:
         model = IssueFieldDefinition
         fields = [
             "id",
             "workspace_id",
+            "dictionary_id",
             "name",
             "description",
             "logo_props",
@@ -333,10 +350,18 @@ class IssueFieldDefinitionSerializer(LinkageSerializerMixin, BaseSerializer):
 def _validate_linkage_candidate(serializer, attrs, **scope):
     from copy import copy
     from django.core.exceptions import ValidationError as DjangoValidationError
+    from plane.utils.dictionary_field import apply_dictionary
     from plane.utils.field_linkage import validate_field
     candidate = copy(serializer.instance) if serializer.instance else serializer.Meta.model(**scope)
     for key, value in attrs.items():
         setattr(candidate, key, value)
+    try:
+        apply_dictionary(candidate)
+    except DjangoValidationError as exc:
+        raise serializers.ValidationError({"dictionary_id": exc.messages}) from exc
+    if candidate.dictionary_id:
+        # 引用数据字典：选项以字典值为准，联动规则也按它校验
+        attrs["options"] = candidate.options
     try:
         validate_field(candidate)
     except DjangoValidationError as exc:

@@ -9,6 +9,7 @@ const ERROR_I18N_SUFFIX: Record<TDataDictionaryErrorCode, string> = {
   DATA_DICTIONARY_ITEM_ALREADY_EXISTS: "item_already_exists",
   DATA_DICTIONARY_SYSTEM_PROTECTED: "system_protected",
   DATA_DICTIONARY_ITEM_IN_USE: "item_in_use",
+  DATA_DICTIONARY_FIELD_BOUND: "field_bound",
 };
 
 /** 字段级错误：表单就地显示在对应输入框下方，Root 不再弹 toast */

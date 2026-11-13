@@ -119,6 +119,7 @@ export function DictionaryDetailPanel(props: Props) {
       <DictionaryHeader
         dictionary={dictionary}
         canEdit={canEdit}
+        fieldUsage={usage.fields}
         onToggleColored={(isColored) => onUpdate(dictionary.id, { is_colored: isColored })}
         onEdit={() => setIsEditModalOpen(true)}
         onDelete={() => onDelete(dictionary)}
