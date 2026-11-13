@@ -53,7 +53,7 @@ def whitelisted_product_scope(user, workspace) -> ScopeResult:
 
 
 def visible_project_scope(user, workspace_or_slug) -> ScopeResult:
-    workspace = _get_workspace(workspace_or_slug)
+    workspace = _get_workspace(workspace_or_slug, user)
     if workspace is None or _is_anonymous(user):
         return EMPTY_SCOPE
     cache = _cache(user)
@@ -81,7 +81,7 @@ def visible_project_ids(user, workspace_or_slug) -> frozenset:
     """能看到的项目 id。直通的人展开成工作区全部项目。"""
     scope = visible_project_scope(user, workspace_or_slug)
     if scope.all:
-        workspace = _get_workspace(workspace_or_slug)
+        workspace = _get_workspace(workspace_or_slug, user)
         return frozenset(str(v) for v in Project.objects.filter(workspace=workspace).values_list("id", flat=True))
     return scope.ids
 
@@ -109,7 +109,7 @@ def can_access_project(user, workspace_or_slug, project_id) -> bool:
 
 
 def visible_product_scope(user, workspace_or_slug) -> ScopeResult:
-    workspace = _get_workspace(workspace_or_slug)
+    workspace = _get_workspace(workspace_or_slug, user)
     if workspace is None or _is_anonymous(user):
         return EMPTY_SCOPE
     cache = _cache(user)
@@ -144,7 +144,7 @@ def visible_product_scope(user, workspace_or_slug) -> ScopeResult:
 def visible_product_ids(user, workspace_or_slug) -> frozenset:
     scope = visible_product_scope(user, workspace_or_slug)
     if scope.all:
-        workspace = _get_workspace(workspace_or_slug)
+        workspace = _get_workspace(workspace_or_slug, user)
         return frozenset(str(v) for v in Product.objects.filter(workspace=workspace).values_list("id", flat=True))
     return scope.ids
 

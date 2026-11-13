@@ -35,6 +35,7 @@ from plane.app.permissions import (
     allow_workspace_member,
     allow_workspace_self_or_permission,
 )
+from plane.app.permissions.base import workspace_context
 
 # Module imports
 from plane.app.serializers import (
@@ -50,6 +51,7 @@ from plane.db.models import (
     CycleIssue,
     Issue,
     IssueActivity,
+    IssueAssignee,
     FileAsset,
     IssueLink,
     Product,
@@ -364,9 +366,17 @@ class WorkspaceUserProfileEndpoint(BaseAPIView):
         projects = []
         can_view_project_contributions = True
         if can_view_project_contributions:
+            # 侧栏「项目」只列该成员有工作项的项目（创建过或被分配过），口径同下面的 created_issues / assigned_issues。
+            # 先按这两个子查询收窄再统计：全量可见项目（管理员是整个工作区）逐个 join 工作项既慢，前端也要渲染上千行。
+            issue_scope = {"deleted_at__isnull": True, "archived_at__isnull": True, "is_draft": False}
+            created_project_ids = Issue.objects.filter(created_by_id=user_id, **issue_scope).values("project_id")
+            assigned_project_ids = IssueAssignee.objects.filter(
+                assignee_id=user_id, **{f"issue__{key}": value for key, value in issue_scope.items()}
+            ).values("project_id")
             projects = (
                 Project.objects.filter(
                     visible_projects_q(request.user, slug, None),
+                    Q(id__in=created_project_ids) | Q(id__in=assigned_project_ids),
                     workspace__slug=slug,
                     archived_at__isnull=True,
                 )
@@ -624,6 +634,8 @@ class WorkspaceUserProfileStatsEndpoint(BaseAPIView):
         today = timezone.now().date()
         week_start = today - timedelta(days=today.weekday())
         week_end = today + timedelta(days=6 - today.weekday())
+        # 下面的工作项统计按 workspace_id 过滤：按 slug 连 workspaces 表会让规划器估不准这个工作区的行数
+        workspace_id = workspace_context(request.user, slug).workspace.id
 
         metric_counts = {
             metric: get_profile_metric_queryset(metric, slug, user_id, request.user).count()
@@ -634,7 +646,7 @@ class WorkspaceUserProfileStatsEndpoint(BaseAPIView):
             Issue.issue_objects.filter(
                 (Q(assignees__in=[user_id]) & Q(issue_assignee__deleted_at__isnull=True)),
                 visible_projects_q(request.user, slug, "project"),
-                workspace__slug=slug,
+                workspace_id=workspace_id,
             )
             .filter(**filters)
             .annotate(state_group=F("state__group"))
@@ -649,7 +661,7 @@ class WorkspaceUserProfileStatsEndpoint(BaseAPIView):
             Issue.issue_objects.filter(
                 (Q(assignees__in=[user_id]) & Q(issue_assignee__deleted_at__isnull=True)),
                 visible_projects_q(request.user, slug, "project"),
-                workspace__slug=slug,
+                workspace_id=workspace_id,
             )
             .filter(**filters)
             .values("priority")
@@ -670,7 +682,7 @@ class WorkspaceUserProfileStatsEndpoint(BaseAPIView):
                 ~Q(state__group__in=["completed", "cancelled"]),
                 (Q(assignees__in=[user_id]) & Q(issue_assignee__deleted_at__isnull=True)),
                 visible_projects_q(request.user, slug, "project"),
-                workspace__slug=slug,
+                workspace_id=workspace_id,
             )
             .filter(**filters)
             .count()
@@ -680,7 +692,7 @@ class WorkspaceUserProfileStatsEndpoint(BaseAPIView):
             Issue.issue_objects.filter(
                 (Q(assignees__in=[user_id]) & Q(issue_assignee__deleted_at__isnull=True)),
                 visible_projects_q(request.user, slug, "project"),
-                workspace__slug=slug,
+                workspace_id=workspace_id,
                 state__group="completed",
             )
             .filter(**filters)
@@ -692,7 +704,7 @@ class WorkspaceUserProfileStatsEndpoint(BaseAPIView):
                 ~Q(state__group__in=["completed", "cancelled"]),
                 (Q(assignees__in=[user_id]) & Q(issue_assignee__deleted_at__isnull=True)),
                 visible_projects_q(request.user, slug, "project"),
-                workspace__slug=slug,
+                workspace_id=workspace_id,
                 priority__in=["urgent", "high"],
             )
             .filter(**filters)
@@ -703,7 +715,7 @@ class WorkspaceUserProfileStatsEndpoint(BaseAPIView):
             Issue.issue_objects.filter(
                 (Q(assignees__in=[user_id]) & Q(issue_assignee__deleted_at__isnull=True)),
                 visible_projects_q(request.user, slug, "project"),
-                workspace__slug=slug,
+                workspace_id=workspace_id,
                 completed_at__date=today,
             )
             .filter(**filters)
@@ -714,7 +726,7 @@ class WorkspaceUserProfileStatsEndpoint(BaseAPIView):
             Issue.issue_objects.filter(
                 (Q(assignees__in=[user_id]) & Q(issue_assignee__deleted_at__isnull=True)),
                 visible_projects_q(request.user, slug, "project"),
-                workspace__slug=slug,
+                workspace_id=workspace_id,
                 completed_at__date__gte=week_start,
                 completed_at__date__lte=week_end,
             )

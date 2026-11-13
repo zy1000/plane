@@ -144,54 +144,56 @@ export const ProfileSidebar = observer(function ProfileSidebar(props: TProfileSi
                 </div>
               ))}
             </div>
-            <div className="mt-9">
-              <h5 className="mb-1 text-12 font-medium text-secondary">{t("profile.details.projects")}</h5>
-              <div className="divide-y divide-subtle">
-                {userProjectsData.project_data.map((project, index) => {
-                  const projectDetails = getProjectById(project.id);
+            {userProjectsData.project_data.length > 0 && (
+              <div className="mt-9">
+                <h5 className="mb-1 text-12 font-medium text-secondary">{t("profile.details.projects")}</h5>
+                <div className="divide-y divide-subtle">
+                  {userProjectsData.project_data.map((project, index) => {
+                    const projectDetails = getProjectById(project.id);
 
-                  const completedIssuePercentage =
-                    project.assigned_issues === 0
-                      ? 0
-                      : Math.round((project.completed_issues / project.assigned_issues) * 100);
+                    const completedIssuePercentage =
+                      project.assigned_issues === 0
+                        ? 0
+                        : Math.round((project.completed_issues / project.assigned_issues) * 100);
 
-                  if (!projectDetails) return null;
+                    if (!projectDetails) return null;
 
-                  return (
-                    <div key={project.id} className={`${index === 0 ? "pb-3" : "py-3"}`}>
-                      <Link
-                        href={`/${workspaceSlug}/projects/${project.id}/overview`}
-                        className="flex w-full items-center justify-between gap-2"
-                      >
-                        <div className="flex w-3/4 items-center gap-2">
-                          <span className="grid h-7 w-7 flex-shrink-0 place-items-center">
-                            <Logo logo={projectDetails.logo_props} />
-                          </span>
-                          <div className="truncate text-13 font-medium break-words">{projectDetails.name}</div>
-                        </div>
-                        <div className="flex flex-shrink-0 items-center gap-2">
-                          {project.assigned_issues > 0 && (
-                            <Tooltip tooltipContent="Completion percentage" position="left" isMobile={isMobile}>
-                              <div
-                                className={`rounded-sm px-1 py-0.5 text-11 font-medium ${
-                                  completedIssuePercentage <= 35
-                                    ? "bg-danger-subtle text-danger-primary"
-                                    : completedIssuePercentage <= 70
-                                      ? "bg-yellow-500/10 text-yellow-500"
-                                      : "bg-success-subtle text-success-primary"
-                                }`}
-                              >
-                                {completedIssuePercentage}%
-                              </div>
-                            </Tooltip>
-                          )}
-                        </div>
-                      </Link>
-                    </div>
-                  );
-                })}
+                    return (
+                      <div key={project.id} className={`${index === 0 ? "pb-3" : "py-3"}`}>
+                        <Link
+                          href={`/${workspaceSlug}/projects/${project.id}/overview`}
+                          className="flex w-full items-center justify-between gap-2"
+                        >
+                          <div className="flex w-3/4 items-center gap-2">
+                            <span className="grid h-7 w-7 flex-shrink-0 place-items-center">
+                              <Logo logo={projectDetails.logo_props} />
+                            </span>
+                            <div className="truncate text-13 font-medium break-words">{projectDetails.name}</div>
+                          </div>
+                          <div className="flex flex-shrink-0 items-center gap-2">
+                            {project.assigned_issues > 0 && (
+                              <Tooltip tooltipContent="Completion percentage" position="left" isMobile={isMobile}>
+                                <div
+                                  className={`rounded-sm px-1 py-0.5 text-11 font-medium ${
+                                    completedIssuePercentage <= 35
+                                      ? "bg-danger-subtle text-danger-primary"
+                                      : completedIssuePercentage <= 70
+                                        ? "bg-yellow-500/10 text-yellow-500"
+                                        : "bg-success-subtle text-success-primary"
+                                  }`}
+                                >
+                                  {completedIssuePercentage}%
+                                </div>
+                              </Tooltip>
+                            )}
+                          </div>
+                        </Link>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
+            )}
             {userProjectsData.product_data.length > 0 && (
               <div className="mt-7">
                 <h5 className="mb-1 text-12 font-medium text-secondary">{t("profile.details.products")}</h5>

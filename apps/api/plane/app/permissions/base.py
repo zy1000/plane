@@ -187,12 +187,23 @@ class _WorkspaceContext:
         self.project_payloads = tuple(project_payloads)
 
 
-def _get_workspace(workspace_or_slug):
+def _get_workspace(workspace_or_slug, user=None):
+    """传 ``user`` 时按 slug 查到的工作区记进请求级缓存：一次请求里可见范围会被问几十次，
+    不必每次都查一遍 workspaces。查不到的不缓存。"""
     if isinstance(workspace_or_slug, Workspace):
         return workspace_or_slug
     if not workspace_or_slug:
         return None
-    return Workspace.objects.filter(slug=workspace_or_slug).first()
+    if _is_anonymous(user):
+        return Workspace.objects.filter(slug=workspace_or_slug).first()
+    cache = _cache(user)
+    cache_key = ("workspace_by_slug", workspace_or_slug)
+    workspace = cache.get(cache_key)
+    if workspace is None:
+        workspace = Workspace.objects.filter(slug=workspace_or_slug).first()
+        if workspace is not None:
+            cache[cache_key] = workspace
+    return workspace
 
 
 def user_workspace_groups(user, workspace, workspace_member):
@@ -218,7 +229,7 @@ def user_workspace_groups(user, workspace, workspace_member):
 
 
 def workspace_context(user, workspace_or_slug) -> _WorkspaceContext:
-    workspace = _get_workspace(workspace_or_slug)
+    workspace = _get_workspace(workspace_or_slug, user)
     if workspace is None or _is_anonymous(user):
         return _WorkspaceContext(workspace)
     cache = _cache(user)
@@ -273,7 +284,7 @@ def is_workspace_member(user, workspace_slug) -> bool:
 
 
 def is_workspace_owner(user, workspace_slug) -> bool:
-    workspace = _get_workspace(workspace_slug)
+    workspace = _get_workspace(workspace_slug, user)
     return bool(workspace) and not _is_anonymous(user) and (
         workspace.owner_id == user.id or _is_instance_admin(user)
     )
