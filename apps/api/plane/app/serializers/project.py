@@ -393,6 +393,11 @@ class ProjectListSerializer(ProjectExtendedDetailMixin, DynamicBaseSerializer):
     next_work_item_sequence = serializers.IntegerField(read_only=True)
 
     def get_members(self, obj):
+        # 列表接口一次查好各项目的成员 id 放进 context（见 ProjectViewSet.list_detail），
+        # 不为每条成员记录建模型对象；单项目路径仍走下面的 members_list 预取
+        members_by_project = self.context.get("members_by_project")
+        if members_by_project is not None:
+            return members_by_project.get(obj.id, [])
         project_members = getattr(obj, "members_list", None)
         if project_members is not None:
             # Filter members by the project ID

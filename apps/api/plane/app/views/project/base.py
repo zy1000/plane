@@ -239,6 +239,19 @@ class ProjectViewSet(BaseViewSet):
             PROJECT_LIST_PERMISSION_KEYS,
         )
 
+    def _get_member_ids_by_project(self, project_rows):
+        # 与 get_queryset 里 members_list 预取 + ProjectListSerializer.get_members 同口径
+        # （有效成员、排除机器人、沿用 ProjectMember 默认排序），但只取两列 id：
+        # 904 个项目约 6800 条成员记录，逐条建 ProjectMember + User 对象要 200ms+
+        member_ids_by_project = {}
+        for project_id, member_id in ProjectMember.objects.filter(
+            project_id__in=[row.id for row in project_rows],
+            is_active=True,
+            member__is_bot=False,
+        ).values_list("project_id", "member_id"):
+            member_ids_by_project.setdefault(project_id, []).append(member_id)
+        return member_ids_by_project
+
     def _serialize_projects_with_permission_keys(self, slug, projects, fields=None):
         project_rows = list(projects)
         permission_keys_by_project = self._get_permission_keys_by_project(
@@ -247,7 +260,12 @@ class ProjectViewSet(BaseViewSet):
         serialized_projects = [
             dict(project)
             for project in ProjectListSerializer(
-                project_rows, many=True, fields=fields if fields else None
+                project_rows,
+                many=True,
+                fields=fields if fields else None,
+                context={
+                    "members_by_project": self._get_member_ids_by_project(project_rows)
+                },
             ).data
         ]
         # 列表页「项目 → 关联产品」展开行的数据源，与 permission_keys 同样在这里合入：
@@ -344,8 +362,12 @@ class ProjectViewSet(BaseViewSet):
         fields = [field for field in request.GET.get("fields", "").split(",") if field]
         # 只返回当前用户能看到的项目（成员 / 负责 / 直通 / 白名单，见 utils/visibility.py）；
         # is_member 注解仍标记「是不是成员表里的人」。get_queryset 不收窄，retrieve / 创建后回读等仍按 id 取。
+        # 成员 id 由 _serialize_projects_with_permission_keys 用一条轻量查询补，这里去掉 members_list 预取
         projects = (
-            self.get_queryset().filter(visible_projects_q(request.user, slug, None)).order_by("sort_order", "name")
+            self.get_queryset()
+            .prefetch_related(None)
+            .filter(visible_projects_q(request.user, slug, None))
+            .order_by("sort_order", "name")
         )
 
         if request.GET.get("per_page", False) and request.GET.get("cursor", False):
