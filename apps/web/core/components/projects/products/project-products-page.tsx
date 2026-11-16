@@ -11,7 +11,7 @@
 import { useState } from "react";
 import { observer } from "mobx-react";
 import { FolderKanban, Link2, Package } from "lucide-react";
-import { useParams } from "react-router";
+import { Link, useParams } from "react-router";
 import {
   PERMISSION_KEYS,
   PROJECT_PRODUCT_LINK_MANAGE_PERMISSION_KEY,
@@ -130,7 +130,12 @@ export const ProjectProductsPage = observer(function ProjectProductsPage() {
     }
   };
 
-  /** 产品名落到需求页并按该产品筛选：从项目看过来，关心的是「本项目从它引了哪些需求」 */
+  /**
+   * 产品名进产品本身（默认落到产品需求页）；「本项目从它引了哪些需求」挪到需求数列，
+   * 落到本项目需求页并按该产品筛选。能看到这张表的人一定看得到这些产品：产品可见范围
+   * 本就包含「可见项目所关联的产品」，所以产品名不用再按权限降级成纯文本
+   */
+  const productHref = (productId: string) => `/${slug}/products/${productId}`;
   const requirementsHref = (productId: string) => `/${slug}/projects/${project}/requirements?product=${productId}`;
 
   if (!slug || !project) return null;
@@ -250,7 +255,7 @@ export const ProjectProductsPage = observer(function ProjectProductsPage() {
                         identifier={link.product_identifier}
                         name={link.product_name}
                         logoProps={link.product_logo_props}
-                        href={requirementsHref(link.product)}
+                        href={productHref(link.product)}
                         className="font-medium text-primary group-hover:text-accent-primary"
                       />
                     </td>
@@ -259,7 +264,18 @@ export const ProjectProductsPage = observer(function ProjectProductsPage() {
                         {link.product_code || "—"}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-13 tabular-nums text-primary">{link.requirement_count}</td>
+                    <td className="px-4 py-3 text-13 tabular-nums text-primary">
+                      {link.requirement_count > 0 ? (
+                        <Link
+                          to={requirementsHref(link.product)}
+                          className="hover:text-accent-primary hover:underline"
+                        >
+                          {link.requirement_count}
+                        </Link>
+                      ) : (
+                        link.requirement_count
+                      )}
+                    </td>
                     <td className="px-4 py-3">
                       <ProductProjectStatusBar statusCounts={link.status_counts} total={link.requirement_count} />
                     </td>

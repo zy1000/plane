@@ -128,8 +128,8 @@ export const OverviewProductsCard: FC<Props> = observer(({ workspaceSlug, projec
   });
 
   const productsHref = `/${workspaceSlug}/projects/${projectId}/products`;
-  const requirementsHref = (productId: string) =>
-    `/${workspaceSlug}/projects/${projectId}/requirements?product=${productId}`;
+  // 整行是一个链接，点进产品本身；「本项目从它引了哪些需求」的入口在「产品」页的需求数列
+  const productHref = (productId: string) => `/${workspaceSlug}/products/${productId}`;
 
   const renderBody = () => {
     if (!canView) {
@@ -182,7 +182,7 @@ export const OverviewProductsCard: FC<Props> = observer(({ workspaceSlug, projec
             <span />
           </div>
           {links.map((link) => (
-            <ProductRow key={link.id} link={link} href={requirementsHref(link.product)} />
+            <ProductRow key={link.id} link={link} href={productHref(link.product)} />
           ))}
         </div>
         <ProductsLegend />
