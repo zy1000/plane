@@ -22,13 +22,20 @@ export const PERMISSION_GROUP_KIND_LABELS: Record<TPermissionGroupKind, string> 
 export const isPermissionGroupKind = (value: string | null | undefined): value is TPermissionGroupKind =>
   value != null && (PERMISSION_GROUP_KINDS as string[]).includes(value);
 
-export type TPermissionGroupDetailTab = "permissions" | "data-scope" | "members" | "referenced";
+export type TPermissionGroupDetailTab = "permissions" | "data-scope" | "job-roles" | "members" | "referenced";
 
-/** 详情页每类可用的页签，第一个是默认页签 */
+/** 详情页每类可用的页签，第一个是默认页签。三类都能绑角色 */
 export const PERMISSION_GROUP_KIND_TABS: Record<TPermissionGroupKind, TPermissionGroupDetailTab[]> = {
-  workspace: ["permissions", "members"],
-  project_template: ["permissions", "referenced"],
-  data: ["data-scope", "members"],
+  workspace: ["permissions", "job-roles", "members"],
+  project_template: ["permissions", "job-roles", "referenced"],
+  data: ["data-scope", "job-roles", "members"],
+};
+
+/** 「角色」页签卡片上的小字：这一类组按哪一层的角色生效 */
+export const PERMISSION_GROUP_JOB_ROLE_SCOPE_LABELS: Record<TPermissionGroupKind, string> = {
+  workspace: "按工作区角色生效",
+  data: "按工作区角色生效",
+  project_template: "按项目内角色生效",
 };
 
 export const getPermissionGroupDefaultTab = (kind: TPermissionGroupKind): TPermissionGroupDetailTab =>

@@ -7,7 +7,10 @@
   为空 = 本项目自定义。没有「脱离」。
 - 没有系统组：每个组都能改名、改权限、删除、绑人；成员不默认属于任何组。
 - 类型限定 ``type_limits``：{key: [排除的类型 id]}，只允许工作项 / 缺陷的新建、编辑、删除。
+- 组的成员 = 直接添加 ∪ 经角色（组绑了角色，挂着这个角色的人自动算在组里，见 utils/group_job_roles.py）。
 """
+
+from collections import defaultdict
 
 from django.db import transaction
 from django.db.models import Count
@@ -19,11 +22,13 @@ from plane.db.models import (
     IssueType,
     Project,
     ProjectGroupRole,
+    ProjectMemberJobRole,
     ProjectMemberRole,
     ProjectRole,
     WorkspaceMember,
     WorkspaceMemberRole,
     WorkspaceRole,
+    WorkspaceRoleJobRole,
     WorkspaceRoleProjectExclusion,
 )
 from plane.utils.data_scope import (
@@ -31,6 +36,14 @@ from plane.utils.data_scope import (
     referencing_templates,
     template_referenced_project_ids,
     template_references_project,
+)
+from plane.utils.group_job_roles import (
+    WORKSPACE_LEVEL_KINDS,
+    merge_members,
+    project_group_job_roles,
+    project_job_role_holders,
+    workspace_group_job_roles,
+    workspace_job_role_holders,
 )
 from plane.utils.project_visibility import project_audience
 
@@ -160,38 +173,32 @@ def set_project_role_permissions(role, permission_keys, type_limits):
 # ---------------------------------------------------------------------------
 
 
-def workspace_group_member_counts(workspace) -> dict:
-    """{组 id: 直绑的活跃成员数}。"""
-    return dict(
-        WorkspaceMemberRole.objects.filter(
-            workspace=workspace, member__is_active=True, member__deleted_at__isnull=True
-        )
-        .values("role_id")
-        .annotate(n=Count("member_id", distinct=True))
-        .values_list("role_id", "n")
-    )
+def workspace_group_member_ids(workspace) -> dict:
+    """{组 id: [用户 id, ...]}：工作区权限组 / 数据权限的成员 = 直接添加 ∪ 经角色，去重，直接添加的在前。
+    列表的人数和叠放头像都从这里取。"""
+    result, seen = defaultdict(list), defaultdict(set)
 
+    def add(role_id, user_id):
+        if user_id not in seen[role_id]:
+            seen[role_id].add(user_id)
+            result[role_id].append(str(user_id))
 
-def _preview_ids(pairs, limit=3) -> dict:
-    """[(组 id, 用户 id), ...] → {组 id: [最多 limit 个用户 id]}，按出现顺序去重。"""
-    result = {}
-    for role_id, user_id in pairs:
-        ids = result.setdefault(role_id, [])
-        user_id = str(user_id)
-        if len(ids) < limit and user_id not in ids:
-            ids.append(user_id)
-    return result
-
-
-def workspace_group_member_previews(workspace) -> dict:
-    """{组 id: [前 3 个直绑成员的用户 id]}：列表「成员」列叠放头像用。"""
-    return _preview_ids(
+    for role_id, user_id in (
         WorkspaceMemberRole.objects.filter(
             workspace=workspace, member__is_active=True, member__deleted_at__isnull=True
         )
         .order_by("created_at")
         .values_list("role_id", "member__member_id")
-    )
+    ):
+        add(role_id, user_id)
+    bindings = workspace_group_job_roles(workspace.id, WORKSPACE_LEVEL_KINDS)
+    if bindings:
+        holders = workspace_job_role_holders(workspace.id, {value for ids in bindings.values() for value in ids})
+        for role_id, job_role_ids in bindings.items():
+            for job_role_id in job_role_ids:
+                for _, user_id in holders.get(job_role_id, ()):
+                    add(role_id, user_id)
+    return result
 
 
 def template_usage_counts(workspace) -> dict:
@@ -215,14 +222,21 @@ def template_projects(template):
     """模板详情的「引用项目」页：工作区全部项目，带「已排除」标记。"""
     queryset = Project.objects.filter(workspace_id=template.workspace_id)
     excluded = excluded_project_ids(template)
-    bound_counts = dict(
-        ProjectMemberRole.objects.filter(
-            role__source_template=template, member__is_active=True, member__deleted_at__isnull=True
-        )
-        .values("role__project_id")
-        .annotate(n=Count("member_id", distinct=True))
-        .values_list("role__project_id", "n")
-    )
+    # 每个项目里在这个组的人 = 项目里直接分配的 ∪ 挂着模板所绑角色的项目成员
+    bound = defaultdict(set)
+    for project_id, user_id in ProjectMemberRole.objects.filter(
+        role__source_template=template, member__is_active=True, member__deleted_at__isnull=True
+    ).values_list("role__project_id", "member__member_id"):
+        bound[project_id].add(user_id)
+    job_role_ids = list(WorkspaceRoleJobRole.objects.filter(role=template).values_list("job_role_id", flat=True))
+    if job_role_ids:
+        for project_id, user_id in ProjectMemberJobRole.objects.filter(
+            workspace_id=template.workspace_id,
+            job_role_id__in=job_role_ids,
+            member__is_active=True,
+            member__deleted_at__isnull=True,
+        ).values_list("project_id", "member__member_id"):
+            bound[project_id].add(user_id)
     rows = []
     for row in queryset.order_by("name").values(
         "id", "name", "identifier", "logo_props", "archived_at", "project_lead_id"
@@ -233,7 +247,7 @@ def template_projects(template):
                 "id": str(row["id"]),
                 "project_lead_id": str(row["project_lead_id"]) if row["project_lead_id"] else None,
                 "excluded": str(row["id"]) in excluded,
-                "bound_member_count": bound_counts.get(row["id"], 0),
+                "bound_member_count": len(bound.get(row["id"], ())),
             }
         )
     return {"projects": rows}
@@ -306,24 +320,26 @@ def project_group_rows(project):
     """项目「权限组」列表：引用了本项目的模板（含还没人用的）+ 本项目自定义组。"""
     templates = referencing_templates(project)
     rows = list(ProjectRole.objects.filter(project=project).select_related("source_template").order_by("created_at"))
-    member_counts = dict(
-        ProjectMemberRole.objects.filter(
-            project=project, member__is_active=True, member__deleted_at__isnull=True
-        )
-        .values("role_id")
-        .annotate(n=Count("member_id", distinct=True))
-        .values_list("role_id", "n")
-    )
-    member_previews = _preview_ids(
+    direct = defaultdict(list)
+    for role_id, user_id in (
         ProjectMemberRole.objects.filter(project=project, member__is_active=True, member__deleted_at__isnull=True)
         .order_by("created_at")
         .values_list("role_id", "member__member_id")
-    )
+    ):
+        direct[role_id].append(user_id)
+    # 绑定的角色：标准权限组跟模板走，自定义组在本项目绑；成员 = 直接分配 ∪ 本项目里挂着这些角色的人
+    template_job_roles = workspace_group_job_roles(project.workspace_id, [WorkspaceRole.KIND_PROJECT_TEMPLATE])
+    custom_job_roles = project_group_job_roles(project.id)
+    holders = project_job_role_holders(project.id) if (template_job_roles or custom_job_roles) else {}
     by_template = {row.source_template_id: row for row in rows if row.source_template_id}
 
-    def entry(**values):
+    def entry(row, job_role_ids, **values):
         payload = values.pop("payload")
+        member_ids = [member["id"] for member in merge_members(direct.get(row.id, ()) if row else (), job_role_ids, holders)]
         values["permission_count"] = len(payload["permission_keys"])
+        values["member_count"] = len(member_ids)
+        values["member_preview_ids"] = member_ids[:3]
+        values["job_role_ids"] = [str(value) for value in job_role_ids]
         return values
 
     result = []
@@ -331,14 +347,14 @@ def project_group_rows(project):
         row = by_template.get(template.id)
         result.append(
             entry(
+                row,
+                template_job_roles.get(template.id, []),
                 id=str(row.id) if row else str(template.id),
                 project_role_id=str(row.id) if row else None,
                 template_id=str(template.id),
                 name=row.name if row else template.name,
                 description=template.description,
                 source="template",
-                member_count=member_counts.get(row.id, 0) if row else 0,
-                member_preview_ids=member_previews.get(row.id, []) if row else [],
                 updated_at=template.updated_at,
                 payload=effective_payload(template),
             )
@@ -349,14 +365,14 @@ def project_group_rows(project):
             continue
         result.append(
             entry(
+                row,
+                custom_job_roles.get(row.id, []),
                 id=str(row.id),
                 project_role_id=str(row.id),
                 template_id=None,
                 name=row.name,
                 description=row.description,
                 source="project",
-                member_count=member_counts.get(row.id, 0),
-                member_preview_ids=member_previews.get(row.id, []),
                 updated_at=row.updated_at,
                 payload=effective_payload(row),
             )
@@ -365,11 +381,12 @@ def project_group_rows(project):
 
 
 def inherited_workspace_groups(project):
-    """项目「权限组」页的「工作区权限组」段：带项目权限的工作区权限组，以及能看到本项目的人里谁在组里（直绑或经团队）。
+    """项目「权限组」页的「工作区权限组」段：带项目权限的工作区权限组，以及能看到本项目的人里谁在组里（直绑、经团队或经角色）。
     工作区权限组的项目权限对能进入本项目的组内人员都生效，不管是不是项目成员（``is_member`` 区分）。
     直通的人（工作区所有者、实例管理员、项目负责人）本来就有全部权限，不算在内；没人生效的组不列。"""
     audience = project_audience(project, with_permissions=False)
     people = [entry for entry in audience["people"].values() if not entry["passthrough"]]
+    job_roles = workspace_group_job_roles(project.workspace_id, [WorkspaceRole.KIND_WORKSPACE])
     result = []
     for role in audience["workspace_roles"]:
         keys, _ = role_payload(role.permissions, PROJECT_KEYS)
@@ -384,6 +401,7 @@ def inherited_workspace_groups(project):
                 "id": str(role.id),
                 "name": role.name,
                 "project_permission_count": len(keys),
+                "job_role_ids": [str(value) for value in job_roles.get(role.id, [])],
                 "members": [
                     {
                         "id": str(entry["user"].id),
@@ -398,7 +416,7 @@ def inherited_workspace_groups(project):
 
 
 def group_member_ids(role):
-    """权限组详情「成员」页签：直绑的成员（用户 id）。"""
+    """直接添加在这个组里的成员（用户 id）。经角色算进来的人见 utils/group_job_roles.py。"""
     if isinstance(role, WorkspaceRole):
         return list(
             WorkspaceMemberRole.objects.filter(role=role, member__is_active=True, member__deleted_at__isnull=True)

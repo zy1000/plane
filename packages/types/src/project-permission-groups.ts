@@ -9,7 +9,8 @@ import type { TPermissionGroupContent, TPermissionGroupTypeOption } from "./perm
 /**
  * 项目设置 › 权限组（后端 plane/app/views/project/role.py、utils/permission_groups.py），
  * 以及研发矩阵（项目 × 产品 × 角色 → 成员）。权限内容 / 类型选项与工作区组共用 permission-group.ts 的类型。
- * 「角色」是另一回事：数据字典 job_role 的值，只用来找人，与权限无关。
+ * 「角色」是数据字典 job_role 的值，用来找人；权限组可以绑角色，本项目里挂着这个角色的成员自动拥有该组权限
+ * （自定义组在本项目绑，标准权限组跟工作区模板走），反过来进了组不会得到角色。
  */
 
 /** 项目权限组列表一行的来源：引用了本项目的工作区模板组（白名单命中且未排除，只读、可删除引用）/ 本项目自己的组 */
@@ -23,9 +24,12 @@ export type TProjectPermissionGroup = {
   name: string;
   description: string;
   source: TProjectPermissionGroupSource;
+  /** 组内人数 = 直接分配 ∪ 经角色 */
   member_count: number;
   /** 前 3 个成员的用户 id（列表叠放头像） */
   member_preview_ids?: string[];
+  /** 绑定的角色 id：标准权限组取模板的，自定义组取本项目绑的 */
+  job_role_ids?: string[];
   updated_at: string | null;
   permission_count: number;
 };
@@ -35,6 +39,8 @@ export type TProjectInheritedGroup = {
   id: string;
   name: string;
   project_permission_count: number;
+  /** 这个工作区权限组绑定的角色 id（按工作区角色生效） */
+  job_role_ids?: string[];
   /** 项目成员在前；is_member=false 是项目外的人 */
   members: { id: string; display_name: string; is_member: boolean }[];
 };

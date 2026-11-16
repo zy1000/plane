@@ -36,6 +36,8 @@ import type {
   IPermissionGroupDetail,
   TPermissionGroupKind,
   TPermissionGroupContent,
+  TPermissionGroupJobRoles,
+  TPermissionGroupMembers,
   TPermissionGroupTemplateProjects,
   TDataScope,
   TDataScopeEntry,
@@ -598,8 +600,8 @@ export class WorkspaceService extends APIService {
       });
   }
 
-  /** 工作区权限组的成员（用户 id）。「工作区成员」组返回全部活跃成员 */
-  async fetchWorkspaceRoleMembers(workspaceSlug: string, roleId: string): Promise<{ member_ids: string[] }> {
+  /** 权限组的成员：members = 直接添加 ∪ 经角色（带来源），member_ids 只有直接添加的 */
+  async fetchWorkspaceRoleMembers(workspaceSlug: string, roleId: string): Promise<TPermissionGroupMembers> {
     return this.get(`/api/workspaces/${workspaceSlug}/roles/${roleId}/members/`)
       .then((response) => response?.data)
       .catch((error) => {
@@ -611,7 +613,7 @@ export class WorkspaceService extends APIService {
     workspaceSlug: string,
     roleId: string,
     userIds: string[]
-  ): Promise<{ member_ids: string[] }> {
+  ): Promise<TPermissionGroupMembers> {
     return this.post(`/api/workspaces/${workspaceSlug}/roles/${roleId}/members/`, { member_ids: userIds })
       .then((response) => response?.data)
       .catch((error) => {
@@ -622,6 +624,35 @@ export class WorkspaceService extends APIService {
   async removeWorkspaceRoleMember(workspaceSlug: string, roleId: string, userId: string): Promise<void> {
     return this.delete(`/api/workspaces/${workspaceSlug}/roles/${roleId}/members/${userId}/`)
       .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 权限组绑定的角色：挂着这些角色的人自动拥有这个组的权限 */
+  async fetchWorkspaceRoleJobRoles(workspaceSlug: string, roleId: string): Promise<TPermissionGroupJobRoles> {
+    return this.get(`/api/workspaces/${workspaceSlug}/roles/${roleId}/job-roles/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async addWorkspaceRoleJobRoles(
+    workspaceSlug: string,
+    roleId: string,
+    jobRoleIds: string[]
+  ): Promise<TPermissionGroupJobRoles> {
+    return this.post(`/api/workspaces/${workspaceSlug}/roles/${roleId}/job-roles/`, { job_role_ids: jobRoleIds })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async removeWorkspaceRoleJobRole(workspaceSlug: string, roleId: string, jobRoleId: string): Promise<void> {
+    return this.delete(`/api/workspaces/${workspaceSlug}/roles/${roleId}/job-roles/${jobRoleId}/`)
+      .then(() => undefined)
       .catch((error) => {
         throw error?.response?.data;
       });

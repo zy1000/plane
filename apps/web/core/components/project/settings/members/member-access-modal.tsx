@@ -59,7 +59,7 @@ export function ProjectMemberAccessModal({ row, groups, jobRoles, onClose, onSub
         </div>
         <div className="flex flex-col gap-5 px-6 py-5">
           <div>
-            <ModalFieldLabel note="只用来找人（审批人、评审负责人），与权限无关">角色</ModalFieldLabel>
+            <ModalFieldLabel note="审批人、评审负责人按角色指定；绑定该角色的权限组同时生效">角色</ModalFieldLabel>
             <OptionMultiSelect
               options={buildJobRoleOptions(jobRoles)}
               value={jobRoleIds}

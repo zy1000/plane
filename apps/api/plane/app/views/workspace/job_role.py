@@ -23,6 +23,7 @@ from plane.utils.job_role_settings import (
     label_usage,
     list_roles,
     mark_roles_colored,
+    permission_groups,
     project_members,
     purge_hidden_links,
     remove_workspace_member,
@@ -155,6 +156,17 @@ class JobRoleReferencesAPIView(BaseAPIView):
         if item is None:
             return _not_found()
         return Response(workflow_references(workspace.id, item.id), status=status.HTTP_200_OK)
+
+
+class JobRolePermissionGroupsAPIView(BaseAPIView):
+    """本角色绑在哪些权限组上。绑定 / 解除在权限组那边做，这里只读。"""
+
+    @allow_fine_permission(*JOB_ROLE_READ_KEYS, level="WORKSPACE")
+    def get(self, request, slug, pk):
+        workspace, item = _resolve(slug, pk)
+        if item is None:
+            return _not_found()
+        return Response(permission_groups(workspace.id, item.id), status=status.HTTP_200_OK)
 
 
 class JobRoleLabelUsageAPIView(BaseAPIView):

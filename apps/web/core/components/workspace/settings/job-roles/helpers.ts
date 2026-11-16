@@ -16,8 +16,8 @@ export const JOB_ROLE_MANAGE_KEYS = [PERMISSION_KEYS.WORKSPACE_DATA_DICTIONARY_M
 /** 在角色上添加 / 移除工作区成员：同成员页编辑角色 */
 export const JOB_ROLE_MEMBER_MANAGE_KEYS = [PERMISSION_KEYS.WORKSPACE_MEMBER_MANAGE];
 
-export type TJobRoleTab = "workspace" | "projects" | "references";
-export const JOB_ROLE_TABS: TJobRoleTab[] = ["workspace", "projects", "references"];
+export type TJobRoleTab = "workspace" | "projects" | "references" | "groups";
+export const JOB_ROLE_TABS: TJobRoleTab[] = ["workspace", "projects", "references", "groups"];
 export const isJobRoleTab = (value: string | null): value is TJobRoleTab =>
   !!value && (JOB_ROLE_TABS as string[]).includes(value);
 

@@ -168,7 +168,7 @@ export type TProjectMembership = {
   member: string;
   /** @deprecated 整数角色已退役，权限看 permission_keys / type_limits */
   role?: TUserPermissions | EUserProjectRoles;
-  /** 角色（数据字典 job_role 的值 id），只用来「找人」，与权限无关 */
+  /** 角色（数据字典 job_role 的值 id）：用来「找人」；绑了这些角色的权限组对他同时生效 */
   job_role_ids?: string[];
   /** {key: [不适用的工作项类型 id]}：权限组按工作项类型限定的新建 / 编辑 / 删除 */
   type_limits?: Record<string, string[]>;

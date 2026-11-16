@@ -50,6 +50,7 @@ from plane.app.views import (
     WorkspaceRoleViewSet,
     WorkspaceRolePermissionAPIView,
     WorkspaceRoleMembersAPIView,
+    WorkspaceRoleJobRolesAPIView,
     WorkspaceRoleTemplateProjectsAPIView,
     WorkspaceRoleDataScopeAPIView,
     WorkspaceRoleDataScopePreviewAPIView,
@@ -232,6 +233,16 @@ urlpatterns = [
         "workspaces/<str:slug>/roles/<uuid:pk>/members/<uuid:member_id>/",
         WorkspaceRoleMembersAPIView.as_view(),
         name="workspace-role-member-detail",
+    ),
+    path(
+        "workspaces/<str:slug>/roles/<uuid:pk>/job-roles/",
+        WorkspaceRoleJobRolesAPIView.as_view(),
+        name="workspace-role-job-roles",
+    ),
+    path(
+        "workspaces/<str:slug>/roles/<uuid:pk>/job-roles/<uuid:job_role_id>/",
+        WorkspaceRoleJobRolesAPIView.as_view(),
+        name="workspace-role-job-role-detail",
     ),
     path(
         "workspaces/<str:slug>/roles/<uuid:pk>/data-scope/",

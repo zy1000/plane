@@ -106,6 +106,7 @@ from .workspace.role import (
     PermissionViewSet,
     WorkspaceRolePermissionAPIView,
     WorkspaceRoleMembersAPIView,
+    WorkspaceRoleJobRolesAPIView,
     WorkspaceRoleTemplateProjectsAPIView,
     WorkspaceRoleDataScopeAPIView,
     WorkspaceRoleDataScopePreviewAPIView,

@@ -7,10 +7,12 @@
 import type { ReactNode } from "react";
 import { observer } from "mobx-react";
 import { Link } from "react-router";
-import type { TProjectInheritedGroup, TProjectPermissionGroup } from "@plane/types";
+import type { TDataDictionaryItem, TProjectInheritedGroup, TProjectPermissionGroup } from "@plane/types";
 import { Avatar, AvatarGroup, Loader } from "@plane/ui";
 import { cn, getFileURL } from "@plane/utils";
+import { JobRoleTag } from "@/components/workspace/settings/job-roles/job-role-tag";
 import { formatKeyCount, getPermissionGroupDetailPath } from "@/components/workspace/settings/permission-groups";
+import { useJobRoles } from "@/hooks/store/use-job-roles";
 import { useMember } from "@/hooks/store/use-member";
 import { deleteActionLabel, isGroupEditable } from "./shared";
 
@@ -33,14 +35,14 @@ type Props = {
   onDelete: (group: TProjectPermissionGroup) => void;
 };
 
-const GRID = "grid grid-cols-[minmax(200px,1fr)_120px_300px_120px] items-center gap-x-5 px-6";
+const GRID = "grid grid-cols-[minmax(180px,1fr)_88px_minmax(0,264px)_216px_112px] items-center gap-x-5 px-6";
 const OP_BUTTON = "text-14 hover:underline disabled:cursor-not-allowed disabled:text-placeholder disabled:no-underline";
 /** 成员不超过这么多人时直接写名字，多了写人数 */
 const MAX_NAMES = 2;
 
 const SECTION_META: Record<TProjectGroupSection, { label: string; dot: string; hint?: string }> = {
   project: { label: "自定义", dot: "bg-success-primary" },
-  template: { label: "标准", dot: "bg-accent-primary", hint: "由工作区统一维护，本项目仅分配成员" },
+  template: { label: "标准", dot: "bg-accent-primary", hint: "权限与绑定角色由工作区统一维护，本项目仅分配成员" },
   workspace: { label: "工作区继承", dot: "bg-current text-placeholder", hint: "对可访问本项目的组内成员生效" },
 };
 
@@ -85,6 +87,22 @@ const MemberCell = observer(function MemberCell(props: {
   );
 });
 
+/** 绑定角色格：本项目里挂着这些角色的成员自动拥有这个组的权限；没绑时「—」 */
+function JobRolesCell(props: { jobRoleIds: string[] | undefined; jobRoleMap: Map<string, TDataDictionaryItem> }) {
+  const { jobRoleIds, jobRoleMap } = props;
+  const roles = (jobRoleIds ?? [])
+    .map((jobRoleId) => jobRoleMap.get(jobRoleId))
+    .filter((role): role is TDataDictionaryItem => !!role);
+  if (roles.length === 0) return <span className="text-placeholder">—</span>;
+  return (
+    <span className="flex min-w-0 flex-wrap items-center gap-1.5 py-2">
+      {roles.map((role) => (
+        <JobRoleTag key={role.id} role={role} className="h-6 rounded-md px-2 text-12" />
+      ))}
+    </span>
+  );
+}
+
 function SectionRow({ section, count }: { section: TProjectGroupSection; count: number }) {
   const meta = SECTION_META[section];
   return (
@@ -99,8 +117,15 @@ function SectionRow({ section, count }: { section: TProjectGroupSection; count: 
   );
 }
 
-function Row(props: { name: ReactNode; description?: string; count: ReactNode; members: ReactNode; ops: ReactNode }) {
-  const { name, description, count, members, ops } = props;
+function Row(props: {
+  name: ReactNode;
+  description?: string;
+  count: ReactNode;
+  jobRoles: ReactNode;
+  members: ReactNode;
+  ops: ReactNode;
+}) {
+  const { name, description, count, jobRoles, members, ops } = props;
   return (
     <div className={cn(GRID, "min-h-[60px] border-t border-subtle text-14 hover:bg-layer-1-hover")}>
       <div className="flex min-w-0 flex-col gap-0.5 py-2.5">
@@ -112,6 +137,7 @@ function Row(props: { name: ReactNode; description?: string; count: ReactNode; m
         )}
       </div>
       {count}
+      <div className="min-w-0">{jobRoles}</div>
       <div className="min-w-0">{members}</div>
       <span className="flex items-center justify-end gap-4">{ops}</span>
     </div>
@@ -121,6 +147,7 @@ function Row(props: { name: ReactNode; description?: string; count: ReactNode; m
 /**
  * 项目设置 › 权限组列表：一张表分三段（本项目 → 模板 → 工作区权限组），行内不再挂来源标签，操作列常显。
  * 工作区权限组段列的是在本项目生效的人（含可访问本项目的非项目成员），橙色标出非成员人数。
+ * 「绑定角色」列：挂着这些角色的人自动算在组里（自定义组、标准权限组看项目内角色，工作区权限组看工作区角色）。
  */
 export function ProjectPermissionGroupsTable(props: Props) {
   const {
@@ -137,6 +164,7 @@ export function ProjectPermissionGroupsTable(props: Props) {
     onDelete,
   } = props;
 
+  const { jobRoleMap } = useJobRoles(workspaceSlug);
   const projectRows = groups.filter((group) => group.source === "project");
   const templateRows = sortTemplates(groups.filter((group) => group.source === "template"));
   const sections: { key: TProjectGroupSection; count: number; rows: ReactNode[] }[] = [];
@@ -164,6 +192,7 @@ export function ProjectPermissionGroupsTable(props: Props) {
       }
       description={group.description}
       count={countCell(group.permission_count)}
+      jobRoles={<JobRolesCell jobRoleIds={group.job_role_ids} jobRoleMap={jobRoleMap} />}
       members={<MemberCell userIds={group.member_preview_ids ?? []} count={group.member_count} />}
       ops={
         <>
@@ -212,6 +241,7 @@ export function ProjectPermissionGroupsTable(props: Props) {
               </Link>
             }
             count={countCell(group.project_permission_count)}
+            jobRoles={<JobRolesCell jobRoleIds={group.job_role_ids} jobRoleMap={jobRoleMap} />}
             members={
               <MemberCell
                 userIds={group.members.map((member) => member.id)}
@@ -237,10 +267,11 @@ export function ProjectPermissionGroupsTable(props: Props) {
 
   return (
     <div className="overflow-x-auto rounded-xl border border-subtle bg-surface-1">
-      <div className="min-w-[760px]">
+      <div className="min-w-[900px]">
         <div className={cn(GRID, "h-11 text-13 font-medium text-tertiary")}>
           <span>权限组</span>
           <span>项目权限</span>
+          <span>绑定角色</span>
           <span>成员</span>
           <span className="flex justify-end">操作</span>
         </div>

@@ -7,6 +7,7 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 import type { IMyAccessGroup, IMyAccessTeam, IWorkspaceMyAccess } from "@plane/types";
+import { JobRoleTag } from "../job-roles/job-role-tag";
 import { getPermissionGroupDetailPath } from "../permission-groups/helpers";
 import { Chip } from "./chips";
 
@@ -56,6 +57,13 @@ function GroupItem(props: { workspaceSlug: string; group: IMyAccessGroup; meta: 
           ))}
         </ChipLine>
       )}
+      {!group.is_direct && (group.job_roles?.length ?? 0) > 0 && (
+        <ChipLine label="经角色">
+          {group.job_roles?.map((role) => (
+            <JobRoleTag key={role.id} role={role} className="h-[22px] rounded-md px-2 text-12" />
+          ))}
+        </ChipLine>
+      )}
     </div>
   );
 }
@@ -70,7 +78,7 @@ function TeamItem(props: { team: IMyAccessTeam; groupNames: Map<string, string> 
       </span>
       <span className="text-12 text-tertiary tabular-nums">{team.member_count} 人</span>
       {broughtGroups.length > 0 && (
-        <ChipLine label="带来">
+        <ChipLine label="授予">
           {broughtGroups.map((name) => (
             <Chip key={name}>{name}</Chip>
           ))}
@@ -80,13 +88,13 @@ function TeamItem(props: { team: IMyAccessTeam; groupNames: Map<string, string> 
   );
 }
 
-/** 「权限来自哪里」：工作区权限组 / 数据权限 / 所在团队 三张卡并排 */
+/** 「权限来源」：工作区权限组 / 数据权限 / 所在团队 三张卡并排；组是经团队还是经角色（组绑了我挂着的角色）拿到的，标在组下面 */
 export function SourcesSection({ workspaceSlug, data }: Props) {
   const groupNames = new Map([...data.workspace_groups, ...data.data_groups].map((group) => [group.id, group.name]));
 
   return (
     <section>
-      <h2 className="text-[17px] font-semibold text-primary">权限来自哪里</h2>
+      <h2 className="text-[17px] font-semibold text-primary">权限来源</h2>
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
         <SourceCard title="工作区权限组" count={data.workspace_groups.length}>
           {data.workspace_groups.map((group) => (

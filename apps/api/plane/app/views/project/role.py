@@ -7,6 +7,7 @@
 列表 = 引用了本项目的模板组（白名单命中且未排除；只读、可删）+ 本项目自定义组。
 「删除」引用 = 把本项目加进模板的排除列表并解绑；在工作区的模板详情「引用项目」页可以恢复。
 没有权限模式，没有脱离。
+权限组可以绑角色：本项目里挂着这个角色的成员自动拥有这个组的权限。自定义组在本项目绑，标准权限组跟模板走。
 """
 
 from rest_framework import status
@@ -17,6 +18,13 @@ from plane.app.serializers import ProjectRolePermissionBindingSerializer, Projec
 from plane.app.views.base import BaseAPIView, BaseViewSet
 from plane.db.models import Project, ProjectRole, WorkspaceRole
 from plane.utils.data_scope import template_references_project
+from plane.utils.group_job_roles import (
+    GroupJobRoleError,
+    bind_job_roles,
+    project_group_job_role_rows,
+    project_group_members,
+    unbind_job_role,
+)
 from plane.utils.project_visibility import project_visible_members_payload
 from plane.utils.permission_groups import (
     PermissionGroupError,
@@ -198,14 +206,67 @@ class ProjectRolePermissionAPIView(BaseAPIView):
 
 
 class ProjectRoleMembersAPIView(BaseAPIView):
-    """项目权限组详情的「成员」页签（用户 id）。还没人用的模板在本项目没有行，返回空。"""
+    """项目权限组详情的「成员」页签。``members`` = 直接分配 ∪ 经角色（带来源）；``member_ids`` 只有直接分配的。
+    标准权限组还没人直接分配时在本项目没有行，但挂着所绑角色的成员照样算在内。"""
 
     @allow_project_member
     def get(self, request, slug, project_id, pk):
         project = _project(slug, project_id)
-        row, _ = _resolve(project, pk) if project else (None, None)
+        row, template = _resolve(project, pk) if project else (None, None)
+        if row is None and template is None:
+            return Response({"member_ids": [], "members": []}, status=status.HTTP_200_OK)
         member_ids = group_member_ids(row) if row is not None else []
-        return Response({"member_ids": [str(value) for value in member_ids]}, status=status.HTTP_200_OK)
+        return Response(
+            {
+                "member_ids": [str(value) for value in member_ids],
+                "members": project_group_members(project, row, template),
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class ProjectRoleJobRolesAPIView(BaseAPIView):
+    """项目权限组详情的「角色」页签。自定义组在本项目绑定 / 解除；标准权限组的角色跟模板走，这里只读。"""
+
+    def _response(self, project, row, template):
+        return Response(
+            {"job_roles": project_group_job_role_rows(project, row, template), "is_editable": template is None},
+            status=status.HTTP_200_OK,
+        )
+
+    def _custom_row(self, slug, project_id, pk):
+        project = _project(slug, project_id)
+        row = ProjectRole.objects.filter(project=project, pk=pk).first() if project else None
+        return project, row
+
+    @allow_project_member
+    def get(self, request, slug, project_id, pk):
+        project = _project(slug, project_id)
+        row, template = _resolve(project, pk) if project else (None, None)
+        if row is None and template is None:
+            return Response({"error": "Permission group not found."}, status=status.HTTP_404_NOT_FOUND)
+        return self._response(project, row, template)
+
+    @allow_fine_permission(GROUP_MANAGE)
+    def post(self, request, slug, project_id, pk):
+        project, row = self._custom_row(slug, project_id, pk)
+        if row is None:
+            return Response({"error": "Permission group not found."}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            bind_job_roles(row, request.data.get("job_role_ids") or [])
+        except GroupJobRoleError as exc:
+            return Response({"error": exc.message}, status=status.HTTP_400_BAD_REQUEST)
+        return self._response(project, row, None)
+
+    @allow_fine_permission(GROUP_MANAGE)
+    def delete(self, request, slug, project_id, pk, job_role_id):
+        _, row = self._custom_row(slug, project_id, pk)
+        if row is None:
+            return Response({"error": "Permission group not found."}, status=status.HTTP_404_NOT_FOUND)
+        if row.source_template_id:
+            return Response({"error": "项目标准权限组的角色在工作区设置里绑定。"}, status=status.HTTP_400_BAD_REQUEST)
+        unbind_job_role(row, job_role_id)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class ProjectVisibleMembersAPIView(BaseAPIView):

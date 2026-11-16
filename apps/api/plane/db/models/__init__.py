@@ -87,6 +87,7 @@ from .project import (
     ProjectUserProperty,
     ProjectMemberRole,
     ProjectMemberJobRole,
+    ProjectRoleJobRole,
     ProjectRole,
 )
 from .session import Session
@@ -110,6 +111,7 @@ from .workspace import (
     WorkspaceRoleProjectExclusion,
     WorkspaceMemberRole,
     WorkspaceMemberJobRole,
+    WorkspaceRoleJobRole,
     WorkspaceGroup,
     WorkspaceGroupMember,
     WorkspaceGroupRole,

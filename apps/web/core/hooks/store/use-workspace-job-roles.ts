@@ -9,6 +9,7 @@ import type {
   TJobRole,
   TJobRoleLabelUsage,
   TJobRolePayload,
+  TJobRolePermissionGroup,
   TJobRoleProjectMembers,
   TJobRoleReference,
 } from "@plane/types";
@@ -198,6 +199,12 @@ export const useJobRoleProjectMembers = (workspaceSlug: string, roleId: string, 
 export const useJobRoleReferences = (workspaceSlug: string, roleId: string, enabled: boolean) => {
   const load = useCallback(() => jobRoleService.listReferences(workspaceSlug, roleId), [workspaceSlug, roleId]);
   return useLazyRoleData<TJobRoleReference[]>(load, [], enabled);
+};
+
+/** 角色详情「权限组」页签：这个角色绑在哪些权限组上 */
+export const useJobRolePermissionGroups = (workspaceSlug: string, roleId: string, enabled: boolean) => {
+  const load = useCallback(() => jobRoleService.listPermissionGroups(workspaceSlug, roleId), [workspaceSlug, roleId]);
+  return useLazyRoleData<TJobRolePermissionGroup[]>(load, [], enabled);
 };
 
 /** 编辑弹窗打开时取：哪些地方按角色名字引用它（改名会对不上）。roleId 为空 = 新建，不取 */

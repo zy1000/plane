@@ -36,11 +36,12 @@ import {
 } from "./helpers";
 import { JobRoleDeleteModal } from "./job-role-delete-modal";
 import { JobRoleFormModal } from "./job-role-form-modal";
+import { JobRolePermissionGroups } from "./job-role-permission-groups";
 import { JobRoleProjectMembers } from "./job-role-project-members";
 import { JobRoleReferences } from "./job-role-references";
 import { JobRoleWorkspaceMembers } from "./job-role-workspace-members";
 
-/** 角色详情：三张数字卡片兼页签——工作区成员 / 项目成员 / 工作流引用，当前页签在 ?tab= */
+/** 角色详情：四张数字卡片兼页签——工作区成员 / 项目成员 / 工作流引用 / 权限组，当前页签在 ?tab= */
 export const JobRoleDetail = observer(function JobRoleDetail(props: { workspaceSlug: string; roleId: string }) {
   const { workspaceSlug, roleId } = props;
   const navigate = useNavigate();
@@ -136,7 +137,6 @@ export const JobRoleDetail = observer(function JobRoleDetail(props: { workspaceS
           />
 
           <PermissionGroupTiles<TJobRoleTab>
-            className="lg:grid-cols-3"
             active={tab}
             onSelect={setTab}
             tiles={[
@@ -161,6 +161,16 @@ export const JobRoleDetail = observer(function JobRoleDetail(props: { workspaceS
                 unit: "个流转",
                 sub: role.workflow_count > 0 ? `涉及 ${role.workflow_count} 个工作流` : undefined,
               },
+              {
+                key: "groups",
+                label: "权限组",
+                value: role.permission_group_count ?? 0,
+                unit: "个",
+                sub:
+                  (role.permission_group_count ?? 0) > 0
+                    ? `工作区 ${role.workspace_permission_group_count ?? 0} · 项目 ${role.project_permission_group_count ?? 0}`
+                    : undefined,
+              },
             ]}
           />
 
@@ -176,6 +186,7 @@ export const JobRoleDetail = observer(function JobRoleDetail(props: { workspaceS
           )}
           {tab === "projects" && <JobRoleProjectMembers workspaceSlug={workspaceSlug} roleId={roleId} />}
           {tab === "references" && <JobRoleReferences workspaceSlug={workspaceSlug} roleId={roleId} />}
+          {tab === "groups" && <JobRolePermissionGroups workspaceSlug={workspaceSlug} roleId={roleId} />}
         </div>
       )}
 

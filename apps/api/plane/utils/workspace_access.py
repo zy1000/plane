@@ -9,7 +9,8 @@
 2. 我能看到什么：可见项目 / 产品及每一条的来源（成员 / 负责人 / 哪个数据权限 / 直通）。
 3. 我能做什么：工作区 key 与项目 key（默认「全部可见项目」= 各工作区权限组项目 key 的并集；
    切到某个项目再并上那里绑定的模板 / 本项目组），每个 key 带来源。
-4. 权限来自哪里：工作区权限组 / 数据权限 / 所在团队。
+4. 权限来自哪里：工作区权限组 / 数据权限 / 所在团队。组可以是直接添加的、经团队的，或经角色的
+   （组绑了他挂着的角色，见 utils/group_job_roles.py）。
 返回的都是 JSON 能直接吐的基本类型（id 字符串、时间 isoformat）。
 """
 
@@ -20,6 +21,8 @@ from plane.app.permissions.base import (
     _inactive_keys,
     _is_instance_admin,
     is_project_passthrough,
+    job_role_templates,
+    project_member_job_role_ids,
     resolve_project_grant,
     user_project_roles,
 )
@@ -35,8 +38,10 @@ from plane.db.models import (
     WorkspaceMember,
     WorkspaceMemberRole,
     WorkspaceRole,
+    WorkspaceRoleJobRole,
 )
 from plane.utils.data_scope import role_scope, template_references_project
+from plane.utils.group_job_roles import WORKSPACE_LEVEL_KINDS
 from plane.utils.job_role import job_role_items
 from plane.utils.permission_groups import effective_payload
 from plane.utils.visibility import visible_product_scope, visible_project_scope
@@ -51,13 +56,14 @@ def _source(type_, role=None, team=None):
 
 
 class _Bindings:
-    """此人在工作区绑的组：直绑 + 经团队，按 kind 分开，并记住每个组经哪些团队来。"""
+    """此人在工作区的组：直绑 + 经团队 + 经角色，按 kind 分开，并记住每个组经哪些团队、哪些角色来。"""
 
     def __init__(self, workspace, workspace_member):
         self.workspace = workspace
         self.member = workspace_member
         self.direct_ids = set()
         self.teams_by_role = defaultdict(list)  # role_id -> [WorkspaceGroup]
+        self.job_roles_by_role = defaultdict(list)  # role_id -> [DataDictionaryItem]
         self.roles = {}  # role_id -> WorkspaceRole
         self.teams = []  # [WorkspaceGroup]
         self.team_member_counts = {}
@@ -99,6 +105,21 @@ class _Bindings:
                 .annotate(n=__import__("django.db.models", fromlist=["Count"]).Count("member_id", distinct=True))
             )
             self.team_member_counts = {group_id: n for group_id, n in counts}
+        # 经角色：组绑了他挂着的工作区角色
+        job_role_ids = list(workspace_member.job_role_links.values_list("job_role_id", flat=True))
+        if job_role_ids:
+            for row in (
+                WorkspaceRoleJobRole.objects.filter(
+                    workspace=workspace,
+                    job_role_id__in=job_role_ids,
+                    role__deleted_at__isnull=True,
+                    role__kind__in=WORKSPACE_LEVEL_KINDS,
+                )
+                .select_related("role", "job_role")
+                .order_by("role__name", "created_at")
+            ):
+                self.roles.setdefault(row.role_id, row.role)
+                self.job_roles_by_role[row.role_id].append(row.job_role)
 
     def of_kind(self, kind):
         return [role for role in self.roles.values() if role.kind == kind]
@@ -122,6 +143,10 @@ class _Bindings:
             "workspace_permission_count": len([k for k in keys if k.startswith("workspace.")]),
             "is_direct": role.id in self.direct_ids,
             "teams": [_ref(team) for team in self.teams_by_role.get(role.id, [])],
+            "job_roles": [
+                {"id": str(item.id), "label": item.label, "color": item.color}
+                for item in self.job_roles_by_role.get(role.id, [])
+            ],
         }
         if scope_counts is not None:
             item["project_count"], item["product_count"] = scope_counts
@@ -321,11 +346,14 @@ def build_project_my_access(workspace, user, project):
     ).first()
     if project_member is not None:
         template_keys, local_keys = set(), set()
-        for role in user_project_roles(user, project_member, project.id):
+        job_role_ids = project_member_job_role_ids(project_member)
+        listed_templates = set()
+        for role in user_project_roles(user, project_member, project.id, job_role_ids):
             template = role.source_template
             if template is not None:
                 if not template_references_project(template, project.id, user):
                     continue
+                listed_templates.add(template.id)
                 keys = set(effective_payload(template)["permission_keys"])
                 template_keys |= keys
                 bound_groups.append({"id": str(template.id), "name": template.name, "source": "template"})
@@ -337,6 +365,15 @@ def build_project_my_access(workspace, user, project):
                 bound_groups.append({"id": str(role.id), "name": role.name, "source": "project"})
                 for key in keys:
                     sources[key].append(_source("project_role", role))
+        # 项目标准权限组绑了他在本项目挂的角色
+        for template in job_role_templates(workspace.id, job_role_ids):
+            if template.id in listed_templates or not template_references_project(template, project.id, user):
+                continue
+            keys = set(effective_payload(template)["permission_keys"])
+            template_keys |= keys
+            bound_groups.append({"id": str(template.id), "name": template.name, "source": "template"})
+            for key in keys:
+                sources[key].append(_source("template", template))
         ws_keys = set(ws_sources)
         summary["template"] = len((template_keys - ws_keys) & grant.keys)
         summary["project_role"] = len((local_keys - ws_keys - template_keys) & grant.keys)

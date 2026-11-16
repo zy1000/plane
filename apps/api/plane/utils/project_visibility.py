@@ -6,10 +6,10 @@
 
 可见规则与 utils/visibility.py 的正向判断一致：
 直通（工作区所有者 / 实例管理员）∪ 活跃项目成员 ∪ 项目负责人 ∪ 白名单含本项目的「数据权限」组里的人；
-除直通外都要是工作区活跃成员。
+除直通外都要是工作区活跃成员。「组里的人」含经角色算进来的（组绑了角色，见 utils/group_job_roles.py）。
 
 项目权限与 permissions/base.py 的 resolve_project_grant 一致：直通（所有者、实例管理员、负责人，没有负责人时是创建人）
-= 全部；其余 = 所在工作区权限组的项目 key ∪ 本项目绑定的项目权限组（只有项目成员有）。
+= 全部；其余 = 所在工作区权限组的项目 key ∪ 本项目的项目权限组（只有项目成员有；含绑了他在本项目所挂角色的组）。
 """
 
 from collections import defaultdict
@@ -19,14 +19,17 @@ from plane.app.permissions.registry import PROJECT_KEYS
 from plane.db.models import (
     Permission,
     ProjectMember,
+    ProjectMemberJobRole,
     User,
     WorkspaceGroupMember,
     WorkspaceMember,
     WorkspaceMemberRole,
     WorkspaceRole,
+    WorkspaceRoleJobRole,
 )
 from plane.license.models import Instance, InstanceAdmin
 from plane.utils.data_scope import VALUE_ME, evaluate_entry, template_references_project
+from plane.utils.group_job_roles import WORKSPACE_LEVEL_KINDS, workspace_group_job_roles, workspace_job_role_holders
 
 
 def _instance_admin_ids():
@@ -52,7 +55,7 @@ def _is_personal(entry):
 
 
 def _role_bindings(workspace):
-    """{工作区成员 id: {权限组 id: 团队名}}：直绑记 None，经团队记团队名（直绑优先）。"""
+    """{工作区成员 id: {权限组 id: 团队名}}：直绑、经角色记 None，经团队记团队名（直绑优先）。"""
     bindings = defaultdict(dict)
     for member_id, role_id, team_name in WorkspaceGroupMember.objects.filter(
         group__workspace=workspace,
@@ -67,6 +70,17 @@ def _role_bindings(workspace):
         workspace=workspace, deleted_at__isnull=True, role__deleted_at__isnull=True
     ).values_list("member_id", "role_id"):
         bindings[member_id][role_id] = None
+    # 经角色：组绑了角色，挂着这个角色的工作区成员算在组里
+    group_job_roles = workspace_group_job_roles(workspace.id, WORKSPACE_LEVEL_KINDS)
+    if group_job_roles:
+        groups_by_job_role = defaultdict(list)
+        for role_id, job_role_ids in group_job_roles.items():
+            for job_role_id in job_role_ids:
+                groups_by_job_role[job_role_id].append(role_id)
+        for job_role_id, holders in workspace_job_role_holders(workspace.id, list(groups_by_job_role)).items():
+            for member_id, _ in holders:
+                for role_id in groups_by_job_role[job_role_id]:
+                    bindings[member_id].setdefault(role_id, None)
     return bindings
 
 
@@ -171,6 +185,24 @@ def project_audience(project, with_permissions=True):
     role_names = {role.id: role.name for role in roles}
     grant_passthrough_ids = {owner_id, project.project_lead_id or project.created_by_id} | admin_ids
 
+    # 经角色：项目成员在本项目挂的角色 → 绑了这些角色的自定义组（user_project_roles 里算）和仍引用本项目的标准权限组
+    member_job_roles = defaultdict(set)
+    template_links = []
+    if with_permissions and project_members:
+        for member_id, job_role_id in ProjectMemberJobRole.objects.filter(project=project).values_list(
+            "member_id", "job_role_id"
+        ):
+            member_job_roles[member_id].add(job_role_id)
+        if member_job_roles:
+            referencing = {}
+            for link in WorkspaceRoleJobRole.objects.filter(
+                workspace=workspace, role__kind=WorkspaceRole.KIND_PROJECT_TEMPLATE, role__deleted_at__isnull=True
+            ).select_related("role"):
+                if link.role_id not in referencing:
+                    referencing[link.role_id] = template_references_project(link.role, project.id)
+                if referencing[link.role_id]:
+                    template_links.append(link)
+
     for user_id, entry in people.items():
         member = ws_members.get(user_id)
         entry["is_member"] = user_id in project_members
@@ -190,8 +222,11 @@ def project_audience(project, with_permissions=True):
                 groups.append({"id": str(role_id), "name": role_names[role_id], "kind": "workspace"})
         member_row = project_members.get(user_id)
         if member_row is not None:
-            for project_role in user_project_roles(entry["user"], member_row, project.id):
+            job_role_ids = member_job_roles.get(member_row.id, ())
+            listed_templates = set()
+            for project_role in user_project_roles(entry["user"], member_row, project.id, job_role_ids):
                 template = project_role.source_template
+                listed_templates.add(project_role.source_template_id)
                 if template is not None and not template_references_project(template, project.id, entry["user"]):
                     continue
                 payload = project_role_payload(project_role)
@@ -204,6 +239,14 @@ def project_audience(project, with_permissions=True):
                             "kind": "project",
                         }
                     )
+            for link in template_links:
+                if link.job_role_id not in job_role_ids or link.role_id in listed_templates:
+                    continue
+                listed_templates.add(link.role_id)
+                payload = role_payload(link.role.permissions, PROJECT_KEYS)
+                if payload[0]:
+                    payloads.append(payload)
+                    groups.append({"id": str(link.role_id), "name": link.role.name, "kind": "project"})
         keys, _ = combine_payloads(payloads)
         entry["permission_count"] = len(keys - inactive)
         entry["permission_groups"] = groups

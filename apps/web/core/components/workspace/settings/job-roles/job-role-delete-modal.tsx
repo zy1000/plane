@@ -24,7 +24,11 @@ type Props = {
 };
 
 const isInUse = (role: TJobRole) =>
-  role.workspace_member_count > 0 || role.project_member_count > 0 || role.transition_count > 0 || role.matrix_count > 0;
+  role.workspace_member_count > 0 ||
+  role.project_member_count > 0 ||
+  role.transition_count > 0 ||
+  role.matrix_count > 0 ||
+  (role.permission_group_count ?? 0) > 0;
 
 /** 删除角色：使用中的角色列出引用、不给删（后端同样拦）；没被使用的二次确认后删除 */
 export function JobRoleDeleteModal({ workspaceSlug, role, onClose, onConfirm }: Props) {
@@ -76,11 +80,13 @@ function JobRoleInUseModal({ workspaceSlug, role, onClose }: { workspaceSlug: st
       sub: `${role.workflow_count} 个工作流`,
       tab: "references",
     },
+    { key: "groups", label: "权限组", value: `${role.permission_group_count ?? 0} 个`, tab: "groups" },
     { key: "matrix", label: "研发矩阵", value: `${role.matrix_count} 处` },
   ].filter((row) => {
     if (row.key === "workspace") return role.workspace_member_count > 0;
     if (row.key === "projects") return role.project_member_count > 0;
     if (row.key === "references") return role.transition_count > 0;
+    if (row.key === "groups") return (role.permission_group_count ?? 0) > 0;
     return role.matrix_count > 0;
   });
 

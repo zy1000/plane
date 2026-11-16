@@ -7,7 +7,11 @@
 一个人的权限 = 直通身份 + 他所在权限组的 key 并集，按三层算：
 
 - 工作区：工作区 owner / 实例管理员直通；否则 = 直绑的工作区权限组 ∪ 所在团队绑的
-  工作区权限组，取 workspace.* 部分。没绑任何组的成员只有「是成员」这一身份，没有 key。
+  工作区权限组 ∪ 绑了他工作区角色的工作区权限组，取 workspace.* 部分。没绑任何组的成员只有
+  「是成员」这一身份，没有 key。
+- 经角色：权限组可以绑角色（job_role），挂着这个角色的人自动算在组里，实时计算、不落成员行。
+  工作区权限组 / 数据权限看工作区角色；项目里的组（自定义组、项目标准权限组）看他在该项目的角色。
+  反过来不成立：进了权限组不会得到角色。
 - 项目：实例管理员 / 工作区 owner / 项目负责人（负责人为空时回退创建人）直通；否则
   本项目绑的组（直绑 + 团队授权；引用行要求模板仍引用本项目）∪ 白名单含本项目的工作区权限组的
   project.* 部分。项目在某个组的白名单里但自己不是成员（「白名单访客」）也算能进，权限只有后一半。
@@ -38,13 +42,17 @@ from plane.db.models import (
     Project,
     ProjectGroupRole,
     ProjectMember,
+    ProjectMemberJobRole,
     ProjectMemberRole,
     ProjectRole,
+    ProjectRoleJobRole,
     TestCaseRepository,
     Workspace,
     WorkspaceMember,
+    WorkspaceMemberJobRole,
     WorkspaceMemberRole,
     WorkspaceRole,
+    WorkspaceRoleJobRole,
 )
 from plane.license.models import Instance, InstanceAdmin
 
@@ -207,7 +215,8 @@ def _get_workspace(workspace_or_slug, user=None):
 
 
 def user_workspace_groups(user, workspace, workspace_member):
-    """此人在工作区绑定的权限组（工作区权限组 + 数据权限，模板不会出现）：直绑 + 团队绑定。"""
+    """此人在工作区的权限组（工作区权限组 + 数据权限，模板不会出现）：
+    直绑 + 团队绑定 + 经角色（组绑了他挂着的工作区角色）。"""
     direct_ids = WorkspaceMemberRole.objects.filter(
         member=workspace_member,
         workspace=workspace,
@@ -221,9 +230,14 @@ def user_workspace_groups(user, workspace, workspace_member):
         role_groups__group__group_members__deleted_at__isnull=True,
         role_groups__group__group_members__member=workspace_member,
     ).values_list("id", flat=True)
+    job_role_group_ids = WorkspaceRoleJobRole.objects.filter(
+        workspace=workspace,
+        role__kind__in=(WorkspaceRole.KIND_WORKSPACE, WorkspaceRole.KIND_DATA),
+        job_role_id__in=WorkspaceMemberJobRole.objects.filter(member=workspace_member).values("job_role_id"),
+    ).values_list("role_id", flat=True)
     return list(
         WorkspaceRole.objects.filter(workspace=workspace, deleted_at__isnull=True)
-        .filter(id__in=set(direct_ids) | set(team_ids))
+        .filter(id__in=set(direct_ids) | set(team_ids) | set(job_role_group_ids))
         .distinct()
     )
 
@@ -312,8 +326,29 @@ def _load_project(project_id, project=None):
         return None
 
 
-def user_project_roles(user, project_member, project_id):
-    """此人在项目里绑定的项目权限组（直绑 + 团队授权），带模板。"""
+def project_member_job_role_ids(project_member) -> list:
+    """他在这个项目里挂的角色。"""
+    return list(ProjectMemberJobRole.objects.filter(member=project_member).values_list("job_role_id", flat=True))
+
+
+def job_role_templates(workspace_id, job_role_ids) -> list:
+    """绑了这些角色之一的项目标准权限组。是否仍引用某个项目由调用方判断。"""
+    if not job_role_ids:
+        return []
+    return list(
+        WorkspaceRole.objects.filter(
+            workspace_id=workspace_id,
+            kind=WorkspaceRole.KIND_PROJECT_TEMPLATE,
+            job_role_links__job_role_id__in=list(job_role_ids),
+            job_role_links__deleted_at__isnull=True,
+        ).distinct()
+    )
+
+
+def user_project_roles(user, project_member, project_id, job_role_ids=None):
+    """此人在项目里的项目权限组（直绑 + 团队授权 + 自定义组绑了他在本项目挂的角色），带模板。
+    ``job_role_ids`` 是他在本项目的角色，批量调用方传进来，免得逐人再查一次。
+    经角色得到的项目标准权限组不在这里（它们在项目里没有行），见 ``job_role_templates``。"""
     direct_ids = ProjectMemberRole.objects.filter(
         member=project_member, deleted_at__isnull=True
     ).values_list("role_id", flat=True)
@@ -326,9 +361,20 @@ def user_project_roles(user, project_member, project_id):
         group__group_members__member__is_active=True,
         group__group_members__member__member=user,
     ).values_list("role_id", flat=True)
+    if job_role_ids is None:
+        job_role_ids = project_member_job_role_ids(project_member)
+    job_role_group_ids = (
+        ProjectRoleJobRole.objects.filter(project_id=project_id, job_role_id__in=list(job_role_ids)).values_list(
+            "role_id", flat=True
+        )
+        if job_role_ids
+        else ()
+    )
     return list(
         ProjectRole.objects.filter(
-            pk__in=set(direct_ids) | set(team_ids), project_id=project_id, deleted_at__isnull=True
+            pk__in=set(direct_ids) | set(team_ids) | set(job_role_group_ids),
+            project_id=project_id,
+            deleted_at__isnull=True,
         ).select_related("source_template")
     )
 
@@ -380,11 +426,16 @@ def resolve_project_grant(user, workspace_slug, project_id, *, project=None) -> 
     # 工作区权限组的项目 key 在所有能进的项目上生效
     payloads = list(context.project_payloads)
     if project_member is not None:
-        for role in user_project_roles(user, project_member, project.id):
+        job_role_ids = project_member_job_role_ids(project_member)
+        for role in user_project_roles(user, project_member, project.id, job_role_ids):
             # 引用行：模板不再引用本项目（被排除）时不生效
             if role.source_template_id and not template_references_project(role.source_template, project.id, user):
                 continue
             payloads.append(project_role_payload(role))
+        # 项目标准权限组绑了他在本项目挂的角色
+        for template in job_role_templates(project.workspace_id, job_role_ids):
+            if template_references_project(template, project.id, user):
+                payloads.append(role_payload(template.permissions, PROJECT_KEYS))
 
     keys, excluded = combine_payloads(payloads)
     grant = Grant(keys - inactive, excluded, is_member=True)
@@ -441,6 +492,37 @@ def bulk_project_permission_keys(user, workspace, project_ids, wanted_keys) -> d
         group__group_members__member__member=user,
     ).values_list("project_id", "role_id"):
         role_ids_by_project.setdefault(str(project_id), set()).add(role_id)
+
+    # 经角色：他在各项目挂的角色 → 绑了这些角色的自定义组 / 项目标准权限组
+    project_by_member = {member_id: project_id for project_id, member_id in member_rows.items()}
+    job_roles_by_project = {}
+    for member_id, job_role_id in ProjectMemberJobRole.objects.filter(member_id__in=list(project_by_member)).values_list(
+        "member_id", "job_role_id"
+    ):
+        job_roles_by_project.setdefault(project_by_member[member_id], set()).add(job_role_id)
+    template_keys_by_project = {}
+    if job_roles_by_project:
+        all_job_role_ids = {value for ids in job_roles_by_project.values() for value in ids}
+        for project_id, role_id, job_role_id in ProjectRoleJobRole.objects.filter(
+            project_id__in=list(job_roles_by_project), job_role_id__in=all_job_role_ids
+        ).values_list("project_id", "role_id", "job_role_id"):
+            if job_role_id in job_roles_by_project.get(str(project_id), ()):
+                role_ids_by_project.setdefault(str(project_id), set()).add(role_id)
+        template_links = list(
+            WorkspaceRoleJobRole.objects.filter(
+                workspace=context.workspace,
+                role__kind=WorkspaceRole.KIND_PROJECT_TEMPLATE,
+                role__deleted_at__isnull=True,
+                job_role_id__in=all_job_role_ids,
+            ).select_related("role")
+        )
+        for project_id, job_role_ids in job_roles_by_project.items():
+            keys = set()
+            for link in template_links:
+                if link.job_role_id in job_role_ids and template_references_project(link.role, project_id, user):
+                    keys |= role_payload(link.role.permissions, PROJECT_KEYS)[0]
+            template_keys_by_project[project_id] = keys
+
     all_role_ids = {role_id for ids in role_ids_by_project.values() for role_id in ids}
     roles = {
         role.id: role
@@ -471,6 +553,7 @@ def bulk_project_permission_keys(user, workspace, project_ids, wanted_keys) -> d
         keys = set(group_keys)
         if project_id in member_rows:
             keys |= role_keys_by_project.get(project_id, set())
+            keys |= template_keys_by_project.get(project_id, set())
         result[project_id] = (keys & wanted) - inactive
     return result
 

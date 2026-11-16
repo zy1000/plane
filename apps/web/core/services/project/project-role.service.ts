@@ -7,6 +7,8 @@
 import { API_BASE_URL } from "@plane/constants";
 import type {
   TPermissionGroupContent,
+  TPermissionGroupJobRoles,
+  TPermissionGroupMembers,
   TProjectPermissionGroup,
   TProjectPermissionGroupDetail,
   TProjectPermissionGroupList,
@@ -104,10 +106,40 @@ export class ProjectRoleService extends APIService {
       });
   }
 
-  /** 组里的成员（用户 id） */
-  async fetchMemberIds(workspaceSlug: string, projectId: string, groupId: string): Promise<string[]> {
+  /** 组里的成员：members = 直接分配 ∪ 经角色（带来源） */
+  async fetchMembers(workspaceSlug: string, projectId: string, groupId: string): Promise<TPermissionGroupMembers> {
     return this.get(`${this.base(workspaceSlug, projectId)}/roles/${groupId}/members/`)
-      .then((response) => (response?.data?.member_ids as string[]) ?? [])
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 组绑定的角色。标准权限组的角色跟工作区模板走，is_editable=false */
+  async fetchJobRoles(workspaceSlug: string, projectId: string, groupId: string): Promise<TPermissionGroupJobRoles> {
+    return this.get(`${this.base(workspaceSlug, projectId)}/roles/${groupId}/job-roles/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async addJobRoles(
+    workspaceSlug: string,
+    projectId: string,
+    groupId: string,
+    jobRoleIds: string[]
+  ): Promise<TPermissionGroupJobRoles> {
+    return this.post(`${this.base(workspaceSlug, projectId)}/roles/${groupId}/job-roles/`, { job_role_ids: jobRoleIds })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async removeJobRole(workspaceSlug: string, projectId: string, groupId: string, jobRoleId: string): Promise<void> {
+    return this.delete(`${this.base(workspaceSlug, projectId)}/roles/${groupId}/job-roles/${jobRoleId}/`)
+      .then(() => undefined)
       .catch((error) => {
         throw error?.response?.data;
       });

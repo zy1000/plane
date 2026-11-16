@@ -138,14 +138,6 @@ export const useProjectRoles = (workspaceSlug: string | undefined, projectId: st
     [workspaceSlug, projectId, replaceRow]
   );
 
-  const fetchMemberIds = useCallback(
-    async (groupId: string) => {
-      if (!workspaceSlug || !projectId) return [];
-      return projectRoleService.fetchMemberIds(workspaceSlug, projectId, groupId);
-    },
-    [workspaceSlug, projectId]
-  );
-
   return {
     roles,
     inheritedGroups,
@@ -158,6 +150,5 @@ export const useProjectRoles = (workspaceSlug: string | undefined, projectId: st
     updateRole,
     deleteRole,
     savePermissions,
-    fetchMemberIds,
   };
 };

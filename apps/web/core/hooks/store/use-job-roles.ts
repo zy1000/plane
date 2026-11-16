@@ -41,7 +41,8 @@ const loadJobRoles = (workspaceSlug: string) => {
 
 /**
  * 角色（job_role）候选：成员表的「角色」列、编辑成员弹窗、筛选都用它。
- * 角色只用来「找人」（审批人、评审负责人候选），与权限组无关。按工作区缓存，同一页多处调用只请求一次。
+ * 角色用来「找人」（审批人、评审负责人候选）；权限组也可以绑角色，挂着角色的人自动拥有该组权限。
+ * 按工作区缓存，同一页多处调用只请求一次。
  */
 export const useJobRoles = (workspaceSlug: string | undefined) => {
   const [state, setState] = useState<TJobRolesState>(() =>

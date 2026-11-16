@@ -17,6 +17,29 @@ export type TJobRoleUsage = {
   /** 引用它的流转数（按流转去重） */
   transition_count: number;
   workflow_count: number;
+  /** 绑了这个角色的权限组数 = 下面两项之和 */
+  permission_group_count: number;
+  /** 按工作区角色生效的：工作区权限组、数据权限组 */
+  workspace_permission_group_count: number;
+  /** 按项目内角色生效的：项目标准权限组、项目自定义权限组 */
+  project_permission_group_count: number;
+};
+
+/** 角色详情「权限组」页签的一行：这个角色绑在哪个权限组上（挂这个角色的人自动拥有该组权限） */
+export type TJobRolePermissionGroup = {
+  id: string;
+  name: string;
+  /** project = 某个项目的自定义权限组，其余是工作区设置里的三类 */
+  kind: "workspace" | "data" | "project_template" | "project";
+  /** 仅项目自定义权限组 */
+  project: { id: string; name: string; identifier: string } | null;
+  workspace_permission_count: number;
+  project_permission_count: number;
+  /** 仅数据权限组：白名单当前命中的项目 / 产品数 */
+  scope_project_count?: number;
+  scope_product_count?: number;
+  /** 仅项目标准权限组 */
+  referenced_project_count?: number;
 };
 
 export type TJobRole = TJobRoleUsage & {

@@ -5,8 +5,9 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { TPermissionGroupContent } from "@plane/types";
-import { countChanges } from "@/hooks/store/use-permission-group-detail";
+import type { TPermissionGroupContent, TPermissionGroupMember } from "@plane/types";
+import { countChanges, useGroupJobRoles } from "@/hooks/store/use-permission-group-detail";
+import type { TGroupJobRolesApi } from "@/hooks/store/use-permission-group-detail";
 import { useProjectRoles } from "@/hooks/store/use-project-roles";
 import { ProjectRoleService } from "@/services/project/project-role.service";
 
@@ -18,13 +19,13 @@ const toContent = (data: TPermissionGroupContent): TPermissionGroupContent => ({
 });
 
 /**
- * 项目权限组详情页的数据：列表（找当前组、复制来源）、权限内容草稿、组内成员。
- * 与工作区组一致：编辑器改草稿，底部保存条整份 PATCH，可放弃。
+ * 项目权限组详情页的数据：列表（找当前组、复制来源）、权限内容草稿、绑定的角色、组内成员（直接分配 ∪ 经角色）。
+ * 与工作区组一致：编辑器改草稿，底部保存条整份 PATCH，可放弃；角色绑定 / 解除即时生效。
  */
 export const useProjectPermissionGroupDetail = (workspaceSlug: string, projectId: string, groupId: string) => {
   const roles = useProjectRoles(workspaceSlug, projectId);
-  const { fetchRoles, loadRolePermissions, getRolePermissionState, fetchMemberIds, savePermissions } = roles;
-  const [memberIds, setMemberIds] = useState<string[] | null>(null);
+  const { fetchRoles, loadRolePermissions, getRolePermissionState, savePermissions } = roles;
+  const [members, setMembers] = useState<TPermissionGroupMember[] | null>(null);
   const [draft, setDraft] = useState<TPermissionGroupContent | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -37,16 +38,30 @@ export const useProjectPermissionGroupDetail = (workspaceSlug: string, projectId
     void loadRolePermissions(groupId, true);
   }, [groupId, loadRolePermissions]);
 
+  const reloadMembers = useCallback(async () => {
+    try {
+      const data = await projectRoleService.fetchMembers(workspaceSlug, projectId, groupId);
+      setMembers(data.members ?? []);
+    } catch {
+      setMembers([]);
+    }
+  }, [workspaceSlug, projectId, groupId]);
+
   useEffect(() => {
-    let cancelled = false;
-    setMemberIds(null);
-    fetchMemberIds(groupId)
-      .then((ids) => !cancelled && setMemberIds(ids))
-      .catch(() => !cancelled && setMemberIds([]));
-    return () => {
-      cancelled = true;
-    };
-  }, [groupId, fetchMemberIds]);
+    setMembers(null);
+    void reloadMembers();
+  }, [reloadMembers]);
+
+  // 组绑定的角色：自定义组在本项目绑，标准权限组跟工作区模板走（接口回 is_editable=false）
+  const jobRolesApi = useMemo<TGroupJobRolesApi>(
+    () => ({
+      list: () => projectRoleService.fetchJobRoles(workspaceSlug, projectId, groupId),
+      add: (jobRoleIds) => projectRoleService.addJobRoles(workspaceSlug, projectId, groupId, jobRoleIds),
+      remove: (jobRoleId) => projectRoleService.removeJobRole(workspaceSlug, projectId, groupId, jobRoleId),
+    }),
+    [workspaceSlug, projectId, groupId]
+  );
+  const jobRoles = useGroupJobRoles(jobRolesApi);
 
   const permissionState = getRolePermissionState(groupId);
   const detail = permissionState.data;
@@ -86,7 +101,9 @@ export const useProjectPermissionGroupDetail = (workspaceSlug: string, projectId
     group,
     detail,
     permissionState,
-    memberIds,
+    members,
+    reloadMembers,
+    jobRoles,
     draft,
     setDraft,
     changedCount,

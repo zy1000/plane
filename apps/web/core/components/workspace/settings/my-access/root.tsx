@@ -83,7 +83,7 @@ function MyAccessSkeleton({ loadingLabel }: { loadingLabel: string }) {
   );
 }
 
-/** 工作区设置 › 我的权限：身份条 / 我能看到什么 / 我能做什么 / 权限来自哪里 */
+/** 工作区设置 › 我的权限：身份条 / 我能看到什么 / 我能做什么 / 权限来源 */
 export const MyAccessRoot = observer(function MyAccessRoot({ data, error, isLoading, onRetry }: Props) {
   const { t } = useTranslation();
   const { workspaceSlug } = useParams();

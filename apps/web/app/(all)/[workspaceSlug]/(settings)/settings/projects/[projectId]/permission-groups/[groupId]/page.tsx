@@ -29,6 +29,7 @@ import { SettingsContentWrapper } from "@/components/settings/content-wrapper";
 import {
   PermissionGroupEditor,
   PermissionGroupIdentity,
+  PermissionGroupJobRolesPanel,
   PermissionGroupSaveBar,
   PermissionGroupTiles,
   countDepartments,
@@ -43,9 +44,9 @@ import { useAppRouter } from "@/hooks/use-app-router";
 import type { Route } from "./+types/page";
 import { RolesProjectSettingsHeader } from "../header";
 
-type TTab = "permissions" | "members";
+type TTab = "permissions" | "job-roles" | "members";
 
-/** 项目设置 › 权限组详情：与工作区设置的权限组详情同一套样式（头部 + 数字卡片页签：权限 / 成员） */
+/** 项目设置 › 权限组详情：与工作区设置的权限组详情同一套样式（头部 + 数字卡片页签：权限 / 角色 / 成员） */
 function ProjectPermissionGroupDetailPage({ params }: Route.ComponentProps) {
   const { workspaceSlug, projectId, groupId } = params;
   const router = useAppRouter();
@@ -61,7 +62,7 @@ function ProjectPermissionGroupDetailPage({ params }: Route.ComponentProps) {
   const canManage = allowProjectPermissionKeys(PROJECT_SETTINGS.roles.editPermissionKeys ?? [], workspaceSlug, projectId);
 
   const detail = useProjectPermissionGroupDetail(workspaceSlug, projectId, groupId);
-  const { group, detail: content, permissionState, memberIds, roles, draft } = detail;
+  const { group, detail: content, permissionState, members, jobRoles, roles, draft } = detail;
   const readOnly = !canManage || !content?.is_editable;
   const copySources = useMemo(
     () =>
@@ -72,7 +73,15 @@ function ProjectPermissionGroupDetailPage({ params }: Route.ComponentProps) {
   );
   const totalKeyCount = useMemo(() => getScopeKeys("project").length, []);
   // 不用 useMemo：成员详情晚于成员 id 到达时要跟着重算（observer 会重渲）
-  const departmentCount = countDepartments(memberIds ?? [], getUserDetails);
+  const departmentCount = countDepartments(
+    (members ?? []).map((member) => member.id),
+    getUserDetails
+  );
+  // 组里的人 = 直接分配 ∪ 经角色（本项目里挂着组所绑角色的成员）
+  const directMemberCount = (members ?? []).filter((member) => member.is_direct).length;
+  const jobRoleMemberCount = (members ?? []).filter((member) => member.job_role_ids.length > 0).length;
+  const jobRoleCount =
+    jobRoles.isLoading && jobRoles.jobRoles.length === 0 ? (group?.job_role_ids?.length ?? 0) : jobRoles.jobRoles.length;
 
   // 权限卡片跟草稿走：勾了还没保存也能看到数字在变
   const permissionCount = draft
@@ -80,12 +89,18 @@ function ProjectPermissionGroupDetailPage({ params }: Route.ComponentProps) {
     : (group?.permission_count ?? 0);
   const tiles: TDetailTile<TTab>[] = [
     { key: "permissions", label: "权限", value: permissionCount, unit: "项", sub: `项目权限共 ${totalKeyCount} 项` },
+    { key: "job-roles", label: "角色", value: jobRoleCount, unit: "个", sub: "按项目内角色生效" },
     {
       key: "members",
       label: "成员",
-      value: memberIds?.length ?? group?.member_count ?? 0,
+      value: members?.length ?? group?.member_count ?? 0,
       unit: "人",
-      sub: departmentCount > 0 ? `来自 ${departmentCount} 个部门` : undefined,
+      sub:
+        jobRoleMemberCount > 0
+          ? `直接分配 ${directMemberCount} · 经角色 ${jobRoleMemberCount}`
+          : departmentCount > 0
+            ? `来自 ${departmentCount} 个部门`
+            : undefined,
     },
   ];
 
@@ -162,12 +177,28 @@ function ProjectPermissionGroupDetailPage({ params }: Route.ComponentProps) {
             actions={actions}
           />
 
-          <PermissionGroupTiles tiles={tiles} active={tab} onSelect={setTab} />
+          <PermissionGroupTiles tiles={tiles} active={tab} onSelect={setTab} className="lg:grid-cols-3" />
 
           <div className="mt-1">
-            {tab === "members" ? (
+            {tab === "job-roles" ? (
+              <PermissionGroupJobRolesPanel
+                workspaceSlug={workspaceSlug}
+                groupName={group.name}
+                state={jobRoles}
+                canManage={canManage}
+                holderLabel="项目成员"
+                notice={
+                  jobRoles.isEditable ? undefined : "标准权限组的角色由工作区统一维护，本项目内不可调整。"
+                }
+                onChanged={() => {
+                  void detail.reloadMembers();
+                  void detail.fetchRoles();
+                }}
+              />
+            ) : tab === "members" ? (
               <PermissionGroupMembersTab
-                memberIds={memberIds}
+                workspaceSlug={workspaceSlug}
+                members={members}
                 membersPath={`/${workspaceSlug}/settings/projects/${projectId}/members/`}
               />
             ) : permissionState.isLoading && !draft ? (

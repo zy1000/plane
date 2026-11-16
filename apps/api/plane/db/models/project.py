@@ -664,3 +664,43 @@ class ProjectMemberJobRole(ProjectBaseModel):
 
     def delete(self, using=None, soft=False, *args, **kwargs):
         return super().delete(using=using, soft=False, *args, **kwargs)
+
+
+class ProjectRoleJobRole(ProjectBaseModel):
+    """本项目自定义权限组绑定的角色：本项目里挂这个角色的成员自动拥有这个组的权限。
+
+    引用行（项目标准权限组）不在这里绑，跟模板走（WorkspaceRoleJobRole）。纯连接行，硬删。
+    """
+
+    role = models.ForeignKey(ProjectRole, on_delete=models.CASCADE, related_name="job_role_links")
+    job_role = models.ForeignKey(
+        "db.DataDictionaryItem",
+        on_delete=models.PROTECT,
+        related_name="project_role_links",
+    )
+
+    class Meta:
+        db_table = "project_role_job_roles"
+        ordering = ("created_at",)
+        constraints = [
+            models.UniqueConstraint(
+                fields=["role", "job_role"],
+                condition=Q(deleted_at__isnull=True),
+                name="project_role_job_role_unique_active",
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.role_id and self.role.source_template_id:
+            raise ValidationError("项目标准权限组的角色在工作区设置里绑定。")
+
+    def save(self, *args, **kwargs):
+        if self.role_id:
+            self.project_id = self.role.project_id
+            self.workspace_id = self.role.workspace_id
+        self.full_clean(exclude=["created_by", "updated_by"])
+        return super().save(*args, **kwargs)
+
+    def delete(self, using=None, soft=False, *args, **kwargs):
+        return super().delete(using=using, soft=False, *args, **kwargs)

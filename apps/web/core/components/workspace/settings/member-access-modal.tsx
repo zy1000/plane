@@ -85,7 +85,7 @@ function CheckList(props: { options: TOption[]; value: string[]; onChange: (valu
 }
 
 /**
- * 编辑成员（成员表「编辑」）：角色（找人用，与权限无关）+ 工作区权限组（能做什么）+ 数据权限（能看哪些项目 / 产品）。
+ * 编辑成员（成员表「编辑」）：角色（找人用；绑了该角色的权限组同时生效）+ 工作区权限组（能做什么）+ 数据权限（能看哪些项目 / 产品）。
  * 两类组勾选的并集提交成一个 custom_role_ids；经团队拿到的组在对应清单里灰显，要改去团队页。
  */
 export function MemberAccessModal(props: Props) {

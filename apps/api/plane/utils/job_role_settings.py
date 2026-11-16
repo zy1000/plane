@@ -1,7 +1,7 @@
-"""工作区设置 › 角色：列表计数、持有人、工作流引用、改名影响与删除前清理。
+"""工作区设置 › 角色：列表计数、持有人、工作流引用、绑定的权限组、改名影响与删除前清理。
 
 角色 = 数据字典 ``job_role`` 的值；「按角色找人」的规则在 ``utils/job_role.py``，这里只服务设置页。
-「看得见的引用」（下面四个 ``_visible_*``）是计数、详情页签和删除拦截的同一口径。
+「看得见的引用」（下面几个 ``_visible_*``）是计数、详情页签和删除拦截的同一口径。
 """
 
 from collections import defaultdict
@@ -12,7 +12,9 @@ from plane.db.models import (
     DataDictionary,
     DataDictionaryItem,
     ProductTeamAssignment,
+    Project,
     ProjectMemberJobRole,
+    ProjectRoleJobRole,
     StageReview,
     StageReviewStatus,
     StageReviewTemplate,
@@ -20,9 +22,13 @@ from plane.db.models import (
     WorkflowTransitionPrincipal,
     WorkspaceMember,
     WorkspaceMemberJobRole,
+    WorkspaceRole,
+    WorkspaceRoleJobRole,
 )
 from plane.utils.data_dictionary import SORT_ORDER_STEP
+from plane.utils.data_scope import MODELS, excluded_project_ids, role_scope
 from plane.utils.job_role import job_role_items
+from plane.utils.permission_groups import effective_payload
 
 #: 评审模板 / 评审里按角色名字存的三列（发起者 / 主导者 / 审核者）
 ROLE_LABEL_FIELDS = ("initiator_role", "leader_role", "auditor_role")
@@ -34,6 +40,9 @@ EMPTY_USAGE = {
     "matrix_count": 0,
     "transition_count": 0,
     "workflow_count": 0,
+    "permission_group_count": 0,
+    "workspace_permission_group_count": 0,
+    "project_permission_group_count": 0,
 }
 
 
@@ -69,8 +78,21 @@ def _visible_principals(workspace_id):
     ).filter(Q(transition__scheme__project__isnull=True) | Q(transition__scheme__project__deleted_at__isnull=True))
 
 
+def _visible_workspace_group_links(workspace_id):
+    """工作区里的权限组（工作区权限组 / 数据权限 / 项目标准权限组）绑了这个角色，组还在。"""
+    return WorkspaceRoleJobRole.objects.filter(workspace_id=workspace_id, role__deleted_at__isnull=True)
+
+
+def _visible_project_group_links(workspace_id):
+    """项目自定义权限组绑了这个角色，组和项目都还在。"""
+    return ProjectRoleJobRole.objects.filter(
+        workspace_id=workspace_id, role__deleted_at__isnull=True, project__deleted_at__isnull=True
+    )
+
+
 def role_usage(workspace_id, role_ids=None):
-    """{角色 id: 计数}。项目成员按人去重，另给项目数；工作流引用按流转去重，另给工作流数。"""
+    """{角色 id: 计数}。项目成员按人去重，另给项目数；工作流引用按流转去重，另给工作流数；
+    权限组按「看工作区角色的」（工作区权限组、数据权限）与「看项目角色的」（项目标准权限组、项目自定义组）分开数。"""
     usage = defaultdict(lambda: dict(EMPTY_USAGE))
 
     def scoped(queryset):
@@ -101,13 +123,32 @@ def role_usage(workspace_id, role_ids=None):
     ):
         usage[str(row["job_role_id"])]["transition_count"] = row["transitions"]
         usage[str(row["job_role_id"])]["workflow_count"] = row["workflows"]
+    for job_role_id, kind in scoped(_visible_workspace_group_links(workspace_id)).values_list("job_role_id", "role__kind"):
+        key = (
+            "project_permission_group_count"
+            if kind == WorkspaceRole.KIND_PROJECT_TEMPLATE
+            else "workspace_permission_group_count"
+        )
+        usage[str(job_role_id)][key] += 1
+    for row in scoped(_visible_project_group_links(workspace_id)).values("job_role_id").annotate(count=Count("id")):
+        usage[str(row["job_role_id"])]["project_permission_group_count"] += row["count"]
+    for counts in usage.values():
+        counts["permission_group_count"] = (
+            counts["workspace_permission_group_count"] + counts["project_permission_group_count"]
+        )
     return usage
 
 
 def is_role_in_use(usage):
     return any(
         usage[key] > 0
-        for key in ("workspace_member_count", "project_member_count", "matrix_count", "transition_count")
+        for key in (
+            "workspace_member_count",
+            "project_member_count",
+            "matrix_count",
+            "transition_count",
+            "permission_group_count",
+        )
     )
 
 
@@ -226,6 +267,60 @@ def workflow_references(workspace_id, role_id):
     return rows
 
 
+def permission_groups(workspace_id, role_id):
+    """本角色绑在哪些权限组上（挂这个角色的人自动拥有这些组的权限）。
+    工作区权限组 / 数据权限对工作区成员生效；项目标准权限组、项目自定义组对项目成员生效。"""
+    rows = []
+    links = list(
+        _visible_workspace_group_links(workspace_id)
+        .filter(job_role_id=role_id)
+        .select_related("role__workspace")
+        .order_by("created_at")
+    )
+    totals = None
+    project_total = None
+    for link in links:
+        group = link.role
+        keys = effective_payload(group)["permission_keys"]
+        row = {
+            "id": str(group.id),
+            "name": group.name,
+            "kind": group.kind,
+            "project": None,
+            "workspace_permission_count": len([key for key in keys if key.startswith("workspace.")]),
+            "project_permission_count": len([key for key in keys if key.startswith("project.")]),
+        }
+        if group.kind == WorkspaceRole.KIND_DATA:
+            if totals is None:
+                totals = {kind: MODELS[kind].objects.filter(workspace_id=workspace_id).count() for kind in MODELS}
+            for kind in MODELS:
+                scope = role_scope(group, kind, group.workspace)
+                row[f"scope_{kind[:-1]}_count"] = totals[kind] if scope.all else len(scope.ids)
+        if group.kind == WorkspaceRole.KIND_PROJECT_TEMPLATE:
+            if project_total is None:
+                project_total = Project.objects.filter(workspace_id=workspace_id).count()
+            row["referenced_project_count"] = max(project_total - len(excluded_project_ids(group)), 0)
+        rows.append(row)
+    for link in (
+        _visible_project_group_links(workspace_id)
+        .filter(job_role_id=role_id)
+        .select_related("role", "project")
+        .order_by("project__name", "created_at")
+    ):
+        group, project = link.role, link.project
+        rows.append(
+            {
+                "id": str(group.id),
+                "name": group.name,
+                "kind": "project",
+                "project": {"id": str(project.id), "name": project.name, "identifier": project.identifier},
+                "workspace_permission_count": 0,
+                "project_permission_count": len(effective_payload(group)["permission_keys"]),
+            }
+        )
+    return rows
+
+
 def label_usage(item):
     """按角色**名字**引用它的地方（改名会对不上）：评审模板各列的处数、未完成的评审数。"""
     templates = StageReviewTemplate.objects.filter(workspace_id=item.workspace_id)
@@ -281,6 +376,8 @@ def purge_hidden_links(item):
         (ProjectMemberJobRole, _visible_project_links(workspace_id)),
         (ProductTeamAssignment, _visible_matrix_links(workspace_id)),
         (WorkflowTransitionPrincipal, _visible_principals(workspace_id)),
+        (WorkspaceRoleJobRole, _visible_workspace_group_links(workspace_id)),
+        (ProjectRoleJobRole, _visible_project_group_links(workspace_id)),
     ):
         visible_ids = visible.filter(job_role=item).values("id")
         model.all_objects.filter(job_role=item).exclude(id__in=visible_ids).delete()

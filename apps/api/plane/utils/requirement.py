@@ -507,6 +507,10 @@ def get_requirement_eligible_user_ids(
                 member__is_active=True,
             ).values_list("member__member_id", flat=True)
         )
+        # 经角色算在这些组里的人
+        from plane.utils.group_job_roles import workspace_job_role_user_ids
+
+        eligible |= workspace_job_role_user_ids(workspace_id, editor_group_ids) & set(workspace_member_ids)
         return eligible
 
     if project_id:

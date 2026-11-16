@@ -10,6 +10,10 @@ import type {
   IPermissionGroupDetail,
   TDataScope,
   TPermissionGroupContent,
+  TPermissionGroupJobRole,
+  TPermissionGroupJobRoles,
+  TPermissionGroupMember,
+  TPermissionGroupMembers,
   TTemplateProjectRef,
 } from "@plane/types";
 import { DEFAULT_DATA_SCOPE } from "@plane/types";
@@ -193,29 +197,37 @@ export const usePermissionGroupDataScope = (
   return { dataScope: saved, draft, setDraft, isDirty, changedCount, isLoading, isSaving, error, reload, discard, save };
 };
 
-/** 工作区权限组 / 数据权限详情的「成员」页签：直绑的人（用户 id）。模板没有成员，enabled 传 false */
+/**
+ * 工作区权限组 / 数据权限详情的「成员」页签。`members` = 直接添加 ∪ 经角色（带来源）；
+ * `memberIds` 只有直接添加的人（添加成员弹窗用它排除已添加的）。模板没有成员，enabled 传 false
+ */
 export const usePermissionGroupMembers = (
   workspaceSlug: string | undefined,
   roleId: string | undefined,
   enabled: boolean
 ) => {
   const [memberIds, setMemberIds] = useState<string[]>([]);
+  const [members, setMembers] = useState<TPermissionGroupMember[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const apply = useCallback((data: TPermissionGroupMembers) => {
+    setMemberIds(data.member_ids ?? []);
+    setMembers(data.members ?? []);
+  }, []);
 
   const reload = useCallback(async () => {
     if (!workspaceSlug || !roleId || !enabled) return;
     setIsLoading(true);
     setError(null);
     try {
-      const data = await workspaceService.fetchWorkspaceRoleMembers(workspaceSlug, roleId);
-      setMemberIds(data.member_ids ?? []);
+      apply(await workspaceService.fetchWorkspaceRoleMembers(workspaceSlug, roleId));
     } catch (requestError) {
       setError(getErrorMessage(requestError, "获取成员失败"));
     } finally {
       setIsLoading(false);
     }
-  }, [workspaceSlug, roleId, enabled]);
+  }, [workspaceSlug, roleId, enabled, apply]);
 
   useEffect(() => {
     void reload();
@@ -224,22 +236,108 @@ export const usePermissionGroupMembers = (
   const addMembers = useCallback(
     async (userIds: string[]) => {
       if (!workspaceSlug || !roleId) return;
-      const data = await workspaceService.addWorkspaceRoleMembers(workspaceSlug, roleId, userIds);
-      setMemberIds(data.member_ids ?? []);
+      apply(await workspaceService.addWorkspaceRoleMembers(workspaceSlug, roleId, userIds));
     },
-    [workspaceSlug, roleId]
+    [workspaceSlug, roleId, apply]
   );
 
+  /** 移出直接添加的人；他若还挂着组绑定的角色，仍留在列表里，只是不再算直接添加 */
   const removeMember = useCallback(
     async (userId: string) => {
       if (!workspaceSlug || !roleId) return;
       await workspaceService.removeWorkspaceRoleMember(workspaceSlug, roleId, userId);
       setMemberIds((prev) => prev.filter((id) => id !== userId));
+      setMembers((prev) =>
+        prev
+          .map((member) => (member.id === userId ? { ...member, is_direct: false } : member))
+          .filter((member) => member.is_direct || member.job_role_ids.length > 0)
+      );
     },
     [workspaceSlug, roleId]
   );
 
-  return { memberIds, isLoading, error, reload, addMembers, removeMember };
+  return { memberIds, members, isLoading, error, reload, addMembers, removeMember };
+};
+
+export type TGroupJobRolesApi = {
+  list: () => Promise<TPermissionGroupJobRoles>;
+  add: (jobRoleIds: string[]) => Promise<TPermissionGroupJobRoles>;
+  remove: (jobRoleId: string) => Promise<void>;
+};
+
+/**
+ * 权限组详情的「角色」页签：组绑定的角色，绑定 / 解除后就地同步。
+ * 工作区设置和项目设置两级共用，差别只在接口（`api` 为 null 时不发请求）。
+ */
+export const useGroupJobRoles = (api: TGroupJobRolesApi | null) => {
+  const [jobRoles, setJobRoles] = useState<TPermissionGroupJobRole[]>([]);
+  const [isEditable, setIsEditable] = useState(true);
+  const [isLoading, setIsLoading] = useState(Boolean(api));
+  const [error, setError] = useState<string | null>(null);
+
+  const apply = useCallback((data: TPermissionGroupJobRoles) => {
+    setJobRoles(data.job_roles ?? []);
+    setIsEditable(data.is_editable ?? true);
+  }, []);
+
+  const reload = useCallback(async () => {
+    if (!api) return;
+    setIsLoading(true);
+    setError(null);
+    try {
+      apply(await api.list());
+    } catch (requestError) {
+      setError(getErrorMessage(requestError, "获取角色失败"));
+    } finally {
+      setIsLoading(false);
+    }
+  }, [api, apply]);
+
+  useEffect(() => {
+    setJobRoles([]);
+    void reload();
+  }, [reload]);
+
+  const addJobRoles = useCallback(
+    async (jobRoleIds: string[]) => {
+      if (!api) return;
+      apply(await api.add(jobRoleIds));
+    },
+    [api, apply]
+  );
+
+  const removeJobRole = useCallback(
+    async (jobRoleId: string) => {
+      if (!api) return;
+      await api.remove(jobRoleId);
+      setJobRoles((prev) => prev.filter((row) => row.id !== jobRoleId));
+    },
+    [api]
+  );
+
+  return { jobRoles, isEditable, isLoading, error, reload, addJobRoles, removeJobRole };
+};
+
+export type TGroupJobRolesState = ReturnType<typeof useGroupJobRoles>;
+
+/** 工作区设置里的权限组（三类都能绑角色） */
+export const usePermissionGroupJobRoles = (
+  workspaceSlug: string | undefined,
+  roleId: string | undefined,
+  enabled: boolean
+) => {
+  const api = useMemo<TGroupJobRolesApi | null>(
+    () =>
+      workspaceSlug && roleId && enabled
+        ? {
+            list: () => workspaceService.fetchWorkspaceRoleJobRoles(workspaceSlug, roleId),
+            add: (jobRoleIds) => workspaceService.addWorkspaceRoleJobRoles(workspaceSlug, roleId, jobRoleIds),
+            remove: (jobRoleId) => workspaceService.removeWorkspaceRoleJobRole(workspaceSlug, roleId, jobRoleId),
+          }
+        : null,
+    [workspaceSlug, roleId, enabled]
+  );
+  return useGroupJobRoles(api);
 };
 
 /** 项目权限模板的「引用项目」页：工作区全部项目（带已排除标记），可以把某个项目移出引用 / 恢复 */

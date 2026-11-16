@@ -126,11 +126,11 @@ SYSTEM_DICTIONARIES = (
             "综合能源设备",
         ),
     },
-    # 角色：成员是干什么的。审批人、评审负责人按角色找人，与权限组无关（docs/permission-refactor/）
+    # 角色：成员是干什么的。审批人、评审负责人按角色找人；权限组可以绑角色（utils/group_job_roles.py）
     {
         "key": "job_role",
         "name": "角色",
-        "description": "成员是干什么的。审批人、评审负责人按角色找人，与权限组无关。",
+        "description": "成员是干什么的。审批人、评审负责人按角色找人；权限组绑定角色后，挂着该角色的成员自动拥有该组权限。",
         "items": (),
     },
 )

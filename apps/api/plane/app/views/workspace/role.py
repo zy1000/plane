@@ -5,7 +5,8 @@
 """工作区设置 › 权限组（docs/permission-refactor/split-plan.md）。
 
 三类组走同一组接口，按 ``kind`` 区分：工作区权限组（权限 + 成员）、项目权限模板（项目权限 + 引用项目）、
-数据权限（项目 / 产品白名单 + 成员）。不属于该类型的页签接口返回 400。"""
+数据权限（项目 / 产品白名单 + 成员）。不属于该类型的页签接口返回 400。
+三类都能绑角色（``job-roles/``）：挂着角色的人自动拥有这个组的权限。"""
 
 from rest_framework import status
 from rest_framework.response import Response
@@ -19,6 +20,14 @@ from plane.app.serializers import (
 from plane.app.views.base import BaseAPIView, BaseViewSet
 from plane.db.models import Permission, Project, Workspace, WorkspaceRole
 from plane.utils.data_scope import MODELS, DataScopeError, preview_entry, role_scope, validate_data_scope
+from plane.utils.group_job_roles import (
+    GroupJobRoleError,
+    bind_job_roles,
+    unbind_job_role,
+    workspace_group_job_role_rows,
+    workspace_group_job_roles,
+    workspace_group_members,
+)
 from plane.utils.permission_groups import (
     PermissionGroupError,
     bind_workspace_group_members,
@@ -30,8 +39,7 @@ from plane.utils.permission_groups import (
     template_projects,
     template_usage_counts,
     unbind_workspace_group_member,
-    workspace_group_member_counts,
-    workspace_group_member_previews,
+    workspace_group_member_ids,
     workspace_type_options,
 )
 
@@ -68,12 +76,12 @@ class WorkspaceRoleViewSet(BaseViewSet):
 
     def _with_stats(self, roles, workspace):
         """列表 / 详情卡片要的统计，按类型给：工作区权限组 → 成员 + 两类 key 数；模板 → 项目 key 数 + 引用项目数；
-        数据权限 → 成员 + 白名单摘要。"""
+        数据权限 → 成员 + 白名单摘要。成员含经角色算进来的人；三类都带绑定的角色。"""
         kinds = {role.kind for role in roles}
-        member_counts = workspace_group_member_previews_needed = None
+        member_ids = {}
         if kinds & {WorkspaceRole.KIND_WORKSPACE, WorkspaceRole.KIND_DATA}:
-            member_counts = workspace_group_member_counts(workspace)
-            workspace_group_member_previews_needed = workspace_group_member_previews(workspace)
+            member_ids = workspace_group_member_ids(workspace)
+        job_roles = workspace_group_job_roles(workspace.id)
         usage = template_usage_counts(workspace) if WorkspaceRole.KIND_PROJECT_TEMPLATE in kinds else {}
         totals = (
             {kind: MODELS[kind].objects.filter(workspace=workspace).count() for kind in ("projects", "products")}
@@ -83,10 +91,10 @@ class WorkspaceRoleViewSet(BaseViewSet):
         data = []
         for role, item in zip(roles, self.get_serializer(roles, many=True).data):
             payload = effective_payload(role)
-            item["member_count"] = (member_counts or {}).get(role.id, 0) if role.can_have_members else 0
-            item["member_preview_ids"] = (
-                (workspace_group_member_previews_needed or {}).get(role.id, []) if role.can_have_members else []
-            )
+            group_member_ids_ = member_ids.get(role.id, []) if role.can_have_members else []
+            item["member_count"] = len(group_member_ids_)
+            item["member_preview_ids"] = group_member_ids_[:3]
+            item["job_role_ids"] = [str(value) for value in job_roles.get(role.id, [])]
             item["permission_keys_count"] = len(payload["permission_keys"])
             item["workspace_permission_count"] = len([k for k in payload["permission_keys"] if k.startswith("workspace.")])
             item["project_permission_count"] = len([k for k in payload["permission_keys"] if k.startswith("project.")])
@@ -215,15 +223,24 @@ class WorkspaceRolePermissionAPIView(BaseAPIView):
         return Response(self._response(role), status=status.HTTP_200_OK)
 
 
+def _members_response(role):
+    """``members``：直接添加 ∪ 经角色（带来源）；``member_ids``：直接添加的人，添加成员弹窗用它排除已添加的。"""
+    return {
+        "member_ids": [str(value) for value in group_member_ids(role)],
+        "members": workspace_group_members(role) if role.can_have_members else [],
+    }
+
+
 class WorkspaceRoleMembersAPIView(BaseAPIView):
-    """工作区权限组 / 数据权限详情的「成员」页签：列出 / 添加 / 移出。项目权限模板没有成员（在项目里绑定），添加会 400。"""
+    """工作区权限组 / 数据权限详情的「成员」页签：列出 / 添加 / 移出。项目权限模板没有成员（在项目里绑定），添加会 400。
+    经角色算进来的人只读：要移出就摘掉他的角色，或解除组与角色的绑定。"""
 
     @allow_fine_permission(*GROUP_READ_KEYS, level="WORKSPACE")
     def get(self, request, slug, pk):
         role = _get_role(slug, pk)
         if role is None:
             return Response({"error": "Permission group not found."}, status=status.HTTP_404_NOT_FOUND)
-        return Response({"member_ids": [str(value) for value in group_member_ids(role)]}, status=status.HTTP_200_OK)
+        return Response(_members_response(role), status=status.HTTP_200_OK)
 
     @allow_fine_permission(GROUP_MANAGE, level="WORKSPACE")
     def post(self, request, slug, pk):
@@ -234,7 +251,7 @@ class WorkspaceRoleMembersAPIView(BaseAPIView):
             bind_workspace_group_members(role, request.data.get("member_ids") or [])
         except PermissionGroupError as exc:
             return _error(exc)
-        return Response({"member_ids": [str(value) for value in group_member_ids(role)]}, status=status.HTTP_200_OK)
+        return Response(_members_response(role), status=status.HTTP_200_OK)
 
     @allow_fine_permission(GROUP_MANAGE, level="WORKSPACE")
     def delete(self, request, slug, pk, member_id):
@@ -245,6 +262,39 @@ class WorkspaceRoleMembersAPIView(BaseAPIView):
             unbind_workspace_group_member(role, member_id)
         except PermissionGroupError as exc:
             return _error(exc)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class WorkspaceRoleJobRolesAPIView(BaseAPIView):
+    """权限组详情的「角色」页签：列出 / 绑定 / 解除绑定。三类权限组都能绑。"""
+
+    def _response(self, role):
+        return Response({"job_roles": workspace_group_job_role_rows(role)}, status=status.HTTP_200_OK)
+
+    @allow_fine_permission(*GROUP_READ_KEYS, level="WORKSPACE")
+    def get(self, request, slug, pk):
+        role = _get_role(slug, pk)
+        if role is None:
+            return Response({"error": "Permission group not found."}, status=status.HTTP_404_NOT_FOUND)
+        return self._response(role)
+
+    @allow_fine_permission(GROUP_MANAGE, level="WORKSPACE")
+    def post(self, request, slug, pk):
+        role = _get_role(slug, pk)
+        if role is None:
+            return Response({"error": "Permission group not found."}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            bind_job_roles(role, request.data.get("job_role_ids") or [])
+        except GroupJobRoleError as exc:
+            return Response({"error": exc.message}, status=status.HTTP_400_BAD_REQUEST)
+        return self._response(role)
+
+    @allow_fine_permission(GROUP_MANAGE, level="WORKSPACE")
+    def delete(self, request, slug, pk, job_role_id):
+        role = _get_role(slug, pk)
+        if role is None:
+            return Response({"error": "Permission group not found."}, status=status.HTTP_404_NOT_FOUND)
+        unbind_job_role(role, job_role_id)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 

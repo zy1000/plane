@@ -215,7 +215,7 @@ class WorkspaceMember(BaseModel):
         blank=True,
         related_name="role_members",
     )
-    # 角色（「他是干什么的」，取自数据字典 job_role），与权限组无关
+    # 角色（「他是干什么的」，取自数据字典 job_role）。权限组可以绑角色（WorkspaceRoleJobRole），反过来进组不会得到角色
     job_roles = models.ManyToManyField(
         "db.DataDictionaryItem",
         through="WorkspaceMemberJobRole",
@@ -797,6 +797,45 @@ class WorkspaceMemberJobRole(BaseModel):
     def save(self, *args, **kwargs):
         if self.member_id and not self.workspace_id:
             self.workspace_id = self.member.workspace_id
+        super().save(*args, **kwargs)
+
+    def delete(self, using=None, soft=False, *args, **kwargs):
+        return super().delete(using=using, soft=False, *args, **kwargs)
+
+
+class WorkspaceRoleJobRole(BaseModel):
+    """权限组绑定的角色（数据字典 job_role 的值）：挂着这个角色的人自动拥有这个组的权限。
+
+    工作区权限组 / 数据权限看工作区成员的角色；项目标准权限组看成员在各引用项目里的角色。
+    单向：把人直接加进权限组不会让他得到角色。纯连接行，硬删。
+    """
+
+    workspace = models.ForeignKey(
+        "db.Workspace",
+        on_delete=models.CASCADE,
+        related_name="workspace_role_job_roles",
+    )
+    role = models.ForeignKey(WorkspaceRole, on_delete=models.CASCADE, related_name="job_role_links")
+    job_role = models.ForeignKey(
+        "db.DataDictionaryItem",
+        on_delete=models.PROTECT,
+        related_name="workspace_role_links",
+    )
+
+    class Meta:
+        db_table = "workspace_role_job_roles"
+        ordering = ("created_at",)
+        constraints = [
+            models.UniqueConstraint(
+                fields=["role", "job_role"],
+                condition=models.Q(deleted_at__isnull=True),
+                name="workspace_role_job_role_unique_active",
+            ),
+        ]
+
+    def save(self, *args, **kwargs):
+        if self.role_id and not self.workspace_id:
+            self.workspace_id = self.role.workspace_id
         super().save(*args, **kwargs)
 
     def delete(self, using=None, soft=False, *args, **kwargs):

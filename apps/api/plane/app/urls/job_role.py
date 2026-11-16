@@ -4,6 +4,7 @@ from plane.app.views.workspace.job_role import (
     JobRoleDetailAPIView,
     JobRoleLabelUsageAPIView,
     JobRoleListAPIView,
+    JobRolePermissionGroupsAPIView,
     JobRoleProjectMembersAPIView,
     JobRoleReferencesAPIView,
     JobRoleReorderAPIView,
@@ -24,6 +25,11 @@ urlpatterns = [
         "workspaces/<str:slug>/job-roles/<uuid:pk>/references/",
         JobRoleReferencesAPIView.as_view(),
         name="job-role-references",
+    ),
+    path(
+        "workspaces/<str:slug>/job-roles/<uuid:pk>/permission-groups/",
+        JobRolePermissionGroupsAPIView.as_view(),
+        name="job-role-permission-groups",
     ),
     path(
         "workspaces/<str:slug>/job-roles/<uuid:pk>/label-usage/",

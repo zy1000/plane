@@ -9,6 +9,7 @@ import type {
   TJobRole,
   TJobRoleLabelUsage,
   TJobRolePayload,
+  TJobRolePermissionGroup,
   TJobRoleProjectMembers,
   TJobRoleReference,
 } from "@plane/types";
@@ -82,6 +83,15 @@ export class JobRoleService extends APIService {
 
   async listReferences(workspaceSlug: string, roleId: string): Promise<TJobRoleReference[]> {
     return this.get(`${this.base(workspaceSlug)}${roleId}/references/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 这个角色绑在哪些权限组上（只读；绑定 / 解除在权限组那边做） */
+  async listPermissionGroups(workspaceSlug: string, roleId: string): Promise<TJobRolePermissionGroup[]> {
+    return this.get(`${this.base(workspaceSlug)}${roleId}/permission-groups/`)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;

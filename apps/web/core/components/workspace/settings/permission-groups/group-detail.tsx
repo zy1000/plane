@@ -26,6 +26,7 @@ import {
   fetchPermissionGroupContent,
   usePermissionGroupDataScope,
   usePermissionGroupDetail,
+  usePermissionGroupJobRoles,
   usePermissionGroupMembers,
   usePermissionGroupTemplateProjects,
 } from "@/hooks/store/use-permission-group-detail";
@@ -36,9 +37,11 @@ import { DeletePermissionGroupModal } from "./delete-group-modal";
 import { PermissionGroupEditor } from "./editor";
 import type { TCopySource } from "./editor";
 import { PermissionGroupFormModal } from "./group-form-modal";
+import { PermissionGroupJobRolesPanel } from "./group-job-roles-panel";
 import { PermissionGroupMembersPanel } from "./group-members-panel";
 import {
   DATA_SCOPE_MODE_LABELS,
+  PERMISSION_GROUP_JOB_ROLE_SCOPE_LABELS,
   PERMISSION_GROUP_KIND_LABELS,
   PERMISSION_GROUP_KIND_TABS,
   PROJECT_KEY_TOTAL,
@@ -68,9 +71,9 @@ const EDITOR_SCOPES: Record<TPermissionGroupKind, TPermissionScope[]> = {
 };
 
 /**
- * 权限组详情：头部（标题旁类型标签）+ 两张数字卡片（兼做页签），按类型不同：
- * 工作区权限组「权限 / 成员」、项目权限模板「项目权限 / 引用项目」、数据权限「数据权限 / 成员」。
- * 权限与数据权限各自是草稿 + 底部保存条，整份提交。
+ * 权限组详情：头部（标题旁类型标签）+ 三张数字卡片（兼做页签），按类型不同：
+ * 工作区权限组「权限 / 角色 / 成员」、项目权限模板「项目权限 / 角色 / 引用项目」、数据权限「数据权限 / 角色 / 成员」。
+ * 权限与数据权限各自是草稿 + 底部保存条，整份提交；角色绑定 / 解除、成员增删即时生效。
  */
 export const PermissionGroupDetail = observer(function PermissionGroupDetail(props: {
   workspaceSlug: string;
@@ -81,7 +84,10 @@ export const PermissionGroupDetail = observer(function PermissionGroupDetail(pro
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { workspaceUserInfo, allowWorkspacePermissionKeys, fetchWorkspacePermissionKeys } = useUserPermissions();
-  const { getUserDetails } = useMember();
+  const {
+    getUserDetails,
+    workspace: { getWorkspaceMemberIds, workspaceMemberMap },
+  } = useMember();
   const canView = allowWorkspacePermissionKeys(READ_KEYS, workspaceSlug);
   const canManage = allowWorkspacePermissionKeys([PERMISSION_KEYS.WORKSPACE_PERMISSION_GROUP_MANAGE], workspaceSlug);
 
@@ -104,6 +110,7 @@ export const PermissionGroupDetail = observer(function PermissionGroupDetail(pro
   const dataScope = usePermissionGroupDataScope(workspaceSlug, roleId, canView && hasTab("data-scope"));
   const templateProjects = usePermissionGroupTemplateProjects(workspaceSlug, roleId, canView && hasTab("referenced"));
   const members = usePermissionGroupMembers(workspaceSlug, roleId, canView && hasTab("members"));
+  const jobRoles = usePermissionGroupJobRoles(workspaceSlug, roleId, canView && hasTab("job-roles"));
 
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<IPermissionGroup | null>(null);
@@ -113,10 +120,18 @@ export const PermissionGroupDetail = observer(function PermissionGroupDetail(pro
     [templateProjects.projects]
   );
   const excludedCount = templateProjects.projects.length - referencingCount;
+  // 组里的人 = 直接添加 ∪ 经角色（挂着组所绑角色的工作区成员）
+  const groupMembers = members.members;
   // 不用 useMemo：成员详情晚于成员 id 到达时要跟着重算（observer 会重渲）
-  const departmentCount = countDepartments(members.memberIds, getUserDetails);
-  const memberCount =
-    members.isLoading && members.memberIds.length === 0 ? (group?.member_count ?? 0) : members.memberIds.length;
+  const departmentCount = countDepartments(
+    groupMembers.map((member) => member.id),
+    getUserDetails
+  );
+  const memberCount = members.isLoading && groupMembers.length === 0 ? (group?.member_count ?? 0) : groupMembers.length;
+  const directMemberCount = groupMembers.filter((member) => member.is_direct).length;
+  const jobRoleMemberCount = groupMembers.filter((member) => member.job_role_ids.length > 0).length;
+  const jobRoleCount =
+    jobRoles.isLoading && jobRoles.jobRoles.length === 0 ? (group?.job_role_ids?.length ?? 0) : jobRoles.jobRoles.length;
 
   // 权限卡片跟草稿走：勾了还没保存也能看到数字在变
   const draftKeys = editor.draft?.permission_keys;
@@ -134,7 +149,19 @@ export const PermissionGroupDetail = observer(function PermissionGroupDetail(pro
       label: "成员",
       value: memberCount,
       unit: "人",
-      sub: departmentCount > 0 ? `来自 ${departmentCount} 个部门` : undefined,
+      sub:
+        jobRoleMemberCount > 0
+          ? `直接添加 ${directMemberCount} · 经角色 ${jobRoleMemberCount}`
+          : departmentCount > 0
+            ? `来自 ${departmentCount} 个部门`
+            : undefined,
+    };
+    const jobRolesTile: TDetailTile<TPermissionGroupDetailTab> = {
+      key: "job-roles",
+      label: "角色",
+      value: jobRoleCount,
+      unit: "个",
+      sub: PERMISSION_GROUP_JOB_ROLE_SCOPE_LABELS[group.kind],
     };
     switch (group.kind) {
       case "project_template":
@@ -146,6 +173,7 @@ export const PermissionGroupDetail = observer(function PermissionGroupDetail(pro
             unit: "项",
             sub: `共 ${PROJECT_KEY_TOTAL} 项`,
           },
+          jobRolesTile,
           {
             key: "referenced",
             label: t(`${I18N}.referenced_projects`),
@@ -170,6 +198,7 @@ export const PermissionGroupDetail = observer(function PermissionGroupDetail(pro
             unit: "个项目",
             sub: `${DATA_SCOPE_MODE_LABELS[projectsScope?.mode ?? "all"]} · ${productText}`,
           },
+          jobRolesTile,
           membersTile,
         ];
       }
@@ -182,6 +211,7 @@ export const PermissionGroupDetail = observer(function PermissionGroupDetail(pro
             unit: "项",
             sub: `项目 ${projectPermissionCount} · 工作区 ${workspacePermissionCount}`,
           },
+          jobRolesTile,
           membersTile,
         ];
     }
@@ -190,6 +220,9 @@ export const PermissionGroupDetail = observer(function PermissionGroupDetail(pro
     projectPermissionCount,
     workspacePermissionCount,
     memberCount,
+    directMemberCount,
+    jobRoleMemberCount,
+    jobRoleCount,
     departmentCount,
     templateProjects.isLoading,
     templateProjects.projects.length,
@@ -230,6 +263,17 @@ export const PermissionGroupDetail = observer(function PermissionGroupDetail(pro
     void refreshRole(roleId).catch(() => undefined);
     // 自己可能就在这个组里：刷新自己的 key，侧栏 / 按钮立刻反映
     void fetchWorkspacePermissionKeys(workspaceSlug).catch(() => undefined);
+  };
+
+  // 「添加角色」弹窗里各角色现有的人数：工作区权限组 / 数据权限数工作区成员；项目标准权限组看的是项目里的角色，这里不给
+  const getWorkspaceHolderCounts = () => {
+    const counts = new Map<string, number>();
+    getWorkspaceMemberIds(workspaceSlug).forEach((userId) => {
+      const membership = workspaceMemberMap?.[workspaceSlug]?.[userId];
+      if (membership?.is_active === false) return;
+      (membership?.job_role_ids ?? []).forEach((jobRoleId) => counts.set(jobRoleId, (counts.get(jobRoleId) ?? 0) + 1));
+    });
+    return counts;
   };
 
   const handleSave = async () => {
@@ -328,9 +372,23 @@ export const PermissionGroupDetail = observer(function PermissionGroupDetail(pro
             }
           />
 
-          <PermissionGroupTiles tiles={tiles} active={activeTab} onSelect={setTab} />
+          <PermissionGroupTiles tiles={tiles} active={activeTab} onSelect={setTab} className="lg:grid-cols-3" />
 
           <div className="mt-1">
+            {activeTab === "job-roles" && (
+              <PermissionGroupJobRolesPanel
+                workspaceSlug={workspaceSlug}
+                groupName={group.name}
+                state={jobRoles}
+                canManage={canManage}
+                holderLabel={kind === "project_template" ? "项目成员" : "工作区成员"}
+                holderCounts={kind === "project_template" ? undefined : getWorkspaceHolderCounts()}
+                onChanged={() => {
+                  refreshAfterChange();
+                  void members.reload();
+                }}
+              />
+            )}
             {activeTab === "members" && (
               <PermissionGroupMembersPanel
                 workspaceSlug={workspaceSlug}

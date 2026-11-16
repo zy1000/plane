@@ -158,6 +158,8 @@ export interface IMyAccessGroup {
   is_direct: boolean;
   /** 经哪些团队拿到（直绑时也可能同时经团队） */
   teams: { id: string; name: string }[];
+  /** 经哪些角色拿到：组绑了我挂着的这些角色 */
+  job_roles?: { id: string; label: string; color: string }[];
 }
 
 export interface IMyAccessTeam {
