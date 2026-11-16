@@ -33,7 +33,7 @@ def project_invitation(email, project_id, token, current_site, invitor):
         abs_url = current_site + relativelink
 
         inviter_name = user.display_name or user.first_name or user.email
-        subject = f"{inviter_name} invited you to join {project.name} on Plane"
+        subject = f"{inviter_name} invited you to join {project.name} on PMS"
 
         context = {
             "email": email,

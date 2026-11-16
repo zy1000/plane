@@ -20,7 +20,7 @@ export default {
     },
     not_found: {
       title: "Hata! Bir şeyler ters gitti",
-      description: "Şu anda Plane hesabınızı alamıyoruz. Bu bir ağ hatası olabilir.",
+      description: "Şu anda PMS hesabınızı alamıyoruz. Bu bir ağ hatası olabilir.",
       cta_primary: "Yeniden yüklemeyi dene",
     },
     server_error: {

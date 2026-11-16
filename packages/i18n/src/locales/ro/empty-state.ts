@@ -21,7 +21,7 @@ export default {
     },
     not_found: {
       title: "Hopa! Se pare că ceva nu este în regulă",
-      description: "Nu putem accesa contul dvs. Plane în prezent. Aceasta ar putea fi o eroare de rețea.",
+      description: "Nu putem accesa contul dvs. PMS în prezent. Aceasta ar putea fi o eroare de rețea.",
       cta_primary: "Încercați reîncărcarea",
     },
     server_error: {

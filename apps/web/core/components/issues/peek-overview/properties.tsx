@@ -73,7 +73,7 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
     return time ? `${day} ${time}` : day;
   };
   const createdByLabel = createdByDetails?.display_name?.includes("-intake")
-    ? "Plane"
+    ? "PMS"
     : (createdByDetails?.display_name ?? "-");
   const createdAtLabel = formatDateTime(issue.created_at);
   const updatedAtLabel = formatDateTime(issue.updated_at);

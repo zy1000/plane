@@ -21,7 +21,7 @@ export default {
     },
     not_found: {
       title: "¡Ups! Algo parece estar mal",
-      description: "No podemos obtener tu cuenta de Plane actualmente. Esto podría ser un error de red.",
+      description: "No podemos obtener tu cuenta de PMS actualmente. Esto podría ser un error de red.",
       cta_primary: "Intentar recargar",
     },
     server_error: {

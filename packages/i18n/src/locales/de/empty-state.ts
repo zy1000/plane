@@ -21,7 +21,7 @@ export default {
     },
     not_found: {
       title: "Hoppla! Etwas scheint nicht zu stimmen",
-      description: "Wir können Ihr Plane-Konto derzeit nicht abrufen. Dies könnte ein Netzwerkfehler sein.",
+      description: "Wir können Ihr PMS-Konto derzeit nicht abrufen. Dies könnte ein Netzwerkfehler sein.",
       cta_primary: "Versuchen Sie neu zu laden",
     },
     server_error: {

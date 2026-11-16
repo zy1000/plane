@@ -20,7 +20,7 @@ export default {
     },
     not_found: {
       title: "Oops! Something seems wrong",
-      description: "We are unable to fetch your plane account currently. This might be a network error.",
+      description: "We are unable to fetch your PMS account currently. This might be a network error.",
       cta_primary: "Try reloading",
     },
     server_error: {

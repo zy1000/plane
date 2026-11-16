@@ -21,7 +21,7 @@ export default {
     },
     not_found: {
       title: "Ops! Algo parece errado",
-      description: "Não conseguimos buscar sua conta Plane no momento. Pode ser um erro de rede.",
+      description: "Não conseguimos buscar sua conta PMS no momento. Pode ser um erro de rede.",
       cta_primary: "Tentar recarregar",
     },
     server_error: {

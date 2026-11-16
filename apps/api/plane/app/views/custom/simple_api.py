@@ -67,7 +67,7 @@ class HealthCheckAPIView(APIView):
         data = {
             "status": "healthy",
             "timestamp": timezone.now().isoformat(),
-            "service": "Plane API",
+            "service": "PMS API",
             "version": "1.0.0",
             "uptime": "运行正常"
         }

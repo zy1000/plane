@@ -72,7 +72,7 @@ const ProjectActivityListPage = observer((props: ProjectActivityListPageProps) =
         const actorDetail = activityItem?.actor_detail;
         const isSystemActivity = !actorDetail;
         const actorDisplayName = isSystemActivity
-          ? "Plane"
+          ? "PMS"
           : actorDetail.is_bot
             ? `${actorDetail.first_name} Bot`
             : currentUser?.id === actorDetail.id
@@ -160,9 +160,9 @@ const ProjectActivityListPage = observer((props: ProjectActivityListPageProps) =
                 </div>
                 <div className="w-full truncate text-secondary">
                   {activityItem.field === "archived_at" && activityItem.new_value !== "restore" ? (
-                    <span className="font-medium text-secondary">Plane</span>
+                    <span className="font-medium text-secondary">PMS</span>
                   ) : isSystemActivity ? (
-                    <span className="font-medium text-secondary">Plane</span>
+                    <span className="font-medium text-secondary">PMS</span>
                   ) : actorDetail.is_bot ? (
                     <span className="font-medium text-secondary">{actorDetail.first_name} Bot</span>
                   ) : (

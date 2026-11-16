@@ -65,7 +65,7 @@ export const ProductUpdatesChangelog = observer(function ProductUpdatesChangelog
   if (shouldShowFallback) {
     return (
       <ProductUpdatesFallback
-        description="We're having trouble fetching the updates. Please visit our changelog to view the latest updates."
+        description="We're having trouble fetching the updates."
         variant={config?.is_self_managed ? "self-managed" : "cloud"}
       />
     );

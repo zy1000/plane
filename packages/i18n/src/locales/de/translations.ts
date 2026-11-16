@@ -90,7 +90,7 @@ export default {
       already_have_an_account: "Haben Sie bereits ein Konto?",
       login: "Anmelden",
       create_account: "Konto erstellen",
-      new_to_plane: "Neu bei Plane?",
+      new_to_plane: "Neu bei PMS?",
       back_to_sign_in: "Zurück zur Anmeldung",
       resend_in: "Erneut senden in {seconds} Sekunden",
       sign_in_with_unique_code: "Mit einmaligem Code anmelden",
@@ -421,7 +421,7 @@ export default {
   full_changelog: "Vollständiges Änderungsprotokoll",
   support: "Support",
   forum: "Forum",
-  powered_by_plane_pages: "Bereitgestellt von Plane Pages",
+  powered_by_plane_pages: "Bereitgestellt von PMS Pages",
   please_select_at_least_one_invitation: "Bitte wählen Sie mindestens eine Einladung aus.",
   please_select_at_least_one_invitation_description:
     "Wählen Sie mindestens eine Einladung aus, um dem Arbeitsbereich beizutreten.",
@@ -584,7 +584,7 @@ export default {
       not_right_now: "Jetzt nicht",
       create_project: {
         title: "Projekt erstellen",
-        description: "Die meisten Dinge beginnen mit einem Projekt in Plane.",
+        description: "Die meisten Dinge beginnen mit einem Projekt in PMS.",
         cta: "Los geht’s",
       },
       invite_team: {
@@ -598,7 +598,7 @@ export default {
         cta: "Diesen Bereich konfigurieren",
       },
       personalize_account: {
-        title: "Personalisieren Sie Plane.",
+        title: "Personalisieren Sie PMS.",
         description: "Wählen Sie ein Profilbild, Farben und mehr.",
         cta: "Jetzt personalisieren",
       },
@@ -633,7 +633,7 @@ export default {
       },
     },
     new_at_plane: {
-      title: "Neu in Plane",
+      title: "Neu in PMS",
     },
     quick_tutorial: {
       title: "Schnelles Tutorial",
@@ -1288,7 +1288,7 @@ export default {
   },
   workspace_creation: {
     heading: "Erstellen Sie einen Arbeitsbereich",
-    subheading: "Um Plane verwenden zu können, müssen Sie einen Arbeitsbereich erstellen oder beitreten.",
+    subheading: "Um PMS verwenden zu können, müssen Sie einen Arbeitsbereich erstellen oder beitreten.",
     form: {
       name: {
         label: "Geben Sie Ihrem Arbeitsbereich einen Namen",
@@ -1343,11 +1343,11 @@ export default {
       general: {
         title: "Übersicht über Projekte, Aktivitäten und Kennzahlen",
         description:
-          "Willkommen bei Plane, wir freuen uns, dass Sie hier sind. Erstellen Sie Ihr erstes Projekt, verfolgen Sie Arbeitselemente und diese Seite verwandelt sich in einen Ort für Ihren Fortschritt. Administratoren sehen hier zusätzlich teamrelevante Elemente.",
+          "Willkommen bei PMS, wir freuen uns, dass Sie hier sind. Erstellen Sie Ihr erstes Projekt, verfolgen Sie Arbeitselemente und diese Seite verwandelt sich in einen Ort für Ihren Fortschritt. Administratoren sehen hier zusätzlich teamrelevante Elemente.",
         primary_button: {
           text: "Erstes Projekt erstellen",
           comic: {
-            title: "Alles beginnt mit einem Projekt in Plane",
+            title: "Alles beginnt mit einem Projekt in PMS",
             description:
               "Ein Projekt kann eine Produkt-Roadmap, eine Marketingkampagne oder die Markteinführung eines neuen Autos sein.",
           },
@@ -1493,7 +1493,7 @@ export default {
         primary_button: {
           text: "Erstes Projekt erstellen",
           comic: {
-            title: "Alles beginnt mit einem Projekt in Plane",
+            title: "Alles beginnt mit einem Projekt in PMS",
             description:
               "Ein Projekt kann eine Produkt-Roadmap, eine Marketingkampagne oder die Markteinführung eines neuen Autos sein.",
           },
@@ -1505,7 +1505,7 @@ export default {
         primary_button: {
           text: "Erstes Projekt erstellen",
           comic: {
-            title: "Alles beginnt mit einem Projekt in Plane",
+            title: "Alles beginnt mit einem Projekt in PMS",
             description:
               "Ein Projekt kann eine Produkt-Roadmap, eine Marketingkampagne oder die Markteinführung eines neuen Autos sein.",
           },
@@ -1605,7 +1605,7 @@ export default {
     page_label: "{workspace} - Allgemeine Einstellungen",
     key_created: "Schlüssel erstellt",
     copy_key:
-      "Kopieren Sie diesen Schlüssel und fügen Sie ihn in Plane Pages ein. Nach dem Schließen können Sie ihn nicht mehr sehen. Eine CSV-Datei mit dem Schlüssel wurde heruntergeladen.",
+      "Kopieren Sie diesen Schlüssel und fügen Sie ihn in PMS Pages ein. Nach dem Schließen können Sie ihn nicht mehr sehen. Eine CSV-Datei mit dem Schlüssel wurde heruntergeladen.",
     token_copied: "Token in die Zwischenablage kopiert.",
     settings: {
       general: {
@@ -1771,7 +1771,7 @@ export default {
     empty_state: {
       api_tokens: {
         title: "Keine API-Tokens",
-        description: "Verwenden Sie die API, um Plane mit externen Systemen zu integrieren.",
+        description: "Verwenden Sie die API, um PMS mit externen Systemen zu integrieren.",
       },
       webhooks: {
         title: "Keine Webhooks",
@@ -1993,7 +1993,7 @@ export default {
       label: "Automatisierungen",
       "auto-archive": {
         title: "Geschlossene Arbeitselemente automatisch archivieren",
-        description: "Plane wird Arbeitselemente automatisch archivieren, die abgeschlossen oder abgebrochen wurden.",
+        description: "PMS wird Arbeitselemente automatisch archivieren, die abgeschlossen oder abgebrochen wurden.",
         duration: "Arbeitselemente automatisch archivieren, die seit",
       },
     workflow: {
@@ -2002,7 +2002,7 @@ export default {
       "auto-close": {
         title: "Arbeitselemente automatisch schließen",
         description:
-          "Plane wird Arbeitselemente automatisch schließen, die nicht abgeschlossen oder abgebrochen wurden.",
+          "PMS wird Arbeitselemente automatisch schließen, die nicht abgeschlossen oder abgebrochen wurden.",
         duration: "Inaktive Arbeitselemente automatisch schließen seit",
         auto_close_status: "Status der automatischen Schließung",
       },
@@ -2668,7 +2668,7 @@ export default {
   },
   self_hosted_maintenance_message: {
     plane_didnt_start_up_this_could_be_because_one_or_more_plane_services_failed_to_start:
-      "Plane ist nicht gestartet. Dies könnte daran liegen, dass einer oder mehrere Plane-Services nicht starten konnten.",
+      "PMS ist nicht gestartet. Dies könnte daran liegen, dass einer oder mehrere PMS-Services nicht starten konnten.",
     choose_view_logs_from_setup_sh_and_docker_logs_to_be_sure:
       "Wählen Sie View Logs aus setup.sh und Docker-Logs, um sicherzugehen.",
   },

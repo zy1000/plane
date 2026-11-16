@@ -277,7 +277,7 @@ export default {
   full_changelog: "Full changelog",
   support: "Support",
   forum: "Forum",
-  powered_by_plane_pages: "Powered by Plane Pages",
+  powered_by_plane_pages: "Powered by PMS Pages",
   please_select_at_least_one_invitation: "Please select at least one invitation.",
   please_select_at_least_one_invitation_description: "Please select at least one invitation to join the workspace.",
   we_see_that_someone_has_invited_you_to_join_a_workspace: "We see that someone has invited you to join a workspace",
@@ -450,7 +450,7 @@ export default {
       not_right_now: "Not right now",
       create_project: {
         title: "Create a project",
-        description: "Most things start with a project in Plane.",
+        description: "Most things start with a project in PMS.",
         cta: "Get started",
       },
       invite_team: {
@@ -464,7 +464,7 @@ export default {
         cta: "Configure this workspace",
       },
       personalize_account: {
-        title: "Make Plane yours.",
+        title: "Make PMS yours.",
         description: "Choose your picture, colors, and more.",
         cta: "Personalize now",
       },
@@ -498,7 +498,7 @@ export default {
       },
     },
     new_at_plane: {
-      title: "New at Plane",
+      title: "New at PMS",
     },
     quick_tutorial: {
       title: "Quick tutorial",
@@ -1285,7 +1285,7 @@ export default {
   },
   workspace_creation: {
     heading: "Create your workspace",
-    subheading: "To start using Plane, you need to create or join a workspace.",
+    subheading: "To start using PMS, you need to create or join a workspace.",
     form: {
       name: {
         label: "Name your workspace",
@@ -1340,11 +1340,11 @@ export default {
       general: {
         title: "Overview of your projects, activity, and metrics",
         description:
-          "Welcome to Plane, we are excited to have you here. Create your first project and track your work items, and this page will transform into a space that helps you progress. Admins will also see items which help their team progress.",
+          "Welcome to PMS, we are excited to have you here. Create your first project and track your work items, and this page will transform into a space that helps you progress. Admins will also see items which help their team progress.",
         primary_button: {
           text: "Build your first project",
           comic: {
-            title: "Everything starts with a project in Plane",
+            title: "Everything starts with a project in PMS",
             description: "A project could be a product's roadmap, a marketing campaign, or launching a new car.",
           },
         },
@@ -5439,7 +5439,7 @@ export default {
         primary_button: {
           text: "Start your first project",
           comic: {
-            title: "Everything starts with a project in Plane",
+            title: "Everything starts with a project in PMS",
             description: "A project could be a product's roadmap, a marketing campaign, or launching a new car.",
           },
         },
@@ -5450,7 +5450,7 @@ export default {
         primary_button: {
           text: "Start your first project",
           comic: {
-            title: "Everything starts with a project in Plane",
+            title: "Everything starts with a project in PMS",
             description: "A project could be a product's roadmap, a marketing campaign, or launching a new car.",
           },
         },
@@ -5568,7 +5568,7 @@ export default {
     page_label: "{workspace} - General settings",
     key_created: "Key created",
     copy_key:
-      "Copy and save this secret key in Plane Pages. You can't see this key after you hit Close. A CSV file containing the key has been downloaded.",
+      "Copy and save this secret key in PMS Pages. You can't see this key after you hit Close. A CSV file containing the key has been downloaded.",
     token_copied: "Token copied to clipboard.",
     settings: {
       my_access: {
@@ -6203,7 +6203,7 @@ export default {
         delete: {
           title: "Delete personal access token",
           description:
-            "Any application using this token will no longer have the access to Plane data. This action cannot be undone.",
+            "Any application using this token will no longer have the access to PMS data. This action cannot be undone.",
           success: {
             title: "Success!",
             message: "The token has been successfully deleted",
@@ -6219,7 +6219,7 @@ export default {
       api_tokens: {
         title: "No personal access tokens created",
         description:
-          "Plane APIs can be used to integrate your data in Plane with any external system. Create a token to get started.",
+          "PMS APIs can be used to integrate your data in PMS with any external system. Create a token to get started.",
       },
       webhooks: {
         title: "No webhooks added",
@@ -6740,7 +6740,7 @@ export default {
       activity: {
         title: "No activities yet",
         description:
-          "Get started by creating a new work item! Add details and properties to it. Explore more in Plane to see your activity.",
+          "Get started by creating a new work item! Add details and properties to it. Explore more in PMS to see your activity.",
       },
       assigned: {
         title: "No work items are assigned to you",
@@ -6940,7 +6940,7 @@ export default {
         "Configure automated actions to streamline your project management workflow and reduce manual tasks.",
       "auto-archive": {
         title: "Auto-archive closed work items",
-        description: "Plane will auto archive work items that have been completed or canceled.",
+        description: "PMS will auto archive work items that have been completed or canceled.",
         duration: "Auto-archive work items that are closed for",
       },
       workflow: {
@@ -6992,7 +6992,7 @@ export default {
       },
       "auto-close": {
         title: "Auto-close work items",
-        description: "Plane will automatically close work items that haven't been completed or canceled.",
+        description: "PMS will automatically close work items that haven't been completed or canceled.",
         duration: "Auto-close work items that are inactive for",
         auto_close_status: "Auto-close status",
       },
@@ -7214,9 +7214,9 @@ export default {
         primary_button: {
           text: "Create your first work item",
           comic: {
-            title: "Work items are building blocks in Plane.",
+            title: "Work items are building blocks in PMS.",
             description:
-              "Redesign the Plane UI, Rebrand the company, or Launch the new fuel injection system are examples of work items that likely have sub-work items.",
+              "Redesign the PMS UI, Rebrand the company, or Launch the new fuel injection system are examples of work items that likely have sub-work items.",
           },
         },
       },
@@ -7331,9 +7331,9 @@ export default {
     empty_state: {
       general: {
         title:
-          "Write a note, a doc, or a full knowledge base. Get Galileo, Plane's AI assistant, to help you get started",
+          "Write a note, a doc, or a full knowledge base. Get Galileo, PMS's AI assistant, to help you get started",
         description:
-          "Pages are thoughts potting space in Plane. Take down meeting notes, format them easily, embed work items, lay them out using a library of components, and keep them all in your project's context. To make short work of any doc, invoke Galileo, Plane's AI, with a shortcut or the click of a button.",
+          "Pages are thoughts potting space in PMS. Take down meeting notes, format them easily, embed work items, lay them out using a library of components, and keep them all in your project's context. To make short work of any doc, invoke Galileo, PMS's AI, with a shortcut or the click of a button.",
         primary_button: {
           text: "Create your first page",
         },
@@ -7750,7 +7750,7 @@ export default {
   },
   self_hosted_maintenance_message: {
     plane_didnt_start_up_this_could_be_because_one_or_more_plane_services_failed_to_start:
-      "Plane didn't start up. This could be because one or more Plane services failed to start.",
+      "PMS didn't start up. This could be because one or more PMS services failed to start.",
     choose_view_logs_from_setup_sh_and_docker_logs_to_be_sure:
       "Choose View Logs from setup.sh and Docker logs to be sure.",
   },
@@ -7935,7 +7935,7 @@ export default {
     },
     help_actions: {
       open_keyboard_shortcuts: "Open keyboard shortcuts",
-      open_plane_documentation: "Open Plane documentation",
+      open_plane_documentation: "Open PMS documentation",
       join_forum: "Join our Forum",
       report_bug: "Report a bug",
       chat_with_us: "Chat with us",

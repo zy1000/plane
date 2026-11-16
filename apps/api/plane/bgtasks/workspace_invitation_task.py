@@ -49,7 +49,7 @@ def workspace_invitation(email, workspace_id, token, current_site, inviter):
 
         # Subject of the email
         inviter_name = user.display_name or user.first_name or user.email
-        subject = f"{inviter_name} has invited you to join them in {workspace.name} on Plane"  # noqa: E501
+        subject = f"{inviter_name} has invited you to join them in {workspace.name} on PMS"  # noqa: E501
 
         context = {
             "email": email,

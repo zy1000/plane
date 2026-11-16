@@ -20,7 +20,7 @@ export default {
     },
     not_found: {
       title: "Ups! Ada yang salah",
-      description: "Kami tidak dapat mengambil akun Plane Anda saat ini. Ini mungkin kesalahan jaringan.",
+      description: "Kami tidak dapat mengambil akun PMS Anda saat ini. Ini mungkin kesalahan jaringan.",
       cta_primary: "Coba muat ulang",
     },
     server_error: {

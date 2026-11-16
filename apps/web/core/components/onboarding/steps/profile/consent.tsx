@@ -25,7 +25,7 @@ export function MarketingConsent({ isChecked, handleChange }: Props) {
       >
         {isChecked && <CheckIcon className="h-3 w-3 text-on-color" />}
       </button>
-      <span className="text-13 text-tertiary">I agree to Plane marketing communications</span>
+      <span className="text-13 text-tertiary">I agree to PMS marketing communications</span>
     </div>
   );
 }

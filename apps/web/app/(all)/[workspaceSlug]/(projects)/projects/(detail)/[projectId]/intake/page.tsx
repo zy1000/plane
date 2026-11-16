@@ -88,7 +88,7 @@ function ProjectInboxPage({ params }: Route.ComponentProps) {
         workspace: currentProjectDetails?.name,
       })
     : t("inbox_issue.page_label", {
-        workspace: "Plane",
+        workspace: "PMS",
       });
 
   const currentNavigationTab = navigationTab

@@ -26,7 +26,7 @@ def user_deactivation_email(current_site, user_id):
         # Send email to user when account is deactivated
         user = User.objects.get(id=user_id)
         current_site = link_base_for_user(user, current_site)
-        subject = f"{user.display_name or user.first_name or user.email} has been deactivated on Plane"
+        subject = f"{user.display_name or user.first_name or user.email} has been deactivated on PMS"
 
         context = {"email": str(user.email), "login_url": current_site + "/login"}
 

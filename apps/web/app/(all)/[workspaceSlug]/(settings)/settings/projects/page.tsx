@@ -5,7 +5,6 @@
  */
 
 import { observer } from "mobx-react";
-import Link from "next/link";
 import { useTheme } from "next-themes";
 // plane imports
 import {
@@ -13,8 +12,7 @@ import {
   WORKSPACE_PROJECT_CREATE_PERMISSION_KEY,
   WORKSPACE_PROJECT_VIEW_PERMISSION_KEY,
 } from "@plane/constants";
-import { Button, getButtonStyling } from "@plane/propel/button";
-import { cn } from "@plane/utils";
+import { Button } from "@plane/propel/button";
 // assets
 import ProjectDarkEmptyState from "@/app/assets/empty-state/project-settings/no-projects-dark.png?url";
 import ProjectLightEmptyState from "@/app/assets/empty-state/project-settings/no-projects-light.png?url";
@@ -50,9 +48,6 @@ function ProjectSettingsPage({ params }: Route.ComponentProps) {
         need to get things done.
       </div>
       <div className="flex gap-2">
-        <Link href="https://plane.so/" target="_blank" className={cn(getButtonStyling("secondary", "base"))}>
-          Learn more about projects
-        </Link>
         {canCreateProjects && (
           <Button
             onClick={() => toggleCreateProjectModal(true)}

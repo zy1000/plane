@@ -20,7 +20,7 @@ export default {
     },
     not_found: {
       title: "Ojej! Niečo sa zdá byť v neporiadku",
-      description: "Momentálne sa nám nedarí načítať váš účet plane. Môže ísť o chybu siete.",
+      description: "Momentálne sa nám nedarí načítať váš účet PMS. Môže ísť o chybu siete.",
       cta_primary: "Skúste znovu načítať",
     },
     server_error: {

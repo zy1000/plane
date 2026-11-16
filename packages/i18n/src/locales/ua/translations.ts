@@ -90,7 +90,7 @@ export default {
       already_have_an_account: "Вже маєте обліковий запис?",
       login: "Увійти",
       create_account: "Створити обліковий запис",
-      new_to_plane: "Вперше в Plane?",
+      new_to_plane: "Вперше в PMS?",
       back_to_sign_in: "Повернутися до входу",
       resend_in: "Надіслати повторно через {seconds} секунд",
       sign_in_with_unique_code: "Увійти за допомогою унікального коду",
@@ -417,7 +417,7 @@ export default {
   full_changelog: "Повний журнал змін",
   support: "Підтримка",
   forum: "Forum",
-  powered_by_plane_pages: "Працює на Plane Pages",
+  powered_by_plane_pages: "Працює на PMS Pages",
   please_select_at_least_one_invitation: "Виберіть принаймні одне запрошення.",
   please_select_at_least_one_invitation_description:
     "Виберіть принаймні одне запрошення, щоб приєднатися до робочого простору.",
@@ -584,7 +584,7 @@ export default {
       not_right_now: "Зараз не треба",
       create_project: {
         title: "Створити проєкт",
-        description: "Більшість речей починається з проєкту в Plane.",
+        description: "Більшість речей починається з проєкту в PMS.",
         cta: "Почати",
       },
       invite_team: {
@@ -598,7 +598,7 @@ export default {
         cta: "Налаштувати цей простір",
       },
       personalize_account: {
-        title: "Налаштуйте Plane під себе.",
+        title: "Налаштуйте PMS під себе.",
         description: "Оберіть картинку, кольори та інше.",
         cta: "Налаштувати зараз",
       },
@@ -632,7 +632,7 @@ export default {
       },
     },
     new_at_plane: {
-      title: "Новинки в Plane",
+      title: "Новинки в PMS",
     },
     quick_tutorial: {
       title: "Швидкий посібник",
@@ -1288,7 +1288,7 @@ export default {
   },
   workspace_creation: {
     heading: "Створіть робочий простір",
-    subheading: "Щоб користуватися Plane, вам потрібно створити або приєднатися до робочого простору.",
+    subheading: "Щоб користуватися PMS, вам потрібно створити або приєднатися до робочого простору.",
     form: {
       name: {
         label: "Назвіть свій робочий простір",
@@ -1344,11 +1344,11 @@ export default {
       general: {
         title: "Огляд проєктів, активностей і метрик",
         description:
-          "Ласкаво просимо до Plane, ми раді, що ви з нами. Створіть перший проєкт, додайте робочі одиниці — і ця сторінка заповниться вашим прогресом. Адміністратори побачать тут також важливі елементи для команди.",
+          "Ласкаво просимо до PMS, ми раді, що ви з нами. Створіть перший проєкт, додайте робочі одиниці — і ця сторінка заповниться вашим прогресом. Адміністратори побачать тут також важливі елементи для команди.",
         primary_button: {
           text: "Створіть перший проєкт",
           comic: {
-            title: "Усе починається з проєкту в Plane",
+            title: "Усе починається з проєкту в PMS",
             description:
               "Проєкт може бути дорожньою картою продукту, маркетинговою кампанією або розробкою нового автомобіля.",
           },
@@ -1494,7 +1494,7 @@ export default {
         primary_button: {
           text: "Розпочати перший проєкт",
           comic: {
-            title: "Усе починається з проєкту в Plane",
+            title: "Усе починається з проєкту в PMS",
             description:
               "Проєкт може бути дорожньою картою продукту, маркетинговою кампанією або розробкою нового авто.",
           },
@@ -1506,7 +1506,7 @@ export default {
         primary_button: {
           text: "Розпочати перший проєкт",
           comic: {
-            title: "Усе починається з проєкту в Plane",
+            title: "Усе починається з проєкту в PMS",
             description:
               "Проєкт може бути дорожньою картою продукту, маркетинговою кампанією або розробкою нового авто.",
           },
@@ -1625,7 +1625,7 @@ export default {
     page_label: "{workspace} - Загальні налаштування",
     key_created: "Ключ створено",
     copy_key:
-      "Скопіюйте й збережіть цей ключ для Plane Pages. Після закриття ви його більше не побачите. CSV-файл із ключем було завантажено.",
+      "Скопіюйте й збережіть цей ключ для PMS Pages. Після закриття ви його більше не побачите. CSV-файл із ключем було завантажено.",
     token_copied: "Токен скопійовано до буфера.",
     settings: {
       general: {
@@ -1794,7 +1794,7 @@ export default {
     empty_state: {
       api_tokens: {
         title: "Немає API токенів",
-        description: "Використовуйте API, щоб інтегрувати Plane із зовнішніми системами.",
+        description: "Використовуйте API, щоб інтегрувати PMS із зовнішніми системами.",
       },
       webhooks: {
         title: "Немає вебхуків",
@@ -2024,7 +2024,7 @@ export default {
       description: "Налаштовуйте автоматичні дії, щоб спростити керування проєктом і зменшити ручні операції.",
       "auto-archive": {
         title: "Автоматично архівувати закриті одиниці",
-        description: "Plane архівуватиме завершені або скасовані одиниці.",
+        description: "PMS архівуватиме завершені або скасовані одиниці.",
         duration: "Архівувати одиниці, закриті понад",
       },
     workflow: {
@@ -2032,7 +2032,7 @@ export default {
     },
       "auto-close": {
         title: "Автоматично закривати одиниці",
-        description: "Plane закриватиме неактивні одиниці.",
+        description: "PMS закриватиме неактивні одиниці.",
         duration: "Закривати одиниці, що неактивні понад",
         auto_close_status: "Стан для автоматичного закриття",
       },
@@ -2694,7 +2694,7 @@ export default {
   },
   self_hosted_maintenance_message: {
     plane_didnt_start_up_this_could_be_because_one_or_more_plane_services_failed_to_start:
-      "Plane не запустився. Це може бути через те, що один або декілька сервісів Plane не змогли запуститися.",
+      "PMS не запустився. Це може бути через те, що один або декілька сервісів PMS не змогли запуститися.",
     choose_view_logs_from_setup_sh_and_docker_logs_to_be_sure:
       "Виберіть View Logs з setup.sh та логів Docker, щоб переконатися.",
   },
@@ -2879,7 +2879,7 @@ export default {
     },
     help_actions: {
       open_keyboard_shortcuts: "Відкрити гарячі клавіші",
-      open_plane_documentation: "Відкрити документацію Plane",
+      open_plane_documentation: "Відкрити документацію PMS",
       join_forum: "Приєднатися до Forum",
       report_bug: "Повідомити про помилку",
       chat_with_us: "Написати нам",

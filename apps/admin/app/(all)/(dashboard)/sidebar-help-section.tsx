@@ -7,11 +7,11 @@
 import { useState, useRef } from "react";
 import { observer } from "mobx-react";
 import Link from "next/link";
-import { HelpCircle, MessageSquare, MoveLeft } from "lucide-react";
+import { HelpCircle, MoveLeft } from "lucide-react";
 import { Transition } from "@headlessui/react";
 import { DOCS_URL, WEB_BASE_URL } from "@plane/constants";
 // plane internal packages
-import { GithubIcon, NewTabIcon, PageIcon } from "@plane/propel/icons";
+import { NewTabIcon, PageIcon } from "@plane/propel/icons";
 import { Tooltip } from "@plane/propel/tooltip";
 import { cn } from "@plane/utils";
 // hooks
@@ -23,16 +23,6 @@ const helpOptions = [
     name: "Documentation",
     href: DOCS_URL,
     Icon: PageIcon,
-  },
-  {
-    name: "Join our Forum",
-    href: "https://forum.plane.so",
-    Icon: MessageSquare,
-  },
-  {
-    name: "Report a bug",
-    href: "https://github.com/makeplane/plane/issues/new/choose",
-    Icon: GithubIcon,
   },
 ];
 
@@ -57,13 +47,13 @@ export const AdminSidebarHelpSection = observer(function AdminSidebarHelpSection
       )}
     >
       <div className={`flex items-center gap-1 ${isSidebarCollapsed ? "flex-col justify-center" : "w-full"}`}>
-        <Tooltip tooltipContent="Redirect to Plane" position="right" className="ml-4" disabled={!isSidebarCollapsed}>
+        <Tooltip tooltipContent="Redirect to PMS" position="right" className="ml-4" disabled={!isSidebarCollapsed}>
           <a
             href={redirectionLink}
             className={`relative flex items-center gap-1 rounded-sm bg-layer-1 px-2 py-1 text-body-xs-medium whitespace-nowrap text-secondary`}
           >
             <NewTabIcon width={14} height={14} />
-            {!isSidebarCollapsed && "Redirect to Plane"}
+            {!isSidebarCollapsed && "Redirect to PMS"}
           </a>
         </Tooltip>
         <Tooltip tooltipContent="Help" position={isSidebarCollapsed ? "right" : "top"} className="ml-4">

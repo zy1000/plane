@@ -31,15 +31,15 @@ export function InstanceNotReady() {
         </div>
 
         <div className="absolute inset-0 z-0">
-          <img src={patternBackground} className="h-full w-full object-cover" alt="Plane background pattern" />
+          <img src={patternBackground} className="h-full w-full object-cover" alt="PMS background pattern" />
         </div>
 
         <div className="relative z-10 mb-[110px] flex-grow">
           <div className="relative container mx-auto flex h-full w-full items-center justify-center px-5">
             <div className="relative w-auto max-w-2xl space-y-8 py-10">
               <div className="relative flex flex-col items-center justify-center space-y-4">
-                <h1 className="pb-3 text-24 font-bold">Welcome aboard Plane!</h1>
-                <img src={PlaneTakeOffImage} className="h-full w-full object-cover" alt="Plane Logo" />
+                <h1 className="pb-3 text-24 font-bold">Welcome aboard PMS!</h1>
+                <img src={PlaneTakeOffImage} className="h-full w-full object-cover" alt="PMS Logo" />
                 <p className="text-14 font-medium text-placeholder">
                   Get started by setting up your instance and workspace
                 </p>
