@@ -67,6 +67,8 @@ INSTALLED_APPS = [
 
 # Middlewares
 MIDDLEWARE = [
+    # 放最外层：被后面中间件提前拦掉的请求也要有日志和请求 ID
+    "plane.middleware.logger.RequestLoggerMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
@@ -80,7 +82,6 @@ MIDDLEWARE = [
     "django.middleware.gzip.GZipMiddleware",
     "plane.middleware.request_body_size.RequestBodySizeLimitMiddleware",
     "plane.middleware.logger.APITokenLogMiddleware",
-    "plane.middleware.logger.RequestLoggerMiddleware",
 ]
 
 # Rest Framework settings

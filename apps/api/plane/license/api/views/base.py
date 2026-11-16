@@ -65,30 +65,34 @@ class BaseAPIView(TimezoneMixin, APIView, BasePaginator):
             return response
         except Exception as e:
             if isinstance(e, IntegrityError):
+                log_exception(e, warning=True, status=400)
                 return Response(
                     {"error": "The payload is not valid"},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
             if isinstance(e, ValidationError):
+                log_exception(e, warning=True, status=400)
                 return Response(
                     {"error": "Please provide valid detail"},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
             if isinstance(e, ObjectDoesNotExist):
+                log_exception(e, warning=True, status=404)
                 return Response(
                     {"error": "The required object does not exist."},
                     status=status.HTTP_404_NOT_FOUND,
                 )
 
             if isinstance(e, KeyError):
+                log_exception(e, status=400)
                 return Response(
                     {"error": "The required key does not exist."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            log_exception(e)
+            log_exception(e, status=500)
             return Response(
                 {"error": "Something went wrong please try again later"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,

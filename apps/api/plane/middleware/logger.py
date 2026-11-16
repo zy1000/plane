@@ -3,8 +3,10 @@
 # See the LICENSE file for details.
 
 # Python imports
+import json
 import logging
 import time
+import uuid
 
 # Django imports
 from django.http import HttpRequest
@@ -16,6 +18,7 @@ from rest_framework.request import Request
 # Module imports
 from plane.utils.ip_address import get_client_ip
 from plane.utils.exception_logger import log_exception
+from plane.utils.logging import request_id_var
 from plane.bgtasks.logger_task import process_logs
 
 api_logger = logging.getLogger("plane.api.request")
@@ -32,47 +35,57 @@ class RequestLoggerMiddleware:
         # Don't log health checks
         if request.path == "/" and request.method == "GET":
             return False
+        # CORS 预检请求不带业务信息
+        if request.method == "OPTIONS":
+            return False
         return True
 
+    @staticmethod
+    def _error_reason(response) -> str:
+        """4xx / 5xx 时返回给前端的错误原因，截断后写进请求行。"""
+        data = getattr(response, "data", None)
+        if data is None and not response.streaming and response.get("Content-Type", "").startswith("application/json"):
+            try:
+                data = json.loads(response.content)
+            except ValueError:
+                data = None
+        if isinstance(data, dict):
+            data = data.get("error") or data.get("detail") or data
+        if not data:
+            return ""
+        if not isinstance(data, str):
+            data = json.dumps(data, ensure_ascii=False, default=str)
+        return data.replace("\n", " ")[:300]
+
     def __call__(self, request):
-        # get the start time
+        # 本次请求的 ID：处理期间打的每条日志都带它，同时放进响应头方便前端报错时反查
+        request_id = uuid.uuid4().hex[:8]
+        token = request_id_var.set(request_id)
         start_time = time.time()
+        try:
+            response = self.get_response(request)
+            response["X-Request-ID"] = request_id
 
-        # Get the response
-        response = self.get_response(request)
+            if not self._should_log_route(request=request):
+                return response
 
-        # calculate the duration
-        duration = time.time() - start_time
+            status_code = response.status_code
+            email = getattr(getattr(request, "user", None), "email", None)
+            message = (
+                f"{request.method} {request.get_full_path()} {status_code} "
+                f"{int((time.time() - start_time) * 1000)}ms ip={get_client_ip(request)} user={email or '-'}"
+            )
+            level = logging.INFO
+            if status_code >= 400:
+                level = logging.ERROR if status_code >= 500 else logging.WARNING
+                reason = self._error_reason(response)
+                if reason:
+                    message += f' error="{reason}"'
+            api_logger.log(level, message)
 
-        # Check if logging is required
-        log_true = self._should_log_route(request=request)
-
-        # If logging is not required, return the response
-        if not log_true:
             return response
-
-        user_id = (
-            request.user.id if getattr(request, "user") and getattr(request.user, "is_authenticated", False) else None
-        )
-
-        user_agent = request.META.get("HTTP_USER_AGENT", "")
-
-        # Log the request information
-        api_logger.info(
-            f"{request.method} {request.get_full_path()} {response.status_code}",
-            extra={
-                "path": request.path,
-                "method": request.method,
-                "status_code": response.status_code,
-                "duration_ms": int(duration * 1000),
-                "remote_addr": get_client_ip(request),
-                "user_agent": user_agent,
-                "user_id": user_id,
-            },
-        )
-
-        # return the response
-        return response
+        finally:
+            request_id_var.reset(token)
 
 
 class APITokenLogMiddleware:

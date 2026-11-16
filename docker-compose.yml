@@ -106,6 +106,13 @@ x-web-build-args: &web-build-args
   VITE_DOCS_BASE_PATH: ${DOCS_BASE_PATH:-/docs}
   VITE_SUPPORT_EMAIL: ${VITE_SUPPORT_EMAIL:-support@example.com}
 
+# 后端容器的控制台日志限制大小，避免 docker 的 json 日志无限增长
+x-backend-logging: &backend-logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "5"
+
 services:
   web:
     container_name: web
@@ -180,6 +187,10 @@ services:
         DOCKER_BUILDKIT: 1
     restart: always
     command: ./bin/docker-entrypoint-api.sh
+    volumes:
+      # 日志文件落到宿主机：plane-日期.log（全量）、plane-error-日期.log（WARN 及以上）
+      - /data/plane-data/logs/api:/code/plane/logs
+    logging: *backend-logging
     environment:
       <<: [*public-env, *db-env, *redis-env, *mq-env, *aws-s3-env]
     depends_on:
@@ -204,6 +215,10 @@ services:
         DOCKER_BUILDKIT: 1
     restart: always
     command: ./bin/docker-entrypoint-worker.sh
+    volumes:
+      # 日志文件落到宿主机：plane-日期.log（全量）、plane-error-日期.log（WARN 及以上）
+      - /data/plane-data/logs/worker:/code/plane/logs
+    logging: *backend-logging
     environment:
       <<: [*public-env, *db-env, *redis-env, *mq-env, *aws-s3-env]
     depends_on:
@@ -228,6 +243,10 @@ services:
         DOCKER_BUILDKIT: 1
     restart: always
     command: ./bin/docker-entrypoint-beat.sh
+    volumes:
+      # 日志文件落到宿主机：plane-日期.log（全量）、plane-error-日期.log（WARN 及以上）
+      - /data/plane-data/logs/beat:/code/plane/logs
+    logging: *backend-logging
     environment:
       <<: [*public-env, *db-env, *redis-env, *mq-env, *aws-s3-env]
     depends_on:

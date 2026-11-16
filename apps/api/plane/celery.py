@@ -4,12 +4,11 @@
 
 # Python imports
 import os
-import logging
+from logging.config import dictConfig
 
 # Third party imports
 from celery import Celery
-from pythonjsonlogger.jsonlogger import JsonFormatter
-from celery.signals import after_setup_logger, after_setup_task_logger
+from celery.signals import setup_logging
 from celery.schedules import crontab
 
 # Module imports
@@ -98,25 +97,12 @@ app.conf.beat_schedule = {
 }
 
 
-# Setup logging
-@after_setup_logger.connect
-def setup_loggers(logger, *args, **kwargs):
-    formatter = JsonFormatter(
-        '"%(levelname)s %(asctime)s %(module)s %(name)s %(message)s'
-    )
-    handler = logging.StreamHandler()
-    handler.setFormatter(fmt=formatter)
-    logger.addHandler(handler)
+# 日志统一用 Django 的 LOGGING。接了这个信号，Celery 就不会再清空 root logger 换成自己的格式
+@setup_logging.connect
+def configure_logging(*args, **kwargs):
+    from django.conf import settings
 
-
-@after_setup_task_logger.connect
-def setup_task_loggers(logger, *args, **kwargs):
-    formatter = JsonFormatter(
-        '"%(levelname)s %(asctime)s %(module)s %(name)s %(message)s'
-    )
-    handler = logging.StreamHandler()
-    handler.setFormatter(fmt=formatter)
-    logger.addHandler(handler)
+    dictConfig(settings.LOGGING)
 
 
 # Load task modules from all registered Django app configs.

@@ -7,6 +7,7 @@
 import os
 
 from .local_common import *  # noqa
+from plane.utils.logging import build_logging_config
 
 DEBUG = True
 SECRET_KEY = os.environ.get("SECRET_KEY", "dev-secret-key-do-not-use-in-prod")
@@ -38,58 +39,4 @@ LOG_DIR = os.path.join(BASE_DIR, "logs")  # noqa
 if not os.path.exists(LOG_DIR):
     os.makedirs(LOG_DIR)
 
-LOGGING = {
-    "version": 1,
-    "disable_existing_loggers": True,
-    "formatters": {
-        "verbose": {
-            "format": "{levelname} {asctime} {module} {process:d} {thread:d} {message}",
-            "style": "{",
-        },
-        "json": {
-            "()": "pythonjsonlogger.jsonlogger.JsonFormatter",
-            "fmt": "%(levelname)s %(asctime)s %(module)s %(name)s %(message)s",
-        },
-    },
-    "handlers": {
-        "console": {
-            "level": "DEBUG",
-            "class": "logging.StreamHandler",
-            "formatter": "verbose",
-        }
-    },
-    "loggers": {
-        "plane.api.request": {
-            "level": "INFO",
-            "handlers": ["console"],
-            "propagate": False,
-        },
-        "plane.api": {"level": "INFO", "handlers": ["console"], "propagate": False},
-        "plane.worker": {"level": "INFO", "handlers": ["console"], "propagate": False},
-        "plane.exception": {
-            "level": "ERROR",
-            "handlers": ["console"],
-            "propagate": False,
-        },
-        "plane.external": {
-            "level": "INFO",
-            "handlers": ["console"],
-            "propagate": False,
-        },
-        "plane.mongo": {
-            "level": "INFO",
-            "handlers": ["console"],
-            "propagate": False,
-        },
-        "plane.authentication": {
-            "level": "INFO",
-            "handlers": ["console"],
-            "propagate": False,
-        },
-        "plane.migrations": {
-            "level": "INFO",
-            "handlers": ["console"],
-            "propagate": False,
-        },
-    },
-}
+LOGGING = build_logging_config(LOG_DIR)
