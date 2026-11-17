@@ -13,9 +13,11 @@ import {
 import { EModalPosition, EModalWidth, Loader, ModalCore } from "@plane/ui";
 import { cn, isEmptyHtmlString } from "@plane/utils";
 import { RichTextEditor } from "@/components/editor/rich-text";
+import { useJobRoles } from "@/hooks/store/use-job-roles";
 import { useWorkspace } from "@/hooks/store/use-workspace";
 import { WorkspaceService } from "@/services/workspace.service";
 import { StageReviewKindBadge } from "./stage-review-kind-badge";
+import { StageReviewRoleSelect } from "./stage-review-role-select";
 
 export type TStageReviewFormValue = {
   kind: EStageReviewKind;
@@ -79,6 +81,8 @@ export const StageReviewTemplateFormModal = observer(function StageReviewTemplat
   const { t } = useTranslation();
   const { getWorkspaceBySlug } = useWorkspace();
   const workspaceId = getWorkspaceBySlug(workspaceSlug)?.id?.toString();
+  // 发起者 / 主导者 / 审核者的候选：工作区角色（设置 › 角色）
+  const { jobRoles } = useJobRoles(workspaceSlug);
   // 描述单独拿出来：编辑器自己管内容，只在提交时取一次
   const [value, setValue] = useState<Omit<TStageReviewFormValue, "description_html">>({
     kind: EStageReviewKind.REVIEW,
@@ -355,44 +359,41 @@ export const StageReviewTemplateFormModal = observer(function StageReviewTemplat
           )}
         </div>
 
-        <label className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-1.5">
           <span className="text-12 text-tertiary">{t(`${I18N}.table.initiator`)}</span>
-          <input
+          <StageReviewRoleSelect
             value={value.initiator_role}
-            maxLength={255}
+            jobRoles={jobRoles}
             disabled={isSubmitting}
-            onChange={(event) => setValue((current) => ({ ...current, initiator_role: event.target.value }))}
-            className={INPUT_CLASS}
+            onChange={(role) => setValue((current) => ({ ...current, initiator_role: role }))}
             placeholder={t(`${I18N}.form.role_placeholder`)}
           />
-        </label>
-
-        <div className="grid grid-cols-2 gap-3">
-          <label className="flex flex-col gap-1.5">
-            <span className="text-12 text-tertiary">{t(`${I18N}.table.leader`)}</span>
-            <input
-              value={value.leader_role}
-              maxLength={255}
-              disabled={isSubmitting}
-              onChange={(event) => setValue((current) => ({ ...current, leader_role: event.target.value }))}
-              className={INPUT_CLASS}
-              placeholder={t(`${I18N}.form.role_placeholder`)}
-            />
-          </label>
-          <label className="flex flex-col gap-1.5">
-            <span className="text-12 text-tertiary">{t(`${I18N}.table.auditor`)}</span>
-            <input
-              value={value.auditor_role}
-              maxLength={255}
-              disabled={isSubmitting}
-              onChange={(event) => setValue((current) => ({ ...current, auditor_role: event.target.value }))}
-              className={INPUT_CLASS}
-              placeholder={t(`${I18N}.form.auditor_placeholder`)}
-            />
-          </label>
         </div>
 
-        {/* 角色填的是名称不是人：模板是工作区级标准流程，落到项目 + 产品时才解析成人 */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="flex min-w-0 flex-col gap-1.5">
+            <span className="text-12 text-tertiary">{t(`${I18N}.table.leader`)}</span>
+            <StageReviewRoleSelect
+              value={value.leader_role}
+              jobRoles={jobRoles}
+              disabled={isSubmitting}
+              onChange={(role) => setValue((current) => ({ ...current, leader_role: role }))}
+              placeholder={t(`${I18N}.form.role_placeholder`)}
+            />
+          </div>
+          <div className="flex min-w-0 flex-col gap-1.5">
+            <span className="text-12 text-tertiary">{t(`${I18N}.table.auditor`)}</span>
+            <StageReviewRoleSelect
+              value={value.auditor_role}
+              jobRoles={jobRoles}
+              disabled={isSubmitting}
+              onChange={(role) => setValue((current) => ({ ...current, auditor_role: role }))}
+              placeholder={t(`${I18N}.form.auditor_placeholder`)}
+            />
+          </div>
+        </div>
+
+        {/* 角色选的是工作区角色不是人：模板是工作区级标准流程，落到项目 + 产品时才解析成人 */}
         <p className="text-10 leading-4 text-tertiary">{t(`${I18N}.form.role_hint`)}</p>
         {error && !errorField && <p className="text-10 leading-4 text-danger-primary">{error}</p>}
       </div>

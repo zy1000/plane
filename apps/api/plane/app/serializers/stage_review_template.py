@@ -10,8 +10,12 @@ from plane.db.models.stage_review import (
     StageReviewKind,
     is_o_stage_label,
 )
+from plane.utils.job_role import job_role_items
 
 from .base import BaseSerializer
+
+#: 发起者 / 主导者 / 审核者
+ROLE_FIELDS = ("initiator_role", "leader_role", "auditor_role")
 
 
 class StageReviewTemplateSerializer(BaseSerializer):
@@ -60,7 +64,8 @@ class StageReviewTemplateSerializer(BaseSerializer):
             "standard_code",
             "description_html",
             # 三个角色存的都是**角色名称文本**而不是人：模板是工作区级标准流程，
-            # 落到具体项目 + 产品时才解析成人。审核者留空 = 无需审核。
+            # 落到具体项目 + 产品时才解析成人。只能填工作区「角色」里有的名字（见 validate），
+            # 审核者留空 = 无需审核。
             "initiator_role",
             "leader_role",
             "auditor_role",
@@ -148,5 +153,29 @@ class StageReviewTemplateSerializer(BaseSerializer):
                     f"「{stage.name}」不是。"
                 }
             )
+
+        # 三个角色只能选工作区「角色」里有的。只查这次改动的值：角色后来改了名的存量模板，
+        # 不该因此连别的字段也改不了
+        changed = {
+            field: attrs[field]
+            for field in ROLE_FIELDS
+            if attrs.get(field) and attrs[field] != getattr(instance, field, "")
+        }
+        if changed:
+            workspace_id = (
+                instance.workspace_id if instance is not None else self.context["workspace"].id
+            )
+            known = set(
+                job_role_items(workspace_id)
+                .filter(label__in=changed.values())
+                .values_list("label", flat=True)
+            )
+            invalid = {
+                field: f"「{label}」不是工作区里的角色，请重新选择。"
+                for field, label in changed.items()
+                if label not in known
+            }
+            if invalid:
+                raise serializers.ValidationError(invalid)
 
         return attrs

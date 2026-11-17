@@ -3881,10 +3881,12 @@ export default {
           stage_review_template_code_already_exists: "This standard code already exists. Use another code.",
         },
         description_label: "Description (optional)",
-        role_placeholder: "Role name, e.g. Hardware lead",
+        role_placeholder: "Select a role",
         auditor_placeholder: "Leave empty if no approval is needed",
+        role_clear: "Clear",
+        role_missing: "This role is no longer in the workspace roles. Select another one.",
         role_hint:
-          "These three fields hold role names, not people. Roles are resolved against project and product members when a review starts.",
+          "Roles come from workspace Settings › Roles. When a tailoring sheet takes effect, project members holding the lead and approver roles are assigned to the generated reviews automatically.",
         save_failed: "Could not save. Please try again.",
       },
       delete_modal: {

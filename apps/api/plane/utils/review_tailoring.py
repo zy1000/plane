@@ -1587,7 +1587,7 @@ def _create_stage_reviews(tailoring, items, actor):
     for item in pending:
         (children if item.template.kind in ACTIVITY_KINDS and item.template.parent_id else roots).append(item)
 
-    created_ids = []
+    created, created_ids = [], []
     for batch in (roots, children):
         if not batch:
             continue
@@ -1633,6 +1633,12 @@ def _create_stage_reviews(tailoring, items, actor):
             review_by_key[(item.product_id, item.stage_id, template.id)] = review.id
             created_ids.append(review.id)
         StageReview.objects.bulk_create(reviews, batch_size=500)
+        created.extend(reviews)
+
+    # 项目里（研发矩阵 / 成员角色）对得上主导者、审核者角色的人，直接带进负责人 / 审核人
+    from plane.utils.stage_review import assign_role_holders
+
+    assign_role_holders(created)
 
     ReviewTailoringItem.objects.bulk_update(
         pending, ["stage_review", "updated_at"], batch_size=500

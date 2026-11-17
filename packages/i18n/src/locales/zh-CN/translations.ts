@@ -4060,10 +4060,14 @@ export default {
           stage_review_template_code_already_exists: "标准编号已存在，换一个编号",
         },
         description_label: "描述（选填）",
-        role_placeholder: "填角色名称，例如：硬件研发负责人",
+        role_placeholder: "请选择角色",
         auditor_placeholder: "留空表示无需审核",
+        role_clear: "清空",
+        // 存量模板上的角色后来被改名或删除
+        role_missing: "该角色已不在工作区角色中，请重新选择",
         // 模板是工作区级标准流程，落到具体项目 + 产品时才把角色解析成人
-        role_hint: "三个角色填的是名称不是具体的人，发起评审时按角色在项目与产品成员里解析。",
+        role_hint:
+          "角色取自工作区「设置 › 角色」。裁剪表生效生成评审时，项目内担任主导者、审核者角色的成员将自动带入负责人、审核人。",
         save_failed: "保存失败，请稍后重试",
       },
       delete_modal: {

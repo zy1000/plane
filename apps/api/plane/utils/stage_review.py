@@ -23,7 +23,8 @@
 
 负责人解析（``resolve_role_candidates``）是模板落地到具体产品的那一跳：模板上存的是
 角色名称文本（发起者 / 主导者 / 审核者），这里按研发矩阵与成员角色找人（utils/job_role.py），
-筛不出来就退回到全部项目成员 —— 角色没配好不该让人选不出负责人。
+筛不出来就退回到全部项目成员 —— 角色没配好不该让人选不出负责人。裁剪表生成评审时，
+矩阵或项目成员角色里对得上的人直接带进负责人 / 审核人（``assign_role_holders``）。
 """
 
 from django.core.exceptions import ValidationError
@@ -457,6 +458,54 @@ def resolve_role_candidates(review, role):
         project_id=review.project_id, is_active=True
     ).values_list("member_id", flat=True)
     return _active_users(project_user_ids), ROLE_SOURCE_PROJECT
+
+
+def assign_role_holders(reviews):
+    """裁剪表生成评审的那一刻，按角色把人带进负责人 / 审核人（``reviews`` 同属一个项目，已落库）。
+
+    只认上面找人顺序里对得准的前两级，每个角色各自回退：研发矩阵里本项目 × 本产品给这个角色
+    填了人就用矩阵，否则用本项目里挂了这个角色的成员。工作区角色与「全部项目成员」不自动带，
+    仍只作抽屉里的建议人选。只在生成时带一次，之后角色成员变了不回头改；属于初始值，
+    同生成时带上的计划日期一样不写轨迹。
+    """
+    from plane.utils.job_role import job_role_items, matrix_holders, project_holders
+
+    wanted = {
+        (review.product_id, getattr(review, f"{field}_role"))
+        for review in reviews
+        for field in _MEMBER_FIELDS.values()
+        if getattr(review, f"{field}_role")
+    }
+    if not wanted:
+        return
+    workspace_id, project_id = reviews[0].workspace_id, reviews[0].project_id
+    role_ids = {}
+    for label, role_id in (
+        job_role_items(workspace_id)
+        .filter(label__in={label for _, label in wanted})
+        .values_list("label", "id")
+    ):
+        role_ids.setdefault(label, []).append(role_id)
+
+    in_project = {label: project_holders(project_id, ids) for label, ids in role_ids.items()}
+    holders = {
+        (product_id, label): matrix_holders(project_id, role_ids[label], [product_id]) or in_project[label]
+        for product_id, label in wanted
+        if label in role_ids
+    }
+    active = set(_active_users(set().union(*holders.values())).values_list("id", flat=True))
+
+    for relation, field in _MEMBER_FIELDS.items():
+        through = getattr(StageReview, relation).through
+        through.objects.bulk_create(
+            [
+                through(stagereview_id=review.id, user_id=user_id)
+                for review in reviews
+                for user_id in holders.get((review.product_id, getattr(review, f"{field}_role")), ())
+                if user_id in active
+            ],
+            batch_size=500,
+        )
 
 
 # --- 计划日期跟随阶段 -------------------------------------------------------
