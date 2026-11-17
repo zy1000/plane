@@ -26,6 +26,7 @@
 同一请求内的结果缓存在 user 对象上（它的生命周期就是一次请求）。
 """
 
+from collections import defaultdict
 from enum import Enum
 from functools import wraps
 from typing import Iterable, Optional
@@ -377,6 +378,52 @@ def user_project_roles(user, project_member, project_id, job_role_ids=None):
             deleted_at__isnull=True,
         ).select_related("source_template")
     )
+
+
+def project_roles_by_user(project_id, project_members, member_job_roles) -> dict:
+    """一个项目里各成员的项目权限组（{用户 id: [ProjectRole]}），规则同 ``user_project_roles``，
+    整批查而不是逐人查：直绑、团队授权、角色绑定、权限组各一条查询。
+    ``project_members`` 是 {用户 id: ProjectMember}，``member_job_roles`` 是 {ProjectMember id: 角色 id 集合}。"""
+    if not project_members:
+        return {}
+    user_by_member = {row.id: user_id for user_id, row in project_members.items()}
+    role_ids = defaultdict(set)
+    for member_id, role_id in ProjectMemberRole.objects.filter(
+        member_id__in=list(user_by_member), deleted_at__isnull=True
+    ).values_list("member_id", "role_id"):
+        role_ids[user_by_member[member_id]].add(role_id)
+    for user_id, role_id in ProjectGroupRole.objects.filter(
+        project_id=project_id,
+        deleted_at__isnull=True,
+        group__deleted_at__isnull=True,
+        group__group_members__deleted_at__isnull=True,
+        group__group_members__member__deleted_at__isnull=True,
+        group__group_members__member__is_active=True,
+        group__group_members__member__member_id__in=list(project_members),
+    ).values_list("group__group_members__member__member_id", "role_id"):
+        role_ids[user_id].add(role_id)
+    job_role_ids = {job_role_id for ids in member_job_roles.values() for job_role_id in ids}
+    if job_role_ids:
+        groups_by_job_role = defaultdict(set)
+        for job_role_id, role_id in ProjectRoleJobRole.objects.filter(
+            project_id=project_id, job_role_id__in=list(job_role_ids)
+        ).values_list("job_role_id", "role_id"):
+            groups_by_job_role[job_role_id].add(role_id)
+        for member_id, ids in member_job_roles.items():
+            user_id = user_by_member.get(member_id)
+            if user_id is None:
+                continue
+            for job_role_id in ids:
+                role_ids[user_id] |= groups_by_job_role.get(job_role_id, set())
+    wanted = {role_id for ids in role_ids.values() for role_id in ids}
+    if not wanted:
+        return {}
+    roles = list(
+        ProjectRole.objects.filter(pk__in=wanted, project_id=project_id, deleted_at__isnull=True).select_related(
+            "source_template"
+        )
+    )
+    return {user_id: [role for role in roles if role.id in ids] for user_id, ids in role_ids.items()}
 
 
 def is_project_passthrough(user, project) -> bool:

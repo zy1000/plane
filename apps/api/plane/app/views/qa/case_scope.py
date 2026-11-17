@@ -226,6 +226,7 @@ def readable_repository_q(request, slug, *, keys=CASE_VIEW, template_keys=TEMPLA
 
     返回 Q(**{f"{field}__in": [...]})；field 是查询里指向用例库 id 的字段名（如 "repository_id"）。
     """
+    from plane.app.permissions.base import bulk_project_permission_keys
     from plane.utils.product import can_view_product
     from plane.utils.visibility import visible_project_scope
 
@@ -237,8 +238,7 @@ def readable_repository_q(request, slug, *, keys=CASE_VIEW, template_keys=TEMPLA
     )
     can_template = template_keys is not None and has_workspace_permission(user, slug, *template_keys)
     product_ok = {}
-    project_ok = {}
-    project_scope = None
+    project_keys = None
     for repository in repositories:
         repository_id = str(repository["id"])
         if repository["is_template"]:
@@ -257,13 +257,25 @@ def readable_repository_q(request, slug, *, keys=CASE_VIEW, template_keys=TEMPLA
             continue
         project_id = repository["project_id"]
         if project_id:
-            if project_scope is None:
+            if project_keys is None:
+                # 挂在项目上的库可能有上百个项目：整批算一次，不逐个项目走 resolve_project_grant。
+                # 先按可见范围收窄再算 key —— 整批算法对「没设负责人时的创建人」直接给全部 key、不看可见范围，
+                # 而这里的口径一直是「看得到项目」且「有 key」
                 project_scope = visible_project_scope(user, slug)
-            if project_id not in project_ok:
-                project_ok[project_id] = project_scope.contains(project_id) and bool(
-                    _project_keys(user, slug, project_id) & wanted
+                project_keys = bulk_project_permission_keys(
+                    user,
+                    slug,
+                    {
+                        row["project_id"]
+                        for row in repositories
+                        if row["project_id"]
+                        and not row["is_template"]
+                        and not row["product_id"]
+                        and project_scope.contains(row["project_id"])
+                    },
+                    wanted,
                 )
-            if project_ok[project_id]:
+            if project_keys.get(str(project_id)):
                 allowed.add(repository_id)
     return Q(**{f"{field}__in": list(allowed)})
 

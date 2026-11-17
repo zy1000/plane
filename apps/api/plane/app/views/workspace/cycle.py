@@ -14,6 +14,7 @@ from plane.app.views.base import BaseAPIView
 from plane.db.models import Cycle
 from plane.app.permissions import WorkspaceViewerPermission
 from plane.app.serializers.cycle import CycleSerializer
+from plane.utils.visibility import visible_projects_q
 
 
 class WorkspaceCyclesEndpoint(BaseAPIView):
@@ -21,7 +22,8 @@ class WorkspaceCyclesEndpoint(BaseAPIView):
 
     def get(self, request, slug):
         cycles = (
-            Cycle.objects.filter(workspace__slug=slug)
+            # 只返回当前用户能看到的项目里的迭代（成员 / 负责 / 直通 / 白名单，见 utils/visibility.py）
+            Cycle.objects.filter(visible_projects_q(request.user, slug, "project"), workspace__slug=slug)
             .select_related("project")
             .select_related("workspace")
             .select_related("owned_by")

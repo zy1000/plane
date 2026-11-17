@@ -101,6 +101,8 @@ export class StateStore implements IStateStore {
       fetchedMap: observable,
       fetchedIntakeMap: observable,
       // computed
+      stateBuckets: computed({ keepAlive: true }),
+      workspaceStates: computed,
       projectStates: computed,
       groupedProjectStates: computed,
       // fetch action
@@ -120,6 +122,28 @@ export class StateStore implements IStateStore {
   }
 
   /**
+   * 状态按所属方案、按归属项目各分好组，组内顺序与 stateMap 一致。
+   * 能看全部项目的人这里有两万多条状态，而 getProjectStates 等读取方法同时被几十个组件订阅：
+   * 让每个读取方法各自把全量扫一遍的话，新增一个状态就要卡一两秒。分组只在 stateMap 变化后重算一次
+   * （keepAlive：事件回调、action 里的读取不在观察者上下文，也要能用上这份缓存）。
+   */
+  get stateBuckets() {
+    const byScheme = new Map<string, IState[]>();
+    const byProject = new Map<string, IState[]>();
+    const add = (buckets: Map<string, IState[]>, key: string | null | undefined, state: IState) => {
+      if (!key) return;
+      const bucket = buckets.get(key);
+      if (bucket) bucket.push(state);
+      else buckets.set(key, [state]);
+    };
+    for (const state of Object.values(this.stateMap)) {
+      add(byScheme, state.scheme_id, state);
+      add(byProject, state.project_id, state);
+    }
+    return { byScheme, byProject };
+  }
+
+  /**
    * Returns the stateMap belongs to a specific workspace
    */
   get workspaceStates() {
@@ -135,7 +159,7 @@ export class StateStore implements IStateStore {
     const projectId = this.router.projectId;
     const workspaceSlug = this.router.workspaceSlug || "";
     if (!projectId || !(this.fetchedMap[projectId] || this.fetchedMap[workspaceSlug])) return;
-    return sortStates(Object.values(this.stateMap).filter((state) => this.isStateOfProject(state, projectId)));
+    return sortStates(this.getStatesOfProject(projectId));
   }
 
   /**
@@ -184,6 +208,19 @@ export class StateStore implements IStateStore {
   };
 
   /**
+   * 属于某个项目（或 `scheme:<id>` 方案作用域）的状态，顺序与 stateMap 一致，每次返回新数组。
+   * 先从 stateBuckets 缩到候选，归属规则仍只在 isStateOfProject 一处。
+   */
+  private getStatesOfProject = (projectId: string): IState[] => {
+    const { byScheme, byProject } = this.stateBuckets;
+    const schemeId =
+      getSchemeIdFromScopeKey(projectId) ?? this.rootStore.projectRoot.project.getProjectById(projectId)?.issue_scheme;
+    // 状态都带 scheme_id（后端非空）。项目信息还没加载时不知道它用哪个方案，退回按归属项目取
+    const candidates = (schemeId ? byScheme.get(schemeId) : byProject.get(projectId)) ?? [];
+    return candidates.filter((state) => this.isStateOfProject(state, projectId));
+  };
+
+  /**
    * @description returns state details using state id
    * @param stateId
    */
@@ -209,7 +246,7 @@ export class StateStore implements IStateStore {
   getProjectStates = computedFn((projectId: string | null | undefined) => {
     const workspaceSlug = this.router.workspaceSlug || "";
     if (!projectId || !(this.fetchedMap[projectId] || this.fetchedMap[workspaceSlug])) return;
-    return sortStates(Object.values(this.stateMap).filter((state) => this.isStateOfProject(state, projectId)));
+    return sortStates(this.getStatesOfProject(projectId));
   });
 
   /**
@@ -224,11 +261,7 @@ export class StateStore implements IStateStore {
       if (!projectId) return undefined;
       const cacheKey = issueTypeId ? `${projectId}:${issueTypeId}` : projectId;
       if (!(this.fetchedMap[cacheKey] || this.fetchedMap[workspaceSlug])) return undefined;
-      return sortStates(
-        Object.values(this.stateMap).filter(
-          (state) => this.isStateOfProject(state, projectId) && state.issue_type_id === issueTypeId
-        )
-      );
+      return sortStates(this.getStatesOfProject(projectId).filter((state) => state.issue_type_id === issueTypeId));
     }
   );
 
@@ -456,8 +489,8 @@ export class StateStore implements IStateStore {
   markStateAsDefault = async (workspaceSlug: string, projectId: string, stateId: string) => {
     const targetState = this.stateMap[stateId];
     const issueTypeId = targetState?.issue_type_id ?? null;
-    const currentDefaultState = Object.values(this.stateMap).find(
-      (state) => this.isStateOfProject(state, projectId) && state.default && state.issue_type_id === issueTypeId
+    const currentDefaultState = this.getStatesOfProject(projectId).find(
+      (state) => state.default && state.issue_type_id === issueTypeId
     );
     // 快照受影响的 state 对象（勿复用 stateMap 引用，否则 set() 就地修改后无法回滚）
     const snapshot: Record<string, IState> = {};

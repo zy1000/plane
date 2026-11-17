@@ -8,12 +8,13 @@ from rest_framework.response import Response
 
 # Module imports
 from plane.app.views.base import BaseAPIView
-from django.db.models import Q, Subquery
+from django.db.models import Q, Subquery, TextField
+from django.db.models.functions import Cast
 
 from plane.db.models import DevModeIssueType, State
 from plane.app.permissions import WorkspaceEntityPermission
+from plane.app.serializers.state import build_workspace_states_payload
 from plane.utils.visibility import visible_project_scope
-from collections import defaultdict
 
 
 class WorkspaceStatesEndpoint(BaseAPIView):
@@ -47,53 +48,31 @@ class WorkspaceStatesEndpoint(BaseAPIView):
                     )
                 )
             )
-            # 工作区下有几万个状态（每个项目方案 × 每个类型各一套）：只取要输出的列、直接拼字典，
-            # 不建模型对象、不逐行走 serializer。输出字段与顺序同 StateSerializer，那边加字段这里要跟着加。
-            .values(
-                "id",
-                "scheme__project_id",
-                "scheme_id",
-                "workspace_id",
+            # 工作区下有几万个状态（每个项目方案 × 每个类型各一套）：只取要输出的列，不建模型对象、
+            # 不逐行走 serializer。uuid 列在数据库里转成文本再取 —— 否则驱动要逐个建 UUID 对象、
+            # 渲染时再逐个转回字符串，十万个 id 光这一来一回就是 0.3 秒
+            .annotate(
+                id_text=Cast("id", TextField()),
+                scheme_id_text=Cast("scheme_id", TextField()),
+                project_id_text=Cast("scheme__project_id", TextField()),
+                workspace_id_text=Cast("workspace_id", TextField()),
+                issue_type_id_text=Cast("issue_type_id", TextField()),
+            )
+            # sequence 大量并列（几千个状态同一个值），order 取决于并列行的先后，所以把并列顺序写明
+            .order_by("sequence", "created_at", "id")
+            .distinct()
+            .values_list(
+                "id_text",
+                "scheme_id_text",
+                "project_id_text",
+                "workspace_id_text",
+                "issue_type_id_text",
                 "name",
                 "color",
                 "group",
                 "default",
                 "description",
                 "sequence",
-                "issue_type_id",
             )
-            # sequence 大量并列（几千个状态同一个值），order 取决于并列行的先后。原先 SELECT DISTINCT 整行
-            # 时数据库顺带按 created_at 等列排了并列行，这里把并列顺序写明，只取部分列后 order 才不会变
-            .order_by("sequence", "created_at", "id")
-            .distinct()
         )
-
-        grouped_states = defaultdict(list)
-        for state in states:
-            grouped_states[state["group"]].append(state)
-
-        orders = {}
-        for group_states in grouped_states.values():
-            count = len(group_states)
-
-            for index, state in enumerate(group_states, start=1):
-                orders[state["id"]] = index / count
-
-        data = [
-            {
-                "id": state["id"],
-                "project_id": state["scheme__project_id"],
-                "scheme_id": state["scheme_id"],
-                "workspace_id": state["workspace_id"],
-                "name": state["name"],
-                "color": state["color"],
-                "group": state["group"],
-                "default": state["default"],
-                "description": state["description"],
-                "sequence": state["sequence"],
-                "order": orders[state["id"]],
-                "issue_type_id": state["issue_type_id"],
-            }
-            for state in states
-        ]
-        return Response(data, status=status.HTTP_200_OK)
+        return Response(build_workspace_states_payload(states), status=status.HTTP_200_OK)

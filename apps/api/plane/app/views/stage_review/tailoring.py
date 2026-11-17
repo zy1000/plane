@@ -10,7 +10,8 @@
 """
 
 from django.db import transaction
-from django.db.models import Count, Q
+from django.db.models import Count, IntegerField, OuterRef, Subquery
+from django.db.models.functions import Coalesce
 from rest_framework import status
 from rest_framework.response import Response
 
@@ -102,6 +103,25 @@ CONFLICT_CODES = {
 }
 
 
+def _child_count(model, **filters):
+    """按裁剪单数一张子表的行数，用子查询而不是在主查询上连表。
+
+    格子和两个轴一起连进主查询的话，数据库要先乘出「格子 × 产品 × 模板」再去重，
+    一张大表就是几万行，只为了算这几个数。
+    """
+    return Coalesce(
+        Subquery(
+            model.objects.filter(tailoring_id=OuterRef("pk"), **filters)
+            .order_by()
+            .values("tailoring_id")
+            .annotate(n=Count("id"))
+            .values("n"),
+            output_field=IntegerField(),
+        ),
+        0,
+    )
+
+
 def tailoring_error_response(exc):
     http_status = (
         status.HTTP_409_CONFLICT
@@ -134,30 +154,23 @@ class ReviewTailoringViewSet(BaseViewSet):
                 visible_projects_q(self.request.user, self.kwargs.get("slug"), "project"),
                 project__archived_at__isnull=True,
             )
-            .select_related("created_by", "submitted_by", "project", "stage")
+            .select_related(
+                "created_by",
+                "created_by__avatar_asset",
+                "submitted_by",
+                "submitted_by__avatar_asset",
+                "project",
+                "stage",
+            )
             .annotate(
-                item_count=Count(
-                    "items", filter=Q(items__deleted_at__isnull=True), distinct=True
-                ),
-                selected_count=Count(
-                    "items",
-                    filter=Q(items__deleted_at__isnull=True, items__selected=True),
-                    distinct=True,
-                ),
+                item_count=_child_count(ReviewTailoringItem),
+                selected_count=_child_count(ReviewTailoringItem, selected=True),
                 # 两个轴各自数自己的行数：从格子反推的话，只加了一个轴的表会显示成 0
-                product_count=Count(
-                    "axis_products",
-                    filter=Q(axis_products__deleted_at__isnull=True),
-                    distinct=True,
-                ),
+                product_count=_child_count(ReviewTailoringProduct),
                 # 数的是纵轴上的模板节点数。详情页的 review_count 是**展开后的行数**，
                 # 一个节点被模式里两个同类型阶段都勾上时会比这里多 —— 列表只要个体量感，
                 # 为它把每张表的行都展开一遍不划算。
-                review_count=Count(
-                    "axis_templates",
-                    filter=Q(axis_templates__deleted_at__isnull=True),
-                    distinct=True,
-                ),
+                review_count=_child_count(ReviewTailoringTemplate),
             )
             .distinct()
             # 列表默认最新建的在前。模型 Meta 里也是这个顺序，这里写死是不让它随 Meta 改动悄悄变
@@ -174,7 +187,12 @@ class ReviewTailoringViewSet(BaseViewSet):
         items = list(
             ReviewTailoringItem.objects.filter(tailoring=tailoring)
             .select_related(
-                "template__stage", "stage", "origin_stage", "stage_review", "created_by"
+                "template__stage",
+                "stage",
+                "origin_stage",
+                "stage_review",
+                "created_by",
+                "created_by__avatar_asset",
             )
             .order_by("template__sort_order", "template__created_at", "id")
         )
@@ -194,7 +212,7 @@ class ReviewTailoringViewSet(BaseViewSet):
             ReviewTailoringApproval.objects.filter(
                 tailoring=tailoring, round=tailoring.round
             )
-            .select_related("approver")
+            .select_related("approver", "approver__avatar_asset")
             .order_by("created_at")
         )
         # 计数字段在列表 queryset 上 annotate，单条读取时补上，前端两处形状一致

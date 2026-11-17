@@ -66,7 +66,6 @@ export interface IIssueRootStore {
   userId: string | undefined; // user profile detail Id
   stateMap: Record<string, IState> | undefined;
   stateDetails: IState[] | undefined;
-  workspaceStateDetails: IState[] | undefined;
   labelMap: Record<string, IIssueLabel> | undefined;
   workSpaceMemberRolesMap: Record<string, IWorkspaceMembership> | undefined;
   memberMap: Record<string, IUserLite> | undefined;
@@ -138,7 +137,6 @@ export class IssueRootStore implements IIssueRootStore {
   userId: string | undefined = undefined;
   stateMap: Record<string, IState> | undefined = undefined;
   stateDetails: IState[] | undefined = undefined;
-  workspaceStateDetails: IState[] | undefined = undefined;
   labelMap: Record<string, IIssueLabel> | undefined = undefined;
   workSpaceMemberRolesMap: Record<string, IWorkspaceMembership> | undefined = undefined;
   memberMap: Record<string, IUserLite> | undefined = undefined;
@@ -209,7 +207,6 @@ export class IssueRootStore implements IIssueRootStore {
       globalViewId: observable.ref,
       stateMap: observable,
       stateDetails: observable,
-      workspaceStateDetails: observable,
       labelMap: observable,
       memberMap: observable,
       workSpaceMemberRolesMap: observable,
@@ -234,7 +231,6 @@ export class IssueRootStore implements IIssueRootStore {
       if (this.userId !== rootStore.router.userId) this.userId = rootStore.router.userId;
       if (!isEmpty(rootStore?.state?.stateMap)) this.stateMap = rootStore?.state?.stateMap;
       if (!isEmpty(rootStore?.state?.projectStates)) this.stateDetails = rootStore?.state?.projectStates;
-      if (!isEmpty(rootStore?.state?.workspaceStates)) this.workspaceStateDetails = rootStore?.state?.workspaceStates;
       if (!isEmpty(rootStore?.label?.labelMap)) this.labelMap = rootStore?.label?.labelMap;
       if (!isEmpty(rootStore?.memberRoot?.workspace?.workspaceMemberMap))
         this.workSpaceMemberRolesMap = rootStore?.memberRoot?.workspace?.memberMap || undefined;

@@ -294,7 +294,17 @@ class RepositoryAPIView(BaseAPIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     def get(self, request, slug):
-        queryset = self.get_queryset().select_related("product_category")
+        # 详情序列化器是 depth=1，每个外键都展开成整行：一次连出来，不逐行反查
+        queryset = self.get_queryset().select_related(
+            "product_category",
+            "workspace",
+            "project",
+            "product",
+            "created_by",
+            "created_by__avatar_asset",
+            "updated_by",
+            "updated_by__avatar_asset",
+        )
         # 未显式查询 is_template 时默认排除模板库，
         # 让产品侧列表、库下拉、复制弹窗等存量消费方都看不到模板库
         if "is_template" not in request.query_params:

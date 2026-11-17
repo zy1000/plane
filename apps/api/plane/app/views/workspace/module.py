@@ -14,6 +14,7 @@ from plane.app.views.base import BaseAPIView
 from plane.db.models import Module, ModuleLink
 from plane.app.permissions import WorkspaceViewerPermission
 from plane.app.serializers.module import ModuleSerializer
+from plane.utils.visibility import visible_projects_q
 
 
 class WorkspaceModulesEndpoint(BaseAPIView):
@@ -21,7 +22,8 @@ class WorkspaceModulesEndpoint(BaseAPIView):
 
     def get(self, request, slug):
         modules = (
-            Module.objects.filter(workspace__slug=slug)
+            # 只返回当前用户能看到的项目里的模块（成员 / 负责 / 直通 / 白名单，见 utils/visibility.py）
+            Module.objects.filter(visible_projects_q(request.user, slug, "project"), workspace__slug=slug)
             .select_related("project")
             .select_related("workspace")
             .select_related("lead")

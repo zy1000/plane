@@ -1932,8 +1932,8 @@ def attach_list_progress(tailorings, user=None):
     - ``generated_count``：已生成评审实例的格子数（已生效用）
     - ``pending_change_count``：修订期间相对生效快照改了几格（修订中用）
 
-    列表是几十张表的量级，三条查询按表分组算完再分发，不在 queryset 上再挂 join ——
-    列表 queryset 已经连了格子与两个轴，再连签批行会把行数乘上去。
+    列表是几十张表的量级，三条查询按表分组算完再分发，不在 queryset 上挂 join ——
+    连了签批行会把行数乘上去（列表 queryset 上的几个计数也是为这个走的子查询）。
     """
     tailorings = list(tailorings)
     if not tailorings:

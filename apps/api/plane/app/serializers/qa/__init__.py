@@ -512,6 +512,8 @@ class TestCaseRepositoryDetailSerializer(ModelSerializer):
     """
 
     created_by = UserLiteSerializer(read_only=True)
+    # 必须显式声明：不声明的话 depth=1 会把整行用户记录展开进响应，连密码哈希、token、邮箱、登录 IP 一起吐出去
+    updated_by = UserLiteSerializer(read_only=True)
     # 不让 depth=1 把整个产品模板对象嵌进来，与标准库同形：id + {id, name}
     product_category_id = serializers.UUIDField(read_only=True, allow_null=True)
     product_category_detail = serializers.SerializerMethodField()

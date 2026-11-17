@@ -64,6 +64,17 @@ ACTIVE_WORKSPACE_MEMBER_ROLES_PREFETCH = Prefetch(
     to_attr="active_member_roles",
 )
 
+# 只要权限组 id 的场合（成员名单）：同一批行，但不连带取出权限组整行 ——
+# 权限组的 permissions 是大 JSON，全员合计几千行，逐行建对象 + 解码比查询本身还慢
+ACTIVE_WORKSPACE_MEMBER_ROLE_IDS_PREFETCH = Prefetch(
+    "member_roles",
+    queryset=WorkspaceMemberRole.objects.filter(
+        deleted_at__isnull=True,
+        role__deleted_at__isnull=True,
+    ).only("member_id", "role_id"),
+    to_attr="active_member_roles",
+)
+
 
 class WorkSpaceMemberViewSet(BaseViewSet):
     serializer_class = WorkspaceMemberAdminSerializer
@@ -152,7 +163,15 @@ class WorkSpaceMemberViewSet(BaseViewSet):
     # workspace.member.view 只管工作区设置「成员」页入口，邮箱等管理字段仍按 _can_view_admin_details 裁剪
     @allow_workspace_member
     def list(self, request, slug):
-        workspace_members = list(self.get_queryset())
+        # 名单的每个字段都来自成员行、用户和下面预先算好的 context：
+        # 不带出工作区整行（每人一份）和权限组整行，只留用户、头像和各人的权限组 id
+        workspace_members = list(
+            self.get_queryset()
+            .select_related(None)
+            .select_related("member", "member__avatar_asset")
+            .prefetch_related(None)
+            .prefetch_related(ACTIVE_WORKSPACE_MEMBER_ROLE_IDS_PREFETCH)
+        )
         serializer_class = (
             WorkspaceMemberAdminSerializer
             if self._can_view_admin_details(request, slug)

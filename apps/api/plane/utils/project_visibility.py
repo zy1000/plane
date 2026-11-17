@@ -14,7 +14,7 @@
 
 from collections import defaultdict
 
-from plane.app.permissions.base import combine_payloads, project_role_payload, role_payload, user_project_roles
+from plane.app.permissions.base import combine_payloads, project_role_payload, project_roles_by_user, role_payload
 from plane.app.permissions.registry import PROJECT_KEYS
 from plane.db.models import (
     Permission,
@@ -185,23 +185,31 @@ def project_audience(project, with_permissions=True):
     role_names = {role.id: role.name for role in roles}
     grant_passthrough_ids = {owner_id, project.project_lead_id or project.created_by_id} | admin_ids
 
-    # 经角色：项目成员在本项目挂的角色 → 绑了这些角色的自定义组（user_project_roles 里算）和仍引用本项目的标准权限组
+    # 经角色：项目成员在本项目挂的角色 → 绑了这些角色的自定义组（project_roles_by_user 里算）和仍引用本项目的标准权限组
     member_job_roles = defaultdict(set)
     template_links = []
+    # 模板是否仍引用本项目：同一个模板会被很多人命中，按模板记一次，不逐人再查
+    referencing = {}
+
+    def references(template):
+        if template.id not in referencing:
+            referencing[template.id] = template_references_project(template, project.id)
+        return referencing[template.id]
+
+    roles_by_user = {}
     if with_permissions and project_members:
         for member_id, job_role_id in ProjectMemberJobRole.objects.filter(project=project).values_list(
             "member_id", "job_role_id"
         ):
             member_job_roles[member_id].add(job_role_id)
         if member_job_roles:
-            referencing = {}
             for link in WorkspaceRoleJobRole.objects.filter(
                 workspace=workspace, role__kind=WorkspaceRole.KIND_PROJECT_TEMPLATE, role__deleted_at__isnull=True
             ).select_related("role"):
-                if link.role_id not in referencing:
-                    referencing[link.role_id] = template_references_project(link.role, project.id)
-                if referencing[link.role_id]:
+                if references(link.role):
                     template_links.append(link)
+        # 全部成员的项目权限组一次查完，下面逐人只做内存里的合并
+        roles_by_user = project_roles_by_user(project.id, project_members, member_job_roles)
 
     for user_id, entry in people.items():
         member = ws_members.get(user_id)
@@ -224,10 +232,10 @@ def project_audience(project, with_permissions=True):
         if member_row is not None:
             job_role_ids = member_job_roles.get(member_row.id, ())
             listed_templates = set()
-            for project_role in user_project_roles(entry["user"], member_row, project.id, job_role_ids):
+            for project_role in roles_by_user.get(user_id, ()):
                 template = project_role.source_template
                 listed_templates.add(project_role.source_template_id)
-                if template is not None and not template_references_project(template, project.id, entry["user"]):
+                if template is not None and not references(template):
                     continue
                 payload = project_role_payload(project_role)
                 if payload[0]:
