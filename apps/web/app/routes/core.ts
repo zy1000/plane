@@ -221,10 +221,23 @@ export const coreRoutes: RouteConfigEntry[] = [
             ":workspaceSlug/templates/issue-types/workflows/:workflowId",
             "./(all)/[workspaceSlug]/(projects)/templates/issue-types/workflows/[workflowId]/page.tsx"
           ),
-          // 通用字段库
+          // 工作项通用字段库
           route(
             ":workspaceSlug/templates/issue-fields",
             "./(all)/[workspaceSlug]/(projects)/templates/issue-fields/page.tsx"
+          ),
+          // 需求类型（列表 + 某个类型的字段配置页）与需求通用字段库
+          route(
+            ":workspaceSlug/templates/requirement-types",
+            "./(all)/[workspaceSlug]/(projects)/templates/requirement-types/page.tsx"
+          ),
+          route(
+            ":workspaceSlug/templates/requirement-types/:requirementTypeId",
+            "./(all)/[workspaceSlug]/(projects)/templates/requirement-types/[requirementTypeId]/page.tsx"
+          ),
+          route(
+            ":workspaceSlug/templates/requirement-fields",
+            "./(all)/[workspaceSlug]/(projects)/templates/requirement-fields/page.tsx"
           ),
           route(
             ":workspaceSlug/templates/dev-modes",
@@ -712,15 +725,6 @@ export const coreRoutes: RouteConfigEntry[] = [
             ":workspaceSlug/settings/issue-type-categories",
             "./(all)/[workspaceSlug]/(settings)/settings/(workspace)/issue-type-categories/page.tsx"
           ),
-          // Workspace Requirement Types
-          route(
-            ":workspaceSlug/settings/requirement-types",
-            "./(all)/[workspaceSlug]/(settings)/settings/(workspace)/requirement-types/page.tsx"
-          ),
-          route(
-            ":workspaceSlug/settings/requirement-types/:requirementTypeId",
-            "./(all)/[workspaceSlug]/(settings)/settings/(workspace)/requirement-types/[requirementTypeId]/page.tsx"
-          ),
           // Workspace Data Dictionaries
           route(
             ":workspaceSlug/settings/data-dictionaries",
@@ -895,12 +899,13 @@ export const coreRoutes: RouteConfigEntry[] = [
   // Timesheets: 旧路径 /timesheets/manage → /timesheets
   route(":workspaceSlug/timesheets/manage", "routes/redirects/core/timesheets-manage.tsx"),
 
-  // 需求类型: 模板管理下的旧路径 → /settings/requirement-types/**
+  // 需求类型: 旧路径 → 模板中心 /templates/requirement-types/**
+  // （先后在 /templates/requirements 与 /settings/requirement-types 落过脚）
   // 裸路径与 splat 都注册，不依赖 splat 能否匹配空串
   route(":workspaceSlug/templates/requirements", "routes/redirects/core/requirement-types.tsx"),
   route(":workspaceSlug/templates/requirements/*", "routes/redirects/core/requirement-types.tsx"),
-  route(":workspaceSlug/templates/requirement-types", "routes/redirects/core/requirement-types.tsx"),
-  route(":workspaceSlug/templates/requirement-types/*", "routes/redirects/core/requirement-types.tsx"),
+  route(":workspaceSlug/settings/requirement-types", "routes/redirects/core/requirement-types.tsx"),
+  route(":workspaceSlug/settings/requirement-types/*", "routes/redirects/core/requirement-types.tsx"),
 
   // 工作流流转配置：模式方案下的旧路径 → 工作项类型库 /templates/issue-types/workflows/:workflowId
   route(

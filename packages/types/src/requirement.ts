@@ -229,6 +229,11 @@ export type TRequirementField = {
   show_in_library: boolean;
   /** 定义该字段的需求类型 */
   requirement_type_id?: string | null;
+  /**
+   * 绑定的通用字段。非空时名称 / 类型 / 必填 / 配置 / 默认值（表单还有子字段）由通用字段库
+   * 统一维护，类型配置页里只读。只有需求类型配置接口带这个键。
+   */
+  library_field_id?: string | null;
   config: {
     description?: string;
     placeholder?: string;

@@ -73,7 +73,7 @@ export const RequirementFieldsSection = ({
           requirementType ? (
             // 新标签打开：抽屉里的编辑状态（草稿、展开的子表单）不该因为去看一眼字段定义而丢掉
             <a
-              href={`/${workspaceSlug}/settings/requirement-types/${requirementType.id}`}
+              href={`/${workspaceSlug}/templates/requirement-types/${requirementType.id}`}
               target="_blank"
               rel="noreferrer noopener"
               className={SECTION_ACTION_BUTTON}

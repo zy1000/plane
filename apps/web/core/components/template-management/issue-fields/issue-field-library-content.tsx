@@ -125,7 +125,7 @@ export function IssueFieldLibraryContent({
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-3">
-            <h1 className="text-24 leading-8 font-semibold text-primary">通用字段库</h1>
+            <h1 className="text-24 leading-8 font-semibold text-primary">工作项通用字段库</h1>
             {hasLoaded && (
               <span className="rounded-md bg-layer-1 px-2 py-0.5 text-14 text-secondary tabular-nums">
                 {fields.length}

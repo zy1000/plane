@@ -18,7 +18,6 @@ export type TWorkspaceSettingsTabs =
   | "export"
   | "webhooks"
   | "issue-type-categories"
-  | "requirement-types"
   | "data-dictionaries"
   | "stage-types"
   | "integrations"

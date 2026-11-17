@@ -39,6 +39,8 @@ const toDraftField = (field: TRequirementField): TRequirementFieldDraft => ({
   is_required: field.is_required,
   is_active: field.is_active,
   show_in_library: field.show_in_library,
+  // 绑定的通用字段：只读展示用；保存时后端以库里存的绑定为准
+  library_field_id: field.library_field_id ?? null,
   config: { ...field.config },
   default_value: field.default_value,
   children: field.children.map(toDraftField),
@@ -121,8 +123,8 @@ export type TRequirementTypeEditorState = {
 /**
  * 需求类型编辑器的状态内核：草稿、脏检查、校验与带乐观锁的保存。
  *
- * 由「模板管理」与「工作区设置」两个壳共用 —— 保存路径涉及乐观锁与三种错误码，
- * 两份拷贝迟早会静默分叉，所以壳可以各写各的，这块必须共享。
+ * 与外壳（模板中心的 RequirementTypeEditor）分开 —— 保存路径涉及乐观锁与三种错误码，
+ * 外壳换地方时这块不该跟着重写。
  */
 export const useRequirementTypeEditorState = ({
   workspaceSlug,

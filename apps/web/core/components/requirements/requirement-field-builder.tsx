@@ -5,7 +5,9 @@ import {
   ArrowUpToLine,
   ChevronDown,
   Copy,
+  ExternalLink,
   GripVertical,
+  Library,
   ListPlus,
   MoreHorizontal,
   Plus,
@@ -17,6 +19,7 @@ import type { LucideIcon } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
+import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type {
   TRequirementFieldDraft,
   TRequirementFieldType,
@@ -36,6 +39,16 @@ import {
   type TRequirementBinEntry,
 } from "@/components/requirements/requirement-builder-items";
 import { RequirementBuiltinFieldRow } from "@/components/requirements/requirement-builtin-field-row";
+import {
+  COMMON_FIELD_BADGE,
+  COMMON_FIELD_DRAG_TYPE,
+  RequirementCommonChildRows,
+  RequirementCommonFieldCard,
+  RequirementCommonFieldList,
+  RequirementFieldSourceTabs,
+  toBoundFieldDraft,
+  type TRequirementCommonFieldsBinding,
+} from "@/components/requirements/requirement-common-fields";
 import { RequirementFieldRecycleBin } from "@/components/requirements/requirement-field-recycle-bin";
 import {
   getRequirementSelectMode,
@@ -83,6 +96,8 @@ type TRequirementFieldBuilderProps = {
   onChange: (items: TRequirementBuilderItem[]) => void;
   /** 字段 id -> 有非空值的需求条数，回收站行与永久删除弹窗用 */
   fieldValueCounts?: Record<string, number>;
+  /** 通用字段库：传了才有左栏的「字段类型 / 通用字段」切换；绑定字段的只读展示不依赖它 */
+  commonFields?: TRequirementCommonFieldsBinding;
   sidebarHeader?: React.ReactNode;
   compactLayout?: boolean;
   title?: string;
@@ -96,6 +111,15 @@ type TFieldLibraryProps = {
   /** 回收站里的字段数；为 0 时入口置灰 */
   binCount: number;
   onOpenBin: () => void;
+  /** 通用字段库；传了才有「字段类型 / 通用字段」切换 */
+  common?: {
+    definitions: TRequirementCommonFieldsBinding["definitions"];
+    isLoading: boolean;
+    /** 本类型已添加过的库字段 id */
+    boundIds: Set<string>;
+    onDragStart: (definitionId: string) => void;
+    onOpenLibrary: () => void;
+  };
 };
 
 type TFieldRowProps = {
@@ -111,6 +135,12 @@ type TFieldRowProps = {
   onInsert: (position: "above" | "below") => void;
   onDuplicate: () => void;
   onRemove: () => void;
+  /** 绑定了通用字段：行上带标记，定义只读，不能复制 */
+  isCommon?: boolean;
+  /** 私有字段「转为通用字段」；不传不出菜单项 */
+  onPromote?: () => void;
+  /** 绑定字段「编辑通用字段」（去字段库）；不传不出菜单项 */
+  onOpenLibrary?: () => void;
   children?: React.ReactNode;
 };
 
@@ -124,7 +154,8 @@ type TFieldInlineFormProps = {
   onDone: () => void;
 };
 
-const ROOT_FIELD_TYPES: TRequirementFieldType[] = [
+/** 根字段可选的类型；通用字段库的编辑弹窗也用这份，两边能建的类型才一致 */
+export const ROOT_FIELD_TYPES: TRequirementFieldType[] = [
   "text",
   "rich_text",
   "member",
@@ -134,7 +165,7 @@ const ROOT_FIELD_TYPES: TRequirementFieldType[] = [
   "image",
   "form",
 ];
-const CHILD_FIELD_TYPES = ROOT_FIELD_TYPES.filter((type) => type !== "form");
+export const CHILD_FIELD_TYPES = ROOT_FIELD_TYPES.filter((type) => type !== "form");
 const isChildFieldType = (type: TRequirementFieldType) => type !== "form";
 const FIELD_LIBRARY_GROUPS: Array<{
   labelKey: string;
@@ -196,6 +227,8 @@ const duplicateField = (field: TRequirementFieldDraft, suffix: string): TRequire
     ...field,
     id: undefined,
     client_id: uuidv4(),
+    // 副本是私有字段，不继承通用字段的绑定
+    library_field_id: null,
     // 副本没有 id、进不了回收站：本体的停用状态与停用的子字段都不复制
     is_active: true,
     name: `${field.name}${suffix}`,
@@ -225,9 +258,11 @@ function FieldLibraryBinEntry({ count, onOpen }: { count: number; onOpen: () => 
 }
 
 function FieldLibrary(props: TFieldLibraryProps) {
-  const { compact = false, onDragStart, onDragEnd, binCount, onOpenBin } = props;
+  const { compact = false, onDragStart, onDragEnd, binCount, onOpenBin, common } = props;
   const { t } = useTranslation();
   const [searchQuery, setSearchQuery] = useState("");
+  const [source, setSource] = useState<"types" | "common">("types");
+  const showCommon = Boolean(common) && source === "common";
   const normalizedSearch = searchQuery.trim().toLocaleLowerCase();
 
   if (compact) {
@@ -272,60 +307,83 @@ function FieldLibrary(props: TFieldLibraryProps) {
         <h2 className="text-14 font-semibold text-primary">
           {t("requirement_fields.builder.field_library")}
         </h2>
+        {common && <RequirementFieldSourceTabs value={source} onChange={setSource} />}
         <label className="relative mt-3 block">
           <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-placeholder" />
           <input
             type="search"
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder={t("requirement_fields.builder.search_fields")}
+            placeholder={showCommon ? "搜索通用字段" : t("requirement_fields.builder.search_fields")}
             className="focus:border-accent-primary h-8 w-full rounded-md border border-subtle bg-surface-1 pr-2 pl-8 text-12 text-primary outline-none placeholder:text-placeholder"
           />
         </label>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
-        {FIELD_LIBRARY_GROUPS.map((group) => {
-          const types = group.types.filter((type) =>
-            t(`requirement_fields.field_types.${type}`).toLocaleLowerCase().includes(normalizedSearch)
-          );
-          if (types.length === 0) return null;
-          return (
-            <section key={group.labelKey} className="mb-5 last:mb-0">
-              <h3 className="mb-2 px-1 text-11 font-medium text-secondary">{t(group.labelKey)}</h3>
-              <div className="space-y-1.5">
-                {types.map((type) => {
-                  const Icon = FIELD_ICONS[type];
-                  return (
-                    <div
-                      key={type}
-                      role="button"
-                      tabIndex={0}
-                      draggable
-                      onDragStart={(event) => {
-                        onDragStart(type);
-                        event.dataTransfer.effectAllowed = "copy";
-                        event.dataTransfer.setData(FIELD_LIBRARY_DRAG_TYPE, type);
-                      }}
-                      onDragEnd={onDragEnd}
-                      className="group flex h-10 w-full cursor-grab items-center gap-2 rounded-md border border-subtle bg-surface-1 px-2.5 text-left transition-colors duration-150 hover:border-strong hover:bg-layer-transparent-hover active:cursor-grabbing"
-                    >
-                      <GripVertical className="size-3.5 shrink-0 text-placeholder group-hover:text-tertiary" />
-                      <span className="grid size-6 shrink-0 place-items-center rounded border border-subtle bg-layer-1 text-secondary">
-                        <Icon className="size-3.5" />
-                      </span>
-                      <span className="truncate text-12 font-medium text-primary">
-                        {t(`requirement_fields.field_types.${type}`)}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-          );
-        })}
+        {showCommon && common && (
+          <RequirementCommonFieldList
+            definitions={common.definitions}
+            isLoading={common.isLoading}
+            search={searchQuery}
+            boundIds={common.boundIds}
+            onDragStart={common.onDragStart}
+            onDragEnd={onDragEnd}
+          />
+        )}
+        {!showCommon &&
+          FIELD_LIBRARY_GROUPS.map((group) => {
+            const types = group.types.filter((type) =>
+              t(`requirement_fields.field_types.${type}`).toLocaleLowerCase().includes(normalizedSearch)
+            );
+            if (types.length === 0) return null;
+            return (
+              <section key={group.labelKey} className="mb-5 last:mb-0">
+                <h3 className="mb-2 px-1 text-11 font-medium text-secondary">{t(group.labelKey)}</h3>
+                <div className="space-y-1.5">
+                  {types.map((type) => {
+                    const Icon = FIELD_ICONS[type];
+                    return (
+                      <div
+                        key={type}
+                        role="button"
+                        tabIndex={0}
+                        draggable
+                        onDragStart={(event) => {
+                          onDragStart(type);
+                          event.dataTransfer.effectAllowed = "copy";
+                          event.dataTransfer.setData(FIELD_LIBRARY_DRAG_TYPE, type);
+                        }}
+                        onDragEnd={onDragEnd}
+                        className="group flex h-10 w-full cursor-grab items-center gap-2 rounded-md border border-subtle bg-surface-1 px-2.5 text-left transition-colors duration-150 hover:border-strong hover:bg-layer-transparent-hover active:cursor-grabbing"
+                      >
+                        <GripVertical className="size-3.5 shrink-0 text-placeholder group-hover:text-tertiary" />
+                        <span className="grid size-6 shrink-0 place-items-center rounded border border-subtle bg-layer-1 text-secondary">
+                          <Icon className="size-3.5" />
+                        </span>
+                        <span className="truncate text-12 font-medium text-primary">
+                          {t(`requirement_fields.field_types.${type}`)}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            );
+          })}
       </div>
-      <div className="shrink-0 border-t border-subtle px-3 py-3">
-        <FieldLibraryBinEntry count={binCount} onOpen={onOpenBin} />
+      <div className="flex shrink-0 items-center gap-1 border-t border-subtle px-3 py-3">
+        <div className="min-w-0 flex-1">
+          <FieldLibraryBinEntry count={binCount} onOpen={onOpenBin} />
+        </div>
+        {common && (
+          <button
+            type="button"
+            onClick={common.onOpenLibrary}
+            className="shrink-0 rounded px-2 py-1 text-12 font-medium text-accent-primary hover:underline"
+          >
+            前往字段库
+          </button>
+        )}
       </div>
     </div>
   );
@@ -344,6 +402,9 @@ function RequirementFieldRow(props: TFieldRowProps) {
     onInsert,
     onDuplicate,
     onRemove,
+    isCommon = false,
+    onPromote,
+    onOpenLibrary,
     children,
   } = props;
   const { t } = useTranslation();
@@ -428,6 +489,7 @@ function RequirementFieldRow(props: TFieldRowProps) {
             {field.is_required && (
               <span className="ml-1 font-normal text-secondary">({t("requirement_fields.fields.required")})</span>
             )}
+            {isCommon && <span className={cn(COMMON_FIELD_BADGE, "ml-2 align-middle")}>通用字段</span>}
           </button>
           <span className="shrink-0 text-xs text-secondary">{fieldTypeDescription}</span>
           <CustomMenu
@@ -443,7 +505,7 @@ function RequirementFieldRow(props: TFieldRowProps) {
             portalElement={getMenuPortalElement()}
           >
             <CustomMenu.MenuItem onClick={onSelect}>
-              <MenuRowLabel icon={Settings2} label={t("edit")} />
+              <MenuRowLabel icon={Settings2} label={isCommon ? "查看" : t("edit")} />
             </CustomMenu.MenuItem>
             <CustomMenu.MenuItem onClick={() => onInsert("above")}>
               <MenuRowLabel icon={ArrowUpToLine} label={t("requirement_fields.fields.insert_above")} />
@@ -451,9 +513,22 @@ function RequirementFieldRow(props: TFieldRowProps) {
             <CustomMenu.MenuItem onClick={() => onInsert("below")}>
               <MenuRowLabel icon={ArrowDownToLine} label={t("requirement_fields.fields.insert_below")} />
             </CustomMenu.MenuItem>
-            <CustomMenu.MenuItem onClick={onDuplicate}>
-              <MenuRowLabel icon={Copy} label={t("requirement_fields.builder.duplicate_field")} />
-            </CustomMenu.MenuItem>
+            {/* 一个通用字段在一个类型里只能用一次，不提供复制 */}
+            {!isCommon && (
+              <CustomMenu.MenuItem onClick={onDuplicate}>
+                <MenuRowLabel icon={Copy} label={t("requirement_fields.builder.duplicate_field")} />
+              </CustomMenu.MenuItem>
+            )}
+            {onPromote && (
+              <CustomMenu.MenuItem onClick={onPromote}>
+                <MenuRowLabel icon={Library} label="转为通用字段" />
+              </CustomMenu.MenuItem>
+            )}
+            {onOpenLibrary && (
+              <CustomMenu.MenuItem onClick={onOpenLibrary}>
+                <MenuRowLabel icon={ExternalLink} label="编辑通用字段" />
+              </CustomMenu.MenuItem>
+            )}
             {/* 保存过的字段进回收站（可恢复）；没保存过的没有值要保，直接删 */}
             <CustomMenu.MenuItem onClick={onRemove}>
               <MenuRowLabel
@@ -765,13 +840,23 @@ function FieldInlineForm(props: TFieldInlineFormProps) {
 }
 
 export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
-  const { items, onChange, fieldValueCounts = {}, sidebarHeader, compactLayout = false, title, description } = props;
+  const {
+    items,
+    onChange,
+    fieldValueCounts = {},
+    commonFields,
+    sidebarHeader,
+    compactLayout = false,
+    title,
+    description,
+  } = props;
   const { t } = useTranslation();
   // selection = 当前原地展开成表单的那个字段，同时只能有一个。内置行不可展开，不进 selection
   const [selection, setSelection] = useState<TFieldSelection | null>(null);
   // 展开那一刻的字段快照，「取消」还原用；isNew 的字段直接撤销掉这次新增
   const [editSnapshot, setEditSnapshot] = useState<{ field: TRequirementFieldDraft; isNew: boolean } | null>(null);
   const [draggedLibraryFieldType, setDraggedLibraryFieldType] = useState<TRequirementFieldType | null>(null);
+  const [draggedCommonFieldId, setDraggedCommonFieldId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<TFieldDropTarget | null>(null);
   const [isBinOpen, setIsBinOpen] = useState(false);
 
@@ -779,6 +864,10 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
   const { active: activeItems, inactive: inactiveItems } = splitBuilderItems(items);
   const binEntries = collectRecycleBinEntries(items);
   const customFieldCount = activeItems.reduce((count, item) => (item.kind === "custom" ? count + 1 : count), 0);
+  // 本类型已绑定的通用字段（回收站里的也算）：左栏据此置灰，一个通用字段只能添加一次
+  const boundDefinitionIds = new Set(
+    items.flatMap((item) => (item.kind === "custom" && item.field.library_field_id ? [item.field.library_field_id] : []))
+  );
   /** 主列表的回写口：Sortable.onChange 给的是整个数组，回收站里的根字段要自己拼回尾部 */
   const commitActive = (nextActive: TRequirementBuilderItem[]) => onChange([...nextActive, ...inactiveItems]);
   const findCustomField = (rootKey: string) =>
@@ -861,6 +950,18 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
     />
   );
 
+  /** 绑定了通用字段的根字段展开后是只读卡片：能改的只有「纳入标准库」 */
+  const renderCommonFieldCard = (rootKey: string, field: TRequirementFieldDraft) => (
+    <RequirementCommonFieldCard
+      field={field}
+      definition={commonFields?.definitions.find((item) => item.id === field.library_field_id)}
+      onToggleShowInLibrary={(next) => writeField({ rootKey }, { ...field, show_in_library: next })}
+      onCancel={cancelEditing}
+      onDone={closeEditor}
+      onOpenLibrary={() => commonFields?.onOpenLibrary(field.library_field_id ?? undefined)}
+    />
+  );
+
   /** index 是主列表（activeItems）里的下标 —— 新字段可以插在内置字段之间 */
   const insertRootField = (index: number, type: TRequirementFieldType) => {
     const nextField = createField(
@@ -872,6 +973,25 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
     nextItems.splice(index, 0, { kind: "custom", field: nextField });
     commitActive(nextItems);
     openEditor({ rootKey: fieldKey(nextField) }, nextField, true);
+  };
+
+  /** 从左栏拖进来的通用字段：定义取自库、本类型里只读，所以不展开编辑表单 */
+  const insertCommonField = (index: number, definitionId: string) => {
+    const definition = commonFields?.definitions.find((item) => item.id === definitionId);
+    if (!definition || boundDefinitionIds.has(definitionId)) return;
+    const name = definition.name.trim().toLocaleLowerCase();
+    // 保存时后端按同一口径（不分大小写、含回收站）校验重名，这里提前说清楚
+    if (items.some((item) => item.kind === "custom" && item.field.name.trim().toLocaleLowerCase() === name)) {
+      setToast({
+        type: TOAST_TYPE.ERROR,
+        title: "无法添加",
+        message: `本类型里已有名为「${definition.name}」的字段（含回收站），请先改名或删除。`,
+      });
+      return;
+    }
+    const nextItems = [...activeItems];
+    nextItems.splice(index, 0, { kind: "custom", field: toBoundFieldDraft(definition) });
+    commitActive(nextItems);
   };
 
   const insertChildField = (rootKey: string, index: number, type: TRequirementFieldType) => {
@@ -892,14 +1012,27 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
 
   const resetLibraryDrag = () => {
     setDraggedLibraryFieldType(null);
+    setDraggedCommonFieldId(null);
     setDropTarget(null);
   };
 
-  const handleChildFieldDragOver = (event: React.DragEvent<HTMLDivElement>, rootKey: string) => {
-    if (!event.dataTransfer.types.includes(FIELD_LIBRARY_DRAG_TYPE)) return;
+  /**
+   * 拖到表单上：只有「字段类型拖进私有表单」能落成子字段。另外三种情况在这里拦下并标成
+   * 不可放置，不让事件冒泡到根列表 —— 冒泡的话松手会被悄悄加成末尾的一级字段：
+   * 通用字段拖进任何表单（它只能作一级字段）、任何东西拖进绑定了通用字段的表单
+   * （子字段由字段库维护）、表单拖进表单。
+   */
+  const handleChildFieldDragOver = (
+    event: React.DragEvent<HTMLDivElement>,
+    rootKey: string,
+    isCommonForm: boolean
+  ) => {
+    const dragTypes = event.dataTransfer.types;
+    const isCommonDrag = dragTypes.includes(COMMON_FIELD_DRAG_TYPE);
+    if (!isCommonDrag && !dragTypes.includes(FIELD_LIBRARY_DRAG_TYPE)) return;
     event.preventDefault();
     event.stopPropagation();
-    if (draggedLibraryFieldType && isChildFieldType(draggedLibraryFieldType)) {
+    if (!isCommonDrag && !isCommonForm && draggedLibraryFieldType && isChildFieldType(draggedLibraryFieldType)) {
       event.dataTransfer.dropEffect = "copy";
       setDropTarget({ kind: "child", rootKey });
       return;
@@ -908,12 +1041,21 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
     setDropTarget({ kind: "invalid-child", rootKey });
   };
 
-  const handleChildFieldDrop = (event: React.DragEvent<HTMLDivElement>, rootKey: string, childCount: number) => {
-    if (!event.dataTransfer.types.includes(FIELD_LIBRARY_DRAG_TYPE)) return;
+  const handleChildFieldDrop = (
+    event: React.DragEvent<HTMLDivElement>,
+    rootKey: string,
+    childCount: number,
+    isCommonForm: boolean
+  ) => {
+    const dragTypes = event.dataTransfer.types;
+    const isCommonDrag = dragTypes.includes(COMMON_FIELD_DRAG_TYPE);
+    if (!isCommonDrag && !dragTypes.includes(FIELD_LIBRARY_DRAG_TYPE)) return;
     event.preventDefault();
     event.stopPropagation();
-    const fieldType = event.dataTransfer.getData(FIELD_LIBRARY_DRAG_TYPE) as TRequirementFieldType;
-    if (isChildFieldType(fieldType)) insertChildField(rootKey, childCount, fieldType);
+    if (!isCommonDrag && !isCommonForm) {
+      const fieldType = event.dataTransfer.getData(FIELD_LIBRARY_DRAG_TYPE) as TRequirementFieldType;
+      if (isChildFieldType(fieldType)) insertChildField(rootKey, childCount, fieldType);
+    }
     resetLibraryDrag();
   };
 
@@ -983,23 +1125,41 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
   const renderRootField = (field: TRequirementFieldDraft, rootIndex: number) => {
     const rootKey = fieldKey(field);
     const { active: activeChildren } = splitFieldsByActive(field.children);
+    // 绑定了通用字段：定义与子字段整组取自库，本类型里只读
+    const isCommon = Boolean(field.library_field_id);
     const isEditing = selection?.rootKey === rootKey && !selection.childKey;
     const hasSelectedChild = selection?.rootKey === rootKey && Boolean(selection.childKey);
     const isChildDropTarget = dropTarget?.kind === "child" && dropTarget.rootKey === rootKey;
     const isInvalidChildDropTarget = dropTarget?.kind === "invalid-child" && dropTarget.rootKey === rootKey;
+    // 落不进这个表单时说明原因（判定见 handleChildFieldDragOver）
+    const invalidDropNotice = isInvalidChildDropTarget && (
+      <div className="mb-2 rounded-md border border-danger-subtle bg-danger-subtle px-3 py-2 text-11 text-danger-primary">
+        {draggedCommonFieldId
+          ? "通用字段只能作为一级字段，不能放进表单。"
+          : isCommon
+            ? "该表单是通用字段，子字段在需求通用字段库里统一维护。"
+            : t("requirement_fields.builder.nested_form_not_supported")}
+      </div>
+    );
     return (
       <div
         onDragOver={(event) => {
-          if (field.field_type === "form") handleChildFieldDragOver(event, rootKey);
+          if (field.field_type === "form") handleChildFieldDragOver(event, rootKey, isCommon);
         }}
         onDrop={(event) => {
-          if (field.field_type === "form") handleChildFieldDrop(event, rootKey, activeChildren.length);
+          if (field.field_type === "form") handleChildFieldDrop(event, rootKey, activeChildren.length, isCommon);
         }}
       >
         <RequirementFieldRow
           field={field}
           isEditing={isEditing}
-          editor={isEditing ? renderFieldEditor({ rootKey }, field) : undefined}
+          editor={
+            isEditing
+              ? isCommon
+                ? renderCommonFieldCard(rootKey, field)
+                : renderFieldEditor({ rootKey }, field)
+              : undefined
+          }
           hasSelectedChild={hasSelectedChild}
           isDropTarget={isChildDropTarget}
           isInvalidDropTarget={isInvalidChildDropTarget}
@@ -1007,88 +1167,105 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
           onInsert={(position) => insertRootField(rootIndex + (position === "below" ? 1 : 0), "text")}
           onDuplicate={() => duplicateSelection({ rootKey })}
           onRemove={() => discardSelection({ rootKey })}
+          isCommon={isCommon}
+          onPromote={
+            !isCommon && field.id && commonFields?.onPromote ? () => commonFields.onPromote?.(field) : undefined
+          }
+          onOpenLibrary={
+            isCommon && commonFields
+              ? () => commonFields.onOpenLibrary(field.library_field_id ?? undefined)
+              : undefined
+          }
         >
-          <div
-            className={cn("border-t border-subtle bg-layer-1/50 px-3", compactLayout ? "py-2 sm:pl-7" : "py-3 sm:pl-9")}
-          >
-            {isInvalidChildDropTarget && (
-              <div className="mb-2 rounded-md border border-danger-subtle bg-danger-subtle px-3 py-2 text-11 text-danger-primary">
-                {t("requirement_fields.builder.nested_form_not_supported")}
-              </div>
-            )}
-            {activeChildren.length > 0 && (
-              <Sortable
-                id={`requirement-form-${rootKey}`}
-                data={activeChildren}
-                keyExtractor={fieldKey}
-                containerClassName="mb-2 last:mb-0"
-                onChange={(children) =>
-                  onChange(
-                    mapCustomItem(rootKey, (item) => ({
-                      ...item,
-                      // 回收站里的子字段不在 Sortable 里，拼回尾部
-                      children: [...children, ...item.children.filter((child) => !child.is_active)],
-                    }))
-                  )
-                }
-                render={(child, childIndex) => {
-                  const childKey = fieldKey(child);
-                  const isChildEditing = selection?.rootKey === rootKey && selection.childKey === childKey;
-                  return (
-                    <RequirementFieldRow
-                      field={child}
-                      isChild
-                      isEditing={isChildEditing}
-                      editor={isChildEditing ? renderFieldEditor({ rootKey, childKey }, child) : undefined}
-                      onSelect={() => openEditor({ rootKey, childKey }, child)}
-                      onInsert={(position) =>
-                        insertChildField(rootKey, childIndex + (position === "below" ? 1 : 0), "text")
-                      }
-                      onDuplicate={() => duplicateSelection({ rootKey, childKey })}
-                      onRemove={() => discardSelection({ rootKey, childKey })}
-                    />
-                  );
-                }}
-              />
-            )}
-            <CustomMenu
-              customButton={
-                <span
-                  className={cn(
-                    "mt-2 flex h-9 w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-subtle text-11 font-medium text-accent-primary hover:border-accent-subtle hover:bg-accent-subtle",
-                    {
-                      "mt-0": activeChildren.length === 0,
-                      "border-accent-strong bg-accent-subtle": isChildDropTarget,
-                    }
-                  )}
-                >
-                  <Plus className="size-3.5" />
-                  {t(
-                    isChildDropTarget
-                      ? "requirement_fields.builder.child_drop_hint"
-                      : "requirement_fields.fields.add_child"
-                  )}
-                </span>
-              }
-              className="w-full"
-              customButtonClassName="w-full"
-              placement="bottom-start"
-              optionsClassName="w-48"
-              portalElement={getMenuPortalElement()}
+          {isCommon ? (
+            <div
+              className={cn(
+                "border-t border-subtle bg-layer-1/50 px-3",
+                compactLayout ? "py-2 sm:pl-7" : "py-3 sm:pl-9"
+              )}
             >
-              {CHILD_FIELD_TYPES.map((type) => {
-                const Icon = FIELD_ICONS[type];
-                return (
-                  <CustomMenu.MenuItem
-                    key={type}
-                    onClick={() => insertChildField(rootKey, activeChildren.length, type)}
+              {invalidDropNotice}
+              <RequirementCommonChildRows fields={activeChildren} />
+            </div>
+          ) : (
+            <div
+              className={cn("border-t border-subtle bg-layer-1/50 px-3", compactLayout ? "py-2 sm:pl-7" : "py-3 sm:pl-9")}
+            >
+              {invalidDropNotice}
+              {activeChildren.length > 0 && (
+                <Sortable
+                  id={`requirement-form-${rootKey}`}
+                  data={activeChildren}
+                  keyExtractor={fieldKey}
+                  containerClassName="mb-2 last:mb-0"
+                  onChange={(children) =>
+                    onChange(
+                      mapCustomItem(rootKey, (item) => ({
+                        ...item,
+                        // 回收站里的子字段不在 Sortable 里，拼回尾部
+                        children: [...children, ...item.children.filter((child) => !child.is_active)],
+                      }))
+                    )
+                  }
+                  render={(child, childIndex) => {
+                    const childKey = fieldKey(child);
+                    const isChildEditing = selection?.rootKey === rootKey && selection.childKey === childKey;
+                    return (
+                      <RequirementFieldRow
+                        field={child}
+                        isChild
+                        isEditing={isChildEditing}
+                        editor={isChildEditing ? renderFieldEditor({ rootKey, childKey }, child) : undefined}
+                        onSelect={() => openEditor({ rootKey, childKey }, child)}
+                        onInsert={(position) =>
+                          insertChildField(rootKey, childIndex + (position === "below" ? 1 : 0), "text")
+                        }
+                        onDuplicate={() => duplicateSelection({ rootKey, childKey })}
+                        onRemove={() => discardSelection({ rootKey, childKey })}
+                      />
+                    );
+                  }}
+                />
+              )}
+              <CustomMenu
+                customButton={
+                  <span
+                    className={cn(
+                      "mt-2 flex h-9 w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-subtle text-11 font-medium text-accent-primary hover:border-accent-subtle hover:bg-accent-subtle",
+                      {
+                        "mt-0": activeChildren.length === 0,
+                        "border-accent-strong bg-accent-subtle": isChildDropTarget,
+                      }
+                    )}
                   >
-                    <MenuRowLabel icon={Icon} label={t(`requirement_fields.field_types.${type}`)} />
-                  </CustomMenu.MenuItem>
-                );
-              })}
-            </CustomMenu>
-          </div>
+                    <Plus className="size-3.5" />
+                    {t(
+                      isChildDropTarget
+                        ? "requirement_fields.builder.child_drop_hint"
+                        : "requirement_fields.fields.add_child"
+                    )}
+                  </span>
+                }
+                className="w-full"
+                customButtonClassName="w-full"
+                placement="bottom-start"
+                optionsClassName="w-48"
+                portalElement={getMenuPortalElement()}
+              >
+                {CHILD_FIELD_TYPES.map((type) => {
+                  const Icon = FIELD_ICONS[type];
+                  return (
+                    <CustomMenu.MenuItem
+                      key={type}
+                      onClick={() => insertChildField(rootKey, activeChildren.length, type)}
+                    >
+                      <MenuRowLabel icon={Icon} label={t(`requirement_fields.field_types.${type}`)} />
+                    </CustomMenu.MenuItem>
+                  );
+                })}
+              </CustomMenu>
+            </div>
+          )}
         </RequirementFieldRow>
       </div>
     );
@@ -1114,6 +1291,14 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
           </CustomMenu.MenuItem>
         );
       })}
+      {/* 窄屏下左栏收起，还没添加的通用字段也从这个菜单加 */}
+      {(commonFields?.definitions ?? [])
+        .filter((definition) => !boundDefinitionIds.has(definition.id))
+        .map((definition) => (
+          <CustomMenu.MenuItem key={definition.id} onClick={() => insertCommonField(activeItems.length, definition.id)}>
+            <MenuRowLabel icon={FIELD_ICONS[definition.field_type]} label={`通用字段 · ${definition.name}`} />
+          </CustomMenu.MenuItem>
+        ))}
       {/* 窄屏下字段库收进这个菜单，回收站入口也跟着进来 */}
       <CustomMenu.MenuItem onClick={() => setIsBinOpen(true)} disabled={binEntries.length === 0}>
         <MenuRowLabel
@@ -1147,6 +1332,18 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
             onDragEnd={resetLibraryDrag}
             binCount={binEntries.length}
             onOpenBin={() => setIsBinOpen(true)}
+            common={
+              commonFields && {
+                definitions: commonFields.definitions,
+                isLoading: commonFields.isLoading,
+                boundIds: boundDefinitionIds,
+                onDragStart: (definitionId) => {
+                  setDraggedCommonFieldId(definitionId);
+                  setDropTarget(null);
+                },
+                onOpenLibrary: () => commonFields.onOpenLibrary(),
+              }
+            }
           />
         </div>
       </aside>
@@ -1180,12 +1377,21 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
             compactLayout ? "px-6 py-4 2xl:px-7" : "px-4 py-4 2xl:px-7 2xl:py-6"
           )}
           onDragOver={(event) => {
-            if (!event.dataTransfer.types.includes(FIELD_LIBRARY_DRAG_TYPE)) return;
+            const dragTypes = event.dataTransfer.types;
+            if (!dragTypes.includes(FIELD_LIBRARY_DRAG_TYPE) && !dragTypes.includes(COMMON_FIELD_DRAG_TYPE)) return;
             event.preventDefault();
             event.dataTransfer.dropEffect = "copy";
             setDropTarget({ kind: "root" });
           }}
           onDrop={(event) => {
+            // 通用字段只能落成根字段；拖到表单上的情况在表单那一层就被拦下并提示了，走不到这里
+            const commonFieldId = event.dataTransfer.getData(COMMON_FIELD_DRAG_TYPE);
+            if (commonFieldId) {
+              event.preventDefault();
+              insertCommonField(activeItems.length, commonFieldId);
+              resetLibraryDrag();
+              return;
+            }
             const fieldType = event.dataTransfer.getData(FIELD_LIBRARY_DRAG_TYPE) as TRequirementFieldType;
             if (!ROOT_FIELD_TYPES.includes(fieldType)) return;
             event.preventDefault();
@@ -1227,7 +1433,7 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
                 )
               }
             />
-            {customFieldCount === 0 && !draggedLibraryFieldType && (
+            {customFieldCount === 0 && !draggedLibraryFieldType && !draggedCommonFieldId && (
               <div className="mt-3 flex flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-subtle bg-surface-1 px-6 py-5 text-center">
                 <p className="text-13 font-medium text-primary">{t("requirement_fields.fields.empty")}</p>
                 <p className="text-11 leading-4 text-secondary">
@@ -1236,7 +1442,7 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
                 <div className="mt-2 inline-flex xl:hidden">{libraryMenu}</div>
               </div>
             )}
-            {draggedLibraryFieldType && (
+            {(draggedLibraryFieldType || draggedCommonFieldId) && (
               <div
                 className={cn(
                   "mt-3 flex h-12 items-center justify-center rounded-lg border border-dashed text-11 font-medium transition-colors",

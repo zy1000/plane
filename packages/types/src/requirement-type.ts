@@ -5,6 +5,8 @@ import type {
   TRequirementBuiltinFieldPayload,
   TRequirementField,
   TRequirementFieldDraft,
+  TRequirementFieldType,
+  TRequirementValue,
 } from "./requirement";
 
 /**
@@ -66,4 +68,49 @@ export type TRequirementTypeConfigurationPayload = {
   builtin_fields?: TRequirementBuiltinFieldPayload[];
   /** 删字段会清掉引用该类型的明细行里的数据，需二次确认 */
   confirm_data_loss?: boolean;
+};
+
+/** 通用字段的定义部分：根字段与表单子字段同形状 */
+export type TRequirementFieldDefinitionNode = {
+  id: string;
+  name: string;
+  field_type: TRequirementFieldType;
+  is_required: boolean;
+  config: TRequirementField["config"];
+  default_value: TRequirementValue;
+  sort_order: number;
+};
+
+/** 绑定了某个通用字段的需求类型 */
+export type TRequirementFieldDefinitionUsage = {
+  requirement_type_id: string;
+  name: string;
+  logo_props?: Partial<TLogoProps>;
+};
+
+/**
+ * 需求通用字段库里的一个字段。定义全工作区统一，保存后同步到绑定它的需求类型；
+ * 排序、纳入标准库、启停不在这里，各类型自己定。
+ */
+export type TRequirementFieldDefinition = TRequirementFieldDefinitionNode & {
+  /** 表单的子字段，只有一层 */
+  children: TRequirementFieldDefinitionNode[];
+  used_by: TRequirementFieldDefinitionUsage[];
+  created_at: string;
+  updated_at: string;
+};
+
+export type TRequirementFieldDefinitionPayload = Omit<TRequirementFieldDefinitionNode, "id" | "sort_order"> & {
+  /** 带 id 的是已有子字段（保住 id，值才不丢），不带的是新增，没出现的会被删除 */
+  children: Array<Omit<TRequirementFieldDefinitionNode, "id" | "sort_order"> & { id?: string }>;
+  /** 保存会清掉已有字段值时需二次确认 */
+  confirm_data_loss?: boolean;
+};
+
+/** 保存通用字段会清值时 409 带回的影响面：按需求类型列出受影响的需求条数 */
+export type TRequirementFieldLibraryDataLoss = {
+  code: "REQUIREMENT_FIELD_LIBRARY_DATA_LOSS";
+  error: string;
+  affected_requirement_count: number;
+  affected: Array<TRequirementFieldDefinitionUsage & { affected_requirement_count: number }>;
 };

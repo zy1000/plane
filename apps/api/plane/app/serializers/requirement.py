@@ -38,6 +38,9 @@ class RequirementFieldWriteSerializer(serializers.Serializer):
     config = serializers.DictField(required=False, default=dict)
     default_value = serializers.JSONField(required=False, allow_null=True)
     show_in_library = serializers.BooleanField(required=False, default=True)
+    # 新节点绑定通用字段时带上；已有节点的绑定以库里存的为准，带不带都不看
+    # （见 utils/requirement_field_library.expand_library_bound_payloads）
+    library_field_id = serializers.UUIDField(required=False, allow_null=True)
 
     def validate_name(self, value):
         value = value.strip()

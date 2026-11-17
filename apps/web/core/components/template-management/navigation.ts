@@ -1,9 +1,10 @@
 import type { LucideIcon } from "lucide-react";
-import { ClipboardCheck, FlaskConical, Layers, Library, Rows2, Tags, Workflow } from "lucide-react";
+import { ClipboardCheck, ClipboardList, FlaskConical, Layers, Library, Rows2, Rows3, Tags, Workflow } from "lucide-react";
 import {
   WORKSPACE_CASE_TEMPLATE_READ_PERMISSION_KEYS,
   WORKSPACE_DEV_MODE_READ_PERMISSION_KEYS,
   WORKSPACE_REQUIREMENT_LIBRARY_READ_PERMISSION_KEYS,
+  WORKSPACE_REQUIREMENT_TYPE_READ_PERMISSION_KEYS,
   WORKSPACE_REVIEW_TEMPLATE_READ_PERMISSION_KEYS,
 } from "@plane/constants";
 
@@ -14,6 +15,8 @@ export type TTemplateManagementTabKey =
   | "reviews"
   | "issue-types"
   | "issue-fields"
+  | "requirement-types"
+  | "requirement-fields"
   | "dev-modes";
 
 export type TTemplateManagementNavigationItem = {
@@ -62,8 +65,22 @@ export const TEMPLATE_MANAGEMENT_NAVIGATION_ITEMS: TTemplateManagementNavigation
   {
     key: "issue-fields",
     icon: Rows2,
-    label: "通用字段库",
+    label: "工作项通用字段库",
     permissionKeys: WORKSPACE_DEV_MODE_READ_PERMISSION_KEYS,
+  },
+  {
+    // 需求类型：字段结构的定义源，标准需求库与产品需求共用；从工作区设置挪进来
+    key: "requirement-types",
+    icon: ClipboardList,
+    i18nKey: "workspace_settings.settings.requirement_types.title",
+    permissionKeys: WORKSPACE_REQUIREMENT_TYPE_READ_PERMISSION_KEYS,
+  },
+  {
+    // 与「工作项通用字段库」是两个独立的库：字段类型、选项存法都不同
+    key: "requirement-fields",
+    icon: Rows3,
+    label: "需求通用字段库",
+    permissionKeys: WORKSPACE_REQUIREMENT_TYPE_READ_PERMISSION_KEYS,
   },
   {
     // 紧挨「评审」：模式的阶段配置直接引用评审树上的节点，维护两者的是同一批人

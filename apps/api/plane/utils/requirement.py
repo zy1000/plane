@@ -840,8 +840,13 @@ def sync_requirement_type_fields(
     builtin_layout=None,
     actor=None,
     confirm_data_loss=False,
+    keep_root_order=False,
 ):
-    """builtin_layout 是可选的内置字段布局 [{key, show_in_library, position}]，
+    """keep_root_order：已有根字段保留原 sort_order，不按数组下标重排。通用字段库同步
+    定义时用（utils/requirement_field_library.py）—— 那条路径只改定义，不该动各类型
+    自己排的列序和内置字段布局。
+
+    builtin_layout 是可选的内置字段布局 [{key, show_in_library, position}]，
     position 是「7 个可排序内置列 + 自定义根字段」统一列表里的 0 基下标。有布局时
     根字段落到内置项占位之外的互补槽位，两边共用同一个 (slot+1)*STEP 公式，读侧按
     sort_order 归并即还原统一顺序。不传（旧客户端）时保持原行为：根字段按数组下标
@@ -879,15 +884,19 @@ def sync_requirement_type_fields(
                 )
             submitted_ids.add(field.id)
         else:
+            # 绑定通用字段只发生在建行这一刻；已有行的绑定不随载荷改
             field = RequirementField(
-                requirement_type=requirement_type, parent_field=parent
+                requirement_type=requirement_type,
+                parent_field=parent,
+                library_field_id=payload.get("library_field_id"),
             )
 
         field.name = payload["name"]
         field.field_type = payload["field_type"]
         field.is_required = payload["is_required"]
         field.is_active = payload["is_active"]
-        field.sort_order = (index + 1) * SORT_ORDER_STEP
+        if not (keep_root_order and field_id and parent is None):
+            field.sort_order = (index + 1) * SORT_ORDER_STEP
         field.config = deepcopy(payload.get("config") or {})
         field.default_value = deepcopy(payload.get("default_value"))
         field.show_in_library = payload["show_in_library"]

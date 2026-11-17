@@ -508,12 +508,81 @@ class RequirementModule(BaseModel):
         return super().save(*args, **kwargs)
 
 
+class RequirementFieldDefinition(BaseModel):
+    """需求通用字段库：工作区级的字段定义，保证同一个字段在各需求类型里完全一致。
+
+    需求类型通过 ``RequirementField.library_field`` 绑定库字段。绑定行冗余存一份定义
+    （名称 / 类型 / 必填 / 配置 / 默认值，表单还有整组子字段），读侧（网格、详情、筛选、
+    变更对比、版本、Excel）照旧读 RequirementField，不需要知道库的存在；库字段保存时由
+    utils/requirement_field_library.py 在同一事务里把定义同步到全部绑定它的类型。
+    排序、纳入标准库、启停留在绑定行上，各类型自己定。类型照样可以建不绑库的私有字段。
+
+    与工作项的 IssueFieldDefinition 是两张独立的表：两边的字段类型、选项存法（这里存
+    带 id 的选项，值存 id）、改定义的生效方式都不同。
+
+    表单的子字段是 parent 指向表单定义的行，只允许一层（与 RequirementField 同规则）。
+    """
+
+    workspace = models.ForeignKey(
+        "db.WorkSpace",
+        on_delete=models.CASCADE,
+        related_name="requirement_field_definitions",
+        verbose_name="所属工作区",
+    )
+    parent = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        related_name="children",
+        null=True,
+        blank=True,
+        verbose_name="父级表单字段",
+    )
+    name = models.CharField(max_length=255, verbose_name="字段名称")
+    field_type = models.CharField(
+        max_length=20,
+        choices=RequirementFieldType.choices,
+        default=RequirementFieldType.TEXT,
+        verbose_name="字段类型",
+    )
+    is_required = models.BooleanField(default=False, verbose_name="是否必填")
+    sort_order = models.FloatField(default=DEFAULT_SORT_ORDER, verbose_name="排序")
+    config = models.JSONField(default=dict, blank=True, verbose_name="字段配置")
+    default_value = models.JSONField(null=True, blank=True, verbose_name="默认值")
+
+    class Meta:
+        db_table = "requirement_field_definitions"
+        ordering = ("sort_order", "created_at", "id")
+        constraints = [
+            # 只约束根定义：子字段的重名规则是「同一个表单内唯一」，由写入口校验
+            models.UniqueConstraint(
+                fields=["workspace", "name"],
+                condition=Q(deleted_at__isnull=True, parent__isnull=True),
+                name="req_field_definition_unique_root_name",
+            )
+        ]
+
+    def __str__(self):
+        return self.name
+
+
 class RequirementField(BaseModel):
     requirement_type = models.ForeignKey(
         RequirementType,
         on_delete=models.CASCADE,
         related_name="fields",
         verbose_name="所属需求类型",
+    )
+    # 绑定的通用字段：非空时名称 / 类型 / 必填 / 配置 / 默认值（表单还有子字段）由库同步、
+    # 类型编辑器里只读，本行只管排序、纳入标准库与启停；空 = 本类型私有字段。
+    # 用 SET_NULL 而不是 PROTECT / RESTRICT：软删级联把后两者当 CASCADE 处理，库字段一删
+    # 会连带软删掉类型里的字段行。仍被绑定的库字段不让删，由视图拦。
+    library_field = models.ForeignKey(
+        RequirementFieldDefinition,
+        on_delete=models.SET_NULL,
+        related_name="bindings",
+        null=True,
+        blank=True,
+        verbose_name="绑定的通用字段",
     )
     parent_field = models.ForeignKey(
         "self",

@@ -8,7 +8,7 @@ import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { CustomSearchSelect, EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { IdentifierInput, isValidIdentifier } from "@/components/common/identifier-input";
-import { getSettingsRequirementTypePath } from "@/components/workspace/settings/requirement-types/navigation";
+import { getRequirementTypePath } from "@/components/template-management/requirement-types/navigation";
 import { useProductCategories } from "@/hooks/store/use-product-categories";
 import { useRequirementTypes } from "@/hooks/store/use-requirement-types";
 import { useRequirementLibrariesContext } from "./context";
@@ -293,7 +293,7 @@ export function RequirementLibraryFormModal() {
                   footerOption={
                     <div className="mx-2 mt-1.5 border-t border-subtle pt-1.5">
                       <Link
-                        to={getSettingsRequirementTypePath(workspaceSlug)}
+                        to={getRequirementTypePath(workspaceSlug)}
                         onClick={handleClose}
                         className="flex items-center gap-1.5 rounded-sm px-1 py-1.5 text-11 text-secondary hover:bg-layer-transparent-hover"
                       >

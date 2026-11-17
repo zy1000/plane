@@ -70,7 +70,7 @@ export const IssueFieldLibraryPage = observer(function IssueFieldLibraryPage({
 
   return (
     <>
-      <PageHead title={`通用字段库 - ${t("workspace_templates.title")}`} />
+      <PageHead title={`工作项通用字段库 - ${t("workspace_templates.title")}`} />
       <ContentWrapper className="bg-surface-1">
         <IssueFieldLibraryContent
           fields={fields}

@@ -10,6 +10,8 @@ from plane.app.views.requirement import (
     RequirementApprovalInboxAPIView,
     RequirementBaselineViewSet,
     RequirementConfigurationAPIView,
+    RequirementFieldDefinitionViewSet,
+    RequirementFieldPromoteAPIView,
     RequirementChangeItemViewSet,
     RequirementChangeRequestViewSet,
     RequirementChangeTrailViewSet,
@@ -51,6 +53,25 @@ urlpatterns = [
         "workspaces/<str:slug>/requirement-types/<uuid:pk>/configuration/",
         RequirementTypeConfigurationAPIView.as_view(),
         name="requirement-type-configuration",
+    ),
+    # 需求通用字段库：定义全工作区统一，保存后同步到绑定它的需求类型
+    path(
+        "workspaces/<str:slug>/requirement-field-definitions/",
+        RequirementFieldDefinitionViewSet.as_view({"get": "list", "post": "create"}),
+        name="requirement-field-definitions",
+    ),
+    path(
+        "workspaces/<str:slug>/requirement-field-definitions/<uuid:pk>/",
+        RequirementFieldDefinitionViewSet.as_view(
+            {"patch": "partial_update", "delete": "destroy"}
+        ),
+        name="requirement-field-definition-detail",
+    ),
+    # 把类型里的一个私有字段原地转为通用字段
+    path(
+        "workspaces/<str:slug>/requirement-types/<uuid:pk>/fields/<uuid:field_id>/promote/",
+        RequirementFieldPromoteAPIView.as_view(),
+        name="requirement-type-field-promote",
     ),
     path(
         "workspaces/<str:slug>/requirement-approvals/",

@@ -5,7 +5,9 @@ import { ChevronDown, Save, Settings2 } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { RequirementIcon } from "@plane/propel/icons";
+import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Tooltip } from "@plane/propel/tooltip";
+import type { TRequirementFieldDraft } from "@plane/types";
 import { Breadcrumbs, Header, Loader } from "@plane/ui";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { TypeIcon } from "@/components/common/type-icon-picker";
@@ -14,32 +16,69 @@ import { RequirementFieldBuilder } from "@/components/requirements/requirement-f
 import { RequirementTypeSettingsModal } from "@/components/requirements/requirement-type-settings-modal";
 import { useRequirementTypeEditorState } from "@/components/requirements/use-requirement-type-editor-state";
 import { SettingsFullBleedContentWrapper } from "@/components/settings/content-wrapper";
+import { useRequirementFieldLibrary } from "@/hooks/store/use-requirement-field-library";
 import { useRequirementTypes } from "@/hooks/store/use-requirement-types";
-import { getSettingsRequirementTypePath } from "./navigation";
+import { getRequirementFieldLibraryPath, getRequirementTypePath } from "./navigation";
 
 /**
- * 工作区设置里的需求类型二级页。
+ * 模板中心「需求类型」下某个类型的字段配置页。
  *
- * 与模板管理下的 RequirementTypeEditor 共用同一个状态 hook（保存走乐观锁 +
- * 三种错误码，不能有两份实现），但各自渲染自己的外壳与导航。
+ * 草稿、脏检查与带乐观锁的保存都在 useRequirementTypeEditorState 里，这里只管外壳、导航，
+ * 以及把需求通用字段库接给字段构建器（左栏的通用字段列表、转为通用字段、去字段库）。
+ * 外壳沿用 SettingsFullBleedContentWrapper：它只是「页头 + 撑满的内容区」，与设置页无关。
  */
-export const SettingsRequirementTypeEditor = observer(function SettingsRequirementTypeEditor() {
+export const RequirementTypeEditor = observer(function RequirementTypeEditor() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { workspaceSlug, requirementTypeId } = useParams();
-  // 直接用 store hook，不碰模板管理的 context —— 那个 provider 以后要删
   const { requirementTypes, upsertRequirementType } = useRequirementTypes(workspaceSlug);
   const editor = useRequirementTypeEditorState({
     workspaceSlug,
     requirementTypeId,
     onRequirementTypeUpdate: upsertRequirementType,
   });
+  const library = useRequirementFieldLibrary(workspaceSlug);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
-  const listPath = getSettingsRequirementTypePath(workspaceSlug ?? "");
+  const listPath = getRequirementTypePath(workspaceSlug ?? "");
   const handleBack = () => {
     if (!editor.confirmDiscard()) return;
     navigate(listPath);
+  };
+
+  /** 去字段库也是离开编辑器，先确认丢弃草稿 */
+  const handleOpenLibrary = (definitionId?: string) => {
+    if (!editor.confirmDiscard()) return;
+    navigate(getRequirementFieldLibraryPath(workspaceSlug ?? "", definitionId));
+  };
+
+  /**
+   * 转为通用字段是立即生效的独立请求（原地绑定，字段 id 与已有值不变），不走草稿。
+   * 有未保存的改动时先让用户保存：转换后要重新拉配置，草稿会被冲掉。
+   */
+  const handlePromote = async (field: TRequirementFieldDraft) => {
+    if (!field.id || !requirementTypeId) return;
+    if (editor.isDirty) {
+      setToast({ type: TOAST_TYPE.ERROR, title: "请先保存当前修改", message: "保存字段结构后再转为通用字段。" });
+      return;
+    }
+    if (
+      !window.confirm(
+        `将「${field.name}」转为通用字段？转换后字段定义由需求通用字段库统一维护，本类型内不能再修改；已有的字段值不受影响。`
+      )
+    )
+      return;
+    try {
+      await library.promoteField(requirementTypeId, field.id);
+      setToast({ type: TOAST_TYPE.SUCCESS, title: "已转为通用字段" });
+      await editor.reload();
+    } catch (error) {
+      setToast({
+        type: TOAST_TYPE.ERROR,
+        title: "转换失败",
+        message: (error as { error?: string })?.error ?? "无法转为通用字段，请稍后重试。",
+      });
+    }
   };
 
   const { metadata } = editor;
@@ -76,7 +115,7 @@ export const SettingsRequirementTypeEditor = observer(function SettingsRequireme
 
   return (
     <>
-      <PageHead title={`${t("workspace_settings.settings.requirement_types.title")} - ${metadata.name}`} />
+      <PageHead title={`${metadata.name} - ${t("workspace_settings.settings.requirement_types.title")}`} />
       <SettingsFullBleedContentWrapper
         header={
           <Header>
@@ -108,7 +147,7 @@ export const SettingsRequirementTypeEditor = observer(function SettingsRequireme
                           onChange={(event) => {
                             if (!event.target.value || event.target.value === requirementTypeId) return;
                             if (!editor.confirmDiscard()) return;
-                            navigate(getSettingsRequirementTypePath(workspaceSlug ?? "", event.target.value));
+                            navigate(getRequirementTypePath(workspaceSlug ?? "", event.target.value));
                           }}
                           className="h-7 max-w-72 appearance-none truncate rounded-md border border-transparent bg-transparent pr-7 pl-1 text-13 font-medium text-primary outline-none hover:border-subtle hover:bg-layer-transparent-hover"
                           aria-label={t("workspace_templates.requirement_types.switch_requirement_type")}
@@ -128,7 +167,7 @@ export const SettingsRequirementTypeEditor = observer(function SettingsRequireme
                         </span>
                       )}
                       {libraryCount > 0 && (
-                        /* 只做提示，不链到模板管理的标准库页 —— 那个页面以后会删 */
+                        /* 只做提示，不链到标准需求库页 */
                         <Tooltip
                           tooltipContent={t("workspace_templates.requirement_types.editor.used_by_hint")}
                           position="bottom"
@@ -173,6 +212,12 @@ export const SettingsRequirementTypeEditor = observer(function SettingsRequireme
             items={editor.items}
             onChange={editor.setItems}
             fieldValueCounts={editor.configuration?.field_value_counts ?? {}}
+            commonFields={{
+              definitions: library.fields,
+              isLoading: library.isLoading && !library.hasLoaded,
+              onOpenLibrary: handleOpenLibrary,
+              onPromote: (field) => void handlePromote(field),
+            }}
           />
         </div>
       </SettingsFullBleedContentWrapper>

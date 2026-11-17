@@ -170,6 +170,7 @@ from .requirement import (
     RequirementChangeType,
     RequirementCycle,
     RequirementField,
+    RequirementFieldDefinition,
     RequirementFieldType,
     RequirementIssue,
     RequirementItemStatus,

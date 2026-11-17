@@ -9,6 +9,10 @@ from plane.utils.requirement import (
     get_requirement_eligible_user_ids,
     sync_requirement_type_fields,
 )
+from plane.utils.requirement_field_library import (
+    RequirementFieldLibraryError,
+    expand_library_bound_payloads,
+)
 
 from .base import BaseSerializer
 from .requirement import (
@@ -185,11 +189,17 @@ class RequirementTypeConfigurationWriteSerializer(serializers.Serializer):
         return attrs
 
     def validate_fields(self, value):
+        requirement_type = self.context["requirement_type"]
+        # 绑定了通用字段的节点先换成库里的定义，后面的重名 / 默认值校验都按换过的来
+        try:
+            value = expand_library_bound_payloads(requirement_type, value)
+        except RequirementFieldLibraryError as exc:
+            raise serializers.ValidationError(str(exc)) from exc
+
         names = [item["name"].casefold() for item in value]
         if len(names) != len(set(names)):
             raise serializers.ValidationError("Root field names must be unique.")
 
-        requirement_type = self.context["requirement_type"]
         existing_ids = set(
             RequirementField.objects.filter(
                 requirement_type=requirement_type

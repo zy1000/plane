@@ -7,6 +7,8 @@ import {
   WORKSPACE_REQUIREMENT_LIBRARY_IMPORT_EXPORT_PERMISSION_KEY,
   WORKSPACE_REQUIREMENT_LIBRARY_MANAGE_PERMISSION_KEY,
   WORKSPACE_REQUIREMENT_LIBRARY_READ_PERMISSION_KEYS,
+  WORKSPACE_REQUIREMENT_TYPE_READ_PERMISSION_KEYS,
+  PERMISSION_KEYS,
   WORKSPACE_REVIEW_TEMPLATE_MANAGE_PERMISSION_KEY,
   WORKSPACE_REVIEW_TEMPLATE_READ_PERMISSION_KEYS,
 } from "@plane/constants";
@@ -23,7 +25,11 @@ export type TTemplatePermissions = {
   canManageReviewTemplates: boolean;
   canViewDevModes: boolean;
   canManageDevModes: boolean;
-  /** 模板中心整体是否可见：四个页签任一能看 */
+  /** 需求类型与需求通用字段库：菜单入口看 view / manage，页面内容工作区成员可读（后端同口径） */
+  canViewRequirementTypes: boolean;
+  /** 需求类型与需求通用字段库的增删改，与后端同一把 key */
+  canManageRequirementTypes: boolean;
+  /** 模板中心整体是否可见：任一页签能看 */
   canAccessTemplates: boolean;
 };
 
@@ -46,6 +52,7 @@ export const useTemplatePermissions = (workspaceSlug: string | undefined): TTemp
   const canViewCaseTemplates = allowWorkspacePermissionKeys(WORKSPACE_CASE_TEMPLATE_READ_PERMISSION_KEYS, slug);
   const canViewReviewTemplates = allowWorkspacePermissionKeys(WORKSPACE_REVIEW_TEMPLATE_READ_PERMISSION_KEYS, slug);
   const canViewDevModes = allowWorkspacePermissionKeys(WORKSPACE_DEV_MODE_READ_PERMISSION_KEYS, slug);
+  const canViewRequirementTypes = allowWorkspacePermissionKeys(WORKSPACE_REQUIREMENT_TYPE_READ_PERMISSION_KEYS, slug);
 
   return {
     canViewLibraries,
@@ -64,6 +71,12 @@ export const useTemplatePermissions = (workspaceSlug: string | undefined): TTemp
     canManageReviewTemplates: allowWorkspacePermissionKeys([WORKSPACE_REVIEW_TEMPLATE_MANAGE_PERMISSION_KEY], slug),
     canViewDevModes,
     canManageDevModes: allowWorkspacePermissionKeys([WORKSPACE_DEV_MODE_MANAGE_PERMISSION_KEY], slug),
-    canAccessTemplates: canViewLibraries || canViewCaseTemplates || canViewReviewTemplates || canViewDevModes,
+    canViewRequirementTypes,
+    canManageRequirementTypes: allowWorkspacePermissionKeys(
+      [PERMISSION_KEYS.WORKSPACE_REQUIREMENT_TYPE_MANAGE],
+      slug
+    ),
+    canAccessTemplates:
+      canViewLibraries || canViewCaseTemplates || canViewReviewTemplates || canViewDevModes || canViewRequirementTypes,
   };
 };

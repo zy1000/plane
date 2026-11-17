@@ -23,7 +23,6 @@ import {
   Webhook,
 } from "lucide-react";
 // plane imports
-import { RequirementIcon } from "@plane/propel/icons";
 import type { ISvgIcons } from "@plane/propel/icons";
 import type { TWorkspaceSettingsTabs } from "@plane/types";
 
@@ -40,7 +39,6 @@ export const WORKSPACE_SETTINGS_ICONS: Record<TWorkspaceSettingsTabs, LucideIcon
   webhooks: Webhook,
   integrations: Plug,
   "issue-type-categories": Layers,
-  "requirement-types": RequirementIcon,
   "data-dictionaries": BookText,
   "stage-types": Milestone,
   changelog: ScrollText,

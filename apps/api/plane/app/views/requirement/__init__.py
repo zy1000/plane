@@ -31,6 +31,10 @@ from .module import (
     RequirementModuleDetailAPIView,
     RequirementModuleMoveAPIView,
 )
+from .field_library import (
+    RequirementFieldDefinitionViewSet,
+    RequirementFieldPromoteAPIView,
+)
 from .test_case import RequirementTestCaseViewSet
 from .type import (
     RequirementTypeConfigurationAPIView,
@@ -59,6 +63,8 @@ __all__ = [
     "RequirementModuleMoveAPIView",
     "RequirementProjectsViewSet",
     "RequirementTestCaseViewSet",
+    "RequirementFieldDefinitionViewSet",
+    "RequirementFieldPromoteAPIView",
     "RequirementTypeConfigurationAPIView",
     "RequirementTypeViewSet",
     "RequirementVersionViewSet",

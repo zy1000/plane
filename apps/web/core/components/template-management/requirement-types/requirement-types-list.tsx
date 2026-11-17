@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { ChevronRight, Pencil, Plus, Trash2 } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
@@ -10,8 +10,8 @@ import type { TCreateRequirementTypePayload, TRequirementType, TUpdateRequiremen
 import { AlertModalCore, CustomMenu, Loader, ToggleSwitch } from "@plane/ui";
 import { TypeIcon } from "@/components/common/type-icon-picker";
 import { RequirementTypeSettingsModal } from "@/components/requirements/requirement-type-settings-modal";
-import { SettingsHeading } from "@/components/settings/heading";
-import { getSettingsRequirementTypePath } from "./navigation";
+import { TemplatePageHeader, TemplatePageSearch } from "../template-page-header";
+import { getRequirementTypePath } from "./navigation";
 import { RequirementTypeCreateModal } from "./requirement-type-create-modal";
 
 /** 与项目设置的工作项类型页保持同一视觉族；那边是 1874 行页面里的私有 const，从那里导出比复制更糟。 */
@@ -68,6 +68,14 @@ export function RequirementTypesList(props: Props) {
   const [pendingEdit, setPendingEdit] = useState<TRequirementType | null>(null);
   const [pendingDelete, setPendingDelete] = useState<TRequirementType | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [search, setSearch] = useState("");
+  const visibleTypes = useMemo(() => {
+    const keyword = search.trim().toLowerCase();
+    if (!keyword) return requirementTypes;
+    return requirementTypes.filter(
+      (item) => item.name.toLowerCase().includes(keyword) || (item.description ?? "").toLowerCase().includes(keyword)
+    );
+  }, [requirementTypes, search]);
 
   const resync = () => void fetchRequirementTypes().catch(() => undefined);
 
@@ -137,19 +145,19 @@ export function RequirementTypesList(props: Props) {
     }
   };
 
+  // 模板中心统一页头：标题 + 数量，右侧搜索 + 主按钮
   const heading = (
-    <SettingsHeading
+    <TemplatePageHeader
       title={t("workspace_settings.settings.requirement_types.title")}
-      description={t("workspace_settings.settings.requirement_types.description")}
-      control={
-        canEdit ? (
-          <Button variant="primary" size="sm" onClick={() => setIsCreateOpen(true)}>
-            <Plus className="size-3.5" />
-            {t("workspace_templates.requirement_types.create")}
-          </Button>
-        ) : undefined
-      }
-    />
+      count={isLoading && requirementTypes.length === 0 ? undefined : requirementTypes.length}
+    >
+      <TemplatePageSearch value={search} onChange={setSearch} placeholder="搜索类型" />
+      {canEdit && (
+        <Button variant="primary" size="xl" className="px-3" onClick={() => setIsCreateOpen(true)}>
+          {t("workspace_templates.requirement_types.create")}
+        </Button>
+      )}
+    </TemplatePageHeader>
   );
 
   const renderBody = () => {
@@ -206,10 +214,25 @@ export function RequirementTypesList(props: Props) {
       );
     }
 
+    if (visibleTypes.length === 0) {
+      return (
+        <div className="rounded-lg border border-subtle px-6 py-12 text-center">
+          <p className="text-14 font-medium text-primary">没有匹配的类型</p>
+          <button
+            type="button"
+            onClick={() => setSearch("")}
+            className="mt-3 rounded text-13 text-accent-primary hover:underline"
+          >
+            清除搜索
+          </button>
+        </div>
+      );
+    }
+
     return (
-      <div className="flex flex-col divide-y divide-subtle">
-        {requirementTypes.map((requirementType) => {
-          const detailPath = getSettingsRequirementTypePath(workspaceSlug, requirementType.id);
+      <div className="flex flex-col divide-y divide-subtle rounded-lg border border-subtle px-5 py-1.5">
+        {visibleTypes.map((requirementType) => {
+          const detailPath = getRequirementTypePath(workspaceSlug, requirementType.id);
           const isInUse = requirementType.library_count > 0;
           return (
             <div key={requirementType.id} className="py-1.5 first:pt-0 last:pb-0">
@@ -297,7 +320,7 @@ export function RequirementTypesList(props: Props) {
   return (
     <>
       {heading}
-      <div className="mt-6 w-full">{renderBody()}</div>
+      <div className="min-h-0 w-full flex-1 overflow-y-auto px-7 py-6">{renderBody()}</div>
 
       <RequirementTypeCreateModal
         isOpen={isCreateOpen}
@@ -310,7 +333,7 @@ export function RequirementTypesList(props: Props) {
             title: t("success"),
             message: t("workspace_templates.requirement_types.toast.created"),
           });
-          navigate(getSettingsRequirementTypePath(workspaceSlug, created.id));
+          navigate(getRequirementTypePath(workspaceSlug, created.id));
         }}
         isSubmitting={isMutating}
       />

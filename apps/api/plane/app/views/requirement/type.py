@@ -21,6 +21,7 @@ from plane.utils.requirement import (
     resolve_builtin_field_layout,
     serialize_requirement_type_field_tree,
 )
+from plane.utils.requirement_field_library import annotate_library_bindings
 
 from plane.app.permissions import PermissionKey, has_workspace_permission  # noqa: E402
 
@@ -192,7 +193,11 @@ class RequirementTypeConfigurationAPIView(BaseAPIView):
                     "workspace": requirement_type.workspace,
                 },
             ).data,
-            "fields": serialize_requirement_type_field_tree(requirement_type),
+            # 带上每个字段绑定的通用字段 id：配置页据此把绑定字段渲染成只读
+            "fields": annotate_library_bindings(
+                requirement_type,
+                serialize_requirement_type_field_tree(requirement_type),
+            ),
             "builtin_fields": resolve_builtin_field_layout(requirement_type),
             "created_field_ids": created_field_ids or {},
             "field_value_counts": count_requirement_field_values(requirement_type),

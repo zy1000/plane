@@ -146,12 +146,19 @@ export const WORKSPACE_DEV_MODE_READ_PERMISSION_KEYS = [
   WORKSPACE_DEV_MODE_MANAGE_PERMISSION_KEY,
 ];
 
-/** 模板中心入口：四个页签任一能看就显示 */
+/** 模板中心的「需求类型」「需求通用字段库」两项：查看或维护任一即可 */
+export const WORKSPACE_REQUIREMENT_TYPE_READ_PERMISSION_KEYS: string[] = [
+  PERMISSION_KEYS.WORKSPACE_REQUIREMENT_TYPE_VIEW,
+  PERMISSION_KEYS.WORKSPACE_REQUIREMENT_TYPE_MANAGE,
+];
+
+/** 模板中心入口：任一页签能看就显示 */
 export const WORKSPACE_TEMPLATE_CENTER_PERMISSION_KEYS = [
   ...WORKSPACE_REQUIREMENT_LIBRARY_READ_PERMISSION_KEYS,
   ...WORKSPACE_CASE_TEMPLATE_READ_PERMISSION_KEYS,
   ...WORKSPACE_REVIEW_TEMPLATE_READ_PERMISSION_KEYS,
   ...WORKSPACE_DEV_MODE_READ_PERMISSION_KEYS,
+  ...WORKSPACE_REQUIREMENT_TYPE_READ_PERMISSION_KEYS,
 ];
 
 export const WORKSPACE_SETTINGS = {
@@ -243,13 +250,6 @@ export const WORKSPACE_SETTINGS = {
     href: `/settings/issue-type-categories`,
     permissionKeys: [PERMISSION_KEYS.WORKSPACE_ISSUE_SCHEME_VIEW, PERMISSION_KEYS.WORKSPACE_ISSUE_SCHEME_MANAGE],
     highlight: (pathname: string, baseUrl: string) => pathname.startsWith(`${baseUrl}/settings/issue-type-categories`),
-  },
-  "requirement-types": {
-    key: "requirement-types",
-    i18n_label: "workspace_settings.settings.requirement_types.title",
-    href: `/settings/requirement-types`,
-    permissionKeys: [PERMISSION_KEYS.WORKSPACE_REQUIREMENT_TYPE_VIEW, PERMISSION_KEYS.WORKSPACE_REQUIREMENT_TYPE_MANAGE],
-    highlight: (pathname: string, baseUrl: string) => pathname.startsWith(`${baseUrl}/settings/requirement-types`),
   },
   "data-dictionaries": {
     key: "data-dictionaries",

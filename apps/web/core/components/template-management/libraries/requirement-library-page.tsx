@@ -21,7 +21,7 @@ import {
 } from "@/components/requirements/module-tree";
 import { RequirementPeekOverview } from "@/components/requirements/requirement-detail";
 import { RequirementGrid } from "@/components/requirements/requirement-grid";
-import { getSettingsRequirementTypePath } from "@/components/workspace/settings/requirement-types/navigation";
+import { getRequirementTypePath } from "@/components/template-management/requirement-types/navigation";
 import { useLibraryItems } from "@/hooks/store/use-library-items";
 import { useRequirementModules } from "@/hooks/store/use-requirement-modules";
 import { useTemplatePermissions } from "../permissions";
@@ -152,7 +152,7 @@ export const RequirementLibraryPage = observer(function RequirementLibraryPage()
                           position="bottom"
                         >
                           <Link
-                            to={getSettingsRequirementTypePath(workspaceSlug, library.requirement_type_id)}
+                            to={getRequirementTypePath(workspaceSlug, library.requirement_type_id)}
                             className="max-w-48 shrink-0 truncate rounded-full bg-accent-primary/[0.08] px-2 py-0.5 text-11 text-accent-primary hover:bg-accent-primary/[0.14]"
                           >
                             {library.requirement_type_detail?.name}
@@ -245,7 +245,7 @@ export const RequirementLibraryPage = observer(function RequirementLibraryPage()
                   <span>
                     {t("requirement_libraries.items.fields_readonly_prefix")}
                     <Link
-                      to={getSettingsRequirementTypePath(workspaceSlug, library.requirement_type_id)}
+                      to={getRequirementTypePath(workspaceSlug, library.requirement_type_id)}
                       className="font-medium text-accent-primary hover:underline"
                     >
                       {library.requirement_type_detail?.name}
