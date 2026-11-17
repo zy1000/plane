@@ -575,7 +575,7 @@ export const ProjectRequirementsGrid = (props: TProps) => {
           <div className="grid h-full place-items-center p-6 text-center">
             <div>
               <p className="text-13 text-secondary">{error}</p>
-              <Button variant="neutral-primary" size="sm" className="mt-3" onClick={onRetry}>
+              <Button variant="secondary" size="sm" className="mt-3" onClick={onRetry}>
                 {t("retry")}
               </Button>
             </div>
@@ -595,7 +595,7 @@ export const ProjectRequirementsGrid = (props: TProps) => {
                   {t("project_requirements.filtered_empty.description")}
                 </p>
                 {(activeFilterCount > 0 || search.trim()) && (
-                  <Button variant="neutral-primary" size="sm" className="mt-4" onClick={onClearFilters}>
+                  <Button variant="secondary" size="sm" className="mt-4" onClick={onClearFilters}>
                     {t("project_requirements.clear_filters")}
                   </Button>
                 )}

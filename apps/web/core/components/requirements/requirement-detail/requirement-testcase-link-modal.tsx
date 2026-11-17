@@ -252,7 +252,7 @@ export const RequirementTestCaseLinkModal = (props: TProps) => {
         </Combobox.Options>
 
         <div className="flex items-center justify-end gap-2 border-t border-subtle px-3 py-3">
-          <Button variant="neutral-primary" size="sm" onClick={handleClose}>
+          <Button variant="secondary" size="sm" onClick={handleClose}>
             {t("cancel")}
           </Button>
           <Button

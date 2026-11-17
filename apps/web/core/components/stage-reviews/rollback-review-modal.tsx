@@ -66,7 +66,7 @@ export const RollbackStageReviewModal = ({
       </div>
 
       <div className="flex justify-end gap-2 px-6 pb-5.5">
-        <Button variant="neutral-primary" size="sm" onClick={onClose}>
+        <Button variant="secondary" size="sm" onClick={onClose}>
           {t(`${I18N}.actions.cancel`)}
         </Button>
         <Button variant="primary" size="sm" disabled={!canSubmit || isSubmitting} onClick={() => onSubmit(reason.trim())}>

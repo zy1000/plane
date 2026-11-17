@@ -827,7 +827,7 @@ function FieldInlineForm(props: TFieldInlineFormProps) {
           </label>
         </div>
         <div className="mt-auto flex justify-end gap-2 border-t border-subtle pt-3">
-          <Button variant="neutral-primary" size="sm" onClick={onCancel}>
+          <Button variant="secondary" size="sm" onClick={onCancel}>
             {t("cancel")}
           </Button>
           <Button variant="primary" size="sm" onClick={onDone}>
