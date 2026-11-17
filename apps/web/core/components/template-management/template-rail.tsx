@@ -11,6 +11,7 @@ import { DEFAULT_DEV_MODE_NAME } from "@plane/types";
 import { Loader, Tooltip } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { toTypeIconProps, TypeIcon } from "@/components/common/type-icon-picker";
+import { useAppTheme } from "@/hooks/store/use-app-theme";
 import { useUserPermissions } from "@/hooks/store/user";
 import { DevModeFormModal, type TDevModeFormValue } from "./dev-modes/dev-mode-form-modal";
 import { DEV_MODE_I18N } from "./dev-modes/dev-modes-grid";
@@ -66,10 +67,16 @@ export const TemplateRail = observer(function TemplateRail({ workspaceSlug }: { 
   const { allowWorkspacePermissionKeys } = useUserPermissions();
   const { canViewDevModes, canManageDevModes } = useTemplatePermissions(workspaceSlug);
   const { modes } = useTemplateCenter();
+  const { sidebarCollapsed: isWorkspaceSidebarCollapsed } = useAppTheme();
   const { storedValue, setValue: setIsCollapsed } = useLocalStorage<boolean>(RAIL_COLLAPSED_STORAGE_KEY, false);
   const [isCreating, setIsCreating] = useState(false);
 
   const isCollapsed = storedValue === true;
+  /**
+   * 工作区侧栏的收起/展开按钮：展开时在底部 h-12 行里居中，收起成图标条后是贴底的 h-8 格子，两种状态高度不同。
+   * 这里的按钮行跟着取同样的行高（两边都是 pb-3），两条侧栏各自收起/展开的四种组合下按钮都在同一水平线上。
+   */
+  const toggleRowHeight = isWorkspaceSidebarCollapsed ? "h-8" : "h-12";
   const current = normalize(pathname);
   const isUnder = (href: string) => current === href || current.startsWith(`${href}/`);
   const assets = TEMPLATE_MANAGEMENT_NAVIGATION_ITEMS.filter(
@@ -128,9 +135,11 @@ export const TemplateRail = observer(function TemplateRail({ workspaceSlug }: { 
       </div>
 
       {/* 收起/展开按钮照工作区侧栏放在底部 */}
-      <Tooltip tooltipContent="展开侧栏" position="right">
-        <IconButton variant="ghost" size="base" icon={PanelLeft} aria-label="展开侧栏" onClick={() => setIsCollapsed(false)} />
-      </Tooltip>
+      <div className={cn("flex shrink-0 items-center", toggleRowHeight)}>
+        <Tooltip tooltipContent="展开侧栏" position="right">
+          <IconButton variant="ghost" size="base" icon={PanelLeft} aria-label="展开侧栏" onClick={() => setIsCollapsed(false)} />
+        </Tooltip>
+      </div>
     </div>
   );
 
@@ -201,8 +210,8 @@ export const TemplateRail = observer(function TemplateRail({ workspaceSlug }: { 
         </>
       )}
 
-      {/* 收起按钮照工作区侧栏放在底部一行的右侧（同为 h-12 行、pb-3），两条侧栏的按钮在同一水平线上 */}
-      <div className="mt-auto flex h-12 shrink-0 items-center justify-end">
+      {/* 收起按钮照工作区侧栏放在底部一行的右侧 */}
+      <div className={cn("mt-auto flex shrink-0 items-center justify-end", toggleRowHeight)}>
         <Tooltip tooltipContent="收起侧栏" position="right">
           <IconButton variant="ghost" size="base" icon={PanelLeft} aria-label="收起侧栏" onClick={() => setIsCollapsed(true)} />
         </Tooltip>
