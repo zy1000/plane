@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { observer } from "mobx-react";
 import { Link, useLocation, useNavigate } from "react-router";
-import { ArrowLeft, Info, Lock, PanelLeft, Plus, TableProperties } from "lucide-react";
+import { Lock, PanelLeft, Plus, TableProperties } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useLocalStorage } from "@plane/hooks";
 import { useTranslation } from "@plane/i18n";
@@ -26,12 +26,13 @@ const RAIL_COLLAPSED_STORAGE_KEY = "template_center_rail_collapsed";
 
 const ITEM =
   "flex h-9 items-center gap-2.5 rounded-lg px-2 text-14 transition-colors hover:bg-layer-transparent-hover hover:text-primary";
-const ITEM_ACTIVE = "bg-layer-1-selected font-semibold text-primary";
+/** 底色、选中色与工作区侧栏一致（surface-1 + layer-transparent），两条侧栏并排时不分两种颜色 */
+const ITEM_ACTIVE = "bg-layer-transparent-active font-semibold text-primary";
 
 /** 收起后的图标格：与工作区侧栏收起态同为 32×32 */
 const ICON_ITEM = "flex size-8 shrink-0 items-center justify-center rounded-md transition-colors";
 const ICON_ITEM_IDLE = "text-tertiary hover:bg-layer-transparent-hover hover:text-primary";
-const ICON_ITEM_ACTIVE = "bg-layer-1-selected text-accent-primary";
+const ICON_ITEM_ACTIVE = "bg-layer-transparent-selected text-accent-primary";
 
 function RailLink({ href, icon: Icon, label, isActive }: { href: string; icon: LucideIcon; label: string; isActive: boolean }) {
   return (
@@ -55,8 +56,7 @@ function RailIconLink({ href, icon: Icon, label, isActive }: { href: string; ico
 /**
  * 模板中心左栏：资产库各项 + 研发模式逐个列出。
  *
- * 照工作区设置的做法接管工作区侧栏（进模板中心后工作区侧栏不渲染），顶上的返回箭头回工作区；
- * 可以收起成图标条，库内页这类自带模块树的页面嫌挤时用。
+ * 挂在工作区侧栏右边；可以收起成图标条（与工作区侧栏各自收起），库内页这类自带模块树的页面嫌挤时用。
  * 研发模式没有「列表页 → 详情页」那一跳，点模式名直接进模式页，「全部模式对比」是原来的列表页。
  */
 export const TemplateRail = observer(function TemplateRail({ workspaceSlug }: { workspaceSlug: string }) {
@@ -90,8 +90,6 @@ export const TemplateRail = observer(function TemplateRail({ workspaceSlug }: { 
     return { mode, href, isActive: isUnder(href) };
   });
 
-  const goToWorkspace = () => navigate(`/${workspaceSlug}/`);
-
   const handleCreate = async (value: TDevModeFormValue) => {
     const created = await modes.createDevMode({
       name: value.name,
@@ -106,32 +104,20 @@ export const TemplateRail = observer(function TemplateRail({ workspaceSlug }: { 
 
   const renderCollapsed = () => (
     <div className="flex h-full w-[52px] flex-col items-center gap-1 px-1.5 pb-3 pt-3">
-      <Tooltip tooltipContent="展开侧栏" position="right">
-        <IconButton variant="ghost" size="base" icon={PanelLeft} aria-label="展开侧栏" onClick={() => setIsCollapsed(false)} />
-      </Tooltip>
-      <Tooltip tooltipContent="返回工作区" position="right">
-        <IconButton variant="ghost" size="base" icon={ArrowLeft} aria-label="返回工作区" onClick={goToWorkspace} />
-      </Tooltip>
-
       <div className="flex min-h-0 w-full flex-1 flex-col items-center gap-0.5 overflow-y-auto [scrollbar-width:none]">
-        {assets.length > 0 && (
-          <>
-            <hr className="my-1.5 w-full shrink-0 border-subtle" />
-            {assets.map(({ key, ...item }) => (
-              <RailIconLink key={key} {...item} />
-            ))}
-          </>
-        )}
+        {assets.map(({ key, ...item }) => (
+          <RailIconLink key={key} {...item} />
+        ))}
         {canViewDevModes && (
           <>
-            <hr className="my-1.5 w-full shrink-0 border-subtle" />
+            {assets.length > 0 && <hr className="my-1.5 w-full shrink-0 border-subtle" />}
             <RailIconLink href={overviewHref} icon={TableProperties} label="全部模式对比" isActive={current === overviewHref} />
             {devModeLinks.map(({ mode, href, isActive }) => (
               <Tooltip key={mode.id} tooltipContent={mode.name} position="right">
                 <Link
                   to={href}
                   aria-label={mode.name}
-                  className={cn(ICON_ITEM, isActive ? "bg-layer-1-selected" : "hover:bg-layer-transparent-hover")}
+                  className={cn(ICON_ITEM, isActive ? "bg-layer-transparent-selected" : "hover:bg-layer-transparent-hover")}
                 >
                   <TypeIcon iconProps={mode.icon_props?.icon} className="size-6 rounded-[7px]" iconClassName="size-3.5" />
                 </Link>
@@ -140,19 +126,18 @@ export const TemplateRail = observer(function TemplateRail({ workspaceSlug }: { 
           </>
         )}
       </div>
+
+      {/* 收起/展开按钮照工作区侧栏放在底部 */}
+      <Tooltip tooltipContent="展开侧栏" position="right">
+        <IconButton variant="ghost" size="base" icon={PanelLeft} aria-label="展开侧栏" onClick={() => setIsCollapsed(false)} />
+      </Tooltip>
     </div>
   );
 
   const renderExpanded = () => (
     <div className="flex h-full w-[220px] flex-col px-3 pb-3 pt-3">
-      <div className="flex items-center gap-1 pb-1">
-        <Tooltip tooltipContent="返回工作区" position="bottom">
-          <IconButton variant="ghost" size="base" icon={ArrowLeft} aria-label="返回工作区" onClick={goToWorkspace} />
-        </Tooltip>
-        <span className="min-w-0 flex-1 truncate text-16 font-semibold text-primary">{t("workspace_templates.title")}</span>
-        <Tooltip tooltipContent="收起侧栏" position="bottom">
-          <IconButton variant="ghost" size="base" icon={PanelLeft} aria-label="收起侧栏" onClick={() => setIsCollapsed(true)} />
-        </Tooltip>
+      <div className="flex h-8 items-center pb-1">
+        <span className="min-w-0 flex-1 truncate pl-2 text-16 font-semibold text-primary">{t("workspace_templates.title")}</span>
       </div>
 
       {assets.length > 0 && (
@@ -216,15 +201,11 @@ export const TemplateRail = observer(function TemplateRail({ workspaceSlug }: { 
         </>
       )}
 
-      <div className="mt-auto flex items-center gap-2 border-t border-subtle px-2 pt-3 text-12 text-tertiary">
-        <Info className="size-3.5 shrink-0" />
-        <span>
-          阶段类型在{" "}
-          <Link to={`/${workspaceSlug}/settings/stage-types`} className="text-link-primary hover:text-link-primary-hover">
-            工作区设置
-          </Link>{" "}
-          维护
-        </span>
+      {/* 收起按钮照工作区侧栏放在底部一行的右侧（同为 h-12 行、pb-3），两条侧栏的按钮在同一水平线上 */}
+      <div className="mt-auto flex h-12 shrink-0 items-center justify-end">
+        <Tooltip tooltipContent="收起侧栏" position="right">
+          <IconButton variant="ghost" size="base" icon={PanelLeft} aria-label="收起侧栏" onClick={() => setIsCollapsed(true)} />
+        </Tooltip>
       </div>
     </div>
   );
@@ -233,7 +214,7 @@ export const TemplateRail = observer(function TemplateRail({ workspaceSlug }: { 
     <nav
       aria-label={t("workspace_templates.title")}
       className={cn(
-        "h-full shrink-0 overflow-hidden border-r border-subtle bg-surface-2 transition-[width] duration-200",
+        "h-full shrink-0 overflow-hidden border-r border-subtle bg-surface-1 transition-[width] duration-200",
         isCollapsed ? "w-[52px]" : "w-[220px]"
       )}
     >

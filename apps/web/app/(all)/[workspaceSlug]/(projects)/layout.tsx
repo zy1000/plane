@@ -6,7 +6,7 @@
 
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
-import { Outlet, useLocation } from "react-router";
+import { Outlet } from "react-router";
 import { ProjectsAppPowerKProvider } from "@/components/power-k/projects-app-provider";
 import { ReleasenoteModal } from "@/modules/releasenote";
 // plane web components
@@ -15,10 +15,6 @@ import { ExtendedProjectSidebar } from "./extended-project-sidebar";
 
 function WorkspaceLayout() {
   const { workspaceSlug } = useParams();
-  const { pathname } = useLocation();
-  // 模板中心照工作区设置的做法：自带左栏（templates/layout.tsx），进去后工作区侧栏让位
-  const templatesBase = `/${workspaceSlug?.toString() ?? ""}/templates`;
-  const isTemplateCenter = pathname === templatesBase || pathname.startsWith(`${templatesBase}/`);
 
   return (
     <>
@@ -27,12 +23,8 @@ function WorkspaceLayout() {
       <div className="relative flex h-full w-full flex-col overflow-hidden rounded-lg border border-subtle">
         <div id="full-screen-portal" className="absolute inset-0 w-full" />
         <div className="relative flex size-full overflow-hidden">
-          {!isTemplateCenter && (
-            <>
-              <ProjectAppSidebar />
-              <ExtendedProjectSidebar />
-            </>
-          )}
+          <ProjectAppSidebar />
+          <ExtendedProjectSidebar />
           <main className="relative flex h-full w-full flex-col overflow-hidden bg-surface-1">
             <Outlet />
           </main>
