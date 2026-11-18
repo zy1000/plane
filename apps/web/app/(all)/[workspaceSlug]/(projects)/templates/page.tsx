@@ -10,20 +10,19 @@ const TemplateManagementIndexPage = observer(function TemplateManagementIndexPag
 }: {
   workspaceSlug: string;
 }) {
-  // 按左栏顺序（研发模式 → 资产库 → 模板库）落到第一个有权看的入口；研发模式落在「全部模式对比」
+  // 按左栏顺序（研发模式 → 模板库 → 资产库）落到第一个有权看的入口；研发模式落在「全部模式对比」。
+  // 产品模板库的读权限是「需求库或用例模板任一」，看得到两个资产库的人一定先落在它，资产库不必再单列
   const { canViewLibraries, canViewCaseTemplates, canViewReviewTemplates, canViewDevModes, canViewRequirementTypes } =
     useTemplatePermissions(workspaceSlug);
   const tabKey = canViewDevModes
     ? "dev-modes"
-    : canViewLibraries
-      ? "libraries"
-      : canViewCaseTemplates
-        ? "test-cases"
-        : canViewReviewTemplates
-          ? "reviews"
-          : canViewRequirementTypes
-            ? "requirement-types"
-            : "dev-modes";
+    : canViewLibraries || canViewCaseTemplates
+      ? "product"
+      : canViewReviewTemplates
+        ? "reviews"
+        : canViewRequirementTypes
+          ? "requirement-types"
+          : "dev-modes";
   return <Navigate to={getTemplateManagementTabPath(workspaceSlug, tabKey)} replace />;
 });
 

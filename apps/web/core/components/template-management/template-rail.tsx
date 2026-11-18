@@ -59,7 +59,7 @@ function RailIconLink({ href, icon: Icon, label, isActive }: { href: string; ico
 }
 
 /**
- * 模板中心左栏：研发模式逐个列出 + 资产库、模板库各项。
+ * 模板中心左栏：研发模式逐个列出 + 模板库、资产库各项。
  *
  * 挂在工作区侧栏右边；可以收起成图标条（与工作区侧栏各自收起），库内页这类自带模块树的页面嫌挤时用。
  * 研发模式没有「列表页 → 详情页」那一跳，点模式名直接进模式页，「全部模式对比」是原来的列表页。
@@ -83,7 +83,7 @@ export const TemplateRail = observer(function TemplateRail({ workspaceSlug }: { 
   const toggleRowHeight = isWorkspaceSidebarCollapsed ? "h-8" : "h-12";
   const current = normalize(pathname);
   const isUnder = (href: string) => current === href || current.startsWith(`${href}/`);
-  // 资产库、模板库两组；一项都看不到的组整组不出
+  // 模板库、资产库两组；一项都看不到的组整组不出
   const groups = TEMPLATE_MANAGEMENT_NAVIGATION_GROUPS.flatMap((group) => {
     const items = TEMPLATE_MANAGEMENT_NAVIGATION_ITEMS.filter((item) => item.group === group.key).flatMap((item) => {
       // 一个入口可能对应多个地址（通用字段库）：链接取第一个有权限的，落在任一地址下都算选中

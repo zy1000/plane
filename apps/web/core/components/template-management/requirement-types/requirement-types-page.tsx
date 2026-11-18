@@ -7,7 +7,7 @@ import { useTemplatePermissions } from "../permissions";
 import { RequirementTypesList } from "./requirement-types-list";
 
 /**
- * 模板中心「需求类型」：类型列表。点进某个类型是它的字段配置页（RequirementTypeEditor）。
+ * 模板中心「需求模板库」（即需求类型）：类型列表。点进某个类型是它的字段配置页（RequirementTypeEditor）。
  * 读 = 工作区成员（路由页已拦），增删改与后端同一把 key（workspace.requirement_type.manage）。
  */
 export const RequirementTypesPage = observer(function RequirementTypesPage({ workspaceSlug }: { workspaceSlug: string }) {
@@ -27,7 +27,7 @@ export const RequirementTypesPage = observer(function RequirementTypesPage({ wor
   return (
     <>
       <PageHead
-        title={`${t("workspace_settings.settings.requirement_types.title")} - ${t("workspace_templates.title")}`}
+        title={`需求模板库 - ${t("workspace_templates.title")}`}
       />
       <ContentWrapper className="flex min-h-0 flex-col overflow-hidden bg-surface-1">
         <RequirementTypesList

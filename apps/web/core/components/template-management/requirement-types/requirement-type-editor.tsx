@@ -115,7 +115,7 @@ export const RequirementTypeEditor = observer(function RequirementTypeEditor() {
 
   return (
     <>
-      <PageHead title={`${metadata.name} - ${t("workspace_settings.settings.requirement_types.title")}`} />
+      <PageHead title={`${metadata.name} - 需求模板库`} />
       <SettingsFullBleedContentWrapper
         header={
           <Header>
@@ -126,7 +126,7 @@ export const RequirementTypeEditor = observer(function RequirementTypeEditor() {
                     /* 不能用 Link：离开编辑器前要先确认丢弃草稿 */
                     <button type="button" onClick={handleBack}>
                       <BreadcrumbLink
-                        label={t("workspace_settings.settings.requirement_types.title")}
+                        label="需求模板库"
                         icon={<RequirementIcon className="size-4 text-secondary" />}
                       />
                     </button>

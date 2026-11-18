@@ -19,12 +19,12 @@ export type TTemplateManagementTabKey =
   | "requirement-fields"
   | "dev-modes";
 
-/** 左栏分组：资产库是沉淀下来可导入的内容，模板库是结构、流程、类型与字段的定义 */
+/** 左栏分组：模板库是结构、流程、类型与字段的定义，资产库是沉淀下来可导入的内容；左栏按此数组顺序出组 */
 export type TTemplateManagementNavigationGroupKey = "assets" | "templates";
 
 export const TEMPLATE_MANAGEMENT_NAVIGATION_GROUPS: { key: TTemplateManagementNavigationGroupKey; label: string }[] = [
-  { key: "assets", label: "资产库" },
   { key: "templates", label: "模板库" },
+  { key: "assets", label: "资产库" },
 ];
 
 export type TTemplateManagementNavigationItem = {
@@ -83,11 +83,11 @@ export const TEMPLATE_MANAGEMENT_NAVIGATION_ITEMS: TTemplateManagementNavigation
     permissionKeys: WORKSPACE_DEV_MODE_READ_PERMISSION_KEYS,
   },
   {
-    // 需求类型：字段结构的定义源，标准需求库与产品需求共用；从工作区设置挪进来
+    // 需求模板库（即需求类型）：字段结构的定义源，标准需求库与产品需求共用；从工作区设置挪进来
     key: "requirement-types",
     group: "templates",
     icon: ClipboardList,
-    i18nKey: "workspace_settings.settings.requirement_types.title",
+    label: "需求模板库",
     permissionKeys: WORKSPACE_REQUIREMENT_TYPE_READ_PERMISSION_KEYS,
   },
   {
