@@ -8,12 +8,13 @@ import { AlertModalCore } from "@plane/ui";
 import { ContentWrapper } from "@/components/core/content-wrapper";
 import { PageHead } from "@/components/core/page-title";
 import { useRequirementFieldLibrary } from "@/hooks/store/use-requirement-field-library";
+import { useFieldLibrarySwitch } from "../field-library-header";
 import { useTemplatePermissions } from "../permissions";
 import { RequirementFieldFormModal } from "./requirement-field-form-modal";
 import { RequirementFieldLibraryContent } from "./requirement-field-library-content";
 
 /**
- * 模板中心「需求通用字段库」：工作区级字段库。字段定义只在这里改，保存后后端同步到所有
+ * 模板中心「通用字段库」的需求一侧：工作区级字段库。字段定义只在这里改，保存后后端同步到所有
  * 绑定它的需求类型。读 = 工作区成员（路由页已拦），新建 / 编辑 / 删除要需求类型管理权限。
  *
  * 地址带 ?field=<id> 时进页面直接打开该字段的编辑弹窗（需求类型配置页的「编辑通用字段」跳过来）。
@@ -27,6 +28,11 @@ export const RequirementFieldLibraryPage = observer(function RequirementFieldLib
   const { canManageRequirementTypes: canManage } = useTemplatePermissions(workspaceSlug);
   const { fields, isLoading, hasLoaded, error, fetchFields, createField, updateField, deleteField } =
     useRequirementFieldLibrary(workspaceSlug);
+  const libraries = useFieldLibrarySwitch(
+    workspaceSlug,
+    "requirement",
+    hasLoaded && !error ? fields.length : undefined
+  );
   const [searchParams, setSearchParams] = useSearchParams();
   // 关闭时保留 field，离场动画期间不闪成「新建通用字段」
   const [modal, setModal] = useState<{ isOpen: boolean; field: TRequirementFieldDefinition | null }>({
@@ -87,10 +93,11 @@ export const RequirementFieldLibraryPage = observer(function RequirementFieldLib
 
   return (
     <>
-      <PageHead title={`需求通用字段库 - ${t("workspace_templates.title")}`} />
+      <PageHead title={`通用字段库 - ${t("workspace_templates.title")}`} />
       <ContentWrapper className="bg-surface-1">
         <RequirementFieldLibraryContent
           fields={fields}
+          libraries={libraries}
           isLoading={isLoading}
           hasLoaded={hasLoaded}
           error={error}

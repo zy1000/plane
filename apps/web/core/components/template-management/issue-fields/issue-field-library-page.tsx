@@ -9,13 +9,14 @@ import { PageHead } from "@/components/core/page-title";
 import { useIssueFieldLibrary } from "@/hooks/store/use-issue-field-library";
 import { useIssueTypeLibrary } from "@/hooks/store/use-issue-type-library";
 import { useProjectIssueTypes } from "@/hooks/store/use-project-issue-types";
+import { useFieldLibrarySwitch } from "../field-library-header";
 import { useTemplatePermissions } from "../permissions";
 import { getIssueFieldErrorMessage } from "./helpers";
 import { IssueFieldFormModal } from "./issue-field-form-modal";
 import { IssueFieldLibraryContent } from "./issue-field-library-content";
 
 /**
- * 模板中心「通用字段」：工作区级字段库。库字段的定义只在这里改，保存后后端同步到所有绑定它的类型。
+ * 模板中心「通用字段库」的工作项一侧：工作区级字段库。库字段的定义只在这里改，保存后后端同步到所有绑定它的类型。
  * 读要研发模式 view（页面路由已拦），新建 / 编辑 / 删除要研发模式 manage。
  */
 export const IssueFieldLibraryPage = observer(function IssueFieldLibraryPage({
@@ -27,6 +28,7 @@ export const IssueFieldLibraryPage = observer(function IssueFieldLibraryPage({
   const { canManageDevModes: canManage } = useTemplatePermissions(workspaceSlug);
   const { fields, isLoading, hasLoaded, error, fetchFields, createField, updateField, deleteField } =
     useIssueFieldLibrary(workspaceSlug);
+  const libraries = useFieldLibrarySwitch(workspaceSlug, "issue", hasLoaded && !error ? fields.length : undefined);
   // 联动规则的「工作项类型」条件选的是类型库里的类型
   const { scopeKey: libraryScopeKey } = useIssueTypeLibrary(workspaceSlug);
   const { issueTypes = [] } = useProjectIssueTypes(workspaceSlug, libraryScopeKey);
@@ -70,11 +72,12 @@ export const IssueFieldLibraryPage = observer(function IssueFieldLibraryPage({
 
   return (
     <>
-      <PageHead title={`工作项通用字段库 - ${t("workspace_templates.title")}`} />
+      <PageHead title={`通用字段库 - ${t("workspace_templates.title")}`} />
       <ContentWrapper className="bg-surface-1">
         <IssueFieldLibraryContent
           fields={fields}
           issueTypes={issueTypes}
+          libraries={libraries}
           isLoading={isLoading}
           hasLoaded={hasLoaded}
           error={error}

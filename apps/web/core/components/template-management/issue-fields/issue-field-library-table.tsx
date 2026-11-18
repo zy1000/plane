@@ -1,8 +1,7 @@
 import { useId } from "react";
-import { Eye, GitBranch, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { Eye, GitBranch } from "lucide-react";
 import { Tooltip } from "@plane/propel/tooltip";
 import type { TIssueFieldLibraryItem } from "@plane/types";
-import { CustomMenu } from "@plane/ui";
 import { getFieldKindIcon, getFieldKindLabel } from "@/components/project-issue-types/field-display";
 import { getSelectionMode, getTextMode } from "@/components/project-issue-types/field-form";
 import { describeLinkageConditions, linkageChoices } from "@/utils/field-linkage";
@@ -11,8 +10,6 @@ import { AnchoredPopover } from "./anchored-popover";
 import { IssueFieldUsedBy } from "./issue-field-used-by";
 
 const CHIP = "max-w-28 truncate rounded border border-subtle bg-layer-1 px-2 py-0.5 text-12 text-secondary";
-const ICON_BUTTON =
-  "grid size-8 place-items-center rounded-md text-secondary hover:bg-layer-1-hover hover:text-primary focus-visible:outline-2 focus-visible:outline-accent-strong";
 const RULE_BADGE =
   "inline-flex items-center gap-1.5 rounded border border-accent-subtle bg-accent-subtle px-2 py-0.5 text-12 text-accent-primary focus-visible:outline-2 focus-visible:outline-accent-strong";
 
@@ -167,12 +164,12 @@ export function IssueFieldLibraryTable({
     <div className="overflow-x-auto rounded-lg border border-subtle">
       <table className="w-full min-w-[1040px] table-fixed border-collapse text-left text-13" aria-label="工作项通用字段库">
         <colgroup>
-          <col style={{ width: "23%" }} />
-          <col style={{ width: "11%" }} />
-          <col style={{ width: "25%" }} />
-          <col style={{ width: "16%" }} />
-          <col style={{ width: canManage ? "18%" : "25%" }} />
-          {canManage && <col style={{ width: "7%" }} />}
+          <col style={{ width: "24%" }} />
+          <col style={{ width: "12%" }} />
+          <col style={{ width: "26%" }} />
+          <col style={{ width: "14%" }} />
+          <col style={{ width: canManage ? "14%" : "24%" }} />
+          {canManage && <col style={{ width: "10%" }} />}
         </colgroup>
         <thead className="bg-layer-1 text-secondary">
           <tr className="h-11">
@@ -182,8 +179,8 @@ export function IssueFieldLibraryTable({
               </th>
             ))}
             {canManage && (
-              <th scope="col">
-                <span className="sr-only">操作</span>
+              <th scope="col" className="px-4 font-medium">
+                操作
               </th>
             )}
           </tr>
@@ -197,6 +194,8 @@ export function IssueFieldLibraryTable({
                   ? "多选"
                   : "单选"
                 : getFieldKindLabel(field);
+            // 与内容区「未使用」页签同口径：类型库或自定义项目里还有绑定就不能删
+            const isUsed = field.binding_count > 0 || Boolean(field.used_by?.length);
             return (
               <tr
                 key={field.id}
@@ -237,33 +236,24 @@ export function IssueFieldLibraryTable({
                   <IssueFieldUsedBy field={field} maxVisible={2} />
                 </td>
                 {canManage && (
-                  <td className="py-3 pr-3">
-                    <div className="flex justify-end gap-0.5">
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-4">
                       <button
                         type="button"
-                        aria-label={`编辑${field.name}`}
-                        className={ICON_BUTTON}
+                        className="text-13 font-medium text-accent-primary hover:underline"
                         onClick={() => onEdit(field)}
                       >
-                        <Pencil className="size-4" />
+                        编辑
                       </button>
-                      <CustomMenu
-                        ariaLabel={`${field.name}的更多操作`}
-                        placement="bottom-end"
-                        customButton={<MoreHorizontal className="size-4" />}
-                        customButtonClassName={ICON_BUTTON}
-                        optionsClassName="rounded-lg border-subtle p-1.5 shadow-overlay-200"
-                        portalElement={typeof document === "undefined" ? undefined : document.body}
-                        closeOnSelect
+                      <button
+                        type="button"
+                        className="text-13 font-medium text-danger-primary hover:underline disabled:cursor-not-allowed disabled:text-disabled disabled:no-underline"
+                        disabled={isUsed}
+                        title={isUsed ? "仍被工作项类型使用，请先从这些类型里移除" : undefined}
+                        onClick={() => onDelete(field)}
                       >
-                        <CustomMenu.MenuItem
-                          onClick={() => onDelete(field)}
-                          className="flex items-center gap-2 px-2 py-1.5 text-13 text-danger-primary"
-                        >
-                          <Trash2 className="size-4" />
-                          删除字段
-                        </CustomMenu.MenuItem>
-                      </CustomMenu>
+                        删除
+                      </button>
                     </div>
                   </td>
                 )}

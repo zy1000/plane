@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { ClipboardCheck, ClipboardList, FlaskConical, Layers, Library, Rows2, Rows3, Tags, Workflow } from "lucide-react";
+import { ClipboardCheck, ClipboardList, FlaskConical, Layers, Library, Rows3, Tags, Workflow } from "lucide-react";
 import {
   WORKSPACE_CASE_TEMPLATE_READ_PERMISSION_KEYS,
   WORKSPACE_DEV_MODE_READ_PERMISSION_KEYS,
@@ -27,6 +27,11 @@ export type TTemplateManagementNavigationItem = {
   label?: string;
   /** 持有其中任一工作区 key 才显示这个 tab */
   permissionKeys: string[];
+  /**
+   * 同一个入口下的其余地址（页内开关切换），各有各的读权限。
+   * 入口的链接取第一个有权限的地址，落在任一地址下都算选中。
+   */
+  alternates?: { key: TTemplateManagementTabKey; permissionKeys: string[] }[];
 };
 
 export const TEMPLATE_MANAGEMENT_NAVIGATION_ITEMS: TTemplateManagementNavigationItem[] = [
@@ -63,12 +68,6 @@ export const TEMPLATE_MANAGEMENT_NAVIGATION_ITEMS: TTemplateManagementNavigation
     permissionKeys: WORKSPACE_DEV_MODE_READ_PERMISSION_KEYS,
   },
   {
-    key: "issue-fields",
-    icon: Rows2,
-    label: "工作项通用字段库",
-    permissionKeys: WORKSPACE_DEV_MODE_READ_PERMISSION_KEYS,
-  },
-  {
     // 需求类型：字段结构的定义源，标准需求库与产品需求共用；从工作区设置挪进来
     key: "requirement-types",
     icon: ClipboardList,
@@ -76,11 +75,13 @@ export const TEMPLATE_MANAGEMENT_NAVIGATION_ITEMS: TTemplateManagementNavigation
     permissionKeys: WORKSPACE_REQUIREMENT_TYPE_READ_PERMISSION_KEYS,
   },
   {
-    // 与「工作项通用字段库」是两个独立的库：字段类型、选项存法都不同
-    key: "requirement-fields",
+    // 工作项 / 需求两个通用字段库共用一个入口，页头分段开关切换。
+    // 只合并了入口和页头：两个库仍各自独立（字段类型、选项存法都不同），地址和读权限也各是各的
+    key: "issue-fields",
     icon: Rows3,
-    label: "需求通用字段库",
-    permissionKeys: WORKSPACE_REQUIREMENT_TYPE_READ_PERMISSION_KEYS,
+    label: "通用字段库",
+    permissionKeys: WORKSPACE_DEV_MODE_READ_PERMISSION_KEYS,
+    alternates: [{ key: "requirement-fields", permissionKeys: WORKSPACE_REQUIREMENT_TYPE_READ_PERMISSION_KEYS }],
   },
   {
     // 紧挨「评审」：模式的阶段配置直接引用评审树上的节点，维护两者的是同一批人

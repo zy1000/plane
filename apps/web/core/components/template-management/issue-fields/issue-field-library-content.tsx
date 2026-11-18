@@ -6,6 +6,8 @@ import { CustomMenu, Loader } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { FIELD_KIND_FILTERS } from "@/components/project-issue-types/field-display";
 import type { TLinkageIssueType } from "@/utils/field-linkage";
+import { FieldLibraryHeader } from "../field-library-header";
+import type { TFieldLibrarySwitchItem } from "../field-library-header";
 import { IssueFieldLibraryTable } from "./issue-field-library-table";
 
 type Filter = "all" | "linked" | "unused";
@@ -14,6 +16,8 @@ type Props = {
   fields: TIssueFieldLibraryItem[];
   /** 类型库里的类型：联动规则列要显示规则里的类型名 */
   issueTypes: TLinkageIssueType[];
+  /** 页头「工作项 | 需求」开关的各项 */
+  libraries: TFieldLibrarySwitchItem[];
   isLoading: boolean;
   hasLoaded: boolean;
   error: string | null;
@@ -30,6 +34,7 @@ const isUnused = (field: TIssueFieldLibraryItem) => field.binding_count === 0 &&
 export function IssueFieldLibraryContent({
   fields,
   issueTypes,
+  libraries,
   isLoading,
   hasLoaded,
   error,
@@ -122,25 +127,7 @@ export function IssueFieldLibraryContent({
 
   return (
     <div className="flex min-h-full min-w-0 flex-col gap-6 px-4 py-6 sm:px-8 sm:py-8">
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-3">
-            <h1 className="text-24 leading-8 font-semibold text-primary">工作项通用字段库</h1>
-            {hasLoaded && (
-              <span className="rounded-md bg-layer-1 px-2 py-0.5 text-14 text-secondary tabular-nums">
-                {fields.length}
-              </span>
-            )}
-          </div>
-          <p className="mt-2 text-13 leading-5 text-secondary">统一维护字段定义，更新后同步到引用的工作项类型。</p>
-        </div>
-        {canManage && (
-          <Button variant="primary" size="xl" className="h-9 shrink-0 gap-1.5 px-3" onClick={onCreate}>
-            <Plus className="size-4" />
-            新建字段
-          </Button>
-        )}
-      </header>
+      <FieldLibraryHeader activeKey="issue" libraries={libraries} canManage={canManage} onCreate={onCreate} />
 
       <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3 border-b border-subtle">
         <div role="group" aria-label="字段范围" className="flex gap-5 sm:gap-6">

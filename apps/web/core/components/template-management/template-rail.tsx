@@ -79,17 +79,20 @@ export const TemplateRail = observer(function TemplateRail({ workspaceSlug }: { 
   const toggleRowHeight = isWorkspaceSidebarCollapsed ? "h-8" : "h-12";
   const current = normalize(pathname);
   const isUnder = (href: string) => current === href || current.startsWith(`${href}/`);
-  const assets = TEMPLATE_MANAGEMENT_NAVIGATION_ITEMS.filter(
-    (item) => item.key !== "dev-modes" && allowWorkspacePermissionKeys(item.permissionKeys, workspaceSlug)
-  ).map((item) => {
-    const href = getTemplateManagementTabPath(workspaceSlug, item.key);
-    return {
-      key: item.key,
-      href,
-      icon: item.icon,
-      label: item.i18nKey ? t(item.i18nKey) : (item.label ?? item.key),
-      isActive: isUnder(href),
-    };
+  const assets = TEMPLATE_MANAGEMENT_NAVIGATION_ITEMS.filter((item) => item.key !== "dev-modes").flatMap((item) => {
+    // 一个入口可能对应多个地址（通用字段库）：链接取第一个有权限的，落在任一地址下都算选中
+    const targets = [item, ...(item.alternates ?? [])];
+    const allowed = targets.find((target) => allowWorkspacePermissionKeys(target.permissionKeys, workspaceSlug));
+    if (!allowed) return [];
+    return [
+      {
+        key: item.key,
+        href: getTemplateManagementTabPath(workspaceSlug, allowed.key),
+        icon: item.icon,
+        label: item.i18nKey ? t(item.i18nKey) : (item.label ?? item.key),
+        isActive: targets.some((target) => isUnder(getTemplateManagementTabPath(workspaceSlug, target.key))),
+      },
+    ];
   });
   const overviewHref = devModesBasePath(workspaceSlug);
   const devModeLinks = modes.devModes.map((mode) => {

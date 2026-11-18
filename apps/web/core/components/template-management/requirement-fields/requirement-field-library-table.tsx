@@ -94,9 +94,9 @@ export function RequirementFieldLibraryTable({ visibleFields, canManage, onEdit,
         <colgroup>
           <col style={{ width: "24%" }} />
           <col style={{ width: "12%" }} />
-          <col style={{ width: canManage ? "27%" : "32%" }} />
-          <col style={{ width: canManage ? "26%" : "32%" }} />
-          {canManage && <col style={{ width: "11%" }} />}
+          <col style={{ width: "26%" }} />
+          <col style={{ width: canManage ? "28%" : "38%" }} />
+          {canManage && <col style={{ width: "10%" }} />}
         </colgroup>
         <thead className="bg-layer-1 text-secondary">
           <tr className="h-11">
