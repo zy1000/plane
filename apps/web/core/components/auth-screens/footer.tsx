@@ -30,8 +30,5 @@ const BRAND_LOGOS: {
 ];
 
 export function AuthFooter() {
-  return (
-    <div className="flex flex-col items-center gap-6">
-    </div>
-  );
+  return <div className="relative text-12 text-tertiary">© {new Date().getFullYear()} KAIFA</div>;
 }

@@ -102,6 +102,7 @@ export const AuthFormRoot = observer(function AuthFormRoot(props: TAuthFormRoot)
         email={email}
         handleEmailClear={handleEmailClear}
         nextPath={nextPath || undefined}
+        setErrorInfo={setErrorInfo}
       />
     );
   }

@@ -11,6 +11,7 @@ from django.views import View
 # Module imports
 from plane.authentication.provider.credentials.email import EmailProvider
 from plane.authentication.provider.credentials.ldap import LdapProvider
+from plane.authentication.utils.ajax import redirect_as_json, wants_json
 from plane.authentication.utils.login import user_login
 from plane.license.models import Instance
 from plane.authentication.utils.host import base_host
@@ -25,6 +26,13 @@ from plane.utils.path_validator import get_safe_redirect_url
 
 
 class SignInAuthEndpoint(View):
+    def dispatch(self, request, *args, **kwargs):
+        response = super().dispatch(request, *args, **kwargs)
+        # 登录页后台提交时不重定向，直接把结果给前端，登录失败就不用整页重载
+        if wants_json(request) and isinstance(response, HttpResponseRedirect):
+            return redirect_as_json(response)
+        return response
+
     def post(self, request):
         next_path = request.POST.get("next_path")
         # Check instance configuration

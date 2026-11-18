@@ -89,6 +89,15 @@ export default {
         requesting_new_code: "Requesting new code",
         sending_code: "Sending code",
       },
+      account: {
+        label: "Account",
+        placeholder: "Enter your company domain account",
+        errors: {
+          required: "Please enter your account",
+        },
+      },
+      system_name: "Project Management System",
+      login_help: "Forgot your password or can't sign in? Contact your system administrator.",
       already_have_an_account: "Already have an account?",
       login: "Log in",
       create_account: "Create an account",

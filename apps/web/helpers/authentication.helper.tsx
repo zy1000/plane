@@ -117,8 +117,8 @@ const errorCodeMessages: {
 } = {
   // global
   [EAuthenticationErrorCodes.INSTANCE_NOT_CONFIGURED]: {
-    title: `Instance not configured`,
-    message: () => `Instance not configured. Please contact your administrator.`,
+    title: "系统尚未完成配置",
+    message: () => "系统尚未完成配置，请联系系统管理员",
   },
   [EAuthenticationErrorCodes.INVALID_EMAIL]: {
     title: `Invalid email`,
@@ -137,12 +137,12 @@ const errorCodeMessages: {
     message: () => `Magic link login disabled. Please contact your administrator.`,
   },
   [EAuthenticationErrorCodes.PASSWORD_LOGIN_DISABLED]: {
-    title: `Password login disabled`,
-    message: () => `Password login disabled. Please contact your administrator.`,
+    title: "密码登录未启用",
+    message: () => "密码登录未启用，请联系系统管理员",
   },
   [EAuthenticationErrorCodes.USER_ACCOUNT_DEACTIVATED]: {
-    title: `User account deactivated`,
-    message: () => `User account deactivated. Please contact ${SUPPORT_EMAIL ? SUPPORT_EMAIL : "administrator"}.`,
+    title: "账号已停用",
+    message: () => `账号已停用，请联系${SUPPORT_EMAIL ? ` ${SUPPORT_EMAIL}` : "系统管理员"}`,
   },
   [EAuthenticationErrorCodes.INVALID_PASSWORD]: {
     title: `Invalid password`,
@@ -194,32 +194,22 @@ const errorCodeMessages: {
     message: () => `Invalid email. Please try again.`,
   },
 
+  // 登录：账号不存在与密码错误用同一句，不透露账号是否存在
   [EAuthenticationErrorCodes.USER_DOES_NOT_EXIST]: {
-    title: `User does not exist`,
-    message: (email = undefined) => (
-      <div>
-        No account found.&nbsp;
-        <Link
-          className="font-medium underline underline-offset-4 transition-all hover:font-bold"
-          href={`/${email ? `?email=${encodeURIComponent(email)}` : ``}`}
-        >
-          Create one
-        </Link>
-        &nbsp;to get started.
-      </div>
-    ),
+    title: "登录失败",
+    message: () => "账号或密码错误，请重新输入",
   },
   [EAuthenticationErrorCodes.REQUIRED_EMAIL_PASSWORD_SIGN_IN]: {
-    title: `Email and password required`,
-    message: () => `Email and password required. Please try again.`,
+    title: "请输入账号和密码",
+    message: () => "请输入账号和密码",
   },
   [EAuthenticationErrorCodes.AUTHENTICATION_FAILED_SIGN_IN]: {
-    title: `Authentication failed`,
-    message: () => `Authentication failed. Please try again.`,
+    title: "登录失败",
+    message: () => "账号或密码错误，请重新输入",
   },
   [EAuthenticationErrorCodes.INVALID_EMAIL_SIGN_IN]: {
-    title: `Invalid email`,
-    message: () => `Invalid email. Please try again.`,
+    title: "账号格式不正确",
+    message: () => "账号格式不正确，请重新输入",
   },
   [EAuthenticationErrorCodes.MAGIC_SIGN_IN_EMAIL_CODE_REQUIRED]: {
     title: `Email and code required`,
@@ -379,7 +369,7 @@ const errorCodeMessages: {
   },
   [EAuthenticationErrorCodes.RATE_LIMIT_EXCEEDED]: {
     title: "",
-    message: () => `Rate limit exceeded. Please try again later.`,
+    message: () => "操作过于频繁，请稍后再试",
   },
 };
 

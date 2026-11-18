@@ -24,6 +24,26 @@ export class AuthService extends APIService {
       });
   }
 
+  /** 后台提交登录：成功返回落地地址，失败抛出 { error_code, error_message }，页面不整页重载 */
+  async signIn(data: {
+    csrfToken: string;
+    email: string;
+    password: string;
+    nextPath?: string;
+  }): Promise<{ redirect_url: string }> {
+    const body = new URLSearchParams({
+      csrfmiddlewaretoken: data.csrfToken,
+      email: data.email,
+      password: data.password,
+    });
+    if (data.nextPath) body.set("next_path", data.nextPath);
+    return this.post("/auth/sign-in/", body, { headers: { Accept: "application/json" } })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
   emailCheck = async (data: IEmailCheckData): Promise<IEmailCheckResponse> =>
     this.post("/auth/email-check/", data, { headers: {} })
       .then((response) => response?.data)

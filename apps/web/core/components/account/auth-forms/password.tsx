@@ -20,7 +20,13 @@ import { getPasswordStrength } from "@plane/utils";
 import { ForgotPasswordPopover } from "@/components/account/auth-forms/forgot-password-popover";
 // constants
 // helpers
-import { EAuthModes } from "@/helpers/authentication.helper";
+import type { TAuthErrorInfo } from "@/helpers/authentication.helper";
+import {
+  EAuthModes,
+  EAuthenticationErrorCodes,
+  EErrorAlertType,
+  authErrorHandler,
+} from "@/helpers/authentication.helper";
 // services
 import { AuthService } from "@/services/auth.service";
 
@@ -30,6 +36,7 @@ type Props = {
   mode: EAuthModes;
   handleEmailClear: () => void;
   nextPath: string | undefined;
+  setErrorInfo: (errorInfo: TAuthErrorInfo | undefined) => void;
 };
 
 type TPasswordFormValues = {
@@ -45,10 +52,15 @@ const defaultValues: TPasswordFormValues = {
 
 const authService = new AuthService();
 
+const INPUT_CLASS_NAME =
+  "h-11 w-full rounded-lg border !bg-surface-1 px-3.5 text-14 disable-autofill-style placeholder:text-placeholder focus:border-accent-strong focus:ring-[3px] focus:ring-accent-strong/15";
+const LABEL_CLASS_NAME = "block text-14 font-medium text-secondary";
+
 export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props) {
-  const { email, isSMTPConfigured, mode, nextPath } = props;
+  const { email, mode, nextPath, setErrorInfo } = props;
   // plane imports
-  const { t } = useTranslation();
+  const { t, currentLocale } = useTranslation();
+  const isSignIn = mode === EAuthModes.SIGN_IN;
   // ref
   const formRef = useRef<HTMLFormElement>(null);
   // states
@@ -62,12 +74,16 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
   const [isPasswordInputFocused, setIsPasswordInputFocused] = useState(false);
   const [isRetryPasswordInputFocused, setIsRetryPasswordInputFocused] = useState(false);
   const [isBannerMessage, setBannerMessage] = useState(false);
+  // 登录时空着提交的字段；按钮不置灰，改为点了再提示
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof TPasswordFormValues, boolean>>>({});
 
   const handleShowPassword = (key: keyof typeof showPassword) =>
     setShowPassword((prev) => ({ ...prev, [key]: !prev[key] }));
 
-  const handleFormChange = (key: keyof TPasswordFormValues, value: string) =>
+  const handleFormChange = (key: keyof TPasswordFormValues, value: string) => {
     setPasswordFormData((prev) => ({ ...prev, [key]: value }));
+    setFieldErrors((prev) => (prev[key] ? { ...prev, [key]: false } : prev));
+  };
 
   useEffect(() => {
     if (csrfPromise === undefined) {
@@ -121,6 +137,41 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
     csrfElement?.setAttribute("value", token?.csrf_token);
   };
 
+  // 登录走后台提交：失败时原地提示，不整页重载；成功后整页跳到后端给的落地地址
+  const handleSignIn = async () => {
+    const errors = { email: !passwordFormData.email.trim(), password: !passwordFormData.password };
+    if (errors.email || errors.password) {
+      setFieldErrors(errors);
+      formRef.current?.querySelector<HTMLInputElement>(errors.email ? "#email" : "#password")?.focus();
+      return;
+    }
+    setIsSubmitting(true);
+    setErrorInfo(undefined);
+    try {
+      const token = await csrfPromise;
+      const { redirect_url } = await authService.signIn({
+        csrfToken: token?.csrf_token ?? "",
+        email: passwordFormData.email,
+        password: passwordFormData.password,
+        nextPath,
+      });
+      window.location.assign(redirect_url);
+    } catch (error) {
+      const errorCode = (error as { error_code?: string | number } | undefined)?.error_code?.toString();
+      setErrorInfo(
+        authErrorHandler(errorCode as EAuthenticationErrorCodes) ?? {
+          type: EErrorAlertType.BANNER_ALERT,
+          code: EAuthenticationErrorCodes.AUTHENTICATION_FAILED_SIGN_IN,
+          title: "",
+          message: t("something_went_wrong_please_try_again"),
+        }
+      );
+      setPasswordFormData((prev) => ({ ...prev, password: "" }));
+      setIsSubmitting(false);
+      formRef.current?.querySelector<HTMLInputElement>("#password")?.focus();
+    }
+  };
+
   return (
     <>
       {isBannerMessage && mode === EAuthModes.SIGN_UP && (
@@ -142,11 +193,15 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
       )}
       <form
         ref={formRef}
-        className="space-y-4"
+        className="space-y-5"
         method="POST"
         action={`${API_BASE_URL}/auth/${mode === EAuthModes.SIGN_IN ? "sign-in" : "sign-up"}/`}
         onSubmit={async (event) => {
           event.preventDefault(); // Prevent form from submitting by default
+          if (isSignIn) {
+            await handleSignIn();
+            return;
+          }
           await handleCSRFToken();
           const isPasswordValid =
             mode === EAuthModes.SIGN_UP
@@ -165,28 +220,30 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
       >
         <input type="hidden" name="csrfmiddlewaretoken" />
         {nextPath && <input type="hidden" value={nextPath} name="next_path" />}
-        <div className="space-y-1">
-          <label htmlFor="email" className="text-13 font-medium text-tertiary">
-            User
+        <div className="space-y-2">
+          <label htmlFor="email" className={LABEL_CLASS_NAME}>
+            {isSignIn ? t("auth.common.account.label") : t("auth.common.email.label")}
           </label>
-          <div className={`relative flex items-center rounded-md border border-strong bg-surface-1`}>
-            <Input
-              id="email"
-              name="email"
-              type="text"
-              value={passwordFormData.email}
-              onChange={(e) => handleFormChange("email", e.target.value)}
-              placeholder={t("auth.common.email.placeholder")}
-              className={`h-10 w-full border-0 disable-autofill-style placeholder:text-placeholder`}
-            />
-          </div>
+          <Input
+            id="email"
+            name="email"
+            type="text"
+            value={passwordFormData.email}
+            onChange={(e) => handleFormChange("email", e.target.value)}
+            placeholder={isSignIn ? t("auth.common.account.placeholder") : t("auth.common.email.placeholder")}
+            className={`${INPUT_CLASS_NAME} ${fieldErrors.email ? "border-danger-strong" : "border-strong"}`}
+            autoFocus={!email}
+          />
+          {fieldErrors.email && (
+            <p className="text-13 text-danger-primary">{t("auth.common.account.errors.required")}</p>
+          )}
         </div>
 
-        <div className="space-y-1">
-          <label htmlFor="password" className="text-13 font-medium text-tertiary">
+        <div className="space-y-2">
+          <label htmlFor="password" className={LABEL_CLASS_NAME}>
             {mode === EAuthModes.SIGN_IN ? t("auth.common.password.label") : t("auth.common.password.set_password")}
           </label>
-          <div className="relative flex items-center rounded-md bg-surface-1">
+          <div className="relative flex items-center">
             <Input
               type={showPassword?.password ? "text" : "password"}
               id="password"
@@ -194,11 +251,11 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
               value={passwordFormData.password}
               onChange={(e) => handleFormChange("password", e.target.value)}
               placeholder={t("auth.common.password.placeholder")}
-              className="h-10 w-full border border-strong !bg-surface-1 pr-12 disable-autofill-style placeholder:text-placeholder"
+              className={`${INPUT_CLASS_NAME} pr-12 ${fieldErrors.password ? "border-danger-strong" : "border-strong"}`}
               onFocus={() => setIsPasswordInputFocused(true)}
               onBlur={() => setIsPasswordInputFocused(false)}
               autoComplete="off"
-              autoFocus
+              autoFocus={!!email}
             />
             <button
               type="button"
@@ -215,15 +272,18 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
               )}
             </button>
           </div>
+          {fieldErrors.password && (
+            <p className="text-13 text-danger-primary">{t("auth.common.password.errors.empty")}</p>
+          )}
           {passwordSupport}
         </div>
 
         {mode === EAuthModes.SIGN_UP && (
-          <div className="space-y-1">
-            <label htmlFor="confirm-password" className="text-13 font-medium text-tertiary">
+          <div className="space-y-2">
+            <label htmlFor="confirm-password" className={LABEL_CLASS_NAME}>
               {t("auth.common.password.confirm_password.label")}
             </label>
-            <div className="relative flex items-center rounded-md bg-surface-1">
+            <div className="relative flex items-center">
               <Input
                 type={showPassword?.retypePassword ? "text" : "password"}
                 id="confirm-password"
@@ -231,7 +291,7 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
                 value={passwordFormData.confirm_password}
                 onChange={(e) => handleFormChange("confirm_password", e.target.value)}
                 placeholder={t("auth.common.password.confirm_password.placeholder")}
-                className="h-10 w-full border border-strong !bg-surface-1 pr-12 disable-autofill-style placeholder:text-placeholder"
+                className={`${INPUT_CLASS_NAME} border-strong pr-12`}
                 onFocus={() => setIsRetryPasswordInputFocused(true)}
                 onBlur={() => setIsRetryPasswordInputFocused(false)}
                 autoComplete="off"
@@ -261,19 +321,30 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
           </div>
         )}
 
-        <div className="space-y-2.5">
+        <div className="space-y-5 pt-2">
           {mode === EAuthModes.SIGN_IN ? (
-            <Button type="submit" variant="primary" className="w-full" size="xl" disabled={isButtonDisabled}>
-              {isSubmitting ? (
-                <Spinner height="20px" width="20px" />
-              ) : isSMTPConfigured ? (
-                t("common.continue")
-              ) : (
-                t("common.go_to_workspace")
-              )}
-            </Button>
+            <>
+              <Button
+                type="submit"
+                variant="primary"
+                className="h-11 w-full rounded-lg"
+                size="xl"
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? (
+                  <Spinner height="20px" width="20px" />
+                ) : (
+                  <span
+                    className={`text-16 font-semibold ${currentLocale.startsWith("zh") ? "pl-[0.25em] tracking-[0.25em]" : ""}`}
+                  >
+                    {t("auth.common.login")}
+                  </span>
+                )}
+              </Button>
+              <p className="text-center text-13 text-tertiary">{t("auth.common.login_help")}</p>
+            </>
           ) : (
-            <Button type="submit" variant="primary" className="w-full" size="xl" disabled={isButtonDisabled}>
+            <Button type="submit" variant="primary" className="h-11 w-full rounded-lg" size="xl" disabled={isButtonDisabled}>
               {isSubmitting ? <Spinner height="20px" width="20px" /> : "Create account"}
             </Button>
           )}

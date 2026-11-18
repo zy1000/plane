@@ -114,9 +114,6 @@ export const AuthRoot = observer(function AuthRoot(props: TAuthRoot) {
 
   return (
     <AuthContainer>
-      {errorInfo && errorInfo?.type === EErrorAlertType.BANNER_ALERT && (
-        <AuthBanner message={errorInfo.message} handleBannerData={(value) => setErrorInfo(value)} />
-      )}
       <AuthHeader
         workspaceSlug={workspaceSlug?.toString() || undefined}
         invitationId={invitation_id?.toString() || undefined}
@@ -124,6 +121,9 @@ export const AuthRoot = observer(function AuthRoot(props: TAuthRoot) {
         authMode={authMode}
         currentAuthStep={authStep}
       />
+      {errorInfo && errorInfo?.type === EErrorAlertType.BANNER_ALERT && (
+        <AuthBanner message={errorInfo.message} handleBannerData={(value) => setErrorInfo(value)} />
+      )}
       {isOAuthEnabled && (
         <OAuthOptions
           options={oAuthOptions}
@@ -149,8 +149,10 @@ export const AuthRoot = observer(function AuthRoot(props: TAuthRoot) {
 
 function AuthContainer({ children }: { children: React.ReactNode }) {
   return (
-    <div className="mt-10 flex w-full flex-grow flex-col items-center justify-center py-6">
-      <div className="relative flex w-full max-w-[22.5rem] flex-col gap-6">{children}</div>
+    <div className="relative flex w-full flex-grow flex-col items-center justify-center py-6">
+      <div className="flex w-full max-w-[27.5rem] flex-col gap-7 rounded-2xl border border-subtle bg-surface-1 px-6 pt-9 pb-7 shadow-overlay-100 sm:px-11 sm:pt-11 sm:pb-9">
+        {children}
+      </div>
     </div>
   );
 }

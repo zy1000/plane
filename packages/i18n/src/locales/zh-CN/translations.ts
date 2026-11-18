@@ -53,7 +53,7 @@ export default {
       password: {
         label: "密码",
         set_password: "设置密码",
-        placeholder: "输入密码",
+        placeholder: "请输入密码",
         confirm_password: {
           label: "确认密码",
           placeholder: "确认密码",
@@ -101,6 +101,15 @@ export default {
         requesting_new_code: "正在请求新验证码",
         sending_code: "正在发送验证码",
       },
+      account: {
+        label: "账号",
+        placeholder: "请输入公司域账号",
+        errors: {
+          required: "请输入账号",
+        },
+      },
+      system_name: "项目管理系统",
+      login_help: "忘记密码或无法登录，请联系系统管理员",
       already_have_an_account: "已有账号？",
       login: "登录",
       create_account: "创建账号",

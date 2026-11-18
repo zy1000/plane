@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { Info } from "lucide-react";
+import { CircleAlert } from "lucide-react";
 // plane imports
 import { useTranslation } from "@plane/i18n";
 import { CloseIcon } from "@plane/propel/icons";
@@ -25,15 +25,13 @@ export function AuthBanner(props: TAuthBanner) {
   return (
     <div
       role="alert"
-      className="relative flex items-center gap-2 rounded-md border border-accent-strong/50 bg-accent-primary/10 p-2"
+      className="relative flex items-center gap-2.5 rounded-lg border border-danger-subtle bg-danger-subtle py-2.5 pr-2.5 pl-3.5"
     >
-      <div className="grid size-4 flex-shrink-0 place-items-center">
-        <Info size={16} className="text-accent-primary" />
-      </div>
-      <p className="w-full text-13 font-medium text-accent-primary">{message}</p>
+      <CircleAlert size={18} className="flex-shrink-0 text-danger-primary" />
+      <p className="w-full text-14 text-danger-primary">{message}</p>
       <button
         type="button"
-        className="relative ml-auto grid size-6 place-items-center rounded-xs text-accent-primary/80 transition-all hover:bg-accent-primary/20"
+        className="relative ml-auto grid size-6 flex-shrink-0 place-items-center rounded-xs text-danger-primary transition-all hover:bg-danger-subtle-hover"
         onClick={() => handleBannerData?.(undefined)}
         aria-label={t("aria_labels.auth_forms.close_alert")}
       >

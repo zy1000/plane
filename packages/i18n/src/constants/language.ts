@@ -8,6 +8,9 @@ import type { TLanguage, ILanguageOption } from "../types";
 
 export const FALLBACK_LANGUAGE: TLanguage = "en";
 
+/** 浏览器里没有存过语言（首次访问、退出登录后）时使用的界面语言；缺失文案的兜底仍是 FALLBACK_LANGUAGE */
+export const DEFAULT_LANGUAGE: TLanguage = "zh-CN";
+
 export const SUPPORTED_LANGUAGES: ILanguageOption[] = [
   { label: "English", value: "en" },
   { label: "Français", value: "fr" },
