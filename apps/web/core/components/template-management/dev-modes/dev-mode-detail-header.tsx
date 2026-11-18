@@ -1,4 +1,4 @@
-import { Pencil, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import type { TDevMode } from "@plane/types";
@@ -53,8 +53,7 @@ export function DevModeDetailHeader({
       <div className="ml-auto flex shrink-0 items-center gap-2">
         {canEdit && (
           <>
-            <Button variant="secondary" onClick={onEdit}>
-              <Pencil className="size-3.5" />
+            <Button variant="secondary" size="xl" className="px-3" onClick={onEdit}>
               编辑信息
             </Button>
             <MoreMenu

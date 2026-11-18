@@ -262,15 +262,6 @@ export function RequirementTypesList(props: Props) {
                         })}
                       </StatusBadge>
                     )}
-                    {requirementType.is_active ? (
-                      <StatusBadge tone="success">
-                        {t("workspace_settings.settings.requirement_types.list.enabled")}
-                      </StatusBadge>
-                    ) : (
-                      <StatusBadge tone="danger">
-                        {t("workspace_settings.settings.requirement_types.list.disabled")}
-                      </StatusBadge>
-                    )}
                     <ToggleSwitch
                       value={requirementType.is_active}
                       onChange={(value) => void handleToggle(requirementType, value)}

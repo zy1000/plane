@@ -166,7 +166,7 @@ export const DevModeStagesPanel = observer(function DevModeStagesPanel() {
   return (
     <>
       <div className="flex min-h-0 flex-1">
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3.5 pb-5 pl-7 pr-6 pt-[18px]">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3.5 pb-5 pl-7 pr-6 pt-6">
           <DevModeStageTable
             stages={stages}
             activeStageId={activeStageId}

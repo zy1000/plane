@@ -1,5 +1,4 @@
 import { Link } from "react-router";
-import { Button } from "@plane/propel/button";
 import { useIssueFieldLibrary } from "@/hooks/store/use-issue-field-library";
 import { useRequirementFieldLibrary } from "@/hooks/store/use-requirement-field-library";
 import { getTemplateManagementTabPath } from "./navigation";
@@ -56,47 +55,32 @@ type Props = {
   activeKey: TFieldLibraryKey;
   /** 可切换的库；只有一项（另一边没权限）时不出开关 */
   libraries: TFieldLibrarySwitchItem[];
-  canManage: boolean;
-  onCreate: () => void;
 };
 
 /**
- * 工作项 / 需求两个通用字段库共用的页头：标题 + 分段开关 + 新建。
+ * 工作项 / 需求两个通用字段库共用的「工作项 | 需求」分段开关，放在统一页头的标题后面。
  * 两个库的数据各自独立，开关只是在两个地址之间跳。
  */
-export function FieldLibraryHeader({ activeKey, libraries, canManage, onCreate }: Props) {
+export function FieldLibrarySwitch({ activeKey, libraries }: Props) {
+  if (libraries.length <= 1) return null;
   return (
-    <header className="flex flex-wrap items-center justify-between gap-4">
-      <div className="flex flex-wrap items-center gap-5">
-        <h1 className="text-24 leading-9 font-semibold text-primary">通用字段库</h1>
-        {libraries.length > 1 && (
-          <nav aria-label="字段库" className="inline-flex gap-0.5 rounded-lg bg-layer-1-hover p-[3px]">
-            {libraries.map((library) => {
-              const isActive = library.key === activeKey;
-              return (
-                <Link
-                  key={library.key}
-                  to={library.href}
-                  aria-current={isActive ? "page" : undefined}
-                  className={`inline-flex h-[30px] items-center gap-1.5 rounded-md px-4 text-14 whitespace-nowrap focus-visible:outline-2 focus-visible:outline-accent-strong ${
-                    isActive
-                      ? "bg-surface-1 font-medium text-primary shadow-raised-100"
-                      : "text-secondary hover:text-primary"
-                  }`}
-                >
-                  {library.label}
-                  <span className="text-12 font-normal text-tertiary tabular-nums">{library.count ?? "—"}</span>
-                </Link>
-              );
-            })}
-          </nav>
-        )}
-      </div>
-      {canManage && (
-        <Button variant="primary" size="xl" className="h-9 shrink-0 px-4" onClick={onCreate}>
-          新建字段
-        </Button>
-      )}
-    </header>
+    <nav aria-label="字段库" className="inline-flex gap-0.5 rounded-lg bg-layer-1-hover p-[3px]">
+      {libraries.map((library) => {
+        const isActive = library.key === activeKey;
+        return (
+          <Link
+            key={library.key}
+            to={library.href}
+            aria-current={isActive ? "page" : undefined}
+            className={`inline-flex h-[26px] items-center gap-1.5 rounded-md px-3 text-13 whitespace-nowrap focus-visible:outline-2 focus-visible:outline-accent-strong ${
+              isActive ? "bg-surface-1 font-medium text-primary shadow-raised-100" : "text-secondary hover:text-primary"
+            }`}
+          >
+            {library.label}
+            <span className="text-12 font-normal text-tertiary tabular-nums">{library.count ?? "—"}</span>
+          </Link>
+        );
+      })}
+    </nav>
   );
 }

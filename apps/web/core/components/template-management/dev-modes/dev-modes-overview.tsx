@@ -1,10 +1,9 @@
 import { useMemo, useState } from "react";
 import { observer } from "mobx-react";
 import { Link, useNavigate } from "react-router";
-import { Check, ChevronRight, Plus } from "lucide-react";
+import { Check, ChevronRight } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
-import { SearchIcon } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { DEFAULT_DEV_MODE_NAME, DEV_MODE_FEATURE_KEYS } from "@plane/types";
 import { Loader } from "@plane/ui";
@@ -14,13 +13,17 @@ import { ContentWrapper } from "@/components/core/content-wrapper";
 import { PageHead } from "@/components/core/page-title";
 import { useTemplatePermissions } from "../permissions";
 import { useTemplateCenter } from "../template-center-context";
+import { TemplatePageHeader, TemplatePageSearch } from "../template-page-header";
 import { DevModeFormModal, type TDevModeFormValue } from "./dev-mode-form-modal";
 import { DEV_MODE_I18N } from "./dev-modes-grid";
 import { devModeDetailPath } from "./routes";
 import { getStageFamily, STAGE_FAMILY_SOFT } from "./stage-family";
 
-/** 对比表的列：模式 · 阶段 · 评审节点 · 在用项目 · 九个组件 · 进入 */
-const COMPARE_GRID = "grid grid-cols-[minmax(0,1fr)_56px_72px_76px_repeat(9,40px)_24px] items-center gap-x-1.5";
+/** 对比的组件：模块已下线（全部项目、模式的开关都关了），这里不再占一列；组件页的开关仍保留 */
+const COMPARE_FEATURE_KEYS = DEV_MODE_FEATURE_KEYS.filter((key) => key !== "module_view");
+
+/** 对比表的列：模式 · 阶段 · 评审节点 · 在用项目 · 八个组件 · 进入 */
+const COMPARE_GRID = "grid grid-cols-[minmax(0,1fr)_56px_72px_76px_repeat(8,40px)_24px] items-center gap-x-1.5";
 
 /**
  * 「全部模式对比」（方案 A）：原来的模式卡片列表改成一张对比表 + 阶段路线。
@@ -90,14 +93,14 @@ export const DevModesOverview = observer(function DevModesOverview() {
 
     return (
       <>
-        <div className="horizontal-scrollbar scrollbar-sm overflow-x-auto rounded-xl border border-subtle">
-          <div className="min-w-[840px]">
-            <div className={cn(COMPARE_GRID, "h-10 bg-layer-1 pl-4 pr-3 text-12 font-medium text-tertiary")}>
+        <div className="horizontal-scrollbar scrollbar-sm overflow-x-auto rounded-lg border border-subtle">
+          <div className="min-w-[800px]">
+            <div className={cn(COMPARE_GRID, "h-10 bg-surface-2 pl-4 pr-3 text-13 font-medium text-secondary")}>
               <span>模式</span>
               <span className="text-right">阶段</span>
               <span className="text-right">评审节点</span>
               <span className="text-right">在用项目</span>
-              {DEV_MODE_FEATURE_KEYS.map((key) => (
+              {COMPARE_FEATURE_KEYS.map((key) => (
                 <span key={key} className="truncate text-center" title={t(`${DEV_MODE_I18N}.features.${key}`)}>
                   {key === "is_issue_type_enabled" ? "类型" : t(`${DEV_MODE_I18N}.features.${key}`)}
                 </span>
@@ -144,7 +147,7 @@ export const DevModesOverview = observer(function DevModesOverview() {
                       {value}
                     </span>
                   ))}
-                  {DEV_MODE_FEATURE_KEYS.map((key) => (
+                  {COMPARE_FEATURE_KEYS.map((key) => (
                     <span key={key} className="flex justify-center">
                       {mode.features?.[key] ? (
                         <span className="grid size-[18px] place-items-center rounded-full bg-accent-subtle text-accent-primary">
@@ -163,11 +166,8 @@ export const DevModesOverview = observer(function DevModesOverview() {
         </div>
 
         <section className="mt-6">
-          <div className="mb-2.5 flex items-center gap-2">
-            <h2 className="text-13 font-semibold text-secondary">阶段路线</h2>
-            <span className="text-12 text-tertiary">项目进入每个阶段时生成对应评审</span>
-          </div>
-          <div className="overflow-hidden rounded-xl border border-subtle">
+          <h2 className="mb-2.5 text-[15px] font-semibold text-primary">阶段路线</h2>
+          <div className="overflow-hidden rounded-lg border border-subtle">
             {visibleModes.map((mode, index) => {
               const stages = mode.stage_brief ?? [];
               return (
@@ -209,35 +209,23 @@ export const DevModesOverview = observer(function DevModesOverview() {
   return (
     <>
       <PageHead title={t(`${DEV_MODE_I18N}.title`)} />
-      <ContentWrapper className="bg-surface-1">
-        <div className="flex flex-col px-7 pb-8 pt-6">
-          <div className="mb-[18px] flex flex-wrap items-start gap-4">
-            <div className="min-w-0">
-              <h1 className="text-20 font-semibold text-primary">{t(`${DEV_MODE_I18N}.title`)}</h1>
-              <p className="mt-1 text-13 text-secondary">
-                决定项目有哪些阶段评审、开放哪些组件、用哪套工作项配置。新建项目默认使用「{DEFAULT_DEV_MODE_NAME}」。
-              </p>
-            </div>
-            <div className="ml-auto flex items-center gap-2">
-              <div className="relative">
-                <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-placeholder" />
-                <input
-                  className="h-8 w-56 rounded-md border border-subtle bg-surface-1 pl-8 pr-2.5 text-13 text-primary outline-none placeholder:text-placeholder focus:border-accent-strong"
-                  placeholder={t(`${DEV_MODE_I18N}.search_placeholder`)}
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                />
-              </div>
-              {canManageDevModes && (
-                <Button variant="primary" onClick={() => setIsCreating(true)}>
-                  <Plus className="size-3.5" />
-                  {t(`${DEV_MODE_I18N}.create`)}
-                </Button>
-              )}
-            </div>
-          </div>
-          {renderBody()}
-        </div>
+      <ContentWrapper className="flex min-h-0 flex-col bg-surface-1">
+        <TemplatePageHeader
+          title={t(`${DEV_MODE_I18N}.title`)}
+          count={modes.isLoading ? undefined : modes.devModes.length}
+        >
+          <TemplatePageSearch
+            value={query}
+            onChange={setQuery}
+            placeholder={t(`${DEV_MODE_I18N}.search_placeholder`)}
+          />
+          {canManageDevModes && (
+            <Button variant="primary" size="xl" className="px-3" onClick={() => setIsCreating(true)}>
+              {t(`${DEV_MODE_I18N}.create`)}
+            </Button>
+          )}
+        </TemplatePageHeader>
+        <div className="flex flex-col px-7 py-6">{renderBody()}</div>
       </ContentWrapper>
 
       <DevModeFormModal

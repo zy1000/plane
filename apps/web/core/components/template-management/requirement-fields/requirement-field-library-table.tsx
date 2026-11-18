@@ -1,7 +1,6 @@
 import { useTranslation } from "@plane/i18n";
 import type { TRequirementFieldDefinition } from "@plane/types";
 import { IssueTypeTag } from "@/components/project-issue-types/field-display";
-import { FIELD_ICONS } from "@/components/requirements/requirement-builder-items";
 import { getRequirementSelectMode, getRequirementSelectOptions } from "@/components/requirements/requirement-select";
 import { AnchoredPopover } from "../issue-fields/anchored-popover";
 
@@ -98,8 +97,8 @@ export function RequirementFieldLibraryTable({ visibleFields, canManage, onEdit,
           <col style={{ width: canManage ? "28%" : "38%" }} />
           {canManage && <col style={{ width: "10%" }} />}
         </colgroup>
-        <thead className="bg-layer-1 text-secondary">
-          <tr className="h-11">
+        <thead className="bg-surface-2 text-secondary">
+          <tr className="h-10">
             {headers.map((label) => (
               <th key={label} scope="col" className="px-4 font-medium first:pl-5">
                 {label}
@@ -114,7 +113,6 @@ export function RequirementFieldLibraryTable({ visibleFields, canManage, onEdit,
         </thead>
         <tbody>
           {visibleFields.map((field) => {
-            const Icon = FIELD_ICONS[field.field_type];
             const kindLabel =
               field.field_type === "select"
                 ? t(
@@ -131,30 +129,29 @@ export function RequirementFieldLibraryTable({ visibleFields, canManage, onEdit,
             return (
               <tr
                 key={field.id}
-                className="h-[72px] border-t border-subtle focus-within:bg-accent-subtle/40 hover:bg-accent-subtle/40"
+                className="h-[52px] border-t border-subtle focus-within:bg-accent-subtle/40 hover:bg-accent-subtle/40"
               >
-                <th scope="row" className="px-4 py-3 pl-5 text-left font-medium">
-                  <div className="flex min-w-0 items-center gap-3">
-                    <Icon className="size-[18px] shrink-0 text-secondary" />
+                <th scope="row" className="px-4 py-2 pl-5 text-left font-medium">
+                  <div className="flex min-w-0 items-center gap-1">
                     <span className="truncate text-14 text-primary" title={field.name}>
                       {field.name}
                     </span>
                     {field.is_required && (
-                      <span className="-ml-1 shrink-0 text-danger-primary" aria-label="必填">
+                      <span className="shrink-0 text-danger-primary" aria-label="必填">
                         *
                       </span>
                     )}
                   </div>
                 </th>
-                <td className="px-4 py-3 text-secondary">{kindLabel}</td>
-                <td className="px-4 py-3">
+                <td className="px-4 py-2 text-secondary">{kindLabel}</td>
+                <td className="px-4 py-2">
                   <NameChips fieldName={field.name} names={names} />
                 </td>
-                <td className="px-4 py-3">
+                <td className="px-4 py-2">
                   <UsedBy field={field} />
                 </td>
                 {canManage && (
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-2">
                     <div className="flex items-center gap-4">
                       <button
                         type="button"

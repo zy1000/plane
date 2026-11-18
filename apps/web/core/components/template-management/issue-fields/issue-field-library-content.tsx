@@ -1,13 +1,14 @@
 import { useMemo, useState } from "react";
-import { AlertCircle, Check, ChevronDown, Plus, Rows2, Search, X } from "lucide-react";
+import { AlertCircle, Check, ChevronDown, Plus, Rows2 } from "lucide-react";
 import { Button } from "@plane/propel/button";
 import type { TIssueFieldLibraryItem } from "@plane/types";
 import { CustomMenu, Loader } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { FIELD_KIND_FILTERS } from "@/components/project-issue-types/field-display";
 import type { TLinkageIssueType } from "@/utils/field-linkage";
-import { FieldLibraryHeader } from "../field-library-header";
+import { FieldLibrarySwitch } from "../field-library-header";
 import type { TFieldLibrarySwitchItem } from "../field-library-header";
+import { TemplatePageHeader, TemplatePageSearch, TemplatePageTabs } from "../template-page-header";
 import { IssueFieldLibraryTable } from "./issue-field-library-table";
 
 type Filter = "all" | "linked" | "unused";
@@ -78,9 +79,9 @@ export function IssueFieldLibraryContent({
     if (isLoading && !hasLoaded)
       return (
         <Loader className="space-y-3" aria-label="正在加载字段">
-          <Loader.Item height="44px" />
+          <Loader.Item height="40px" />
           {[0, 1, 2, 3].map((index) => (
-            <Loader.Item key={index} height="72px" />
+            <Loader.Item key={index} height="52px" />
           ))}
         </Loader>
       );
@@ -126,94 +127,66 @@ export function IssueFieldLibraryContent({
   };
 
   return (
-    <div className="flex min-h-full min-w-0 flex-col gap-6 px-4 py-6 sm:px-8 sm:py-8">
-      <FieldLibraryHeader activeKey="issue" libraries={libraries} canManage={canManage} onCreate={onCreate} />
-
-      <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3 border-b border-subtle">
-        <div role="group" aria-label="字段范围" className="flex gap-5 sm:gap-6">
-          {filters.map(({ id, label }) => (
-            <button
-              key={id}
-              type="button"
-              aria-pressed={filter === id}
-              onClick={() => setFilter(id)}
-              className={cn(
-                "-mb-px flex h-12 items-center gap-2 border-b-2 px-0.5 text-14 whitespace-nowrap focus-visible:outline-2 focus-visible:outline-accent-strong",
-                filter === id
-                  ? "border-accent-strong font-medium text-primary"
-                  : "border-transparent text-secondary hover:text-primary"
-              )}
+    <div className="flex min-h-full min-w-0 flex-col">
+      <TemplatePageHeader
+        title="通用字段库"
+        bordered={false}
+        after={<FieldLibrarySwitch activeKey="issue" libraries={libraries} />}
+      >
+        <TemplatePageSearch value={search} onChange={setSearch} placeholder="搜索名称或说明" />
+        <CustomMenu
+          ariaLabel="筛选字段类型"
+          placement="bottom-end"
+          customButton={
+            <>
+              <span>{kindLabel}</span>
+              <ChevronDown className="size-3.5" />
+            </>
+          }
+          customButtonClassName={cn(
+            "inline-flex h-8 min-w-28 items-center justify-between gap-3 rounded-md border px-3 text-13",
+            kind === "all"
+              ? "border-subtle text-secondary hover:bg-layer-1-hover"
+              : "border-accent-strong bg-accent-subtle text-accent-primary"
+          )}
+          optionsClassName="min-w-40 rounded-lg border-subtle p-1.5 shadow-overlay-200"
+          portalElement={typeof document === "undefined" ? undefined : document.body}
+          closeOnSelect
+        >
+          {[{ value: "all" as const, label: "全部类型" }, ...FIELD_KIND_FILTERS].map((item) => (
+            <CustomMenu.MenuItem
+              key={item.value}
+              onClick={() => setKind(item.value)}
+              className="flex items-center gap-2 px-2 py-1.5 text-13"
             >
-              {label}
-              <span className={cn("rounded px-1 text-12 tabular-nums", filter === id && "bg-layer-1")}>
-                {hasLoaded ? counts[id] : "—"}
-              </span>
-            </button>
+              <span className="flex-1">{item.label}</span>
+              {kind === item.value && <Check className="size-3.5 text-accent-primary" />}
+            </CustomMenu.MenuItem>
           ))}
-        </div>
-        <div className="mb-3 flex min-w-0 flex-wrap items-center gap-2.5 max-sm:w-full">
-          <div className="relative min-w-0 flex-1 sm:w-64">
-            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-secondary" />
-            <input
-              type="search"
-              aria-label="搜索字段名称或说明"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="搜索名称或说明"
-              className="h-9 w-full min-w-0 rounded-md border border-subtle bg-surface-1 pr-8 pl-9 text-13 text-primary outline-none placeholder:text-secondary focus:border-accent-strong [&::-webkit-search-cancel-button]:appearance-none"
-            />
-            {search && (
-              <button
-                type="button"
-                aria-label="清除搜索"
-                onClick={() => setSearch("")}
-                className="absolute top-1/2 right-1.5 grid size-6 -translate-y-1/2 place-items-center rounded text-secondary hover:bg-layer-1-hover"
-              >
-                <X className="size-3.5" />
-              </button>
-            )}
-          </div>
-          <CustomMenu
-            ariaLabel="筛选字段类型"
-            placement="bottom-end"
-            customButton={
-              <>
-                <span>{kindLabel}</span>
-                <ChevronDown className="size-3.5" />
-              </>
-            }
-            customButtonClassName={cn(
-              "inline-flex h-9 min-w-28 items-center justify-between gap-3 rounded-md border px-3 text-13",
-              kind === "all"
-                ? "border-subtle text-secondary hover:bg-layer-1-hover"
-                : "border-accent-strong bg-accent-subtle text-accent-primary"
-            )}
-            optionsClassName="min-w-40 rounded-lg border-subtle p-1.5 shadow-overlay-200"
-            portalElement={typeof document === "undefined" ? undefined : document.body}
-            closeOnSelect
-          >
-            {[{ value: "all" as const, label: "全部类型" }, ...FIELD_KIND_FILTERS].map((item) => (
-              <CustomMenu.MenuItem
-                key={item.value}
-                onClick={() => setKind(item.value)}
-                className="flex items-center gap-2 px-2 py-1.5 text-13"
-              >
-                <span className="flex-1">{item.label}</span>
-                {kind === item.value && <Check className="size-3.5 text-accent-primary" />}
-              </CustomMenu.MenuItem>
-            ))}
-          </CustomMenu>
-        </div>
-      </div>
+        </CustomMenu>
+        {canManage && (
+          <Button variant="primary" size="xl" className="px-3" onClick={onCreate}>
+            新建字段
+          </Button>
+        )}
+      </TemplatePageHeader>
+      <TemplatePageTabs
+        ariaLabel="字段范围"
+        tabs={filters.map(({ id, label }) => ({ key: id, label, count: hasLoaded ? counts[id] : undefined }))}
+        activeKey={filter}
+        onChange={setFilter}
+      />
 
-      {renderBody()}
-      {hasLoaded && !error && fields.length > 0 && (
-        <span role="status" className="text-12 text-secondary">
-          {visibleFields.length === fields.length
-            ? `共 ${fields.length} 个字段`
-            : `显示 ${visibleFields.length} / ${fields.length} 个字段`}
-        </span>
-      )}
+      <div className="flex flex-col gap-3 px-7 py-6">
+        {renderBody()}
+        {hasLoaded && !error && fields.length > 0 && (
+          <span role="status" className="text-12 text-secondary">
+            {visibleFields.length === fields.length
+              ? `共 ${fields.length} 个字段`
+              : `显示 ${visibleFields.length} / ${fields.length} 个字段`}
+          </span>
+        )}
+      </div>
     </div>
   );
 }

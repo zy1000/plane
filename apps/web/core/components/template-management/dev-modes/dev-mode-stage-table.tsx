@@ -1,4 +1,4 @@
-import { GripVertical, Layers, Plus } from "lucide-react";
+import { GripVertical, Layers } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import type { TDevModeStage } from "@plane/types";
@@ -75,12 +75,10 @@ export function DevModeStageTable({
         )}
         {canEdit && (
           <span className="ml-auto flex gap-2">
-            <Button variant="secondary" onClick={onBulkCreate}>
-              <Layers className="size-3.5" />
+            <Button variant="secondary" size="xl" className="px-3" onClick={onBulkCreate}>
               按阶段类型批量添加
             </Button>
-            <Button variant="primary" onClick={onCreate}>
-              <Plus className="size-3.5" />
+            <Button variant="primary" size="xl" className="px-3" onClick={onCreate}>
               {t(`${DEV_MODE_I18N}.table.create`)}
             </Button>
           </span>

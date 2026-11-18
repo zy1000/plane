@@ -1,7 +1,7 @@
 import { Fragment, useState } from "react";
 import { observer } from "mobx-react";
 import { Link, useLocation, useNavigate } from "react-router";
-import { Lock, PanelLeft, Plus, TableProperties } from "lucide-react";
+import { PanelLeft, Plus, TableProperties } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useLocalStorage } from "@plane/hooks";
 import { useTranslation } from "@plane/i18n";
@@ -202,11 +202,6 @@ export const TemplateRail = observer(function TemplateRail({ workspaceSlug }: { 
                         <span className="shrink-0 rounded border border-accent-subtle bg-accent-subtle px-1 text-11 font-medium leading-4 text-accent-primary">
                           默认
                         </span>
-                      )}
-                      {mode.is_system && (
-                        <Tooltip tooltipContent={t(`${DEV_MODE_I18N}.card.preset`)} position="right">
-                          <Lock className="size-3.5 shrink-0 text-placeholder" aria-label={t(`${DEV_MODE_I18N}.card.preset`)} />
-                        </Tooltip>
                       )}
                     </Link>
                   );

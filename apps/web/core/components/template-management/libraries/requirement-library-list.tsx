@@ -1,22 +1,22 @@
 import { useMemo, useState } from "react";
 import { observer } from "mobx-react";
-import { Link, useSearchParams } from "react-router";
-import { AlertCircle, Library, Pencil, Plus, Trash2 } from "lucide-react";
+import { useSearchParams } from "react-router";
+import { AlertCircle, Library } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
-import { CloseIcon, SearchIcon } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TRequirementLibrary } from "@plane/types";
 import { AlertModalCore, Loader } from "@plane/ui";
-import { cn, renderFormattedDate } from "@plane/utils";
+import { cn } from "@plane/utils";
 import { ContentWrapper } from "@/components/core/content-wrapper";
 import { PageHead } from "@/components/core/page-title";
-import { MoreMenu } from "@/components/project-issue-types/root";
 import { useTemplatePermissions } from "../permissions";
 import { ProductCategoryTag } from "../product-categories/product-category-tag";
+import { TemplateLibraryTable } from "../template-library-table";
+import { TemplatePageHeader, TemplatePageSearch, TemplatePageTabs } from "../template-page-header";
 import { useRequirementLibrariesContext } from "./context";
 
-/** 按需求类型给卡片图标上色：同一类型同一色，类型多了循环用 */
+/** 按需求类型给类型标签上色：同一类型同一色，类型多了循环用 */
 const TYPE_TONES = [
   "bg-[#E6EFFA] text-[#1E63A6]",
   "bg-[#FDF1DC] text-[#93590B]",
@@ -26,10 +26,10 @@ const TYPE_TONES = [
 ];
 
 /**
- * 标准需求库列表（方案 A）：卡片网格 + 按需求类型筛选。
+ * 标准需求库列表：与测试用例库同一套列（TemplateLibraryTable）+ 按需求类型筛选的页签。
  *
- * 一个工作区通常只有几个到十几个库，卡片能把类型、说明、条目数、字段数一眼看全；
- * 不再分页、不再批量勾选。`?requirement_type=` 仍然生效（需求类型页「N 个标准库在用」会带着它跳过来）。
+ * 一个工作区通常只有几个到十几个库，不分页、不批量勾选。
+ * `?requirement_type=` 仍然生效（需求类型页「N 个标准库在用」会带着它跳过来）。
  */
 export const RequirementLibraryList = observer(function RequirementLibraryList() {
   const { t } = useTranslation();
@@ -84,6 +84,8 @@ export const RequirementLibraryList = observer(function RequirementLibraryList()
     [libraries, normalizedSearch, requirementTypeFilter]
   );
 
+  const findLibrary = (id: string) => libraries.find((library) => library.id === id) ?? null;
+
   const setTypeFilter = (typeId: string | null) => {
     const next = new URLSearchParams(searchParams);
     if (typeId) next.set("requirement_type", typeId);
@@ -112,9 +114,9 @@ export const RequirementLibraryList = observer(function RequirementLibraryList()
   const renderBody = () => {
     if (isLoading) {
       return (
-        <Loader className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <Loader className="space-y-2">
           {[0, 1, 2].map((index) => (
-            <Loader.Item key={index} height="196px" />
+            <Loader.Item key={index} height="48px" />
           ))}
         </Loader>
       );
@@ -135,7 +137,8 @@ export const RequirementLibraryList = observer(function RequirementLibraryList()
         </div>
       );
     }
-    if (filteredLibraries.length === 0 && !canManageLibraries) {
+    if (filteredLibraries.length === 0) {
+      const isFiltered = Boolean(normalizedSearch || requirementTypeFilter);
       return (
         <div className="flex min-h-80 items-center justify-center p-6 text-center">
           <div className="max-w-sm">
@@ -143,169 +146,82 @@ export const RequirementLibraryList = observer(function RequirementLibraryList()
               <Library className="size-5" />
             </span>
             <h2 className="mt-3 text-14 font-medium text-primary">
-              {t(
-                normalizedSearch || requirementTypeFilter
-                  ? "requirement_libraries.list.empty_filtered_title"
-                  : "requirement_libraries.empty.title"
-              )}
+              {t(isFiltered ? "requirement_libraries.list.empty_filtered_title" : "requirement_libraries.empty.title")}
             </h2>
+            {!isFiltered && canManageLibraries && (
+              <Button className="mt-4" variant="primary" size="xl" onClick={() => setIsCreateModalOpen(true)}>
+                新建需求库
+              </Button>
+            )}
           </div>
         </div>
       );
     }
 
     return (
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {filteredLibraries.map((library) => (
-          <div
-            key={library.id}
-            className="group relative flex flex-col gap-3 rounded-[14px] border border-subtle bg-surface-1 px-[18px] pb-4 pt-[18px] shadow-raised-100 transition-[border-color,box-shadow] hover:border-strong hover:shadow-raised-200"
-          >
-            <Link
-              to={`/${workspaceSlug}/templates/libraries/${library.id}`}
-              className="absolute inset-0 rounded-[14px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-strong"
-              aria-label={library.name}
-            />
-            <div className="pointer-events-none flex items-start gap-3">
+      <TemplateLibraryTable
+        rows={filteredLibraries.map((library) => ({
+          id: library.id,
+          name: library.name,
+          description: library.description ?? "",
+          href: `/${workspaceSlug}/templates/libraries/${library.id}`,
+          tag: (
+            <>
               <span
                 className={cn(
-                  "grid size-[38px] shrink-0 place-items-center rounded-[10px]",
+                  "inline-flex h-[22px] min-w-0 items-center truncate rounded-md px-2 text-12 font-medium",
                   toneByType.get(library.requirement_type_id) ?? TYPE_TONES[0]
                 )}
               >
-                <Library className="size-[18px]" />
+                {library.requirement_type_detail?.name}
               </span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-14 font-semibold leading-[22px] text-primary">{library.name}</span>
-                <span className="mt-1.5 flex flex-wrap gap-1.5">
-                  <span
-                    className={cn(
-                      "inline-flex h-[22px] max-w-full items-center truncate rounded-md px-2 text-12 font-medium",
-                      toneByType.get(library.requirement_type_id) ?? TYPE_TONES[0]
-                    )}
-                  >
-                    {library.requirement_type_detail?.name}
-                  </span>
-                  {library.product_category_detail && <ProductCategoryTag name={library.product_category_detail.name} />}
-                </span>
-              </span>
-            </div>
-            {canManageLibraries && (
-              <span className="absolute right-3 top-3 z-10 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
-                <MoreMenu
-                  title="标准库操作"
-                  items={[
-                    { label: t("edit"), icon: <Pencil className="size-3.5" />, onClick: () => setLibraryToEdit(library) },
-                    {
-                      label: t("delete"),
-                      icon: <Trash2 className="size-3.5" />,
-                      tone: "danger",
-                      onClick: () => setLibraryToDelete(library),
-                    },
-                  ]}
-                />
-              </span>
-            )}
-            <p className="pointer-events-none line-clamp-2 min-h-10 text-13 leading-5 text-tertiary">
-              {library.description || t("requirement_libraries.list.no_description")}
-            </p>
-            <div className="pointer-events-none flex items-end gap-6 border-t border-subtle pt-3">
-              <span>
-                <b
-                  className={cn(
-                    "block text-20 font-semibold leading-6 tabular-nums",
-                    library.item_count > 0 ? "text-primary" : "text-placeholder"
-                  )}
-                >
-                  {library.item_count}
-                </b>
-                <span className="text-12 text-tertiary">条目</span>
-              </span>
-              <span>
-                <b className="block text-20 font-semibold leading-6 tabular-nums text-primary">{library.field_count}</b>
-                <span className="text-12 text-tertiary">字段</span>
-              </span>
-              <span className="ml-auto text-12 text-tertiary">更新于 {renderFormattedDate(library.updated_at, "yyyy-MM-dd")}</span>
-            </div>
-          </div>
-        ))}
-        {canManageLibraries && (
-          <button
-            type="button"
-            onClick={() => setIsCreateModalOpen(true)}
-            className="flex min-h-[196px] flex-col items-center justify-center gap-2 rounded-[14px] border-[1.5px] border-dashed border-strong bg-surface-2 text-13 text-tertiary transition-colors hover:border-accent-strong hover:text-accent-primary"
-          >
-            <span className="grid size-9 place-items-center rounded-full bg-layer-1">
-              <Plus className="size-4" />
-            </span>
-            {t("requirement_libraries.create")}
-          </button>
-        )}
-      </div>
+              {library.product_category_detail && <ProductCategoryTag name={library.product_category_detail.name} />}
+            </>
+          ),
+          counts: [library.item_count, library.field_count],
+          updatedAt: library.updated_at,
+        }))}
+        columnLabels={{ tag: "需求类型", counts: ["条目数", "字段数"] }}
+        onEdit={canManageLibraries ? (id) => setLibraryToEdit(findLibrary(id)) : undefined}
+        onDelete={canManageLibraries ? (id) => setLibraryToDelete(findLibrary(id)) : undefined}
+      />
     );
   };
+
+  const tabs = [
+    { key: "all", label: "全部", count: libraries.length },
+    ...typeOptions.map((option) => ({ key: option.id, label: option.name, count: option.count })),
+  ];
 
   return (
     <>
       <PageHead title={`${t("requirement_libraries.title")} - ${t("workspace_templates.title")}`} />
-      <ContentWrapper className="bg-surface-1">
-        <div className="flex flex-col px-7 pb-8 pt-6">
-          <div className="mb-4 flex flex-wrap items-start gap-4">
-            <div className="min-w-0">
-              <h1 className="text-20 font-semibold text-primary">{t("requirement_libraries.title")}</h1>
-              <p className="mt-1 text-13 text-secondary">按需求类型沉淀的标准需求条目，产品可以从这里整批导入。</p>
-            </div>
-            <div className="ml-auto flex items-center gap-2">
-              <div className="flex h-8 w-56 items-center gap-2 rounded-md border border-subtle bg-surface-1 px-2.5 text-placeholder focus-within:border-accent-strong">
-                <SearchIcon className="size-3.5 shrink-0" />
-                <input
-                  className="w-full border-none bg-transparent text-13 text-primary placeholder:text-placeholder focus:outline-none"
-                  placeholder={t("requirement_libraries.list.search_placeholder")}
-                  value={searchQuery}
-                  onChange={(event) => setSearchQuery(event.target.value)}
-                  onKeyDown={(event) => event.key === "Escape" && setSearchQuery("")}
-                />
-                {searchQuery && (
-                  <button type="button" className="grid place-items-center hover:text-primary" onClick={() => setSearchQuery("")}>
-                    <CloseIcon className="h-3 w-3" />
-                  </button>
-                )}
-              </div>
-              {canManageLibraries && (
-                <Button variant="primary" onClick={() => setIsCreateModalOpen(true)}>
-                  <Plus className="size-3.5" />
-                  {t("requirement_libraries.create")}
-                </Button>
-              )}
-            </div>
-          </div>
-
-          {typeOptions.length > 0 && (
-            <div className="mb-[18px] flex flex-wrap gap-1.5">
-              {[{ id: null, name: "全部", count: libraries.length }, ...typeOptions].map((option) => {
-                const isActive = (option.id ?? null) === (requirementTypeFilter ?? null);
-                return (
-                  <button
-                    key={option.id ?? "all"}
-                    type="button"
-                    onClick={() => setTypeFilter(option.id)}
-                    className={cn(
-                      "inline-flex h-[30px] items-center gap-1.5 rounded-[15px] border px-3 text-13 transition-colors",
-                      isActive
-                        ? "border-[var(--text-color-primary)] bg-[var(--text-color-primary)] text-[var(--background-color-surface-1)]"
-                        : "border-subtle bg-surface-1 text-secondary hover:text-primary"
-                    )}
-                  >
-                    {option.name}
-                    <span className={cn("text-12 font-medium", isActive ? "opacity-70" : "text-tertiary")}>{option.count}</span>
-                  </button>
-                );
-              })}
-            </div>
+      <ContentWrapper className="flex min-h-0 flex-col bg-surface-1">
+        <TemplatePageHeader
+          title={t("requirement_libraries.title")}
+          count={isLoading ? undefined : libraries.length}
+          bordered={typeOptions.length === 0}
+        >
+          <TemplatePageSearch
+            value={searchQuery}
+            onChange={setSearchQuery}
+            placeholder={t("requirement_libraries.list.search_placeholder")}
+          />
+          {canManageLibraries && (
+            <Button variant="primary" size="xl" className="px-3" onClick={() => setIsCreateModalOpen(true)}>
+              新建需求库
+            </Button>
           )}
-
-          {renderBody()}
-        </div>
+        </TemplatePageHeader>
+        {typeOptions.length > 0 && (
+          <TemplatePageTabs
+            ariaLabel="按需求类型筛选"
+            tabs={tabs}
+            activeKey={requirementTypeFilter ?? "all"}
+            onChange={(key) => setTypeFilter(key === "all" ? null : key)}
+          />
+        )}
+        <div className="px-7 py-6">{renderBody()}</div>
       </ContentWrapper>
 
       <AlertModalCore

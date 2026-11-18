@@ -218,7 +218,7 @@ export const DevModeIssueTypesPanel = observer(function DevModeIssueTypesPanel()
   };
 
   return (
-    <div className="flex flex-col px-8 pt-5 pb-8">
+    <div className="flex flex-col px-7 pt-6 pb-8">
       {canEdit && rows !== undefined && (
         <div className="mb-3.5 flex justify-end gap-2">
           {sorting ? (

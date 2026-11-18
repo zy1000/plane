@@ -519,6 +519,7 @@ class TestCaseRepositoryDetailSerializer(ModelSerializer):
     product_category_detail = serializers.SerializerMethodField()
     # 只有列表接口 annotate 了这个值；新建 / 修改的返回里没有，字段自动省略
     case_count = serializers.IntegerField(read_only=True, required=False)
+    module_count = serializers.IntegerField(read_only=True, required=False)
 
     class Meta:
         model = TestCaseRepository

@@ -14,6 +14,9 @@ export type TTemplateCaseRepository = {
   created_by?: { id: string; [key: string]: unknown } | null;
   created_at: string;
   updated_at: string;
+  /** 列表接口 annotate 的用例数、模块数 */
+  case_count?: number;
+  module_count?: number;
   [key: string]: unknown;
 };
 

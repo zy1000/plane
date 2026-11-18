@@ -12,10 +12,8 @@ import type {
 } from "@plane/types";
 import { PRODUCT_CATEGORY_MODULE_NAME_MAX_LENGTH } from "@plane/types";
 import { AlertModalCore } from "@plane/ui";
-import { cn } from "@plane/utils";
 import { TypeIcon } from "@/components/common/type-icon-picker";
 import type { TProductCategoriesStore } from "@/hooks/store/use-product-categories";
-import { CountPill } from "./count-pill";
 import { DeleteBlockedModal, type TDeleteBlocked } from "./delete-blocked-modal";
 import { getProductCategoryErrorMessage, getProductCategoryLibraryPath } from "./helpers";
 import { ModuleBulkAddModal } from "./module-bulk-add-modal";
@@ -142,23 +140,16 @@ export function ProductCategoryDetail({ workspaceSlug, category, store, canManag
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-      <div
-        className={cn(
-          "flex shrink-0 items-center justify-between gap-4 px-6 pt-5",
-          libraryCount > 0 ? "pb-0" : "pb-5"
-        )}
-      >
-        <div className="min-w-0">
-          <h2 className="truncate text-18 leading-[26px] font-semibold text-primary">{category.name}</h2>
-          <div className="mt-0.5 flex items-center text-13 text-tertiary">
-            <span>{t("product_categories.meta_modules", { count: category.modules.length })}</span>
-            <span className="mx-2.5 h-3 border-l border-strong" />
-            <span>
-              {libraryCount > 0
-                ? t("product_categories.meta_libraries", { count: libraryCount })
-                : t("product_categories.meta_no_libraries")}
-            </span>
-          </div>
+      <div className="flex shrink-0 items-center justify-between gap-4 px-7 pt-6">
+        <div className="flex min-w-0 items-baseline gap-3">
+          <h2 className="truncate text-20 leading-7 font-semibold text-primary">{category.name}</h2>
+          <span className="shrink-0 text-13 text-tertiary">
+            {t("product_categories.meta_modules", { count: category.modules.length })}
+            {" · "}
+            {libraryCount > 0
+              ? t("product_categories.meta_libraries", { count: libraryCount })
+              : t("product_categories.meta_no_libraries")}
+          </span>
         </div>
         {canManage && (
           <div className="flex shrink-0 items-center gap-2">
@@ -185,7 +176,7 @@ export function ProductCategoryDetail({ workspaceSlug, category, store, canManag
       </div>
 
       {libraryCount > 0 && (
-        <div className="flex shrink-0 flex-wrap items-center gap-2 px-6 pt-3.5 pb-[18px]">
+        <div className="flex shrink-0 flex-wrap items-center gap-2 px-7 pt-4">
           <span className="mr-1 text-13 text-tertiary">{t("product_categories.in_use_libraries")}</span>
           {category.libraries.map((library) => (
             <Link
@@ -212,7 +203,7 @@ export function ProductCategoryDetail({ workspaceSlug, category, store, canManag
       )}
 
       {sorting ? (
-        <div className="flex shrink-0 items-center gap-3 border-t border-accent-subtle bg-accent-subtle px-6 py-3">
+        <div className="mx-7 mt-6 mb-3 flex shrink-0 items-center gap-3 rounded-lg bg-accent-subtle px-4 py-2.5">
           <ArrowUpDown className="size-4 shrink-0 text-accent-primary" />
           <span className="min-w-0 flex-1 text-13 text-primary">
             {libraryCount > 0
@@ -227,10 +218,10 @@ export function ProductCategoryDetail({ workspaceSlug, category, store, canManag
           </Button>
         </div>
       ) : (
-        <div className="flex shrink-0 items-center justify-between gap-4 border-t border-subtle px-6 py-3.5">
+        <div className="flex shrink-0 items-center justify-between gap-4 px-7 pt-6 pb-3">
           <div className="flex h-8 items-center gap-2">
             <span className="text-[15px] font-semibold text-primary">{t("product_categories.modules_title")}</span>
-            <CountPill count={category.modules.length} />
+            <span className="text-13 tabular-nums text-tertiary">{category.modules.length}</span>
           </div>
           {canManage && (
             <div className="flex items-center gap-2">
@@ -239,7 +230,7 @@ export function ProductCategoryDetail({ workspaceSlug, category, store, canManag
                   {t("product_categories.adjust_order")}
                 </Button>
               )}
-              <Button variant="primary" size="xl" className="px-3" onClick={() => setIsAddingModules(true)}>
+              <Button variant="secondary" size="xl" className="px-3" onClick={() => setIsAddingModules(true)}>
                 {t("product_categories.add_module")}
               </Button>
             </div>
@@ -247,15 +238,17 @@ export function ProductCategoryDetail({ workspaceSlug, category, store, canManag
         </div>
       )}
 
-      <div className="vertical-scrollbar scrollbar-sm min-h-0 flex-1 overflow-y-auto">
-        <ProductCategoryModuleTable
-          modules={sortDraft ?? category.modules}
-          canManage={canManage}
-          sorting={sorting}
-          onSortChange={setSortDraft}
-          onEdit={setModuleToEdit}
-          onDelete={setModuleToDelete}
-        />
+      <div className="vertical-scrollbar scrollbar-sm min-h-0 flex-1 overflow-y-auto px-7 pb-6">
+        <div className="overflow-hidden rounded-lg border border-subtle">
+          <ProductCategoryModuleTable
+            modules={sortDraft ?? category.modules}
+            canManage={canManage}
+            sorting={sorting}
+            onSortChange={setSortDraft}
+            onEdit={setModuleToEdit}
+            onDelete={setModuleToDelete}
+          />
+        </div>
       </div>
 
       <NameFormModal

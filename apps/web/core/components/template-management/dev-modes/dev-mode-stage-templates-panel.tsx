@@ -164,26 +164,23 @@ export function DevModeStageTemplatesPanel({
         )}
       </div>
 
-      <div className="flex shrink-0 items-center gap-2 border-t border-subtle bg-layer-1 px-4 py-3">
-        {hasChanges ? (
-          <>
-            <span className="size-[7px] rounded-full bg-warning-primary" />
-            <span className="text-13 text-secondary">{t(`${DEV_MODE_I18N}.panel.unsaved`)}</span>
-            {canEdit && (
-              <span className="ml-auto flex gap-1.5">
-                <Button variant="tertiary" size="lg" onClick={onReset} disabled={isSaving}>
-                  {t(`${DEV_MODE_I18N}.panel.reset`)}
-                </Button>
-                <Button variant="primary" size="lg" onClick={onSave} loading={isSaving}>
-                  {t(`${DEV_MODE_I18N}.panel.save`)}
-                </Button>
-              </span>
-            )}
-          </>
-        ) : (
-          <span className="text-12 text-tertiary">勾选后在这里保存</span>
-        )}
-      </div>
+      {/* 有未保存的勾选才出保存条，平时不留占位 */}
+      {hasChanges && (
+        <div className="flex shrink-0 items-center gap-2 border-t border-subtle bg-layer-1 px-4 py-3">
+          <span className="size-[7px] rounded-full bg-warning-primary" />
+          <span className="text-13 text-secondary">{t(`${DEV_MODE_I18N}.panel.unsaved`)}</span>
+          {canEdit && (
+            <span className="ml-auto flex gap-1.5">
+              <Button variant="tertiary" size="lg" onClick={onReset} disabled={isSaving}>
+                {t(`${DEV_MODE_I18N}.panel.reset`)}
+              </Button>
+              <Button variant="primary" size="lg" onClick={onSave} loading={isSaving}>
+                {t(`${DEV_MODE_I18N}.panel.save`)}
+              </Button>
+            </span>
+          )}
+        </div>
+      )}
     </aside>
   );
 }

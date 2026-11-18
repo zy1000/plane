@@ -12,12 +12,13 @@ import { ContentWrapper } from "@/components/core/content-wrapper";
 import { PageHead } from "@/components/core/page-title";
 import { useProductCategories } from "@/hooks/store/use-product-categories";
 import { useTemplatePermissions } from "../permissions";
+import { TemplatePageHeader, TemplatePageSearch } from "../template-page-header";
 import { NameFormModal } from "./name-form-modal";
 import { ProductCategoryDetail } from "./product-category-detail";
 import { ProductCategoryList } from "./product-category-list";
 
 /**
- * 模板中心「产品分类」：左分类列表、右分类详情（在用的库 + 一级模块表）。
+ * 模板中心「产品模板库」：统一页头（搜索分类 + 新建分类）、左贴边分类列、右分类详情（在用的库 + 一级模块表）。
  *
  * 读写口径：需求库或用例模板任一（requirement_library / case_template 的 view / manage）；无管理权限时只读。
  * 新建 / 编辑走弹窗表单，排序走显式的「调整顺序」模式（保存才提交），排序时锁住另一侧。
@@ -35,6 +36,7 @@ export const ProductCategoriesPage = observer(function ProductCategoriesPage({
   const { categories, isLoading, error, fetchCategories } = store;
   const [searchParams, setSearchParams] = useSearchParams();
   const [isCreating, setIsCreating] = useState(false);
+  const [query, setQuery] = useState("");
   const [categorySortDraft, setCategorySortDraft] = useState<TProductCategory[] | null>(null);
   const [isSavingCategorySort, setIsSavingCategorySort] = useState(false);
   const [isSortingModules, setIsSortingModules] = useState(false);
@@ -75,7 +77,7 @@ export const ProductCategoriesPage = observer(function ProductCategoriesPage({
   const renderBody = () => {
     if (isLoading && categories.length === 0) {
       return (
-        <Loader className="flex min-h-0 flex-1 gap-4">
+        <Loader className="flex min-h-0 flex-1 gap-4 p-7">
           <Loader.Item height="420px" width="248px" />
           <Loader.Item height="420px" width="100%" className="flex-1" />
         </Loader>
@@ -104,7 +106,7 @@ export const ProductCategoriesPage = observer(function ProductCategoriesPage({
     }
     if (categories.length === 0) {
       return (
-        <div className="flex min-h-80 flex-1 items-center justify-center rounded-[10px] border border-subtle p-6 text-center">
+        <div className="m-7 flex min-h-80 flex-1 items-center justify-center rounded-[10px] border border-subtle p-6 text-center">
           <div>
             <span className="mx-auto grid size-11 place-items-center rounded-lg border border-subtle bg-layer-1 text-secondary">
               <Tags className="size-5" />
@@ -112,7 +114,7 @@ export const ProductCategoriesPage = observer(function ProductCategoriesPage({
             <h2 className="mt-3 text-14 font-medium text-primary">{t("product_categories.empty.title")}</h2>
             {canManage && (
               <Button className="mt-4" variant="primary" size="xl" onClick={() => setIsCreating(true)}>
-                {t("product_categories.create")}
+                新建分类
               </Button>
             )}
           </div>
@@ -120,15 +122,16 @@ export const ProductCategoriesPage = observer(function ProductCategoriesPage({
       );
     }
     return (
-      <section className="flex min-h-[420px] flex-1 overflow-hidden rounded-xl border border-subtle-1">
+      <div className="flex min-h-0 w-full flex-1">
         <div
           className={cn(
-            "w-[248px] shrink-0 border-r border-subtle bg-surface-1 transition-opacity",
+            "min-h-0 w-[220px] shrink-0 border-r border-subtle transition-opacity",
             isSortingModules && "pointer-events-none opacity-50"
           )}
         >
           <ProductCategoryList
             categories={categories}
+            query={query}
             selectedId={selected?.id ?? null}
             onSelect={selectCategory}
             canManage={canManage}
@@ -157,34 +160,32 @@ export const ProductCategoriesPage = observer(function ProductCategoriesPage({
             />
           </div>
         )}
-      </section>
+      </div>
     );
   };
 
   return (
     <>
       <PageHead title={`${t("product_categories.title")} - ${t("workspace_templates.title")}`} />
-      <ContentWrapper className="bg-surface-1">
-        <div className="flex h-full min-h-0 flex-col gap-5 px-7 pt-[22px] pb-6">
-          <header className="flex items-start justify-between gap-4">
-            <div className="min-w-0">
-              <h1 className="text-20 leading-7 font-semibold text-primary">{t("product_categories.title")}</h1>
-              <p className="mt-1 text-13 text-tertiary">{t("product_categories.description")}</p>
-            </div>
-            {canManage && (
-              <Button
-                variant="primary"
-                size="xl"
-                className="shrink-0 px-3"
-                onClick={() => setIsCreating(true)}
-                disabled={isSortingCategories || isSortingModules}
-              >
-                {t("product_categories.create")}
-              </Button>
-            )}
-          </header>
-          {renderBody()}
-        </div>
+      <ContentWrapper className="flex min-h-0 flex-col overflow-hidden bg-surface-1">
+        <TemplatePageHeader
+          title={t("product_categories.title")}
+          count={isLoading && categories.length === 0 ? undefined : categories.length}
+        >
+          <TemplatePageSearch value={query} onChange={setQuery} placeholder={t("product_categories.search_placeholder")} />
+          {canManage && (
+            <Button
+              variant="primary"
+              size="xl"
+              className="shrink-0 px-3"
+              onClick={() => setIsCreating(true)}
+              disabled={isSortingCategories || isSortingModules}
+            >
+              新建分类
+            </Button>
+          )}
+        </TemplatePageHeader>
+        {renderBody()}
       </ContentWrapper>
       <NameFormModal
         isOpen={isCreating}

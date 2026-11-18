@@ -337,8 +337,17 @@ class RepositoryAPIView(BaseAPIView):
             .annotate(total=Count("id"))
             .values("total")
         )
+        # 模块数：模板中心「测试用例库」列表要显示，写法同上
+        module_counts = (
+            CaseModule.objects.filter(repository=OuterRef("pk"))
+            .order_by()
+            .values("repository")
+            .annotate(total=Count("id"))
+            .values("total")
+        )
         queryset = queryset.annotate(
-            case_count=Coalesce(Subquery(case_counts, output_field=IntegerField()), 0)
+            case_count=Coalesce(Subquery(case_counts, output_field=IntegerField()), 0),
+            module_count=Coalesce(Subquery(module_counts, output_field=IntegerField()), 0),
         )
         repositories = self.filter_queryset(queryset)
         paginator = self.pagination_class()

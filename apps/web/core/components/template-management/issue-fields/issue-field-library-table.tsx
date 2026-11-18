@@ -2,7 +2,7 @@ import { useId } from "react";
 import { Eye, GitBranch } from "lucide-react";
 import { Tooltip } from "@plane/propel/tooltip";
 import type { TIssueFieldLibraryItem } from "@plane/types";
-import { getFieldKindIcon, getFieldKindLabel } from "@/components/project-issue-types/field-display";
+import { getFieldKindLabel } from "@/components/project-issue-types/field-display";
 import { getSelectionMode, getTextMode } from "@/components/project-issue-types/field-form";
 import { describeLinkageConditions, linkageChoices } from "@/utils/field-linkage";
 import type { TLinkageIssueType } from "@/utils/field-linkage";
@@ -75,7 +75,7 @@ function FieldRules({
   const hasTypes = issueTypes.length > 0;
 
   return (
-    <div className="flex flex-col items-start gap-1.5">
+    <div className="flex flex-wrap items-center gap-1.5">
       {visibility && (
         <Tooltip
           position="top"
@@ -171,8 +171,8 @@ export function IssueFieldLibraryTable({
           <col style={{ width: canManage ? "14%" : "24%" }} />
           {canManage && <col style={{ width: "10%" }} />}
         </colgroup>
-        <thead className="bg-layer-1 text-secondary">
-          <tr className="h-11">
+        <thead className="bg-surface-2 text-secondary">
+          <tr className="h-10">
             {["字段名称", "类型", "选项", "联动规则", "使用的类型"].map((label) => (
               <th key={label} scope="col" className="px-4 font-medium first:pl-5">
                 {label}
@@ -187,7 +187,6 @@ export function IssueFieldLibraryTable({
         </thead>
         <tbody>
           {visibleFields.map((field) => {
-            const Icon = getFieldKindIcon(field);
             const kindLabel =
               field.field_type === "select"
                 ? getSelectionMode(field.options) === "multiple"
@@ -199,11 +198,10 @@ export function IssueFieldLibraryTable({
             return (
               <tr
                 key={field.id}
-                className="h-[72px] border-t border-subtle focus-within:bg-accent-subtle/40 hover:bg-accent-subtle/40"
+                className="h-[52px] border-t border-subtle focus-within:bg-accent-subtle/40 hover:bg-accent-subtle/40"
               >
-                <th scope="row" className="px-4 py-3 pl-5 text-left font-medium">
-                  <div className="flex min-w-0 items-center gap-3">
-                    <Icon className="size-[18px] shrink-0 text-secondary" />
+                <th scope="row" className="px-4 py-2 pl-5 text-left font-medium">
+                  <div className="flex min-w-0 items-center gap-1">
                     {canManage ? (
                       <button
                         type="button"
@@ -219,24 +217,24 @@ export function IssueFieldLibraryTable({
                       </span>
                     )}
                     {field.is_required && (
-                      <span className="-ml-1 shrink-0 text-danger-primary" aria-label="必填">
+                      <span className="shrink-0 text-danger-primary" aria-label="必填">
                         *
                       </span>
                     )}
                   </div>
                 </th>
-                <td className="px-4 py-3 text-secondary">{kindLabel}</td>
-                <td className="px-4 py-3">
+                <td className="px-4 py-2 text-secondary">{kindLabel}</td>
+                <td className="px-4 py-2">
                   <FieldOptions field={field} />
                 </td>
-                <td className="px-4 py-3">
+                <td className="px-4 py-2">
                   <FieldRules field={field} fields={fields} issueTypes={issueTypes} />
                 </td>
-                <td className="px-4 py-3">
+                <td className="px-4 py-2">
                   <IssueFieldUsedBy field={field} maxVisible={2} />
                 </td>
                 {canManage && (
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-2">
                     <div className="flex items-center gap-4">
                       <button
                         type="button"

@@ -18,7 +18,7 @@ type Props = {
   onDelete: (module: TProductCategoryModule) => void;
 };
 
-/** 分类详情里的一级模块表（通栏，无外框）：序号 · 模块名称 · 需求数 · 操作（编辑 / 删除常显） */
+/** 分类详情里的一级模块表（外框由详情页包）：序号 · 模块名称 · 需求数 · 操作（编辑 / 删除常显） */
 export function ProductCategoryModuleTable(props: Props) {
   const { modules, canManage, sorting, onSortChange, onEdit, onDelete } = props;
   const { t } = useTranslation();
@@ -26,10 +26,10 @@ export function ProductCategoryModuleTable(props: Props) {
   const columns = cn(
     "grid items-center",
     sorting
-      ? "grid-cols-[36px_64px_minmax(0,1fr)_120px] pr-6 pl-4"
+      ? "grid-cols-[36px_64px_minmax(0,1fr)_120px] pr-5 pl-4"
       : showActions
-        ? "grid-cols-[64px_minmax(0,1fr)_120px_120px] px-6"
-        : "grid-cols-[64px_minmax(0,1fr)_120px] px-6"
+        ? "grid-cols-[64px_minmax(0,1fr)_120px_120px] px-5"
+        : "grid-cols-[64px_minmax(0,1fr)_120px] px-5"
   );
 
   const renderRow = (module: TProductCategoryModule, index: number) => (
@@ -44,10 +44,7 @@ export function ProductCategoryModuleTable(props: Props) {
         </span>
       )}
       <span className="tabular-nums text-tertiary">{index + 1}</span>
-      <span className="flex min-w-0 items-center gap-2.5">
-        <Folder className="size-4 shrink-0 text-tertiary" strokeWidth={1.75} />
-        <span className="truncate text-primary">{module.name}</span>
-      </span>
+      <span className="truncate text-primary">{module.name}</span>
       <span className="text-right tabular-nums text-secondary">{module.item_count}</span>
       {showActions && (
         <span className="flex justify-end gap-[18px]">
@@ -72,7 +69,7 @@ export function ProductCategoryModuleTable(props: Props) {
 
   return (
     <div>
-      <div className={cn(columns, "h-10 border-t border-subtle bg-surface-2 text-13 font-medium text-secondary")}>
+      <div className={cn(columns, "h-10 bg-surface-2 text-13 font-medium text-secondary")}>
         {sorting && <span />}
         <span>{t("product_categories.table.index")}</span>
         <span>{t("product_categories.table.name")}</span>
