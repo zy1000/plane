@@ -459,8 +459,8 @@ export const WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS: Record<string, IWorkspac
   templates: {
     key: "templates",
     labelTranslationKey: "templates",
-    /** 点进来的落地页；改这里不影响下面的高亮范围 */
-    href: `/templates/libraries/`,
+    /** 点进来先到模板中心首页，由它按左栏顺序落到第一个有权看的入口；改这里不影响下面的高亮范围 */
+    href: `/templates/`,
     permissionKeys: WORKSPACE_TEMPLATE_CENTER_PERMISSION_KEYS,
     highlight: (pathname: string, url: string) => {
       const normalizedPathname = pathname.endsWith("/") ? pathname : `${pathname}/`;

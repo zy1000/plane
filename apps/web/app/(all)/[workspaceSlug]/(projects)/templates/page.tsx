@@ -10,18 +10,20 @@ const TemplateManagementIndexPage = observer(function TemplateManagementIndexPag
 }: {
   workspaceSlug: string;
 }) {
-  // 按 tab 顺序落到第一个有权看的页签：只有研发模式权限的人别往标准库落地
+  // 按左栏顺序（研发模式 → 资产库 → 模板库）落到第一个有权看的入口；研发模式落在「全部模式对比」
   const { canViewLibraries, canViewCaseTemplates, canViewReviewTemplates, canViewDevModes, canViewRequirementTypes } =
     useTemplatePermissions(workspaceSlug);
-  const tabKey = canViewLibraries
-    ? "libraries"
-    : canViewCaseTemplates
-      ? "test-cases"
-      : canViewReviewTemplates
-        ? "reviews"
-        : !canViewDevModes && canViewRequirementTypes
-          ? "requirement-types"
-          : "dev-modes";
+  const tabKey = canViewDevModes
+    ? "dev-modes"
+    : canViewLibraries
+      ? "libraries"
+      : canViewCaseTemplates
+        ? "test-cases"
+        : canViewReviewTemplates
+          ? "reviews"
+          : canViewRequirementTypes
+            ? "requirement-types"
+            : "dev-modes";
   return <Navigate to={getTemplateManagementTabPath(workspaceSlug, tabKey)} replace />;
 });
 
