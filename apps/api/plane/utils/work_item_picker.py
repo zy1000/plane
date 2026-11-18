@@ -3,7 +3,7 @@
 # See the LICENSE file for details.
 
 """
-「添加工作项」弹窗（迭代 / 发布 / 模块）的表格数据：排序 + 按页组装行。
+「添加工作项」弹窗（迭代 / 发布 / 模块 / 阶段）的表格数据：排序 + 按页组装行。
 
 搜索接口带 paginated=true 时走这里，返回 {results, total_count}；不带时仍是旧的列表响应。
 """
@@ -36,6 +36,8 @@ ROW_FIELDS = (
     "target_date",
     "created_at",
     "updated_at",
+    "stage_id",
+    "stage__name",
 )
 
 
@@ -66,7 +68,7 @@ def order_picker_issues(issues: QuerySet, order_by: str, order: str) -> QuerySet
 
 
 def build_picker_rows(issue_ids: list) -> list:
-    """按 issue_ids 的顺序返回行，附负责人、所在迭代、所在发布。"""
+    """按 issue_ids 的顺序返回行，附负责人、所在迭代、所在发布、所在阶段。"""
     if not issue_ids:
         return []
 
@@ -110,5 +112,8 @@ def build_picker_rows(issue_ids: list) -> list:
         row["assignee_ids"] = assignees.get(issue_id, [])
         row["cycle"] = cycles.get(issue_id)
         row["releases"] = releases.get(issue_id, [])
+        # 阶段是工作项自己的单选字段
+        stage_id, stage_name = row.pop("stage_id"), row.pop("stage__name")
+        row["stage"] = {"id": stage_id, "name": stage_name} if stage_id else None
         result.append(row)
     return result

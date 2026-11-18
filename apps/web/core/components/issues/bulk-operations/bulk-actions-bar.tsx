@@ -24,6 +24,7 @@ import { IssuePropertyLabels } from "@/components/issues/issue-layouts/propertie
 // hooks
 import { useMultipleSelectStore } from "@/hooks/store/use-multiple-select-store";
 import { useIssues } from "@/hooks/store/use-issues";
+import { useProject } from "@/hooks/store/use-project";
 import { useProjectState } from "@/hooks/store/use-project-state";
 import { useIssueStoreType } from "@/hooks/use-issue-layout-store";
 // services
@@ -77,6 +78,8 @@ export const BulkOperationsActionBar = observer(function BulkOperationsActionBar
   const storeType = useIssueStoreType();
   const { issueMap, issues } = useIssues(storeType);
   const { getProjectStates, getStateById } = useProjectState();
+  const { getProjectById } = useProject();
+  const isModuleEnabled = getProjectById(projectId)?.module_view ?? false;
   const projectStates = getProjectStates(projectId ? projectId.toString() : undefined);
   const bulkStateCompatibility = getBulkStateCompatibility({
     issueIds: selectedEntityIds,
@@ -463,19 +466,21 @@ export const BulkOperationsActionBar = observer(function BulkOperationsActionBar
             buttonContainerClassName={actionPillContainerClassName}
             buttonClassName={actionPillClassName}
           />
-          <ModuleDropdown
-            projectId={projectId ? projectId.toString() : undefined}
-            value={selectedModuleIds}
-            onChange={(moduleIds) => setSelectedModuleIds(moduleIds ?? [])}
-            disabled={false}
-            placeholder="Select modules"
-            buttonVariant="transparent-with-text"
-            buttonContainerClassName={actionPillContainerClassName}
-            buttonClassName={actionPillClassName}
-            multiple
-            showCount
-            showTooltip
-          />
+          {isModuleEnabled && (
+            <ModuleDropdown
+              projectId={projectId ? projectId.toString() : undefined}
+              value={selectedModuleIds}
+              onChange={(moduleIds) => setSelectedModuleIds(moduleIds ?? [])}
+              disabled={false}
+              placeholder="Select modules"
+              buttonVariant="transparent-with-text"
+              buttonContainerClassName={actionPillContainerClassName}
+              buttonClassName={actionPillClassName}
+              multiple
+              showCount
+              showTooltip
+            />
+          )}
           <ReleaseDropdown
             projectId={projectId ? projectId.toString() : undefined}
             value={selectedReleaseIds}

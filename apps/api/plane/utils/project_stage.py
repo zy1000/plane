@@ -69,6 +69,15 @@ class StageTree:
     def is_leaf(self, stage_id):
         return not self.children_of.get(stage_id)
 
+    def subtree_ids(self, stage_id):
+        """自身 + 所有后代的 id（阶段详情页把子阶段的工作项也算在本阶段名下）。"""
+        ids, stack = [], [stage_id]
+        while stack:
+            current = stack.pop()
+            ids.append(current)
+            stack.extend(child.id for child in self.children(current))
+        return ids
+
     def depth(self, stage_id):
         depth, current = 0, self.by_id.get(stage_id)
         seen = set()

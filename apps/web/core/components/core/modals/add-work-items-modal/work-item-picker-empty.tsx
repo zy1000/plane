@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { Inbox, Rocket, SearchX } from "lucide-react";
+import { Inbox, Layers, Rocket, SearchX } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { CycleIcon } from "@plane/propel/icons";
 import type { TWorkItemPickerKind } from "./use-work-item-picker";
@@ -26,7 +26,7 @@ export const WorkItemPickerEmpty = (props: {
   const { kind, query, narrowed, includeOther, projectIdentifier, onIncludeOther } = props;
   const { t } = useTranslation();
   const canWiden = kind !== "module" && !includeOther;
-  const WidenIcon = kind === "release" ? Rocket : CycleIcon;
+  const WidenIcon = kind === "release" ? Rocket : kind === "stage" ? Layers : CycleIcon;
 
   return (
     <div className="flex h-full min-h-72 flex-col items-center justify-center gap-2.5 px-6 pb-10 text-center">

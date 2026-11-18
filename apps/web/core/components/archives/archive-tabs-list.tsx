@@ -36,7 +36,7 @@ const ARCHIVES_TAB_LIST: {
   {
     key: "releases",
     label: "发布",
-    shouldRender: (projectDetails) => projectDetails.module_view,
+    shouldRender: (projectDetails) => projectDetails.release_view,
   },
 ];
 

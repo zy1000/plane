@@ -67,7 +67,7 @@ export const QuickAddIssueRoot = observer(function QuickAddIssueRoot(props: TQui
   // i18n
   const { t } = useTranslation();
   // router
-  const { workspaceSlug, projectId } = useParams();
+  const { workspaceSlug, projectId, stageId } = useParams();
   // states
   const [isOpen, setIsOpen] = useState(isQuickAddOpen ?? false);
   // form info
@@ -103,6 +103,8 @@ export const QuickAddIssueRoot = observer(function QuickAddIssueRoot(props: TQui
     reset({ ...defaultValues });
 
     const payload = createIssuePayload(projectId.toString(), {
+      // 阶段详情页里快速新建：默认挂到当前阶段；按阶段分组时以所在分组为准
+      ...(stageId ? { stage_id: stageId.toString() } : {}),
       ...(prePopulatedData ?? {}),
       ...formData,
     });

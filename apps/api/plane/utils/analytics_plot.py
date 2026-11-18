@@ -94,9 +94,20 @@ def build_graph_plot(queryset, x_axis, y_axis, segment=None):
     return sort_data(grouped_data, temp_axis)
 
 
-def burndown_plot(queryset, slug, project_id, plot_type, cycle_id=None, module_id=None):
+def burndown_plot(queryset, slug, project_id, plot_type, cycle_id=None, module_id=None, release_id=None):
     # Total Issues in Cycle or Module
     total_issues = queryset.total_issues
+    # 模块与发布的起止都是日期列、算法相同，只是工作项挂在不同的关联表上
+    if release_id:
+        container_filter = {
+            "issue_release__release_id": release_id,
+            "issue_release__deleted_at__isnull": True,
+        }
+    else:
+        container_filter = {
+            "issue_module__module_id": module_id,
+            "issue_module__deleted_at__isnull": True,
+        }
     # check whether the estimate is a point or not
     estimate_type = Project.objects.filter(
         workspace__slug=slug,
@@ -116,12 +127,11 @@ def burndown_plot(queryset, slug, project_id, plot_type, cycle_id=None, module_i
         issue_estimates = [float(value) for value in issue_estimates]
         total_estimate_points = sum(issue_estimates)
 
-    if estimate_type and plot_type == "points" and module_id:
+    if estimate_type and plot_type == "points" and (module_id or release_id):
         issue_estimates = Issue.issue_objects.filter(
             workspace__slug=slug,
             project_id=project_id,
-            issue_module__module_id=module_id,
-            issue_module__deleted_at__isnull=True,
+            **container_filter,
             estimate_point__isnull=False,
         ).values_list("estimate_point__value", flat=True)
 
@@ -169,7 +179,7 @@ def burndown_plot(queryset, slug, project_id, plot_type, cycle_id=None, module_i
                 .order_by("date")
             )
 
-    if module_id:
+    if module_id or release_id:
         # Get all dates between the two dates
         date_range = [
             (queryset.start_date + timedelta(days=x))
@@ -183,8 +193,7 @@ def burndown_plot(queryset, slug, project_id, plot_type, cycle_id=None, module_i
                 Issue.issue_objects.filter(
                     workspace__slug=slug,
                     project_id=project_id,
-                    issue_module__module_id=module_id,
-                    issue_module__deleted_at__isnull=True,
+                    **container_filter,
                     estimate_point__isnull=False,
                 )
                 .annotate(date=TruncDate("completed_at"))
@@ -197,8 +206,7 @@ def burndown_plot(queryset, slug, project_id, plot_type, cycle_id=None, module_i
                 Issue.issue_objects.filter(
                     workspace__slug=slug,
                     project_id=project_id,
-                    issue_module__module_id=module_id,
-                    issue_module__deleted_at__isnull=True,
+                    **container_filter,
                 )
                 .annotate(date=TruncDate("completed_at"))
                 .values("date")

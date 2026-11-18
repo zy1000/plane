@@ -30,6 +30,14 @@ export const PROJECT_STAGE_MAX_WORKLOAD_RATIO = 100;
 
 export const PROJECT_STAGE_MAX_DURATION_DAYS = 9999;
 
+export type TProjectStageIssueStateCounts = {
+  backlog: number;
+  unstarted: number;
+  started: number;
+  completed: number;
+  cancelled: number;
+};
+
 export type TProjectStage = {
   id: string;
   project_id: string;
@@ -66,6 +74,11 @@ export type TProjectStage = {
   /** 直接挂在这个阶段上的活跃迭代 / 工作项数（不含子阶段，前端按子树求和）；删除时置空 */
   cycle_count: number;
   issue_count: number;
+  /**
+   * 直接挂在这个阶段上的工作项按状态组的数量，口径同工作项列表（不含已归档 / 草稿 / 收集箱里的）。
+   * 页面上的工作项数、进度、状态分布都由它算；issue_count 是全部引用，只给删除确认用。
+   */
+  issue_state_counts: TProjectStageIssueStateCounts;
   created_at: string;
   updated_at: string;
 };

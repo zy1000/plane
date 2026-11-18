@@ -308,7 +308,7 @@ export const IssueDefaultProperties = observer(function IssueDefaultProperties(p
           )}
         />
       )}
-      {projectDetails?.module_view && workspaceSlug && (
+      {projectDetails?.release_view && workspaceSlug && (
         <Controller
           control={control}
           name="release_ids"

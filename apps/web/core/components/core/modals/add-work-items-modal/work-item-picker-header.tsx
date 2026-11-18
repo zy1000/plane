@@ -6,12 +6,13 @@
 
 import type { ReactNode } from "react";
 import { observer } from "mobx-react";
-import { CalendarDays, Rocket, X } from "lucide-react";
+import { CalendarDays, Layers, Rocket, X } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { CycleIcon, ModuleIcon } from "@plane/propel/icons";
 import { renderFormattedDate } from "@plane/utils";
 import { useCycle } from "@/hooks/store/use-cycle";
 import { useModule } from "@/hooks/store/use-module";
+import { useProjectStage } from "@/hooks/store/use-project-stage";
 import { useRelease } from "@/hooks/store/use-release";
 import type { TWorkItemPickerKind } from "./use-work-item-picker";
 
@@ -24,7 +25,7 @@ const dateRange = (start?: string | null, end?: string | null) => {
   return `${from ?? "—"} – ${to ?? "—"}`;
 };
 
-/** 标题 + 「加到哪儿」：迭代 / 模块显示起止日期，发布显示计划发布日 */
+/** 标题 + 「加到哪儿」：迭代 / 模块 / 阶段显示起止日期，发布显示计划发布日 */
 export const WorkItemPickerHeader = observer(function WorkItemPickerHeader(props: {
   kind: TWorkItemPickerKind;
   targetId: string;
@@ -35,6 +36,7 @@ export const WorkItemPickerHeader = observer(function WorkItemPickerHeader(props
   const { getCycleById } = useCycle();
   const { getReleaseById } = useRelease();
   const { getModuleById } = useModule();
+  const { getStageById } = useProjectStage();
 
   let icon: ReactNode = null;
   let name: string | undefined;
@@ -50,6 +52,11 @@ export const WorkItemPickerHeader = observer(function WorkItemPickerHeader(props
     icon = <Rocket className="size-3.5 shrink-0 text-placeholder" />;
     name = release?.name;
     meta = date ? t(`${I18N}.release_target_date`, { date }) : undefined;
+  } else if (kind === "stage") {
+    const stage = getStageById(targetId);
+    icon = <Layers className="size-3.5 shrink-0 text-placeholder" />;
+    name = stage?.name;
+    meta = dateRange(stage?.start_date, stage?.end_date);
   } else {
     const module = getModuleById(targetId);
     icon = <ModuleIcon className="size-3.5 shrink-0 text-placeholder" />;

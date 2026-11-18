@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
+import uuid
 from typing import Optional, Union
 
 # Django imports
@@ -25,6 +26,7 @@ from plane.db.models import (
     ModuleIssue,
 )
 from plane.utils.issue_search import search_issues
+from plane.utils.project_stage import load_tree
 from plane.utils.work_item_picker import build_picker_rows, order_picker_issues
 from plane.utils.visibility import visible_projects_q
 
@@ -172,6 +174,23 @@ class IssueSearchEndpoint(BaseAPIView):
         )
         return issues
 
+    def filter_issues_addable_to_stage(
+        self, issues: QuerySet, project_id: str, stage_id: Optional[str], include_other: bool
+    ) -> QuerySet:
+        """
+        阶段详情页「添加已有工作项」的候选。
+
+        默认只列没挂阶段的；打开「包含已在其他阶段中的」后也列挂在别的阶段上的（加进来即从原阶段移走）。
+        本阶段及其子阶段下的工作项已经在该页列表里，始终不出现。
+        """
+        if not include_other or not stage_id:
+            return issues.filter(stage_id__isnull=True)
+        try:
+            root_id = uuid.UUID(str(stage_id))
+        except ValueError:
+            return issues.filter(stage_id__isnull=True)
+        return issues.exclude(stage_id__in=load_tree(project_id).subtree_ids(root_id))
+
     def filter_issues_without_target_date(self, issues: QuerySet) -> QuerySet:
         """
         Filter issues without a target date
@@ -247,6 +266,9 @@ class IssueSearchEndpoint(BaseAPIView):
         include_other_cycles = request.query_params.get("include_other_cycles", "false")
         release_id = request.query_params.get("release_id")
         include_other_releases = request.query_params.get("include_other_releases", "false")
+        stage = request.query_params.get("stage", "false")
+        stage_id = request.query_params.get("stage_id")
+        include_other_stages = request.query_params.get("include_other_stages", "false")
         state_groups = self.parse_csv_query_param(request.query_params.get("state_groups"))
         priorities = self.parse_csv_query_param(request.query_params.get("priorities"))
         assignee_ids = self.parse_csv_query_param(request.query_params.get("assignee_ids"))
@@ -313,6 +335,11 @@ class IssueSearchEndpoint(BaseAPIView):
                 issues = self.exclude_issues_in_release(issues, release_id)
             else:
                 issues = self.exclude_issues_in_releases(issues)
+
+        if stage == "true":
+            issues = self.filter_issues_addable_to_stage(
+                issues, project_id, stage_id, include_other_stages == "true"
+            )
 
         if exclude_requirement_id:
             issues = self.exclude_issues_linked_to_requirement(issues, exclude_requirement_id)

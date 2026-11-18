@@ -1048,6 +1048,7 @@ export default {
       cycle: "Add work items to cycle",
       release: "Add work items to release",
       module: "Add work items to module",
+      stage: "Add work items to stage",
     },
     release_target_date: "Release on {date}",
     tabs: {
@@ -1057,6 +1058,7 @@ export default {
     scope: {
       cycle: "Include items in other cycles",
       release: "Include items in other releases",
+      stage: "Include items in other stages",
     },
     search_placeholder: "Search by ID or title",
     filters: {
@@ -1113,6 +1115,7 @@ export default {
       created: "Created",
       cycle: "Current cycle",
       release: "Current releases",
+      stage: "Current stage",
     },
     unset: "Not set",
     open_in_new_tab: "Open in new tab",
@@ -1130,6 +1133,7 @@ export default {
     move_hint: {
       cycle: "{count} will be moved from their current cycle",
       release: "{count} are already in other releases and will belong to both",
+      stage: "{count} will be moved from their current stage",
     },
     add: "Add",
     add_count: "Add {count}",
@@ -1143,10 +1147,12 @@ export default {
       scope_hint: {
         cycle: "Items in other cycles are not included",
         release: "Items in other releases are not included",
+        stage: "Items in other stages are not included",
       },
       find_in_other: {
         cycle: "Search other cycles too",
         release: "Search other releases too",
+        stage: "Search other stages too",
       },
     },
     load_error: "Failed to load work items. Please try again.",
@@ -2409,6 +2415,7 @@ export default {
       actual_start: "Actual start",
       actual_end: "Actual end",
       status: "Status",
+      progress: "Progress",
       children: "{count} sub-stages",
       review_count: "{count} reviews",
       review_count_hint: "Stages with reviews cannot be retyped",
@@ -2423,6 +2430,23 @@ export default {
       delete_blocked_started: "{count} reviews have started or finished. Cannot delete",
       expand: "Expand",
       collapse: "Collapse",
+    },
+    detail: {
+      plan_dates: "Planned dates",
+      ratio_children_sum: "Sum of sub-stages",
+      count_unit: "{count}",
+      progress: "Progress",
+      completed_of: "{completed} / {total} completed",
+      cancelled_excluded: "{count} cancelled not counted",
+      children: "Sub-stages",
+      distribution: "State distribution",
+      issue_total: "{count} work items",
+      toggle_sidebar: "Stage details",
+      not_found: "This stage does not exist or was deleted",
+      back_to_list: "Back to stages",
+      add_success: "{count} work items added",
+      add_partial: "{count} added, {failed} could not be added",
+      add_error: "Could not add work items. Please try again.",
     },
     footer: {
       ratio_total: "Total weight",

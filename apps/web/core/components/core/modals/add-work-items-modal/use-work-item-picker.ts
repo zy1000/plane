@@ -9,7 +9,7 @@ import type { TProjectIssuesSearchParams, TWorkItemPickerOrderBy, TWorkItemPicke
 import useDebounce from "@/hooks/use-debounce";
 import { ProjectService } from "@/services/project";
 
-export type TWorkItemPickerKind = "cycle" | "release" | "module";
+export type TWorkItemPickerKind = "cycle" | "release" | "module" | "stage";
 
 export type TPickerFilterKey = "typeIds" | "stateGroups" | "priorities" | "assigneeIds";
 
@@ -25,9 +25,13 @@ const EMPTY_FILTERS: TPickerFilters = { typeIds: [], stateGroups: [], priorities
 
 const projectService = new ProjectService();
 
-/** 某行是否已在别的迭代 / 发布里（迭代加入即移动，发布加入后同时属于多个） */
-export const isInOtherContainer = (kind: TWorkItemPickerKind, row: TWorkItemPickerRow) =>
-  kind === "cycle" ? !!row.cycle : kind === "release" ? row.releases.length > 0 : false;
+/** 某行是否已在别的迭代 / 发布 / 阶段里（迭代、阶段加入即移动，发布加入后同时属于多个） */
+export const isInOtherContainer = (kind: TWorkItemPickerKind, row: TWorkItemPickerRow) => {
+  if (kind === "cycle") return !!row.cycle;
+  if (kind === "release") return row.releases.length > 0;
+  if (kind === "stage") return !!row.stage;
+  return false;
+};
 
 type TArgs = {
   workspaceSlug: string;
@@ -79,6 +83,7 @@ export const useWorkItemPicker = ({ workspaceSlug, projectId, kind, targetId }: 
       ...(kind === "cycle" && { cycle: true, cycle_id: targetId, include_other_cycles: includeOther }),
       ...(kind === "release" && { release: true, release_id: targetId, include_other_releases: includeOther }),
       ...(kind === "module" && { module: targetId }),
+      ...(kind === "stage" && { stage: true, stage_id: targetId, include_other_stages: includeOther }),
     };
   }, [debouncedSearch, filters, includeOther, kind, mine, sort, targetId]);
   const queryKey = useMemo(() => JSON.stringify(baseParams), [baseParams]);

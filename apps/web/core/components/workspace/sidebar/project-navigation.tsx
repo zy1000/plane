@@ -186,7 +186,7 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
         href: `/${workspaceSlug}/projects/${projectId}/releases`,
         icon: Rocket,
         permissionKeys: [PROJECT_RELEASES_VIEW_PERMISSION_KEY],
-        shouldRender: project?.module_view ?? false,
+        shouldRender: project?.release_view ?? false,
         sortOrder: 3.5,
       },
       {

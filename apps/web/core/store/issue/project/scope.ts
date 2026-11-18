@@ -15,8 +15,11 @@
  * 产品需求实体页在 /projects/:id/requirements，与本枚举无关。原先还有一档
  * `dev_requirements`（研发需求工作项视图），页面已下线；后端 scope 表里的对应
  * 条目保留不删 —— 前端不再发这个值，留着无害，删了反而可能影响外部调用方。
+ *
+ * `stage` 是阶段详情页（/projects/:id/stages/:stageId）：不按类别切，列的是挂在该阶段
+ * （含子阶段）上的工作项，阶段条件由页面并进筛选表达式。
  */
-export type TProjectIssueScope = "issues" | "defects";
+export type TProjectIssueScope = "issues" | "defects" | "stage";
 
 export const DEFAULT_PROJECT_ISSUE_SCOPE: TProjectIssueScope = "issues";
 
@@ -29,5 +32,7 @@ export const getProjectIssueScopeFromPathname = (pathname: string | null | undef
   // /requirements 是产品需求页 —— 那个页面没有工作项 store，不能落到任何
   // typed scope 上，所以它走默认分支。
   if (pathname?.includes("/defects")) return "defects";
+  // 只认带阶段 id 的详情页；阶段列表页 /stages 没有工作项 store
+  if (pathname && /\/stages\/[^/]+/.test(pathname)) return "stage";
   return DEFAULT_PROJECT_ISSUE_SCOPE;
 };

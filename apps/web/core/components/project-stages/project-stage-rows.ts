@@ -1,4 +1,4 @@
-import type { TProjectStage } from "@plane/types";
+import type { TProjectStage, TProjectStageIssueStateCounts } from "@plane/types";
 
 export type TProjectStageRow = {
   stage: TProjectStage;
@@ -100,6 +100,37 @@ export const sumProjectStageSubtree = (
   };
   for (const stage of stages) total(stage);
   return totals;
+};
+
+/** 工作项的五个状态组，状态分布按这个顺序出 */
+export const PROJECT_STAGE_ISSUE_STATE_GROUPS = ["backlog", "unstarted", "started", "completed", "cancelled"] as const;
+
+/** 某阶段自身 + 所有后代的工作项按状态组合计：阶段详情页的完成进度与状态分布 */
+export const sumProjectStageStateCounts = (stages: TProjectStage[], rootId: string): TProjectStageIssueStateCounts => {
+  const ids = new Set(collectProjectStageSubtreeIds(stages, rootId));
+  const total: TProjectStageIssueStateCounts = { backlog: 0, unstarted: 0, started: 0, completed: 0, cancelled: 0 };
+  for (const stage of stages) {
+    if (!ids.has(stage.id)) continue;
+    for (const group of PROJECT_STAGE_ISSUE_STATE_GROUPS) total[group] += stage.issue_state_counts?.[group] ?? 0;
+  }
+  return total;
+};
+
+/** 单个阶段直接挂的工作项数（列表口径）。`issue_count` 含已归档 / 草稿，只给删除确认用 */
+export const getProjectStageIssueTotal = (stage: TProjectStage) =>
+  PROJECT_STAGE_ISSUE_STATE_GROUPS.reduce((sum, group) => sum + (stage.issue_state_counts?.[group] ?? 0), 0);
+
+/** 完成进度：已完成 ÷（总数 − 已取消），口径同迭代 */
+export const getProjectStageProgress = (counts: TProjectStageIssueStateCounts) => {
+  const total = PROJECT_STAGE_ISSUE_STATE_GROUPS.reduce((sum, group) => sum + counts[group], 0);
+  const effective = total - counts.cancelled;
+  return {
+    total,
+    effective,
+    completed: counts.completed,
+    cancelled: counts.cancelled,
+    percent: effective > 0 ? Math.round((counts.completed / effective) * 100) : 0,
+  };
 };
 
 /** 计算「已延期 N 天」：计划结束到今天的自然日差 */

@@ -22,6 +22,8 @@ from .base import BaseSerializer
 
 #: 批量改属性一次最多改多少条
 PROJECT_STAGE_BULK_LIMIT = 500
+#: 工作项的五个状态组（收集箱的 triage 不算），阶段的状态分布按这个顺序出
+ISSUE_STATE_GROUPS = ("backlog", "unstarted", "started", "completed", "cancelled")
 PROJECT_STAGE_BULK_FIELDS = ("owner", "start_date", "end_date")
 
 
@@ -86,6 +88,9 @@ class ProjectStageSerializer(BaseSerializer):
     # 直接挂在该阶段上的迭代 / 工作项数（不含子阶段）
     cycle_count = serializers.SerializerMethodField()
     issue_count = serializers.SerializerMethodField()
+    # 直接挂在该阶段上的工作项按状态组的数量（列表口径，不含已归档 / 草稿，比 issue_count 少）；
+    # 由视图算好放在 ``context["issue_state_counts"]``
+    issue_state_counts = serializers.SerializerMethodField()
 
     class Meta:
         model = ProjectStage
@@ -118,6 +123,7 @@ class ProjectStageSerializer(BaseSerializer):
             "tailoring_item_count",
             "cycle_count",
             "issue_count",
+            "issue_state_counts",
             "created_at",
             "updated_at",
         ]
@@ -136,6 +142,7 @@ class ProjectStageSerializer(BaseSerializer):
             "tailoring_item_count",
             "cycle_count",
             "issue_count",
+            "issue_state_counts",
             "created_at",
             "updated_at",
         ]
@@ -189,6 +196,10 @@ class ProjectStageSerializer(BaseSerializer):
         if annotated is not None:
             return annotated
         return obj.issues.count()
+
+    def get_issue_state_counts(self, obj):
+        counts = (self.context.get("issue_state_counts") or {}).get(obj.id, {})
+        return {group: counts.get(group, 0) for group in ISSUE_STATE_GROUPS}
 
     def get_children_count(self, obj):
         annotated = getattr(obj, "children_count", None)

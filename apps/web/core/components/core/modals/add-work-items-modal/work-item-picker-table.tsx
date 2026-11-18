@@ -18,13 +18,14 @@ import type { TPickerSort } from "./use-work-item-picker";
 
 const I18N = "work_item_picker";
 
-/** 最后一列：默认「创建」；打开「包含已在其他迭代/发布中的」后换成所在迭代 / 所在发布 */
-export type TPickerLastColumn = "created" | "cycle" | "release";
+/** 最后一列：默认「创建」；打开「包含已在其他迭代/发布/阶段中的」后换成所在迭代 / 所在发布 / 所在阶段 */
+export type TPickerLastColumn = "created" | "cycle" | "release" | "stage";
 
 const GRID = {
   created: "grid-cols-[1rem_8rem_minmax(0,1fr)_7rem_5rem_9rem_7.75rem_4rem]",
   cycle: "grid-cols-[1rem_8rem_minmax(0,1fr)_7rem_5rem_9rem_7.75rem_12rem]",
   release: "grid-cols-[1rem_8rem_minmax(0,1fr)_7rem_5rem_9rem_7.75rem_12rem]",
+  stage: "grid-cols-[1rem_8rem_minmax(0,1fr)_7rem_5rem_9rem_7.75rem_12rem]",
 } as const;
 
 const shortDate = (value: string | null | undefined) => renderFormattedDate(value, "MM/dd");
@@ -173,6 +174,14 @@ const PickerRow = (props: {
       {lastColumn === "created" && <span className="text-tertiary tabular-nums">{shortDate(row.created_at)}</span>}
       {lastColumn === "cycle" && <ContainerCell kind="cycle" items={row.cycle ? [row.cycle] : []} />}
       {lastColumn === "release" && <ContainerCell kind="release" items={row.releases} />}
+      {lastColumn === "stage" &&
+        (row.stage ? (
+          <span className="min-w-0 truncate text-secondary" title={row.stage.name}>
+            {row.stage.name}
+          </span>
+        ) : (
+          <span className="text-placeholder">—</span>
+        ))}
     </label>
   );
 };
@@ -204,10 +213,7 @@ export const WorkItemPickerTable = (props: {
     onSort,
   } = props;
   const { t } = useTranslation();
-  const lastLabel =
-    lastColumn === "created"
-      ? t(`${I18N}.columns.created`)
-      : t(`${I18N}.columns.${lastColumn === "cycle" ? "cycle" : "release"}`);
+  const lastLabel = t(`${I18N}.columns.${lastColumn}`);
 
   return (
     <div role="table" className={cn("min-w-[60rem]", props.dimmed && "opacity-60 transition-opacity")}>

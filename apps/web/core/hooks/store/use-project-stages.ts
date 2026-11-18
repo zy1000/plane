@@ -28,6 +28,15 @@ export const getProjectStageError = (error: unknown): { message: string; code?: 
   return { message: "Something went wrong." };
 };
 
+/** 叶子占比合计。按「分」累加再除回来，避免 0.1 + 0.2 的浮点尾巴让合法输入被判超限 */
+export const getProjectStageWorkloadTotal = (stages: TProjectStage[]) => {
+  const cents = stages.reduce(
+    (sum, stage) => sum + (stage.children_count > 0 ? 0 : Math.round(Number(stage.workload_ratio ?? 0) * 100)),
+    0
+  );
+  return cents / 100;
+};
+
 /**
  * 项目的全部阶段。局部 state，不进 MobX root store —— 口径同阶段评审与研发模式。
  *
@@ -111,16 +120,8 @@ export const useProjectStages = (workspaceSlug: string | undefined, projectId: s
     });
   }, [projectId, setProjectStages]);
 
-  /**
-   * 叶子占比合计与剩余。按「分」累加再除回来，避免 0.1 + 0.2 的浮点尾巴让合法输入被判超限。
-   */
-  const workloadTotal = useMemo(() => {
-    const cents = stages.reduce(
-      (sum, stage) => sum + (stage.children_count > 0 ? 0 : Math.round(Number(stage.workload_ratio ?? 0) * 100)),
-      0
-    );
-    return cents / 100;
-  }, [stages]);
+  /** 叶子占比合计与剩余 */
+  const workloadTotal = useMemo(() => getProjectStageWorkloadTotal(stages), [stages]);
   const workloadRemaining = Math.round((PROJECT_STAGE_MAX_WORKLOAD_RATIO - workloadTotal) * 100) / 100;
 
   return {

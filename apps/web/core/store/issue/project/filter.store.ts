@@ -104,6 +104,8 @@ function expandStateConditionData(
 }
 
 export interface IProjectIssuesFilter extends IBaseIssueFilterStore {
+  /** 当前页面的范围（工作项 / 缺陷 / 阶段详情） */
+  activeScope: TProjectIssueScope;
   //helper actions
   setActiveScope: (scope: TProjectIssueScope) => void;
   getFilterParams: (

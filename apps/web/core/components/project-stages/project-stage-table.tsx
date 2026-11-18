@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { useMemo } from "react";
+import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ChevronRight, ClipboardCheck, Flag } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
@@ -18,7 +19,14 @@ import {
 } from "./project-stage-cells";
 import { ProjectStageDelayedTag } from "./project-stage-delayed-tag";
 import type { TProjectStageRow } from "./project-stage-rows";
-import { collectProjectStageSubtreeIds, delayedDays, sumProjectStageSubtree } from "./project-stage-rows";
+import {
+  collectProjectStageSubtreeIds,
+  delayedDays,
+  getProjectStageIssueTotal,
+  getProjectStageProgress,
+  sumProjectStageStateCounts,
+  sumProjectStageSubtree,
+} from "./project-stage-rows";
 import { ProjectStageStatusCell } from "./project-stage-status-cell";
 
 const I18N = "project_stage";
@@ -33,6 +41,7 @@ export type TProjectStageColumn =
   | "actual_start"
   | "actual_end"
   | "status"
+  | "progress"
   | "cycle_count"
   | "issue_count";
 
@@ -46,6 +55,7 @@ export const PROJECT_STAGE_COLUMNS: TProjectStageColumn[] = [
   "actual_start",
   "actual_end",
   "status",
+  "progress",
   "cycle_count",
   "issue_count",
 ];
@@ -61,6 +71,7 @@ const COLUMN_WIDTH: Record<TProjectStageColumn, string> = {
   actual_start: "96px",
   actual_end: "96px",
   status: "124px",
+  progress: "136px",
   cycle_count: "88px",
   issue_count: "88px",
 };
@@ -217,15 +228,17 @@ export const ProjectStageTable = ({
   const { updateFilters: updateCycleFilters } = useCycleFilter();
   const columns = PROJECT_STAGE_COLUMNS;
   const cycleTotals = useMemo(() => sumProjectStageSubtree(stages, (stage) => stage.cycle_count ?? 0), [stages]);
-  const issueTotals = useMemo(() => sumProjectStageSubtree(stages, (stage) => stage.issue_count ?? 0), [stages]);
-  // 迭代列表按该阶段筛选后再跳；工作项列表暂无程序化设筛选的入口，直接跳
+  // 列表口径（同阶段详情页的条数）：issue_count 含已归档 / 草稿，只给删除确认用
+  const issueTotals = useMemo(() => sumProjectStageSubtree(stages, getProjectStageIssueTotal), [stages]);
+  // 迭代列表按该阶段筛选后再跳；工作项进阶段详情页（列的就是该阶段含子阶段的工作项）
   const openCycles = (stage: TProjectStage) => {
     // 计数含子阶段，筛选也要带上整棵子树，否则父阶段点开是空列表
     updateCycleFilters(projectId, { stage: collectProjectStageSubtreeIds(stages, stage.id) });
     router.push(`/${workspaceSlug}/projects/${projectId}/cycles/`);
   };
-  const openIssues = () => {
-    router.push(`/${workspaceSlug}/projects/${projectId}/issues/`);
+  const stageHref = (stage: TProjectStage) => `/${workspaceSlug}/projects/${projectId}/stages/${stage.id}`;
+  const openIssues = (stage: TProjectStage) => {
+    router.push(stageHref(stage));
   };
   const gridTemplateColumns = [
     "minmax(260px, 1fr)",
@@ -323,9 +336,24 @@ export const ProjectStageTable = ({
           <CountCell
             count={issueTotals.get(stage.id) ?? 0}
             title={t(`${I18N}.table.issue_count`)}
-            onClick={openIssues}
+            onClick={() => openIssues(stage)}
           />
         );
+      case "progress": {
+        // 含子阶段；已完成 ÷（总数 − 已取消），同阶段详情页
+        const progress = getProjectStageProgress(sumProjectStageStateCounts(stages, stage.id));
+        if (progress.total === 0) return <Empty />;
+        return (
+          <span className="flex w-full min-w-0 items-center gap-2" title={`${progress.percent}%`}>
+            <span className="block h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-layer-3">
+              <span className="block h-full rounded-full bg-success-primary" style={{ width: `${progress.percent}%` }} />
+            </span>
+            <span className="shrink-0 text-12 tabular-nums text-secondary">
+              {progress.completed}/{progress.effective}
+            </span>
+          </span>
+        );
+      }
     }
   };
 
@@ -405,12 +433,16 @@ export const ProjectStageTable = ({
               ) : (
                 <span className="size-5 shrink-0" aria-hidden />
               )}
-              <span
-                className={cn("truncate text-13", depth === 0 ? "font-medium text-primary" : "text-primary")}
+              <Link
+                href={stageHref(stage)}
+                className={cn(
+                  "truncate text-13 hover:text-accent-primary hover:underline",
+                  depth === 0 ? "font-medium text-primary" : "text-primary"
+                )}
                 title={stage.name}
               >
                 {stage.name}
-              </span>
+              </Link>
               {stage.is_milestone && (
                 <span
                   className="inline-flex h-5 shrink-0 items-center gap-1 rounded-full bg-layer-3 px-1.5 text-11 font-medium text-secondary"

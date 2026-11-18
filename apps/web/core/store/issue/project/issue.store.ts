@@ -89,6 +89,11 @@ export class ProjectIssues extends BaseIssuesStore implements IProjectIssues {
    */
   fetchParentStats = async (workspaceSlug: string, projectId?: string) => {
     projectId && this.rootIssueStore.rootStore.projectRoot.project.fetchProjectDetails(workspaceSlug, projectId);
+    // 阶段详情页：阶段的进度与状态分布也是父级统计。基类在新建 / 更新 / 删除的请求完成之后才调到这里，
+    // 所以读到的是已落库的数（乐观更新时本地数据先变，不能拿本地变化当信号）
+    if (projectId && this.issueFilterStore.activeScope === "stage") {
+      void this.rootIssueStore.rootStore.projectStage.refetchStages(workspaceSlug, projectId);
+    }
   };
 
   /** */

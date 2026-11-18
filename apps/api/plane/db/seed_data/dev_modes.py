@@ -52,8 +52,12 @@ ALL_FEATURES_ON = {key: True for key in FEATURE_KEYS}
 
 
 def _features(**overrides):
-    """全开的基础上覆盖几项。零 import 模块里唯一允许的一点点逻辑。"""
+    """全开的基础上覆盖几项。零 import 模块里唯一允许的一点点逻辑。
+
+    项目模块已下线（迁移 0007 关掉了存量），预置模式一律不开 ``module_view``。
+    """
     features = dict(ALL_FEATURES_ON)
+    features["module_view"] = False
     features.update(overrides)
     return features
 
@@ -107,8 +111,8 @@ DEV_MODE_SPECS = (
                 "background_color": "#EDE9FB",
             },
         },
-        # 现状的等价物：九项全开、阶段与评审节点全量
-        "features": dict(ALL_FEATURES_ON),
+        # 现状的等价物：除已下线的模块外全开、阶段与评审节点全量
+        "features": _features(),
         "seed_all_stages": True,
     },
 )

@@ -28,7 +28,7 @@ const I18N = "work_item_picker";
 type Props = {
   workspaceSlug: string | undefined;
   projectId: string | undefined;
-  /** 加到哪儿：迭代 / 发布 / 模块 */
+  /** 加到哪儿：迭代 / 发布 / 模块 / 阶段 */
   kind: TWorkItemPickerKind;
   targetId: string | undefined;
   isOpen: boolean;
@@ -272,8 +272,8 @@ const AddWorkItemsModalContent = observer(function AddWorkItemsModalContent(
 });
 
 /**
- * 迭代 / 发布 / 模块「添加工作项」弹窗：表格 + 多选筛选 + 排序 + 分页 + 跨页选择。
- * 迭代、发布可打开「包含已在其他迭代/发布中的」：迭代加入即从原迭代移走，发布则同时属于多个。
+ * 迭代 / 发布 / 模块 / 阶段「添加工作项」弹窗：表格 + 多选筛选 + 排序 + 分页 + 跨页选择。
+ * 迭代、发布、阶段可打开「包含已在其他迭代/发布/阶段中的」：迭代、阶段加入即从原处移走，发布则同时属于多个。
  */
 export function AddWorkItemsModal(props: Props) {
   const { isOpen, handleClose, workspaceSlug, projectId, targetId } = props;

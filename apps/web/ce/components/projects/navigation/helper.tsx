@@ -17,6 +17,7 @@ export const getProjectFeatureNavigation = (
   project: {
     cycle_view: boolean;
     module_view: boolean;
+    release_view: boolean;
     issue_views_view: boolean;
     page_view: boolean;
     inbox_view: boolean;
@@ -55,7 +56,7 @@ export const getProjectFeatureNavigation = (
     name: "Releases",
     href: `/${workspaceSlug}/projects/${projectId}/releases`,
     icon: Rocket,
-    shouldRender: project.module_view,
+    shouldRender: project.release_view,
     sortOrder: 3.5,
   },
   {

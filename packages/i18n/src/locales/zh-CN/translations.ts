@@ -1213,6 +1213,7 @@ export default {
       cycle: "添加工作项到迭代",
       release: "添加工作项到发布",
       module: "添加工作项到模块",
+      stage: "添加工作项到阶段",
     },
     release_target_date: "计划发布 {date}",
     tabs: {
@@ -1222,6 +1223,7 @@ export default {
     scope: {
       cycle: "包含已在其他迭代中的",
       release: "包含已在其他发布中的",
+      stage: "包含已在其他阶段中的",
     },
     search_placeholder: "搜索编号或标题",
     filters: {
@@ -1278,6 +1280,7 @@ export default {
       created: "创建",
       cycle: "所在迭代",
       release: "所在发布",
+      stage: "所在阶段",
     },
     unset: "未设",
     open_in_new_tab: "新标签页打开",
@@ -1295,6 +1298,7 @@ export default {
     move_hint: {
       cycle: "其中 {count} 项将从原迭代移到本迭代",
       release: "其中 {count} 项已在其他发布中，加入后同时属于多个发布",
+      stage: "其中 {count} 项将从原阶段移到本阶段",
     },
     add: "添加",
     add_count: "添加 {count} 项",
@@ -1308,10 +1312,12 @@ export default {
       scope_hint: {
         cycle: "当前没有包含已在其他迭代中的工作项",
         release: "当前没有包含已在其他发布中的工作项",
+        stage: "当前没有包含已在其他阶段中的工作项",
       },
       find_in_other: {
         cycle: "在其他迭代中查找",
         release: "在其他发布中查找",
+        stage: "在其他阶段中查找",
       },
     },
     load_error: "工作项加载失败，请重试",
@@ -3025,6 +3031,7 @@ export default {
       actual_start: "实际开始",
       actual_end: "实际完成",
       status: "状态",
+      progress: "进度",
       children: "{count} 个子阶段",
       review_count: "{count} 条评审",
       review_count_hint: "已挂评审的阶段不能改类型",
@@ -3039,6 +3046,23 @@ export default {
       delete_blocked_started: "有 {count} 条评审已开始或已评审，不能删除",
       expand: "展开",
       collapse: "收起",
+    },
+    detail: {
+      plan_dates: "计划时间",
+      ratio_children_sum: "子阶段合计",
+      count_unit: "{count} 个",
+      progress: "完成进度",
+      completed_of: "已完成 {completed} / {total}",
+      cancelled_excluded: "已取消 {count} 个不计入",
+      children: "子阶段",
+      distribution: "状态分布",
+      issue_total: "共 {count} 个工作项",
+      toggle_sidebar: "阶段信息",
+      not_found: "阶段不存在或已删除",
+      back_to_list: "返回阶段列表",
+      add_success: "已添加 {count} 个工作项",
+      add_partial: "已添加 {count} 个，{failed} 个未能添加",
+      add_error: "添加失败，请重试",
     },
     footer: {
       ratio_total: "工作量占比合计",

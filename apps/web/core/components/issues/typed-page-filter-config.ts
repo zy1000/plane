@@ -22,6 +22,15 @@ const buildTypedFallbackConfig = (): TIssuePageFilterConfig => {
 export const getProjectScopeFilterConfig = (scope: TProjectIssueScope): TIssuePageFilterConfig => {
   if (scope === "issues") return ISSUE_DISPLAY_FILTERS_BY_PAGE.issues;
 
+  // 阶段详情页：阶段由页面锁定，不给「阶段」筛选项；工作项类型照常可筛
+  if (scope === "stage") {
+    const issuesConfig = ISSUE_DISPLAY_FILTERS_BY_PAGE.issues;
+    return {
+      ...issuesConfig,
+      filters: issuesConfig.filters.filter((filter) => filter !== "stage_id") as TWorkItemFilterProperty[],
+    };
+  }
+
   const scopedConfig = ISSUE_DISPLAY_FILTERS_BY_PAGE[scope as keyof typeof ISSUE_DISPLAY_FILTERS_BY_PAGE];
   if (scopedConfig) return scopedConfig as TIssuePageFilterConfig;
 

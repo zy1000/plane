@@ -70,7 +70,7 @@ export const CreateUpdateIssueModalBase = observer(function CreateUpdateIssueMod
   const [isDuplicateModalOpen, setIsDuplicateModalOpen] = useState(false);
   // store hooks
   const { t } = useTranslation();
-  const { workspaceSlug, projectId: routerProjectId, cycleId, moduleId, releaseId, workItem } = useParams();
+  const { workspaceSlug, projectId: routerProjectId, cycleId, moduleId, releaseId, stageId, workItem } = useParams();
   const { fetchCycleDetails } = useCycle();
   const { fetchModuleDetails } = useModule();
   const { issues } = useIssues(storeType);
@@ -468,6 +468,8 @@ export const CreateUpdateIssueModalBase = observer(function CreateUpdateIssueMod
       cycle_id: data?.cycle_id ? data?.cycle_id : cycleId ? cycleId.toString() : null,
       module_ids: data?.module_ids ? data?.module_ids : moduleId ? [moduleId.toString()] : null,
       release_ids: data?.release_ids ? data?.release_ids : releaseId ? [releaseId.toString()] : null,
+      // 阶段详情页里新建：默认挂到当前阶段（编辑已有工作项不动它的阶段）
+      ...(stageId && !data?.id && !data?.stage_id ? { stage_id: stageId.toString() } : {}),
     },
     onAssetUpload: handleUpdateUploadedAssetIds,
     onClose: handleClose,

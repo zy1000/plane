@@ -422,7 +422,7 @@ class ReleaseArchiveUnarchiveEndpoint(BaseAPIView):
                         slug=slug,
                         project_id=project_id,
                         plot_type="points",
-                        module_id=pk,
+                        release_id=pk,
                     )
 
             assignee_distribution = (
@@ -531,7 +531,7 @@ class ReleaseArchiveUnarchiveEndpoint(BaseAPIView):
                     slug=slug,
                     project_id=project_id,
                     plot_type="issues",
-                    module_id=pk,
+                    release_id=pk,
                 )
 
             return Response(data, status=status.HTTP_200_OK)

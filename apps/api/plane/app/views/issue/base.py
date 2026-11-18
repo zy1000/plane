@@ -126,6 +126,8 @@ PROJECT_ISSUE_PAGE_SCOPE_PERMISSION_KEYS = {
     "issues": PermissionKey.PROJECT_ISSUE_VIEW,
     "dev_requirements": PermissionKey.PROJECT_REQUIREMENT_VIEW,
     "defects": PermissionKey.PROJECT_DEFECT_VIEW,
+    # 阶段详情页：列的是挂在该阶段上的工作项（阶段条件由前端放进筛选），不按类别收窄
+    "stage": PermissionKey.PROJECT_ISSUE_VIEW,
 }
 
 PROJECT_ISSUE_PAGE_SCOPE_CATEGORY_FILTERS = {

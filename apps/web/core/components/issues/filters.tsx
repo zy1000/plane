@@ -113,7 +113,7 @@ export const HeaderFilters = observer(function HeaderFilters(props: Props) {
         entityType={storeType}
         entityId={filterEntityId}
         initialExpression={scopedIssueFilters?.richFilters}
-        filterRowHiddenOnMount={scope === "defects"}
+        filterRowHiddenOnMount={scope === "defects" || scope === "stage"}
         onToggleFilter={onFilterToggle}
       />
       {/* 不传 miniIcon：工具栏不在 @container 里，@4xl 分支永远不命中，直接显示「显示」两个字 */}

@@ -25,6 +25,7 @@ import { IssueLabelSelect } from "@/components/issues/select";
 // helpers
 // hooks
 import { useProjectEstimates } from "@/hooks/store/estimates";
+import { useProject } from "@/hooks/store/use-project";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 
 type TInboxIssueProperties = {
@@ -38,6 +39,7 @@ export const InboxIssueProperties = observer(function InboxIssueProperties(props
   const { projectId, data, handleData, isVisible = false } = props;
   // hooks
   const { areEstimateEnabledByProjectId } = useProjectEstimates();
+  const { getProjectById } = useProject();
   const { isMobile } = usePlatformOS();
   // states
   const [parentIssueModalOpen, setParentIssueModalOpen] = useState(false);
@@ -143,7 +145,7 @@ export const InboxIssueProperties = observer(function InboxIssueProperties(props
       )}
 
       {/* module */}
-      {isVisible && (
+      {isVisible && getProjectById(projectId)?.module_view && (
         <div className="h-7">
           <ModuleDropdown
             value={data?.module_ids || []}

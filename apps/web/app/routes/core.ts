@@ -515,6 +515,14 @@ export const coreRoutes: RouteConfigEntry[] = [
             ),
           ]),
 
+          // Project stage detail：挂在该阶段（含子阶段）上的工作项
+          layout("./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/stages/(detail)/layout.tsx", [
+            route(
+              ":workspaceSlug/projects/:projectId/stages/:stageId",
+              "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/stages/(detail)/[stageId]/page.tsx"
+            ),
+          ]),
+
           // Project plan（规划）：阶段 › 迭代 › 工作项时间轴
           layout("./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/plan/layout.tsx", [
             route(

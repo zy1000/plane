@@ -265,6 +265,11 @@ export type TProjectIssuesSearchParams = {
   /** 配合 include_other_releases：只排除已在这个发布里的 */
   release_id?: string;
   include_other_releases?: boolean;
+  /** 「加到阶段」：默认只列没挂阶段的；本阶段及其子阶段下的始终不出现 */
+  stage?: boolean;
+  stage_id?: string;
+  /** 也列出挂在别的阶段上的（加进来即从原阶段移走） */
+  include_other_stages?: boolean;
   /** 以下三项都是逗号分隔 */
   state_groups?: string;
   priorities?: string;
@@ -291,6 +296,8 @@ export type TWorkItemPickerRow = ISearchIssueResponse & {
   assignee_ids: string[];
   cycle: TWorkItemPickerContainer | null;
   releases: TWorkItemPickerContainer[];
+  /** 工作项自己挂的阶段（单选） */
+  stage: { id: string; name: string } | null;
 };
 
 export type TWorkItemPickerResponse = {

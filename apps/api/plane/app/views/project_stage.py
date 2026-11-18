@@ -111,7 +111,9 @@ class ProjectStageViewSet(BaseViewSet):
                     StageReview.objects.exclude(status=StageReviewStatus.NOT_STARTED)
                 ),
                 tailoring_item_count=_count_subquery(ReviewTailoringItem.objects.all()),
-                # 直接挂在该阶段上的迭代 / 工作项数，不含子阶段（前端按子树求和）
+                # 直接挂在该阶段上的迭代 / 工作项数，不含子阶段（前端按子树求和）。
+                # issue_count 是全部引用（含已归档 / 草稿 / 收集箱里的）：删除阶段会把它们的阶段都置空，
+                # 删除确认框报的是这个数。页面上显示的工作项数与进度用 issue_state_counts（列表口径）
                 cycle_count=_count_subquery(Cycle.objects.filter(deleted_at__isnull=True)),
                 issue_count=_count_subquery(Issue.objects.filter(deleted_at__isnull=True)),
             )
@@ -126,7 +128,25 @@ class ProjectStageViewSet(BaseViewSet):
         }
         if with_ratios:
             context["ratios"] = load_tree(self.kwargs.get("project_id")).computed_ratios()
+            context["issue_state_counts"] = self._issue_state_counts()
         return context
+
+    def _issue_state_counts(self):
+        """{阶段 id: {状态组: 数量}}：阶段页的工作项数与进度列、阶段详情页的完成进度与状态分布都从这里算。
+
+        只算直接挂在该阶段上的工作项（父阶段由前端按子树求和）。口径同阶段详情页的列表
+        （``issue_objects``：不含已归档 / 草稿 / 收集箱里的），所以比 ``issue_count`` 少。
+        """
+        counts = {}
+        rows = (
+            Issue.issue_objects.filter(project_id=self.kwargs.get("project_id"), stage_id__isnull=False)
+            .order_by()
+            .values("stage_id", "state__group")
+            .annotate(total=Count("id"))
+        )
+        for row in rows:
+            counts.setdefault(row["stage_id"], {})[row["state__group"]] = row["total"]
+        return counts
 
     def _locked(self, pk):
         return (

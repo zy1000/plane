@@ -26,6 +26,11 @@ export interface IProjectStageStore {
   getStageDepth: (stageId: string) => number;
   // actions
   fetchStages: (workspaceSlug: string, projectId: string) => Promise<TProjectStage[]>;
+  /**
+   * 工作项写入之后重取阶段统计用：有进行中的请求就等它结束再发一次。
+   * fetchStages 会复用进行中的请求，而那一次可能是在写入落库之前发出的。
+   */
+  refetchStages: (workspaceSlug: string, projectId: string) => Promise<TProjectStage[]>;
   setProjectStages: (projectId: string, stages: TProjectStage[]) => void;
   /** 阶段删掉后：从候选里去掉，并把缓存里挂着它的迭代 / 工作项置空（项目内切页不会重拉迭代） */
   clearDeletedStage: (projectId: string, stageId: string) => void;
@@ -46,6 +51,7 @@ export class ProjectStageStore implements IProjectStageStore {
       stageMap: observable,
       stageIdsByProject: observable,
       fetchStages: action,
+      refetchStages: action,
       setProjectStages: action,
       clearDeletedStage: action,
     });
@@ -94,6 +100,13 @@ export class ProjectStageStore implements IProjectStageStore {
         if (issue?.stage_id === stageId) issue.stage_id = null;
       });
     });
+  };
+
+  refetchStages = async (workspaceSlug: string, projectId: string) => {
+    const inFlight = this.pending[`${workspaceSlug}/${projectId}`];
+    // 进行中的那次失败与否都不影响这一次重取
+    if (inFlight) await inFlight.catch(() => undefined);
+    return this.fetchStages(workspaceSlug, projectId);
   };
 
   fetchStages = async (workspaceSlug: string, projectId: string) => {
