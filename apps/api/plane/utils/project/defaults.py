@@ -328,11 +328,12 @@ def create_default_bug_extra_field(issue_types: list[IssueType]):
 
 
 def setup_new_project(project: Project, creator: User):
-    """新建项目后的初始化：创建人 / 负责人加为项目管理员、工作项配置、研发模式阶段。
+    """新建项目后的初始化：创建人 / 负责人加为项目管理员、工作项配置、收集箱、研发模式阶段。
 
     创建项目接口与简道云项目同步共用，两边建出来的项目一模一样。project 须已建好 ProjectIdentifier。
     项目权限组不再按模板复制：模板在项目里是引用，绑人时按需生成引用行（utils/permission_groups.py）。
     """
+    from plane.db.models import Intake
     from plane.utils.issue_scheme import prepare_project_issue_scheme
     from plane.utils.project.member import add_project_admins
     from plane.utils.project_stage import copy_stages_from_dev_mode
@@ -343,6 +344,12 @@ def setup_new_project(project: Project, creator: User):
     add_project_admins(project, admin_ids)
 
     prepare_project_issue_scheme(project, creator=creator)
+
+    # 收集默认开（intake_view 默认 True），收集箱要跟着建，否则收集页列表接口 404。
+    # 规则同项目设置保存时补建的那段（ProjectViewSet.partial_update）。
+    if project.intake_view and not Intake.objects.filter(project=project).exists():
+        # 名称列 255，给后缀留位
+        Intake.objects.create(name=f"{project.name[:248]} Intake", project=project, is_default=True)
 
     # 从所选研发模式拷一份阶段到项目下（PMS-101）。放最后且自己包事务：
     # 上面几步都是裸写，这一步失败不该让已经建成的项目回滚，缺了可以在
