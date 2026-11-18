@@ -1042,7 +1042,7 @@ export default function CaseReview() {
                       leaveTo="transform scale-95 opacity-0"
                     >
                       {activeTab === "work" && selectedCaseId && (
-                        <div className="-mt-6 h-full overflow-y-auto vertical-scrollbar scrollbar-sm pb-20">
+                        <div className="h-full overflow-y-auto vertical-scrollbar scrollbar-sm pb-20">
                           <WorkItemDisplayModal caseId={String(selectedCaseId)} defaultType="Task" />
                         </div>
                       )}
@@ -1058,7 +1058,7 @@ export default function CaseReview() {
                       leaveTo="transform scale-95 opacity-0"
                     >
                       {activeTab === "defect" && selectedCaseId && (
-                        <div className="-mt-6 h-full overflow-y-auto vertical-scrollbar scrollbar-sm pb-20">
+                        <div className="h-full overflow-y-auto vertical-scrollbar scrollbar-sm pb-20">
                           <WorkItemDisplayModal caseId={String(selectedCaseId)} defaultType="Bug" />
                         </div>
                       )}
