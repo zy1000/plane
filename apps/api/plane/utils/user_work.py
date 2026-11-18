@@ -76,12 +76,18 @@ PENDING_SOURCES = (
     "case_execution",
     "case_review",
     "plan_review",
+    "cycle",
+    "release",
 )
-PROCESSED_SOURCES = PENDING_SOURCES
+#: 迭代 / 发布只有「我负责、未关闭」这一种待处理口径，没有「我处理过」的事件可取，不进已处理
+PROCESSED_SOURCES = tuple(key for key in PENDING_SOURCES if key not in ("cycle", "release"))
 #: 我发起的：固定来源，不受设置控制
 INITIATED_SOURCES = ("work_item", "defect", "requirement", "requirement_change", "issue_approval", "tailoring_approval")
-#: 测试三项默认关 —— 不是每个人都做测试，默认开会让待处理被几十条用例淹掉
-DEFAULT_OFF_SOURCES = frozenset({"case_execution", "case_review", "plan_review"})
+#: 测试三项默认关 —— 不是每个人都做测试，默认开会让待处理被几十条用例淹掉；
+#: 迭代 / 发布默认关 —— 摘要页「待处理队列」直达用，默认开会改变逾期 / 今天 / 本周等焦点卡的数字
+DEFAULT_OFF_SOURCES = frozenset({"case_execution", "case_review", "plan_review", "cycle", "release"})
+#: 快捷筛选的时间桶；没有截止日期的行归「未排期」
+QUICK_BUCKETS = ("overdue", "today", "week", "unscheduled")
 
 PENDING_GROUP_BY = ("type", "owner", "due_date", "none")
 PENDING_ORDER_BY = ("due_date", "created_at")
@@ -690,6 +696,44 @@ def _pending_plan_reviews(ctx):
         )
 
 
+def _local_day(value):
+    if isinstance(value, datetime):
+        return timezone.localtime(value).date() if timezone.is_aware(value) else value.date()
+    return value
+
+
+def _pending_cycles(ctx):
+    # 口径同摘要页「负责的迭代」：我创建或负责、未完成 / 取消、未归档
+    for cycle in get_profile_metric_queryset("responsible_cycles", ctx.slug, ctx.user_id, ctx.viewer):
+        yield _row(
+            "cycle",
+            cycle.id,
+            title=cycle.name,
+            owner=_project_owner(cycle.project),
+            project_id=str(cycle.project_id),
+            status=_status(cycle.status, cycle.status) if cycle.status else None,
+            due_date=_local_day(cycle.end_date),
+            created_at=cycle.created_at,
+            action={"key": "handle", "role": "leader"},
+        )
+
+
+def _pending_releases(ctx):
+    # 口径同摘要页「负责的发布」：我创建或负责、未完成 / 取消、未归档
+    for release in get_profile_metric_queryset("responsible_releases", ctx.slug, ctx.user_id, ctx.viewer):
+        yield _row(
+            "release",
+            release.id,
+            title=release.name,
+            owner=_project_owner(release.project),
+            project_id=str(release.project_id),
+            status=_status(release.status, release.get_status_display()) if release.status else None,
+            due_date=release.target_date,
+            created_at=release.created_at,
+            action={"key": "handle", "role": "leader"},
+        )
+
+
 # ──────────────────────────────── 待处理 ────────────────────────────────
 
 
@@ -715,7 +759,16 @@ def build_pending_rows(slug, user_id, viewer, types):
         rows.extend(_pending_case_reviews(ctx))
     if "plan_review" in wanted:
         rows.extend(_pending_plan_reviews(ctx))
+    if "cycle" in wanted:
+        rows.extend(_pending_cycles(ctx))
+    if "release" in wanted:
+        rows.extend(_pending_releases(ctx))
     return _finalize(rows, ctx.today)
+
+
+def _quick_bucket(row):
+    """快捷筛选用的桶：逾期 / 今天 / 本周照截止日期，没有截止日期的算「未排期」，其余（之后）不进任何桶。"""
+    return row.get("due_bucket") or "unscheduled"
 
 
 def filter_rows(rows, search=None, quick=None, owners=None):
@@ -726,7 +779,7 @@ def filter_rows(rows, search=None, quick=None, owners=None):
     for row in rows:
         if needle and needle not in (row["title"] or "").lower() and needle not in (row["code"] or "").lower():
             continue
-        if quick and row.get("due_bucket") != quick:
+        if quick and _quick_bucket(row) != quick:
             continue
         if owner_ids and not (row["owner"] and row["owner"]["id"] in owner_ids):
             continue
@@ -744,10 +797,10 @@ def pending_summary(rows, config):
     快捷筛选的 ``total`` / ``by_type`` 只算开启的来源（摘要页焦点卡），``by_type_all`` 覆盖全部来源（待处理页左栏）。"""
     enabled = enabled_sources(config, "pending")
     by_type = _count_by_type(rows)
-    quick = {bucket: Counter() for bucket in ("overdue", "today", "week")}
+    quick = {bucket: Counter() for bucket in QUICK_BUCKETS}
     quick_all = {bucket: Counter() for bucket in quick}
     for row in rows:
-        bucket = row.get("due_bucket")
+        bucket = _quick_bucket(row)
         if bucket not in quick:
             continue
         quick_all[bucket][row["type"]] += 1

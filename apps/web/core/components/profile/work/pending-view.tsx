@@ -34,9 +34,9 @@ import {
   WorkToolbar,
 } from "./work-toolbar";
 import { WORK_TYPE_ALL, WorkTypeRail } from "./work-type-rail";
-import { WORK_SCOPES, isWorkScope, sortTypes } from "./work-types";
+import { WORK_SCOPES, isWorkScope, rowQuickBucket, sortTypes } from "./work-types";
 
-const QUICK_BUCKETS: TUserWorkQuickBucket[] = ["overdue", "today", "week"];
+const QUICK_BUCKETS: TUserWorkQuickBucket[] = ["overdue", "today", "week", "unscheduled"];
 const isQuickBucket = (value: string | null | undefined): value is TUserWorkQuickBucket =>
   QUICK_BUCKETS.includes(value as TUserWorkQuickBucket);
 const isWorkType = (value: string | null): value is TUserWorkType =>
@@ -110,8 +110,9 @@ export const ProfilePendingView = observer(function ProfilePendingView() {
     const byType: Partial<Record<TUserWorkType, number>> = {};
     const byQuick: Partial<Record<TUserWorkQuickBucket, number>> = {};
     scopeRows.forEach((row) => {
-      if (isQuickBucket(row.due_bucket)) byQuick[row.due_bucket] = (byQuick[row.due_bucket] ?? 0) + 1;
-      if (!quick || row.due_bucket === quick) byType[row.type] = (byType[row.type] ?? 0) + 1;
+      const bucket = rowQuickBucket(row);
+      if (isQuickBucket(bucket)) byQuick[bucket] = (byQuick[bucket] ?? 0) + 1;
+      if (!quick || bucket === quick) byType[row.type] = (byType[row.type] ?? 0) + 1;
     });
     return { byType, byQuick };
   }, [quick, scopeRows]);
@@ -128,7 +129,7 @@ export const ProfilePendingView = observer(function ProfilePendingView() {
     () =>
       rows.filter(
         (row) =>
-          (!quick || row.due_bucket === quick) &&
+          (!quick || rowQuickBucket(row) === quick) &&
           matchesSearch(row, needle) &&
           (owners.length === 0 || (row.owner && owners.includes(row.owner.id)))
       ),
@@ -159,17 +160,19 @@ export const ProfilePendingView = observer(function ProfilePendingView() {
       );
   const railCounts = scopeCounts
     ? scopeCounts.byType
-    : ((quick ? summary?.pending.quick[quick].by_type_all : summary?.pending.by_type) ?? {});
+    : ((quick ? summary?.pending.quick[quick]?.by_type_all : summary?.pending.by_type) ?? {});
   const quickCounts = scopeCounts
     ? {
         overdue: scopeCounts.byQuick.overdue ?? 0,
         today: scopeCounts.byQuick.today ?? 0,
         week: scopeCounts.byQuick.week ?? 0,
+        unscheduled: scopeCounts.byQuick.unscheduled ?? 0,
       }
     : {
         overdue: summary?.pending.quick.overdue.total ?? 0,
         today: summary?.pending.quick.today.total ?? 0,
         week: summary?.pending.quick.week.total ?? 0,
+        unscheduled: summary?.pending.quick.unscheduled?.total ?? 0,
       };
   const groupOptions: TWorkGroupBy[] =
     selectedType === WORK_TYPE_ALL ? ["type", "owner", "due_date", "none"] : ["owner", "due_date", "none"];

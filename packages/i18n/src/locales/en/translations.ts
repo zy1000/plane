@@ -6622,8 +6622,10 @@ export default {
         case_execution: "Case executions",
         case_review: "Case reviews",
         plan_review: "Test plan rechecks",
+        cycle: "Cycles",
+        release: "Releases",
       },
-      quick: { overdue: "Overdue", today: "Due today", week: "Due this week" },
+      quick: { overdue: "Overdue", today: "Due today", week: "Due this week", unscheduled: "Unscheduled" },
       buttons: { filter: "Filter", display: "Display", view_settings: "View settings" },
       columns: {
         code: "ID",
@@ -6737,6 +6739,8 @@ export default {
           case_execution: "Assigned to me and not executed",
           case_review: "Cases awaiting my review",
           plan_review: "Executions awaiting my recheck",
+          cycle: "Created or led by me, not completed",
+          release: "Created or led by me, not completed",
         },
         processed_rules: {
           review: "Started, submitted, approved or rolled back by me",
@@ -6793,6 +6797,7 @@ export default {
         unit_item: "",
         unit_case: "",
         reviews_queue: "Reviews I lead or audit",
+        assigned_issues: "Work items & defects",
       },
     },
     user_relation: "Relation to member",

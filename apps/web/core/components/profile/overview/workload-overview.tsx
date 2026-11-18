@@ -4,7 +4,6 @@
  * See the LICENSE file for details.
  */
 
-import { useState } from "react";
 import type { ComponentType } from "react";
 import { ChevronRight, ClipboardCheck, Rocket } from "lucide-react";
 import { useParams } from "next/navigation";
@@ -12,13 +11,11 @@ import { useNavigate } from "react-router";
 // plane imports
 import { useTranslation } from "@plane/i18n";
 import { CycleIcon, DueDatePropertyIcon, RequirementIcon } from "@plane/propel/icons";
-import type { IUserProfileData, TProfileMetricKey } from "@plane/types";
+import type { IUserProfileData } from "@plane/types";
 import { Card, ECardVariant, LinearProgressIndicator, Loader } from "@plane/ui";
 import { cn } from "@plane/utils";
 // hooks
 import { useUserWorkSummary } from "@/hooks/use-user-work";
-// components
-import { ProfileMetricDetailModal } from "./metric-detail-modal";
 
 type Props = {
   userProfile: IUserProfileData | undefined;
@@ -26,12 +23,12 @@ type Props = {
 
 type TQueueMetric = {
   icon: ComponentType<{ className?: string }>;
-  key: TProfileMetricKey | "stage_reviews";
+  key: string;
   title: string;
   value: number;
   warn: boolean;
-  /** 有 href 的直接跳页（评审在待处理页里看），没有的开指标明细弹窗 */
-  href?: string;
+  /** 都跳到待处理页对应的类型 / 范围，和上面今日焦点的卡片一致 */
+  href: string;
 };
 
 export function ProfileWorkloadOverview({ userProfile }: Props) {
@@ -39,7 +36,6 @@ export function ProfileWorkloadOverview({ userProfile }: Props) {
   const navigate = useNavigate();
   const { t } = useTranslation();
   const { summary: workSummary } = useUserWorkSummary(String(workspaceSlug), String(userId));
-  const [activeMetric, setActiveMetric] = useState<TProfileMetricKey | null>(null);
 
   if (!userProfile) {
     return (
@@ -73,7 +69,8 @@ export function ProfileWorkloadOverview({ userProfile }: Props) {
     },
   ];
 
-  // 待审批 / 待执行用例已并入摘要页「今日焦点」与待处理页；这里补一行「负责或审核的评审」直达待处理
+  // 待审批 / 待执行用例已并入摘要页「今日焦点」与待处理页；队列里每张卡都直达待处理页的对应类型
+  const pendingBase = `/${workspaceSlug}/profile/${userId}/pending`;
   const reviewCount = (workSummary?.pending.by_type.review ?? 0) + (workSummary?.pending.by_type.review_activity ?? 0);
   const queueMetrics: TQueueMetric[] = [
     {
@@ -82,6 +79,7 @@ export function ProfileWorkloadOverview({ userProfile }: Props) {
       title: t("profile.stats.insights.unscheduled"),
       value: userProfile.unscheduled_pending_issues,
       warn: userProfile.unscheduled_pending_issues > 0,
+      href: `${pendingBase}?scope=issues&quick=unscheduled`,
     },
     {
       icon: CycleIcon,
@@ -89,6 +87,7 @@ export function ProfileWorkloadOverview({ userProfile }: Props) {
       title: t("profile.stats.responsible_cycles"),
       value: userProfile.responsible_cycles,
       warn: false,
+      href: `${pendingBase}?type=cycle`,
     },
     {
       icon: Rocket,
@@ -96,6 +95,7 @@ export function ProfileWorkloadOverview({ userProfile }: Props) {
       title: t("profile.stats.responsible_releases"),
       value: userProfile.responsible_releases,
       warn: false,
+      href: `${pendingBase}?type=release`,
     },
     {
       icon: RequirementIcon,
@@ -103,6 +103,7 @@ export function ProfileWorkloadOverview({ userProfile }: Props) {
       title: t("profile.stats.open_assigned_requirements"),
       value: userProfile.open_assigned_requirements,
       warn: false,
+      href: `${pendingBase}?type=requirement`,
     },
     {
       icon: ClipboardCheck,
@@ -110,11 +111,9 @@ export function ProfileWorkloadOverview({ userProfile }: Props) {
       title: t("profile.work.summary.reviews_queue"),
       value: reviewCount,
       warn: false,
-      href: `/${workspaceSlug}/profile/${userId}/pending?type=review`,
+      href: `${pendingBase}?type=review`,
     },
   ];
-
-  const activeMetricTitle = queueMetrics.find((metric) => metric.key === activeMetric)?.title;
 
   return (
     <div className="space-y-2">
@@ -175,7 +174,7 @@ export function ProfileWorkloadOverview({ userProfile }: Props) {
                 <button
                   key={metric.key}
                   type="button"
-                  onClick={() => (metric.href ? navigate(metric.href) : setActiveMetric(metric.key as TProfileMetricKey))}
+                  onClick={() => navigate(metric.href)}
                   className="focus-visible:ring-accent-primary rounded-md border border-subtle p-3 text-left outline-none transition-colors hover:bg-surface-2 focus-visible:ring-2 focus-visible:ring-inset"
                 >
                   <div className="flex items-center justify-between gap-2">
@@ -196,16 +195,6 @@ export function ProfileWorkloadOverview({ userProfile }: Props) {
           </section>
         </div>
       </Card>
-      {activeMetric && activeMetricTitle && (
-        <ProfileMetricDetailModal
-          metric={activeMetric}
-          metricTitle={activeMetricTitle}
-          open
-          onClose={() => setActiveMetric(null)}
-          workspaceSlug={String(workspaceSlug)}
-          userId={String(userId)}
-        />
-      )}
     </div>
   );
 }

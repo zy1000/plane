@@ -21,9 +21,16 @@ export const USER_WORK_TYPES = [
   "case_execution",
   "case_review",
   "plan_review",
+  "cycle",
+  "release",
 ] as const;
 
 export type TUserWorkType = (typeof USER_WORK_TYPES)[number];
+
+/** 迭代 / 发布只在待处理里出现（我负责、未关闭），没有已处理事件 */
+export const USER_WORK_PROCESSED_TYPES: TUserWorkType[] = USER_WORK_TYPES.filter(
+  (type) => type !== "cycle" && type !== "release"
+);
 
 export const USER_WORK_INITIATED_TYPES: TUserWorkType[] = [
   "work_item",
@@ -160,7 +167,8 @@ export type TUserWorkConfigPatch = {
   };
 };
 
-export type TUserWorkQuickBucket = "overdue" | "today" | "week";
+/** 快捷筛选：没有截止日期的行算「未排期」（行上的 due_bucket 为 null） */
+export type TUserWorkQuickBucket = "overdue" | "today" | "week" | "unscheduled";
 
 export type TUserWorkSummary = {
   pending: {

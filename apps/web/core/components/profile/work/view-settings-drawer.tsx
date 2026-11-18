@@ -22,7 +22,7 @@ import type {
   TUserWorkProcessedGroupBy,
   TUserWorkType,
 } from "@/types/user-work";
-import { USER_WORK_TYPES } from "@/types/user-work";
+import { USER_WORK_PROCESSED_TYPES, USER_WORK_TYPES } from "@/types/user-work";
 import { WORK_TYPE_ICON, WORK_TYPE_ORDER, workTypeLabel } from "./work-types";
 
 type TView = "pending" | "processed";
@@ -43,7 +43,12 @@ const PENDING_ORDER_OPTIONS: TUserWorkPendingOrderBy[] = ["due_date", "created_a
 const PROCESSED_GROUP_OPTIONS: TUserWorkProcessedGroupBy[] = ["date", "type", "owner", "none"];
 const DAYS_OPTIONS: TUserWorkProcessedDays[] = [7, 30, 90];
 
-const DEFAULT_OFF: TUserWorkType[] = ["case_execution", "case_review", "plan_review"];
+const DEFAULT_OFF: TUserWorkType[] = ["case_execution", "case_review", "plan_review", "cycle", "release"];
+/** 已处理没有迭代 / 发布这两类来源 */
+const VIEW_TYPES: Record<TView, TUserWorkType[]> = {
+  pending: WORK_TYPE_ORDER,
+  processed: WORK_TYPE_ORDER.filter((type) => USER_WORK_PROCESSED_TYPES.includes(type)),
+};
 
 const defaultSources = () =>
   Object.fromEntries(USER_WORK_TYPES.map((type) => [type, !DEFAULT_OFF.includes(type)])) as Record<TUserWorkType, boolean>;
@@ -74,7 +79,8 @@ export function ViewSettingsDrawer({ isOpen, onClose, config, pendingCounts, pro
   if (!portalContainer) return null;
 
   const sources = draft[view].sources;
-  const enabledCount = WORK_TYPE_ORDER.filter((type) => sources[type]).length;
+  const viewTypes = VIEW_TYPES[view];
+  const enabledCount = viewTypes.filter((type) => sources[type]).length;
   const counts = view === "pending" ? pendingCounts : (processedCounts ?? {});
 
   const setSource = (type: TUserWorkType, value: boolean) =>
@@ -170,11 +176,11 @@ export function ViewSettingsDrawer({ isOpen, onClose, config, pendingCounts, pro
               <div className="mt-4 flex h-8 items-center justify-between text-12 font-medium text-tertiary">
                 <span>{t("profile.work.settings.sources")}</span>
                 <span className="font-normal tabular-nums">
-                  {t("profile.work.settings.enabled_count", { enabled: enabledCount, total: WORK_TYPE_ORDER.length })}
+                  {t("profile.work.settings.enabled_count", { enabled: enabledCount, total: viewTypes.length })}
                 </span>
               </div>
               <div className="overflow-hidden rounded-lg border border-subtle">
-                {WORK_TYPE_ORDER.map((type) => {
+                {viewTypes.map((type) => {
                   const Icon = WORK_TYPE_ICON[type];
                   const enabled = !!sources[type];
                   return (

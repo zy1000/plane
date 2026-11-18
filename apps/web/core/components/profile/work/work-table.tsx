@@ -283,6 +283,9 @@ export function buildColumns(t: TTranslate, view: "pending" | "processed" | "ini
       return [c.code, c.name, c.plan, c.project, c.status, c.todo];
     case "case_review":
       return [c.code, c.name, c.caseReview, c.owner, c.status, c.todo];
+    case "cycle":
+    case "release":
+      return [c.name, c.project, c.status, c.todo, c.plannedEnd];
     default:
       return [c.code, c.title, c.owner, c.status, c.todo, c.due];
   }

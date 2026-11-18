@@ -148,9 +148,9 @@ export function WorkMultiSelectMenu({
   );
 }
 
-const QUICK_BUCKETS: TUserWorkQuickBucket[] = ["overdue", "today", "week"];
+const QUICK_BUCKETS: TUserWorkQuickBucket[] = ["overdue", "today", "week", "unscheduled"];
 
-/** 待处理工具栏上的三个快捷筛选：已逾期 / 今天到期 / 本周到期，互斥、可取消 */
+/** 待处理工具栏上的快捷筛选：已逾期 / 今天到期 / 本周到期 / 未排期，互斥、可取消 */
 export function WorkQuickChips({
   active,
   counts,

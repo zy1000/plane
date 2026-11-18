@@ -15,7 +15,7 @@ import type { TUserWorkRow } from "@/types/user-work";
 
 /**
  * 点一行怎么打开：工作项 / 缺陷 / 工作项审批走 peek（审批动作就在工作项详情里），
- * 其余跳到各自的详情页 —— 评审与裁剪表有独立页，需求 / 变更单在产品需求页里用 query 定位。
+ * 其余跳到各自的详情页 —— 评审、裁剪表、迭代、发布有独立页，需求 / 变更单在产品需求页里用 query 定位。
  */
 export const useOpenWorkRow = (workspaceSlug: string) => {
   const navigate = useNavigate();
@@ -64,6 +64,12 @@ export const useOpenWorkRow = (workspaceSlug: string) => {
             navigate(
               `/${workspaceSlug}/products/${row.product_id}/testhub/case-review?review_id=${meta.review_id}&case_id=${meta.case_id ?? ""}`
             );
+          return;
+        case "cycle":
+          if (row.project_id) navigate(`/${workspaceSlug}/projects/${row.project_id}/cycles/${row.id}/overview`);
+          return;
+        case "release":
+          if (row.project_id) navigate(`/${workspaceSlug}/projects/${row.project_id}/releases/${row.id}/overview`);
           return;
         default:
           return;

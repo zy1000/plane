@@ -15,14 +15,17 @@ import {
   Layers,
   ListChecks,
   Play,
+  Rocket,
   SquareCheck,
   Table2,
 } from "lucide-react";
+import { CycleIcon } from "@plane/propel/icons";
 import { differenceInCalendarDays } from "date-fns/differenceInCalendarDays";
 import { getDate, renderFormattedDate } from "@plane/utils";
 import type {
   TUserWorkAction,
   TUserWorkProcessedActionKey,
+  TUserWorkQuickBucket,
   TUserWorkRow,
   TUserWorkStatus,
   TUserWorkType,
@@ -30,7 +33,7 @@ import type {
 
 type TTranslate = (key: string, params?: Record<string, string | number>) => string;
 
-/** 左栏与分组的固定顺序：先是等人表态的（评审 / 审批），再是自己手上的，最后是测试 */
+/** 左栏与分组的固定顺序：先是等人表态的（评审 / 审批），再是自己手上的，再是测试，最后是负责的迭代 / 发布 */
 export const WORK_TYPE_ORDER: TUserWorkType[] = [
   "review",
   "review_activity",
@@ -43,6 +46,8 @@ export const WORK_TYPE_ORDER: TUserWorkType[] = [
   "case_execution",
   "case_review",
   "plan_review",
+  "cycle",
+  "release",
 ];
 
 export const WORK_TYPE_ICON: Record<TUserWorkType, ComponentType<{ className?: string }>> = {
@@ -57,6 +62,8 @@ export const WORK_TYPE_ICON: Record<TUserWorkType, ComponentType<{ className?: s
   case_execution: Play,
   case_review: SquareCheck,
   plan_review: CheckCheck,
+  cycle: CycleIcon,
+  release: Rocket,
 };
 
 /** 编号格里类型图标的颜色：同一类在三个视图里长一样 */
@@ -72,16 +79,19 @@ export const WORK_TYPE_ICON_CLASS: Record<TUserWorkType, string> = {
   case_execution: "text-secondary",
   case_review: "text-secondary",
   plan_review: "text-secondary",
+  cycle: "text-[#3f7fbf]",
+  release: "text-[#3f7fbf]",
 };
 
 export const workTypeLabel = (t: TTranslate, type: TUserWorkType) => t(`profile.work.types.${type}`);
 
 /**
- * 按「等我做什么」归的两组待办（摘要页焦点卡 + 待处理页 `?scope=`）：
+ * 按「等我做什么」归的几组待办（摘要页焦点卡 / 待处理队列 + 待处理页 `?scope=`）：
  * approve = 别人提交、等我通过 / 驳回（评审审核、流转审批、变更审批、裁剪表签批）；
- * lead = 我是负责人、要我推进的评审。评审一类里两种都有，所以按动作筛、类型只用来定左栏。
+ * lead = 我是负责人、要我推进的评审。评审一类里两种都有，所以按动作筛、类型只用来定左栏；
+ * issues = 分配给我的工作项 + 缺陷（摘要页「待排期的工作项」带 `quick=unscheduled` 进来）。
  */
-export type TWorkScope = "approve" | "lead";
+export type TWorkScope = "approve" | "lead" | "issues";
 export const WORK_SCOPES: Record<
   TWorkScope,
   { actions: TUserWorkAction["key"][]; types: TUserWorkType[]; labelKey: string }
@@ -96,8 +106,18 @@ export const WORK_SCOPES: Record<
     types: ["review", "review_activity"],
     labelKey: "profile.work.summary.lead_reviews",
   },
+  issues: {
+    actions: ["handle"],
+    types: ["work_item", "defect"],
+    labelKey: "profile.work.summary.assigned_issues",
+  },
 };
-export const isWorkScope = (value: string | null): value is TWorkScope => value === "approve" || value === "lead";
+export const isWorkScope = (value: string | null): value is TWorkScope =>
+  value === "approve" || value === "lead" || value === "issues";
+
+/** 行落在哪个快捷筛选桶：没有截止日期算「未排期」；「之后」不属于任何快捷筛选 */
+export const rowQuickBucket = (row: Pick<TUserWorkRow, "due_bucket">): TUserWorkQuickBucket | "later" =>
+  row.due_bucket ?? "unscheduled";
 export const countScope = (byAction: Partial<Record<TUserWorkAction["key"], number>>, scope: TWorkScope) =>
   WORK_SCOPES[scope].actions.reduce((sum, key) => sum + (byAction[key] ?? 0), 0);
 
@@ -151,6 +171,16 @@ const GENERIC_STATUS_TONE: Record<string, TPillTone> = {
   复核中: "amber",
   评审中: "blue",
   重新提审: "amber",
+  // 迭代（状态值本身是中文）
+  未开始: "neutral",
+  进行中: "amber",
+  测试中: "blue",
+  已退回: "red",
+  // 发布
+  "not-started": "neutral",
+  "in-progress": "amber",
+  "pending-test": "amber",
+  testing: "blue",
 };
 
 const GENERIC_STATUS_I18N: Record<string, string> = {
