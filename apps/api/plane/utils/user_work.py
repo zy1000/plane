@@ -740,13 +740,18 @@ def _count_by_type(rows):
 
 def pending_summary(rows, config):
     """头部页签条数 + 左栏各类型条数 + 快捷筛选条数 + 摘要页焦点卡用的「按动作」条数。
-    ``by_type`` 覆盖**全部**来源（摘要页的数字不该随开关变），``enabled_total`` 才按设置算。"""
+    ``by_type`` 覆盖**全部**来源（摘要页的数字不该随开关变），``enabled_total`` 才按设置算。
+    快捷筛选的 ``total`` / ``by_type`` 只算开启的来源（摘要页焦点卡），``by_type_all`` 覆盖全部来源（待处理页左栏）。"""
     enabled = enabled_sources(config, "pending")
     by_type = _count_by_type(rows)
     quick = {bucket: Counter() for bucket in ("overdue", "today", "week")}
+    quick_all = {bucket: Counter() for bucket in quick}
     for row in rows:
         bucket = row.get("due_bucket")
-        if bucket in quick and row["type"] in enabled:
+        if bucket not in quick:
+            continue
+        quick_all[bucket][row["type"]] += 1
+        if row["type"] in enabled:
             quick[bucket][row["type"]] += 1
     by_action = Counter(row["action"]["key"] for row in rows if row.get("action"))
     return {
@@ -754,7 +759,10 @@ def pending_summary(rows, config):
         "enabled_total": sum(by_type.get(key, 0) for key in enabled),
         "enabled_types": enabled,
         "by_type": by_type,
-        "quick": {bucket: {"total": sum(c.values()), "by_type": dict(c)} for bucket, c in quick.items()},
+        "quick": {
+            bucket: {"total": sum(c.values()), "by_type": dict(c), "by_type_all": dict(quick_all[bucket])}
+            for bucket, c in quick.items()
+        },
         "by_action": dict(by_action),
     }
 

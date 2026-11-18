@@ -168,7 +168,14 @@ export type TUserWorkSummary = {
     enabled_total: number;
     enabled_types: TUserWorkType[];
     by_type: Partial<Record<TUserWorkType, number>>;
-    quick: Record<TUserWorkQuickBucket, { total: number; by_type: Partial<Record<TUserWorkType, number>> }>;
+    quick: Record<
+      TUserWorkQuickBucket,
+      {
+        total: number;
+        by_type: Partial<Record<TUserWorkType, number>>;
+        by_type_all: Partial<Record<TUserWorkType, number>>;
+      }
+    >;
     by_action: Partial<Record<TUserWorkAction["key"], number>>;
   };
   initiated: { total: number; by_type: Partial<Record<TUserWorkType, number>> };

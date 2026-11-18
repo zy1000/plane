@@ -37,6 +37,8 @@ class ProductProjectSerializer(BaseSerializer):
         source="product.project_lead", read_only=True
     )
     project_detail = ProjectLiteSerializer(source="project", read_only=True)
+    # 产品概览「关联项目」卡的负责人列；视图 select_related 到 project__project_lead
+    project_lead_detail = UserLiteSerializer(source="project.project_lead", read_only=True)
     status_counts = serializers.SerializerMethodField()
     requirement_count = serializers.SerializerMethodField()
 
@@ -54,6 +56,7 @@ class ProductProjectSerializer(BaseSerializer):
             "product_stage_detail",
             "product_project_lead_detail",
             "project_detail",
+            "project_lead_detail",
             "requirement_count",
             "status_counts",
             "created_at",

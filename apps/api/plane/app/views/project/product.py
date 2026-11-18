@@ -53,6 +53,7 @@ class ProjectProductViewSet(BaseViewSet):
                 "product__stage__dictionary",
                 "product__project_lead",
                 "project",
+                "project__project_lead",
             )
             .order_by("product__identifier")
         )
@@ -161,6 +162,7 @@ class ProductProjectViewSet(BaseViewSet):
                 "product__stage__dictionary",
                 "product__project_lead",
                 "project",
+                "project__project_lead",
             )
             .distinct()
             .order_by("project__name")

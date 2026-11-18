@@ -1,7 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { observer } from "mobx-react";
 import { FolderKanban, PackageOpen } from "lucide-react";
-import { Link, useParams } from "react-router";
+import { Link, useParams, useSearchParams } from "react-router";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { Logo } from "@plane/propel/emoji-icon-picker";
@@ -38,6 +38,16 @@ export const ProductProjectsPage = observer(function ProductProjectsPage() {
     productId: productId?.toString(),
   });
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+  // 产品概览空态的「关联项目」带 ?action=link 过来：有权限就直接打开弹窗，参数随即去掉
+  const requestedAction = searchParams.get("action");
+  useEffect(() => {
+    if (requestedAction !== "link") return;
+    if (canManage) setIsModalOpen(true);
+    const next = new URLSearchParams(searchParams);
+    next.delete("action");
+    setSearchParams(next, { replace: true });
+  }, [requestedAction, canManage, searchParams, setSearchParams]);
   /** 行级解除关联的二次确认对象。确认框里展示项目名，避免解错行 */
   const [pendingUnlink, setPendingUnlink] = useState<TProductProject | null>(null);
 

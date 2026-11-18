@@ -177,13 +177,13 @@ export function WorkQuickChips({
               "inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-12 transition-colors",
               isActive
                 ? "border-accent-strong bg-accent-subtle text-accent-primary"
-                : isOverdue
-                  ? "border-danger-subtle bg-danger-subtle/40 text-danger-primary hover:bg-danger-subtle"
-                  : "border-subtle text-secondary hover:bg-layer-transparent-hover"
+                : "border-subtle text-secondary hover:bg-layer-transparent-hover"
             )}
           >
             <span>{t(`profile.work.quick.${bucket}`)}</span>
-            <span className="font-medium tabular-nums">{count}</span>
+            <span className={cn("font-medium tabular-nums", isOverdue && !isActive && "text-danger-primary")}>
+              {count}
+            </span>
           </button>
         );
       })}

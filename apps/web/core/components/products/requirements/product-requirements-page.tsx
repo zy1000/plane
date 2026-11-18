@@ -156,6 +156,21 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
     setSearchParams(next, { replace: true });
   }, [selectedModuleId, urlModuleId, searchParams, setSearchParams]);
 
+  // 产品概览空态的「创建需求 / 从标准库导入」带 ?action= 过来：等配置（权限）到了再开弹窗，参数随即去掉
+  const requestedAction = searchParams.get("action");
+  const hasConfiguration = Boolean(store.configuration);
+  useEffect(() => {
+    if (!requestedAction || !hasConfiguration) return;
+    if (canCreate && requestedAction === "create") setIsCreateOpen(true);
+    if (canCreate && canViewLibraries && requestedAction === "import") {
+      setShouldPrefetchImport(true);
+      setIsImportOpen(true);
+    }
+    const next = new URLSearchParams(searchParams);
+    next.delete("action");
+    setSearchParams(next, { replace: true });
+  }, [requestedAction, hasConfiguration, canCreate, canViewLibraries, searchParams, setSearchParams]);
+
   const { setModuleId } = store;
   useEffect(() => {
     setModuleId(selectedModuleId);

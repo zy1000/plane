@@ -163,7 +163,7 @@ export const ProfilePendingView = observer(function ProfilePendingView() {
         <div className="flex min-h-0 flex-1">
           <WorkTypeRail
             types={railTypes}
-            counts={summary?.pending.by_type ?? {}}
+            counts={(quick ? summary?.pending.quick[quick].by_type_all : summary?.pending.by_type) ?? {}}
             selected={selectedType}
             onSelect={(type) => setParam("type", type === WORK_TYPE_ALL ? null : type)}
           />

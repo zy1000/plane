@@ -1,5 +1,6 @@
 import type { TLogoProps } from "./common";
 import type { TDataDictionaryItemLite } from "./data-dictionary";
+import type { TRequirementItemStatus } from "./requirement";
 import type { IUserLite } from "./users";
 
 export type TProduct = {
@@ -92,3 +93,28 @@ export type TProductExtendedFieldKey =
 
 export type TProductExtendedPayload = Pick<TCreateProductPayload, TProductExtendedFieldKey>;
 
+/** 产品概览：GET /products/<id>/overview/（后端 utils/product_overview.py）。没权限的块是 null */
+export type TProductOverviewRequirements = {
+  total: number;
+  status_counts: Record<TRequirementItemStatus, number>;
+  /** 有待审批变更（pending_change_item）的需求 */
+  in_review_count: number;
+  /** 未交付完（未开始 / 已立项 / 进行中）且截止日期已过 */
+  overdue_count: number;
+  /** 未交付完且 7 天内到期 */
+  due_soon_count: number;
+  pending_change_request_count: number;
+  /** 未关闭需求里有用例的条数 / 未关闭需求总数 */
+  coverage: { covered_count: number; total: number };
+};
+
+export type TProductOverviewTest = {
+  case_count: number | null;
+  repository_count: number | null;
+  active_review_count: number | null;
+};
+
+export type TProductOverview = {
+  requirements: TProductOverviewRequirements | null;
+  test: TProductOverviewTest;
+};

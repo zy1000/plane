@@ -201,7 +201,7 @@ export const ProfileSidebar = observer(function ProfileSidebar(props: TProfileSi
                   {userProjectsData.product_data.map((product, index) => (
                     <div key={product.id} className={`${index === 0 ? "pb-3" : "py-3"}`}>
                       <Link
-                        href={`/${workspaceSlug}/products/${product.id}/requirements`}
+                        href={`/${workspaceSlug}/products/${product.id}/overview`}
                         className="flex w-full items-center justify-between gap-2"
                       >
                         <div className="flex min-w-0 flex-1 items-center gap-2">

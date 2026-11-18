@@ -4,7 +4,11 @@
 
 from django.urls import path
 
-from plane.app.views.product import ProductMyPermissionKeysAPIView, ProductViewSet
+from plane.app.views.product import (
+    ProductMyPermissionKeysAPIView,
+    ProductOverviewEndpoint,
+    ProductViewSet,
+)
 from plane.app.views.project.product import ProductProjectViewSet, ProjectProductViewSet
 from plane.app.views.project.product_team import ProductTeamAPIView, ProjectProductTeamAPIView
 from plane.app.views.release.product import ProductReleaseViewSet
@@ -26,6 +30,12 @@ urlpatterns = [
             }
         ),
         name="product-detail",
+    ),
+    # --- 产品概览（需求 / 测试 / 阶段评审汇总，只读） ------------------------
+    path(
+        "workspaces/<str:slug>/products/<uuid:product_id>/overview/",
+        ProductOverviewEndpoint.as_view(),
+        name="product-overview",
     ),
     # --- 产品 ↔ 项目 ------------------------------------------------------
     path(

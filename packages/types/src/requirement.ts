@@ -595,6 +595,8 @@ export type TProductProject = {
     identifier: string;
     logo_props?: TLogoProps;
   } | null;
+  /** 项目负责人（产品概览「关联项目」卡用） */
+  project_lead_detail?: IUserLite | null;
   /** 本产品有多少需求进了这个项目 */
   requirement_count: number;
   /**
