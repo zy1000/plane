@@ -1,4 +1,4 @@
-import { ChevronDown, Download, Plus, Upload } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button, getButtonStyling } from "@plane/propel/button";
 import { CustomMenu } from "@plane/ui";
@@ -57,7 +57,6 @@ export function RequirementCreateActions({
           customButtonClassName={cn(getButtonStyling("secondary", "xl"), REQUIREMENT_TOOLBAR_BUTTON_CLASS)}
           customButton={
             <>
-              <Upload className="size-[15px] shrink-0" />
               {t("common.import")}
               <ChevronDown className="size-3.5 shrink-0 text-placeholder" />
             </>
@@ -76,7 +75,6 @@ export function RequirementCreateActions({
       ) : (
         canImportFromLibrary && (
           <Button variant="secondary" size="xl" className={REQUIREMENT_TOOLBAR_BUTTON_CLASS} onClick={onImport}>
-            <Upload className="size-[15px] shrink-0" />
             {t("common.import")}
           </Button>
         )
@@ -90,7 +88,6 @@ export function RequirementCreateActions({
             disabled={excelActions.isExporting}
             onClick={() => void excelActions.handleExport()}
           >
-            <Download className="size-[15px] shrink-0" />
             {t("export")}
           </Button>
           <RequirementExcelImportModal
@@ -105,7 +102,6 @@ export function RequirementCreateActions({
         </>
       )}
       <Button variant="primary" size="xl" className={REQUIREMENT_TOOLBAR_BUTTON_CLASS} onClick={onManualEntry}>
-        <Plus className="size-[15px] shrink-0" />
         {t("requirement_grid.data.add")}
       </Button>
     </div>

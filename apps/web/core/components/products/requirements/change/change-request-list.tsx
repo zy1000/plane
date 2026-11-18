@@ -11,6 +11,7 @@ import { EmptyStateDetailed } from "@plane/propel/empty-state";
 import type { TRequirementChangeRequest, TRequirementChangeStatus } from "@plane/types";
 import { Avatar, Loader } from "@plane/ui";
 import { getFileURL, renderFormattedDate, renderFormattedTime } from "@plane/utils";
+import { REQUIREMENT_TOOLBAR_BUTTON_CLASS } from "@/components/requirements/requirement-data-toolbar";
 import { BaselinePagination } from "../baseline/baseline-pagination";
 import { ChangeStatusSegment } from "./change-status-segment";
 import { CHANGE_STATUS_PILL } from "./styles";
@@ -162,7 +163,7 @@ export function ChangeRequestList(props: TProps) {
         <div>
           <p className="text-14 font-medium text-primary">{t("workspace_products.requirements.change.error_title")}</p>
           <p className="mt-1 text-13 text-secondary">{error}</p>
-          <Button className="mt-3" variant="secondary" size="xl" onClick={onRetry}>
+          <Button className={`mt-3 ${REQUIREMENT_TOOLBAR_BUTTON_CLASS}`} variant="secondary" size="xl" onClick={onRetry}>
             {t("retry")}
           </Button>
         </div>

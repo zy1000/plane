@@ -5,12 +5,12 @@
  * 其他人只看到左侧进度；变更单已是终态则整条不渲染。
  */
 import { useLayoutEffect, useRef, useState } from "react";
-import { RotateCcw } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import type { TRequirementChangeApproval, TRequirementChangeRequestDetail } from "@plane/types";
 import { Avatar } from "@plane/ui";
 import { cn, getFileURL } from "@plane/utils";
+import { REQUIREMENT_TOOLBAR_BUTTON_CLASS } from "@/components/requirements/requirement-data-toolbar";
 import { approvalRuleLabel } from "./styles";
 
 const MAX_COMMENT_LENGTH = 2000;
@@ -132,7 +132,7 @@ export function ChangeApprovalBar({ changeRequest, isMutating, onApprove, onReje
             <Button
               variant="error-outline"
               size="xl"
-              className="px-4"
+              className={REQUIREMENT_TOOLBAR_BUTTON_CLASS}
               disabled={isMutating}
               onClick={() => onReject(comment, revert)}
             >
@@ -141,7 +141,7 @@ export function ChangeApprovalBar({ changeRequest, isMutating, onApprove, onReje
             <Button
               variant="primary"
               size="xl"
-              className="bg-success-primary px-4 text-on-color hover:bg-success-primary hover:opacity-90"
+              className={REQUIREMENT_TOOLBAR_BUTTON_CLASS}
               loading={isMutating}
               onClick={() => onApprove(comment)}
             >
@@ -151,8 +151,13 @@ export function ChangeApprovalBar({ changeRequest, isMutating, onApprove, onReje
         </>
       ) : changeRequest.can_cancel ? (
         <div className="ml-auto">
-          <Button variant="secondary" loading={isMutating} onClick={onWithdraw}>
-            <RotateCcw className="size-3.5" />
+          <Button
+            variant="secondary"
+            size="xl"
+            className={REQUIREMENT_TOOLBAR_BUTTON_CLASS}
+            loading={isMutating}
+            onClick={onWithdraw}
+          >
             {t("workspace_products.requirements.state.withdraw_review")}
           </Button>
         </div>

@@ -49,7 +49,7 @@ export const RequirementGridPagination = ({
         onClick={() => onPageChange(pageIndex - 1)}
         aria-label={t("workspace_products.requirements.data.pagination.prev")}
       />
-      <span className="grid h-7 min-w-7 place-items-center rounded-md bg-layer-2 px-1.5 font-semibold text-primary tabular-nums">
+      <span className="grid h-7 min-w-7 place-items-center rounded-md bg-layer-1 px-1.5 font-semibold text-primary tabular-nums">
         {pageIndex + 1}
       </span>
       <IconButton

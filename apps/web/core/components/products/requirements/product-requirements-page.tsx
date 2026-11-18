@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { observer } from "mobx-react";
 import { useNavigate, useParams, useSearchParams } from "react-router";
-import { Database, History, Inbox, Layers } from "lucide-react";
+import { Database, History, Layers } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { EmptyStateDetailed } from "@plane/propel/empty-state";
@@ -369,7 +369,6 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
                 className={REQUIREMENT_TOOLBAR_BUTTON_CLASS}
                 onClick={() => setIsInboxOpen(true)}
               >
-                <Inbox className="size-[15px]" />
                 {t("workspace_products.requirements.inbox.entry")}
                 {approvalInbox.inbox.pending_count > 0 && (
                   <span className="grid h-[18px] min-w-[18px] place-items-center rounded-full bg-warning-primary px-[5px] text-11 font-semibold text-on-color">
@@ -413,8 +412,9 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
               <p className="text-13 font-medium text-primary">{t("workspace_products.requirements.error.title")}</p>
               <p className="mt-1 text-12 text-secondary">{store.configurationError}</p>
               <Button
-                className="mt-3"
+                className={cn("mt-3", REQUIREMENT_TOOLBAR_BUTTON_CLASS)}
                 variant="secondary"
+                size="xl"
                 onClick={() => void store.fetchConfiguration().catch(() => undefined)}
               >
                 {t("retry")}

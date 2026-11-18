@@ -2,7 +2,6 @@
 
 import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 import { observer } from "mobx-react";
-import { ListFilter, SlidersHorizontal } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button, getButtonStyling } from "@plane/propel/button";
 import { CloseIcon, SearchIcon } from "@plane/propel/icons";
@@ -13,7 +12,8 @@ import type { useRequirementGridFilter } from "./filters";
 import { RequirementDisplayProperties } from "./requirement-display-properties";
 
 /**
- * 需求数据页视图行右侧的通用按钮外观：32px 高、图标 + 文字、13px 字。
+ * 产品需求页（含三个页签、弹窗、审批条）统一的按钮外观：配合 propel `size="xl"` 用，
+ * 32px 高、8px 圆角、13px 字、只放文字（下拉按钮可带一个 ChevronDown）。
  * propel 的 xl 档是 14px 字，这里用 body-xs 盖回 13（同属一组 typography，后者生效）。
  */
 export const REQUIREMENT_TOOLBAR_BUTTON_CLASS = "gap-1.5 rounded-lg px-3 text-body-xs-medium";
@@ -111,7 +111,7 @@ export const RequirementDataToolbar = observer(function RequirementDataToolbar(p
             variant: "secondary",
             size: "xl",
             className: REQUIREMENT_TOOLBAR_BUTTON_CLASS,
-            iconConfig: { shouldShowIcon: true, iconComponent: ListFilter },
+            iconConfig: { shouldShowIcon: false },
           }}
           onFilterSelect={() => filter.toggleVisibility(true)}
         />
@@ -126,7 +126,6 @@ export const RequirementDataToolbar = observer(function RequirementDataToolbar(p
           onClick={() => filter?.toggleVisibility()}
           disabled={!filter}
         >
-          <ListFilter className="size-[15px] shrink-0" />
           {t("common.filters")}
         </Button>
       )}
@@ -135,7 +134,6 @@ export const RequirementDataToolbar = observer(function RequirementDataToolbar(p
         placement="bottom-end"
         menuButton={
           <span className={cn(getButtonStyling("secondary", "xl"), REQUIREMENT_TOOLBAR_BUTTON_CLASS)}>
-            <SlidersHorizontal className="size-[15px] shrink-0" />
             {t("common.display")}
           </span>
         }

@@ -2,12 +2,12 @@
  * 待我审批里的一张变更单卡片：头部（产品 / CR 号 / 变更原因 / 审批进度）、条目、页脚（提交人 + 操作）。
  * 驳回在卡片底部就地展开理由框，理由与提交由弹窗统一管理。
  */
-import { ArrowRight, Check } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import type { TRequirementApprovalInboxItem } from "@plane/types";
 import { Avatar } from "@plane/ui";
 import { cn, getFileURL, renderFormattedDateTime } from "@plane/utils";
+import { REQUIREMENT_TOOLBAR_BUTTON_CLASS } from "@/components/requirements/requirement-data-toolbar";
 import { getUserAvatarFallbackBackgroundColor } from "@/helpers/user-avatar.helper";
 import { approvalRuleLabel, CHANGE_TYPE_PILL } from "../change/styles";
 
@@ -107,7 +107,7 @@ export function ApprovalInboxCard({
             date: formatSubmittedAt(item.created_at),
           })}
         </span>
-        <Button variant="ghost" size="lg" onClick={onOpen} appendIcon={<ArrowRight />}>
+        <Button variant="ghost" size="xl" className={REQUIREMENT_TOOLBAR_BUTTON_CLASS} onClick={onOpen}>
           {t("workspace_products.requirements.inbox.open_detail")}
         </Button>
         {tab === "processed" ? (
@@ -119,10 +119,22 @@ export function ApprovalInboxCard({
         ) : (
           item.can_approve && (
             <>
-              <Button variant="error-outline" size="lg" disabled={isMutating} onClick={onToggleReject}>
+              <Button
+                variant="error-outline"
+                size="xl"
+                className={REQUIREMENT_TOOLBAR_BUTTON_CLASS}
+                disabled={isMutating}
+                onClick={onToggleReject}
+              >
                 {t("workspace_products.requirements.change.bar.reject")}
               </Button>
-              <Button variant="primary" size="lg" disabled={isMutating} onClick={onApprove} prependIcon={<Check />}>
+              <Button
+                variant="primary"
+                size="xl"
+                className={REQUIREMENT_TOOLBAR_BUTTON_CLASS}
+                disabled={isMutating}
+                onClick={onApprove}
+              >
                 {t("workspace_products.requirements.change.bar.approve")}
               </Button>
             </>
@@ -142,12 +154,13 @@ export function ApprovalInboxCard({
             placeholder={t("workspace_products.requirements.inbox.reject_placeholder")}
           />
           <div className="mt-2 flex justify-end gap-2">
-            <Button variant="secondary" size="lg" onClick={onToggleReject}>
+            <Button variant="secondary" size="xl" className={REQUIREMENT_TOOLBAR_BUTTON_CLASS} onClick={onToggleReject}>
               {t("cancel")}
             </Button>
             <Button
               variant="error-fill"
-              size="lg"
+              size="xl"
+              className={REQUIREMENT_TOOLBAR_BUTTON_CLASS}
               loading={isMutating}
               disabled={!comment.trim()}
               onClick={onReject}

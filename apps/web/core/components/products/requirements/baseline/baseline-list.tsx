@@ -6,13 +6,14 @@
  * 「创建基线」入口在本列表工具栏；空列表时由空状态的 CTA 承接。
  */
 import { useState } from "react";
-import { GitCompareArrows, Layers, Plus, Trash2 } from "lucide-react";
+import { Layers, Trash2 } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { EmptyStateDetailed } from "@plane/propel/empty-state";
 import type { TRequirementBaseline } from "@plane/types";
 import { Avatar, CustomMenu, Loader } from "@plane/ui";
-import { getFileURL, renderFormattedDate, renderFormattedTime } from "@plane/utils";
+import { cn, getFileURL, renderFormattedDate, renderFormattedTime } from "@plane/utils";
+import { REQUIREMENT_TOOLBAR_BUTTON_CLASS } from "@/components/requirements/requirement-data-toolbar";
 import { BaselinePagination } from "./baseline-pagination";
 
 type TProps = {
@@ -85,7 +86,7 @@ export function BaselineList(props: TProps) {
             {t("workspace_products.requirements.baseline.error_title")}
           </p>
           <p className="mt-1 text-12 text-secondary">{error}</p>
-          <Button className="mt-3" variant="secondary" onClick={onRetry}>
+          <Button className={cn("mt-3", REQUIREMENT_TOOLBAR_BUTTON_CLASS)} variant="secondary" size="xl" onClick={onRetry}>
             {t("retry")}
           </Button>
         </div>
@@ -99,16 +100,12 @@ export function BaselineList(props: TProps) {
         assetKey="view"
         title={t("workspace_products.requirements.baseline.empty.title")}
         description={t("workspace_products.requirements.baseline.empty.description")}
-        actions={
-          canManage && onCreate
-            ? [
-                {
-                  label: t("workspace_products.requirements.baseline.empty.cta"),
-                  onClick: onCreate,
-                  variant: "primary",
-                },
-              ]
-            : undefined
+        customButton={
+          canManage && onCreate ? (
+            <Button variant="primary" size="xl" className={REQUIREMENT_TOOLBAR_BUTTON_CLASS} onClick={onCreate}>
+              {t("workspace_products.requirements.baseline.empty.cta")}
+            </Button>
+          ) : undefined
         }
       />
     );
@@ -126,22 +123,31 @@ export function BaselineList(props: TProps) {
                 {t("workspace_products.requirements.baseline.selected_count", { count: selected.length })}
               </span>
               {/* 对比只在两份之间发生：选满两份才可点 */}
-              <button
-                type="button"
-                disabled={selected.length !== 2}
-                onClick={() => onCompare(selected[0], selected[1])}
+              {/* 提示挂在外层：propel 按钮禁用时 pointer-events-none，挂在按钮上悬停看不到 */}
+              <span
                 title={
                   selected.length === 2 ? undefined : t("workspace_products.requirements.baseline.compare.need_two")
                 }
-                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-accent-subtle bg-accent-subtle px-3 text-13 font-medium whitespace-nowrap text-accent-primary transition-colors hover:bg-accent-subtle-hover disabled:cursor-not-allowed disabled:opacity-60"
               >
-                <GitCompareArrows className="size-4" />
-                {t("workspace_products.requirements.baseline.compare.compare_selected")}
-              </button>
+                <Button
+                  variant="secondary"
+                  size="xl"
+                  className={REQUIREMENT_TOOLBAR_BUTTON_CLASS}
+                  disabled={selected.length !== 2}
+                  onClick={() => onCompare(selected[0], selected[1])}
+                >
+                  {t("workspace_products.requirements.baseline.compare.compare_selected")}
+                </Button>
+              </span>
             </>
           )}
           {canManage && onCreate && (
-            <Button variant="primary" size="xl" className="ml-auto" prependIcon={<Plus />} onClick={onCreate}>
+            <Button
+              variant="primary"
+              size="xl"
+              className={cn("ml-auto", REQUIREMENT_TOOLBAR_BUTTON_CLASS)}
+              onClick={onCreate}
+            >
               {t("workspace_products.requirements.baseline.create")}
             </Button>
           )}

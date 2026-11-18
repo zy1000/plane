@@ -11,6 +11,7 @@ import { Button } from "@plane/propel/button";
 import type { TRequirementBaseline, TRequirementBaselineEntry, TRequirementTypeSchema } from "@plane/types";
 import { Loader } from "@plane/ui";
 import { cn, renderFormattedDate } from "@plane/utils";
+import { REQUIREMENT_TOOLBAR_BUTTON_CLASS } from "@/components/requirements/requirement-data-toolbar";
 import { RequirementDefaultViewGrid } from "../requirement-default-view-grid";
 import { baselineEntryToRequirement } from "./baseline-entry-adapter";
 import { BaselineRequirementPeek } from "./baseline-requirement-peek";
@@ -90,7 +91,7 @@ export function BaselineDetail(props: TProps) {
             {t("workspace_products.requirements.baseline.error_title")}
           </p>
           <p className="mt-1 text-12 text-secondary">{error}</p>
-          <Button className="mt-3" variant="secondary" onClick={onBack}>
+          <Button className={`mt-3 ${REQUIREMENT_TOOLBAR_BUTTON_CLASS}`} variant="secondary" size="xl" onClick={onBack}>
             {t("workspace_products.requirements.baseline.detail.back")}
           </Button>
         </div>

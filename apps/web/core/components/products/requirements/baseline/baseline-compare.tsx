@@ -13,6 +13,7 @@ import type {
   TRequirementTypeSchema,
 } from "@plane/types";
 import { Loader } from "@plane/ui";
+import { REQUIREMENT_TOOLBAR_BUTTON_CLASS } from "@/components/requirements/requirement-data-toolbar";
 import { ChangeRequestRequirementDiff } from "../change/change-request-requirement-diff";
 import { BaselinePagination } from "./baseline-pagination";
 
@@ -67,7 +68,7 @@ export function BaselineCompare(props: TProps) {
             {t("workspace_products.requirements.baseline.error_title")}
           </p>
           <p className="mt-1 text-12 text-secondary">{error}</p>
-          <Button className="mt-3" variant="secondary" onClick={onBack}>
+          <Button className={`mt-3 ${REQUIREMENT_TOOLBAR_BUTTON_CLASS}`} variant="secondary" size="xl" onClick={onBack}>
             {t("workspace_products.requirements.baseline.detail.back")}
           </Button>
         </div>

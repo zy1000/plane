@@ -20,6 +20,7 @@ import type {
 import { AlertModalCore, Avatar, Loader } from "@plane/ui";
 import { cn, getFileURL, renderFormattedDate, renderFormattedTime } from "@plane/utils";
 import { useRequirementChangeRequestDetail } from "@/hooks/store/use-requirement-changes";
+import { REQUIREMENT_TOOLBAR_BUTTON_CLASS } from "@/components/requirements/requirement-data-toolbar";
 import { ChangeApprovalBar } from "./change-approval-bar";
 import { ChangeApprovalProgress } from "./change-approval-progress";
 
@@ -168,7 +169,7 @@ export function ChangeRequestDetail(props: TProps) {
         <div>
           <p className="text-13 font-medium text-primary">{t("workspace_products.requirements.change.error_title")}</p>
           {store.error && <p className="mt-1 text-13 text-secondary">{store.error}</p>}
-          <Button className="mt-3" variant="secondary" onClick={onBack}>
+          <Button className={`mt-3 ${REQUIREMENT_TOOLBAR_BUTTON_CLASS}`} variant="secondary" size="xl" onClick={onBack}>
             {t("common.back")}
           </Button>
         </div>
