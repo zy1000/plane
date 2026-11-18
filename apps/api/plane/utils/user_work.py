@@ -526,7 +526,7 @@ def _pending_requirement_changes(ctx):
         .distinct()
     )
     for change in queryset:
-        yield _change_row(change, status=_status("pending_review"), action={"key": "review", "role": "reviewer"})
+        yield _change_row(change, status=_status("pending_approval"), action={"key": "approve", "role": "approver"})
 
 
 def _issue_type(issue):
@@ -1057,7 +1057,7 @@ def build_initiated_rows(slug, user_id, viewer, types):
             .select_related("product", "project", "created_by")
             .prefetch_related("items")
         )
-        rows.extend(_change_row(change, status=_status("pending_review")) for change in queryset)
+        rows.extend(_change_row(change, status=_status("pending_approval")) for change in queryset)
     if "issue_approval" in wanted:
         queryset = IssueTransitionRecord.objects.filter(
             created_by_id=ctx.user_id,

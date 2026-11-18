@@ -25,11 +25,20 @@ import { ViewSettingsDrawer } from "./view-settings-drawer";
 import type { TWorkGroupBy } from "./work-groups";
 import { groupRows, sortRows } from "./work-groups";
 import { WorkTable, buildColumns } from "./work-table";
-import { WorkGroupByMenu, WorkMultiSelectMenu, WorkQuickChips, WorkSearch, WorkToolbar } from "./work-toolbar";
+import {
+  WorkGroupByMenu,
+  WorkMultiSelectMenu,
+  WorkQuickChips,
+  WorkScopeChip,
+  WorkSearch,
+  WorkToolbar,
+} from "./work-toolbar";
 import { WORK_TYPE_ALL, WorkTypeRail } from "./work-type-rail";
-import { sortTypes } from "./work-types";
+import { WORK_SCOPES, isWorkScope, sortTypes } from "./work-types";
 
 const QUICK_BUCKETS: TUserWorkQuickBucket[] = ["overdue", "today", "week"];
+const isQuickBucket = (value: string | null | undefined): value is TUserWorkQuickBucket =>
+  QUICK_BUCKETS.includes(value as TUserWorkQuickBucket);
 const isWorkType = (value: string | null): value is TUserWorkType =>
   !!value && (USER_WORK_TYPES as readonly string[]).includes(value);
 
@@ -69,7 +78,9 @@ export const ProfilePendingView = observer(function ProfilePendingView() {
   const typeParam = searchParams.get("type");
   const selectedType: string = isWorkType(typeParam) ? typeParam : WORK_TYPE_ALL;
   const quickParam = searchParams.get("quick");
-  const quick = QUICK_BUCKETS.includes(quickParam as TUserWorkQuickBucket) ? (quickParam as TUserWorkQuickBucket) : null;
+  const quick = isQuickBucket(quickParam) ? quickParam : null;
+  const scopeParam = searchParams.get("scope");
+  const scope = isWorkScope(scopeParam) ? scopeParam : null;
 
   const [search, setSearch] = useState("");
   const [owners, setOwners] = useState<string[]>([]);
@@ -77,9 +88,33 @@ export const ProfilePendingView = observer(function ProfilePendingView() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   const { data, isLoading } = useUserWorkPending(ws, uid, {
-    types: selectedType === WORK_TYPE_ALL ? undefined : [selectedType as TUserWorkType],
+    types: scope
+      ? WORK_SCOPES[scope].types
+      : selectedType === WORK_TYPE_ALL
+        ? undefined
+        : [selectedType as TUserWorkType],
   });
-  const rows = useMemo(() => data?.rows ?? [], [data]);
+  // 带范围（?scope=）时一次取回范围内全部类型，按待办动作筛；左栏选类型只在本地筛，不重新取
+  const scopeRows = useMemo(() => {
+    if (!scope) return null;
+    const actions = WORK_SCOPES[scope].actions;
+    return (data?.rows ?? []).filter((row) => !!row.action && actions.includes(row.action.key));
+  }, [data, scope]);
+  const rows = useMemo(() => {
+    if (!scopeRows) return data?.rows ?? [];
+    return selectedType === WORK_TYPE_ALL ? scopeRows : scopeRows.filter((row) => row.type === selectedType);
+  }, [data, scopeRows, selectedType]);
+  // 汇总接口只按类型 / 动作分别计数，范围内的左栏、快捷筛选条数就地按行算
+  const scopeCounts = useMemo(() => {
+    if (!scopeRows) return null;
+    const byType: Partial<Record<TUserWorkType, number>> = {};
+    const byQuick: Partial<Record<TUserWorkQuickBucket, number>> = {};
+    scopeRows.forEach((row) => {
+      if (isQuickBucket(row.due_bucket)) byQuick[row.due_bucket] = (byQuick[row.due_bucket] ?? 0) + 1;
+      if (!quick || row.due_bucket === quick) byType[row.type] = (byType[row.type] ?? 0) + 1;
+    });
+    return { byType, byQuick };
+  }, [quick, scopeRows]);
 
   const setParam = (key: string, value: string | null) => {
     const next = new URLSearchParams(searchParams);
@@ -115,16 +150,27 @@ export const ProfilePendingView = observer(function ProfilePendingView() {
   );
   const onOpen = useOpenWorkRow(ws);
 
-  const railTypes = sortTypes(
-    selectedType !== WORK_TYPE_ALL && !enabledTypes.includes(selectedType as TUserWorkType)
-      ? [...enabledTypes, selectedType as TUserWorkType]
-      : enabledTypes
-  );
-  const quickCounts = {
-    overdue: summary?.pending.quick.overdue.total ?? 0,
-    today: summary?.pending.quick.today.total ?? 0,
-    week: summary?.pending.quick.week.total ?? 0,
-  };
+  const railTypes = scope
+    ? WORK_SCOPES[scope].types
+    : sortTypes(
+        selectedType !== WORK_TYPE_ALL && !enabledTypes.includes(selectedType as TUserWorkType)
+          ? [...enabledTypes, selectedType as TUserWorkType]
+          : enabledTypes
+      );
+  const railCounts = scopeCounts
+    ? scopeCounts.byType
+    : ((quick ? summary?.pending.quick[quick].by_type_all : summary?.pending.by_type) ?? {});
+  const quickCounts = scopeCounts
+    ? {
+        overdue: scopeCounts.byQuick.overdue ?? 0,
+        today: scopeCounts.byQuick.today ?? 0,
+        week: scopeCounts.byQuick.week ?? 0,
+      }
+    : {
+        overdue: summary?.pending.quick.overdue.total ?? 0,
+        today: summary?.pending.quick.today.total ?? 0,
+        week: summary?.pending.quick.week.total ?? 0,
+      };
   const groupOptions: TWorkGroupBy[] =
     selectedType === WORK_TYPE_ALL ? ["type", "owner", "due_date", "none"] : ["owner", "due_date", "none"];
 
@@ -134,6 +180,9 @@ export const ProfilePendingView = observer(function ProfilePendingView() {
         <WorkToolbar
           left={
             <>
+              {scope && (
+                <WorkScopeChip label={t(WORK_SCOPES[scope].labelKey)} onClear={() => setParam("scope", null)} />
+              )}
               <WorkSearch value={search} onChange={setSearch} placeholder={t("profile.work.search_placeholder")} />
               <WorkQuickChips active={quick} counts={quickCounts} onChange={(bucket) => setParam("quick", bucket)} />
             </>
@@ -163,7 +212,7 @@ export const ProfilePendingView = observer(function ProfilePendingView() {
         <div className="flex min-h-0 flex-1">
           <WorkTypeRail
             types={railTypes}
-            counts={(quick ? summary?.pending.quick[quick].by_type_all : summary?.pending.by_type) ?? {}}
+            counts={railCounts}
             selected={selectedType}
             onSelect={(type) => setParam("type", type === WORK_TYPE_ALL ? null : type)}
           />

@@ -20,7 +20,13 @@ import {
 } from "lucide-react";
 import { differenceInCalendarDays } from "date-fns/differenceInCalendarDays";
 import { getDate, renderFormattedDate } from "@plane/utils";
-import type { TUserWorkProcessedActionKey, TUserWorkRow, TUserWorkStatus, TUserWorkType } from "@/types/user-work";
+import type {
+  TUserWorkAction,
+  TUserWorkProcessedActionKey,
+  TUserWorkRow,
+  TUserWorkStatus,
+  TUserWorkType,
+} from "@/types/user-work";
 
 type TTranslate = (key: string, params?: Record<string, string | number>) => string;
 
@@ -70,6 +76,31 @@ export const WORK_TYPE_ICON_CLASS: Record<TUserWorkType, string> = {
 
 export const workTypeLabel = (t: TTranslate, type: TUserWorkType) => t(`profile.work.types.${type}`);
 
+/**
+ * 按「等我做什么」归的两组待办（摘要页焦点卡 + 待处理页 `?scope=`）：
+ * approve = 别人提交、等我通过 / 驳回（评审审核、流转审批、变更审批、裁剪表签批）；
+ * lead = 我是负责人、要我推进的评审。评审一类里两种都有，所以按动作筛、类型只用来定左栏。
+ */
+export type TWorkScope = "approve" | "lead";
+export const WORK_SCOPES: Record<
+  TWorkScope,
+  { actions: TUserWorkAction["key"][]; types: TUserWorkType[]; labelKey: string }
+> = {
+  approve: {
+    actions: ["audit", "approve", "sign"],
+    types: ["review", "review_activity", "issue_approval", "requirement_change", "tailoring_approval"],
+    labelKey: "profile.work.summary.to_approve",
+  },
+  lead: {
+    actions: ["start_review", "submit_for_approval"],
+    types: ["review", "review_activity"],
+    labelKey: "profile.work.summary.lead_reviews",
+  },
+};
+export const isWorkScope = (value: string | null): value is TWorkScope => value === "approve" || value === "lead";
+export const countScope = (byAction: Partial<Record<TUserWorkAction["key"], number>>, scope: TWorkScope) =>
+  WORK_SCOPES[scope].actions.reduce((sum, key) => sum + (byAction[key] ?? 0), 0);
+
 export const sortTypes = (types: Iterable<TUserWorkType>) => {
   const set = new Set(types);
   return WORK_TYPE_ORDER.filter((type) => set.has(type));
@@ -97,7 +128,6 @@ const STATE_GROUP_TONE: Record<string, TPillTone> = {
 
 const GENERIC_STATUS_TONE: Record<string, TPillTone> = {
   pending_approval: "amber",
-  pending_review: "purple",
   pending_sign: "amber",
   not_executed: "neutral",
   not_reviewed: "neutral",
@@ -125,7 +155,6 @@ const GENERIC_STATUS_TONE: Record<string, TPillTone> = {
 
 const GENERIC_STATUS_I18N: Record<string, string> = {
   pending_approval: "profile.work.status.pending_approval",
-  pending_review: "profile.work.status.pending_review",
   pending_sign: "profile.work.status.pending_sign",
   not_executed: "profile.work.status.not_executed",
   not_reviewed: "profile.work.status.not_reviewed",

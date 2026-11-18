@@ -5,7 +5,7 @@
  */
 
 import type { ComponentType } from "react";
-import { Bug, ChevronRight, ClipboardCheck, Play, ShieldCheck, UserCheck } from "lucide-react";
+import { Bug, ChevronRight, ClipboardCheck, Play, ShieldCheck, SquareCheck } from "lucide-react";
 import { useParams } from "next/navigation";
 import { useNavigate } from "react-router";
 // plane imports
@@ -19,7 +19,7 @@ import { useUserWorkSummary } from "@/hooks/use-user-work";
 // types
 import type { TUserWorkType } from "@/types/user-work";
 // local
-import { sortTypes, workTypeLabel } from "../work/work-types";
+import { countScope, sortTypes, workTypeLabel } from "../work/work-types";
 
 type Props = {
   userProfile: IUserProfileData | undefined;
@@ -88,15 +88,25 @@ export function ProfileFocusMetrics({ userProfile }: Props) {
       .map((type) => `${workTypeLabel(t, type)} ${byType[type]}`)
       .join(" · ");
   const action = (key: keyof typeof pending.by_action) => pending.by_action[key] ?? 0;
+  const parts = (entries: [string, number][]) =>
+    entries
+      .filter(([, count]) => count > 0)
+      .map(([label, count]) => `${label} ${count}`)
+      .join(" · ");
 
-  const toReview = action("start_review") + action("submit_for_approval");
-  const toAudit = action("audit");
-  const toApprove = action("approve") + action("review") + action("sign");
-  const approvalBreakdown = breakdown({
-    issue_approval: pending.by_type.issue_approval,
-    requirement_change: pending.by_type.requirement_change,
-    tailoring_approval: pending.by_type.tailoring_approval,
-  });
+  // 第二行按「等我拍板 / 等我推进」分：评审的审核和其它审批都是通过 / 驳回，并成一张
+  const toApprove = countScope(pending.by_action, "approve");
+  const toLead = countScope(pending.by_action, "lead");
+  const approvalBreakdown = parts([
+    [t("profile.work.summary.review_audit"), action("audit")],
+    [workTypeLabel(t, "issue_approval"), pending.by_type.issue_approval ?? 0],
+    [workTypeLabel(t, "requirement_change"), pending.by_type.requirement_change ?? 0],
+    [workTypeLabel(t, "tailoring_approval"), pending.by_type.tailoring_approval ?? 0],
+  ]);
+  const leadBreakdown = parts([
+    [t("stage_review.status.not_started"), action("start_review")],
+    [t("stage_review.status.in_review"), action("submit_for_approval")],
+  ]);
 
   const tiles: TFocusTile[] = [
     {
@@ -143,31 +153,6 @@ export function ProfileFocusMetrics({ userProfile }: Props) {
       href: `${base}?type=defect`,
     },
     {
-      key: "to_review",
-      title: t("profile.work.summary.to_review"),
-      description: [
-        breakdown({ review: pending.by_type.review, review_activity: pending.by_type.review_activity }),
-        t("profile.work.summary.as_leader"),
-      ]
-        .filter(Boolean)
-        .join(" · "),
-      icon: ClipboardCheck,
-      tone: toReview > 0 ? "accent" : "neutral",
-      value: toReview,
-      unit: item,
-      href: `${base}?type=review`,
-    },
-    {
-      key: "to_audit",
-      title: t("profile.work.summary.to_audit"),
-      description: t("profile.work.summary.as_auditor"),
-      icon: UserCheck,
-      tone: toAudit > 0 ? "accent" : "neutral",
-      value: toAudit,
-      unit: item,
-      href: `${base}?type=review`,
-    },
-    {
       key: "to_approve",
       title: t("profile.work.summary.to_approve"),
       description: approvalBreakdown,
@@ -175,7 +160,17 @@ export function ProfileFocusMetrics({ userProfile }: Props) {
       tone: toApprove > 0 ? "warning" : "neutral",
       value: toApprove,
       unit: item,
-      href: `${base}?type=issue_approval`,
+      href: `${base}?scope=approve`,
+    },
+    {
+      key: "lead_reviews",
+      title: t("profile.work.summary.lead_reviews"),
+      description: leadBreakdown,
+      icon: ClipboardCheck,
+      tone: toLead > 0 ? "accent" : "neutral",
+      value: toLead,
+      unit: item,
+      href: `${base}?scope=lead`,
     },
     {
       key: "to_execute",
@@ -186,6 +181,16 @@ export function ProfileFocusMetrics({ userProfile }: Props) {
       value: userProfile.pending_execution_cases,
       unit: t("profile.work.summary.unit_case"),
       href: `${base}?type=case_execution`,
+    },
+    {
+      key: "to_review_cases",
+      title: t("profile.work.summary.to_review_cases"),
+      description: "",
+      icon: SquareCheck,
+      tone: "neutral",
+      value: pending.by_type.case_review ?? 0,
+      unit: t("profile.work.summary.unit_case"),
+      href: `${base}?type=case_review`,
     },
   ];
 

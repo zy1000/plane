@@ -191,6 +191,20 @@ export function WorkQuickChips({
   );
 }
 
+/** 从摘要页焦点卡带进来的范围（待我审批 / 我负责的评审），点 × 回到完整的待处理 */
+export function WorkScopeChip({ label, onClear }: { label: string; onClear: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClear}
+      className="inline-flex h-7 shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-accent-strong bg-accent-subtle pr-1.5 pl-2.5 text-12 text-accent-primary"
+    >
+      <span>{label}</span>
+      <CloseIcon className="size-3" />
+    </button>
+  );
+}
+
 export function WorkTimeRangeMenu({
   days,
   onChange,
