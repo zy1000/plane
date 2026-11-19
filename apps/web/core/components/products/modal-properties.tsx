@@ -113,7 +113,7 @@ export const ProductModalProperties = observer(function ProductModalProperties(p
           <AlertTriangle className="size-3.5 shrink-0" />
           <span className="truncate">{t("workspace_products.validation.dictionary_empty_short")}</span>
           <Link
-            to={`/${workspaceSlug}/settings/data-dictionaries`}
+            to={`/${workspaceSlug}/templates/data-dictionaries`}
             className="shrink-0 text-accent-primary hover:underline"
           >
             {t("workspace_products.validation.manage_dictionaries")}

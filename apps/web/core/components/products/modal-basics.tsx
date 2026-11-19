@@ -83,7 +83,7 @@ export function ProductModalBasics(props: Props) {
             {t("workspace_products.validation.dictionary_empty", {
               name: codeDictionary?.name ?? t("workspace_products.fields.code"),
             })}
-            <Link to={`/${workspaceSlug}/settings/data-dictionaries`} className="text-accent-primary hover:underline">
+            <Link to={`/${workspaceSlug}/templates/data-dictionaries`} className="text-accent-primary hover:underline">
               {t("workspace_products.validation.manage_dictionaries")}
             </Link>
           </p>

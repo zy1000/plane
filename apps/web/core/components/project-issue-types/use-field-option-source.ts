@@ -89,7 +89,7 @@ export function useFieldOptionSource(
   );
 
   const dictionaryPageHref = workspaceSlug
-    ? `/${workspaceSlug}/settings/data-dictionaries${form.dictionary_id ? `?dictionary=${form.dictionary_id}` : ""}`
+    ? `/${workspaceSlug}/templates/data-dictionaries${form.dictionary_id ? `?dictionary=${form.dictionary_id}` : ""}`
     : undefined;
 
   return {

@@ -152,6 +152,18 @@ export const WORKSPACE_REQUIREMENT_TYPE_READ_PERMISSION_KEYS: string[] = [
   PERMISSION_KEYS.WORKSPACE_REQUIREMENT_TYPE_MANAGE,
 ];
 
+/** 模板中心的「数据字典」：查看或维护任一即可（从工作区设置挪进来，口径沿用原设置菜单） */
+export const WORKSPACE_DATA_DICTIONARY_READ_PERMISSION_KEYS: string[] = [
+  PERMISSION_KEYS.WORKSPACE_DATA_DICTIONARY_VIEW,
+  PERMISSION_KEYS.WORKSPACE_DATA_DICTIONARY_MANAGE,
+];
+
+/** 模板中心的「阶段类型」：查看或维护任一即可（从工作区设置挪进来，口径沿用原设置菜单） */
+export const WORKSPACE_STAGE_TYPE_READ_PERMISSION_KEYS: string[] = [
+  PERMISSION_KEYS.WORKSPACE_STAGE_TYPE_VIEW,
+  PERMISSION_KEYS.WORKSPACE_STAGE_TYPE_MANAGE,
+];
+
 /** 模板中心入口：任一页签能看就显示 */
 export const WORKSPACE_TEMPLATE_CENTER_PERMISSION_KEYS = [
   ...WORKSPACE_REQUIREMENT_LIBRARY_READ_PERMISSION_KEYS,
@@ -159,6 +171,8 @@ export const WORKSPACE_TEMPLATE_CENTER_PERMISSION_KEYS = [
   ...WORKSPACE_REVIEW_TEMPLATE_READ_PERMISSION_KEYS,
   ...WORKSPACE_DEV_MODE_READ_PERMISSION_KEYS,
   ...WORKSPACE_REQUIREMENT_TYPE_READ_PERMISSION_KEYS,
+  ...WORKSPACE_DATA_DICTIONARY_READ_PERMISSION_KEYS,
+  ...WORKSPACE_STAGE_TYPE_READ_PERMISSION_KEYS,
 ];
 
 export const WORKSPACE_SETTINGS = {
@@ -250,20 +264,6 @@ export const WORKSPACE_SETTINGS = {
     href: `/settings/issue-type-categories`,
     permissionKeys: [PERMISSION_KEYS.WORKSPACE_ISSUE_SCHEME_VIEW, PERMISSION_KEYS.WORKSPACE_ISSUE_SCHEME_MANAGE],
     highlight: (pathname: string, baseUrl: string) => pathname.startsWith(`${baseUrl}/settings/issue-type-categories`),
-  },
-  "data-dictionaries": {
-    key: "data-dictionaries",
-    i18n_label: "workspace_settings.settings.data_dictionaries.title",
-    href: `/settings/data-dictionaries`,
-    permissionKeys: [PERMISSION_KEYS.WORKSPACE_DATA_DICTIONARY_VIEW, PERMISSION_KEYS.WORKSPACE_DATA_DICTIONARY_MANAGE],
-    highlight: (pathname: string, baseUrl: string) => pathname.startsWith(`${baseUrl}/settings/data-dictionaries`),
-  },
-  "stage-types": {
-    key: "stage-types",
-    i18n_label: "workspace_settings.settings.stage_types.title",
-    href: `/settings/stage-types`,
-    permissionKeys: [PERMISSION_KEYS.WORKSPACE_STAGE_TYPE_VIEW, PERMISSION_KEYS.WORKSPACE_STAGE_TYPE_MANAGE],
-    highlight: (pathname: string, baseUrl: string) => pathname.startsWith(`${baseUrl}/settings/stage-types`),
   },
   changelog: {
     key: "changelog",

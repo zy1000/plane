@@ -1,12 +1,12 @@
 import { useCallback, useState } from "react";
-import { Milestone, Plus } from "lucide-react";
+import { Milestone } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TStageType } from "@plane/types";
 import { AlertModalCore, Loader, Sortable } from "@plane/ui";
 import { cn } from "@plane/utils";
-import { SettingsHeading } from "@/components/settings/heading";
+import { TemplatePageHeader } from "@/components/template-management/template-page-header";
 import { useStageTypes } from "@/hooks/store/use-stage-types";
 import { StageTypeFormModal, type TStageTypeFormValue } from "./stage-type-form-modal";
 import { StageTypeRow } from "./stage-type-row";
@@ -19,7 +19,7 @@ const keyExtractor = (item: TStageType) => item.id;
 type TEditorState = { mode: "closed" } | { mode: "create" } | { mode: "edit"; stageType: TStageType };
 
 /**
- * 阶段类型设置页：一张不分页的 div + CSS grid 表（十来条，分页没有意义）。
+ * 模板中心「阶段类型」页：一张不分页的 div + CSS grid 表（十来条，分页没有意义）。
  *
  * 预置类型（is_system）只能改描述和顺序，删除按钮常驻置灰；自定义类型被评审模板引用时
  * 后端回 409，这里把它翻成一条说人话的 toast。
@@ -134,21 +134,16 @@ export function StageTypesRoot({ workspaceSlug, canEdit }: { workspaceSlug: stri
   };
 
   return (
-    <div className="flex w-full flex-col">
-      <SettingsHeading
-        title={t(`${I18N}.title`)}
-        description={t(`${I18N}.description`)}
-        control={
-          canEdit ? (
-            <Button variant="primary" size="lg" onClick={() => setEditor({ mode: "create" })}>
-              <Plus className="size-3.5" />
-              {t(`${I18N}.create`)}
-            </Button>
-          ) : undefined
-        }
-      />
+    <div className="flex min-h-0 w-full flex-1 flex-col">
+      <TemplatePageHeader title={t(`${I18N}.title`)} count={isLoading ? undefined : stageTypes.length}>
+        {canEdit && (
+          <Button variant="primary" size="xl" className="px-3" onClick={() => setEditor({ mode: "create" })}>
+            {t(`${I18N}.create`)}
+          </Button>
+        )}
+      </TemplatePageHeader>
 
-      <div className="mt-6">
+      <div className="vertical-scrollbar scrollbar-sm min-h-0 flex-1 overflow-y-auto px-7 py-5">
         {isLoading ? (
           <Loader className="overflow-hidden rounded-lg border border-subtle">
             {[0, 1, 2, 3, 4].map((index) => (

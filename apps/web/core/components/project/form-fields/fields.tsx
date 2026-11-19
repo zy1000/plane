@@ -64,7 +64,7 @@ export function DictionaryEmptyHint({ dictionaries, name }: TDictionaryEmptyHint
     <span className="flex flex-wrap items-center gap-x-1">
       {t("workspace_projects.validation.dictionary_empty", { name: dictionaryName })}
       <Link
-        to={`/${dictionaries.workspaceSlug}/settings/data-dictionaries`}
+        to={`/${dictionaries.workspaceSlug}/templates/data-dictionaries`}
         className="text-accent-primary hover:underline"
       >
         {t("workspace_projects.validation.manage_dictionaries")}

@@ -8,12 +8,10 @@ import type { LucideIcon } from "lucide-react";
 import {
   ArrowUpToLine,
   BadgeCheck,
-  BookText,
   Building,
   FolderKanban,
   IdCard,
   Layers,
-  Milestone,
   Network,
   Plug,
   ScrollText,
@@ -39,7 +37,5 @@ export const WORKSPACE_SETTINGS_ICONS: Record<TWorkspaceSettingsTabs, LucideIcon
   webhooks: Webhook,
   integrations: Plug,
   "issue-type-categories": Layers,
-  "data-dictionaries": BookText,
-  "stage-types": Milestone,
   changelog: ScrollText,
 };

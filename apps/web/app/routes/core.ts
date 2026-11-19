@@ -247,6 +247,15 @@ export const coreRoutes: RouteConfigEntry[] = [
             ":workspaceSlug/templates/requirement-fields",
             "./(all)/[workspaceSlug]/(projects)/templates/requirement-fields/page.tsx"
           ),
+          // 阶段类型、数据字典：从工作区设置挪进来，旧的 /settings/** 地址在下方 redirects 里兜底
+          route(
+            ":workspaceSlug/templates/stage-types",
+            "./(all)/[workspaceSlug]/(projects)/templates/stage-types/page.tsx"
+          ),
+          route(
+            ":workspaceSlug/templates/data-dictionaries",
+            "./(all)/[workspaceSlug]/(projects)/templates/data-dictionaries/page.tsx"
+          ),
           route(
             ":workspaceSlug/templates/dev-modes",
             "./(all)/[workspaceSlug]/(projects)/templates/dev-modes/page.tsx"
@@ -741,16 +750,6 @@ export const coreRoutes: RouteConfigEntry[] = [
             ":workspaceSlug/settings/issue-type-categories",
             "./(all)/[workspaceSlug]/(settings)/settings/(workspace)/issue-type-categories/page.tsx"
           ),
-          // Workspace Data Dictionaries
-          route(
-            ":workspaceSlug/settings/data-dictionaries",
-            "./(all)/[workspaceSlug]/(settings)/settings/(workspace)/data-dictionaries/page.tsx"
-          ),
-          // Workspace Stage Types
-          route(
-            ":workspaceSlug/settings/stage-types",
-            "./(all)/[workspaceSlug]/(settings)/settings/(workspace)/stage-types/page.tsx"
-          ),
         ]),
 
         // --------------------------------------------------------------------
@@ -922,6 +921,10 @@ export const coreRoutes: RouteConfigEntry[] = [
   route(":workspaceSlug/templates/requirements/*", "routes/redirects/core/requirement-types.tsx"),
   route(":workspaceSlug/settings/requirement-types", "routes/redirects/core/requirement-types.tsx"),
   route(":workspaceSlug/settings/requirement-types/*", "routes/redirects/core/requirement-types.tsx"),
+
+  // 数据字典 / 阶段类型: 旧路径 /settings/** → 模板中心（带上 ?dictionary= 等查询串）
+  route(":workspaceSlug/settings/data-dictionaries", "routes/redirects/core/data-dictionaries.tsx"),
+  route(":workspaceSlug/settings/stage-types", "routes/redirects/core/stage-types.tsx"),
 
   // 工作流流转配置：模式方案下的旧路径 → 工作项类型库 /templates/issue-types/workflows/:workflowId
   route(

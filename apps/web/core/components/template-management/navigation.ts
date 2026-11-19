@@ -1,11 +1,13 @@
 import type { LucideIcon } from "lucide-react";
-import { ClipboardCheck, ClipboardList, FlaskConical, Layers, Library, Rows3, Tags, Workflow } from "lucide-react";
+import { BookText, ClipboardCheck, ClipboardList, FlaskConical, Layers, Library, Milestone, Rows3, Tags, Workflow } from "lucide-react";
 import {
   WORKSPACE_CASE_TEMPLATE_READ_PERMISSION_KEYS,
+  WORKSPACE_DATA_DICTIONARY_READ_PERMISSION_KEYS,
   WORKSPACE_DEV_MODE_READ_PERMISSION_KEYS,
   WORKSPACE_REQUIREMENT_LIBRARY_READ_PERMISSION_KEYS,
   WORKSPACE_REQUIREMENT_TYPE_READ_PERMISSION_KEYS,
   WORKSPACE_REVIEW_TEMPLATE_READ_PERMISSION_KEYS,
+  WORKSPACE_STAGE_TYPE_READ_PERMISSION_KEYS,
 } from "@plane/constants";
 
 export type TTemplateManagementTabKey =
@@ -17,6 +19,8 @@ export type TTemplateManagementTabKey =
   | "issue-fields"
   | "requirement-types"
   | "requirement-fields"
+  | "data-dictionaries"
+  | "stage-types"
   | "dev-modes";
 
 /** 左栏分组：模板库是结构、流程、类型与字段的定义，资产库是沉淀下来可导入的内容；左栏按此数组顺序出组 */
@@ -68,6 +72,14 @@ export const TEMPLATE_MANAGEMENT_NAVIGATION_ITEMS: TTemplateManagementNavigation
     permissionKeys: [...WORKSPACE_REQUIREMENT_LIBRARY_READ_PERMISSION_KEYS, ...WORKSPACE_CASE_TEMPLATE_READ_PERMISSION_KEYS],
   },
   {
+    // 阶段类型：评审模板库按它分组、研发模式的阶段引用它，所以排在评审模板库前面；从工作区设置挪进来
+    key: "stage-types",
+    group: "templates",
+    icon: Milestone,
+    label: "阶段类型",
+    permissionKeys: WORKSPACE_STAGE_TYPE_READ_PERMISSION_KEYS,
+  },
+  {
     key: "reviews",
     group: "templates",
     icon: ClipboardCheck,
@@ -99,6 +111,14 @@ export const TEMPLATE_MANAGEMENT_NAVIGATION_ITEMS: TTemplateManagementNavigation
     label: "通用字段库",
     permissionKeys: WORKSPACE_DEV_MODE_READ_PERMISSION_KEYS,
     alternates: [{ key: "requirement-fields", permissionKeys: WORKSPACE_REQUIREMENT_TYPE_READ_PERMISSION_KEYS }],
+  },
+  {
+    // 数据字典：选择类字段的选项可以绑定字典，所以紧跟通用字段库；从工作区设置挪进来
+    key: "data-dictionaries",
+    group: "templates",
+    icon: BookText,
+    label: "数据字典",
+    permissionKeys: WORKSPACE_DATA_DICTIONARY_READ_PERMISSION_KEYS,
   },
   {
     // 紧挨「评审」：模式的阶段配置直接引用评审树上的节点，维护两者的是同一批人

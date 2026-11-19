@@ -101,7 +101,7 @@ export const ProductExtendedFields = observer(function ProductExtendedFields(pro
     return (
       <span className="flex flex-wrap items-center gap-x-1">
         {t("workspace_products.validation.dictionary_empty", { name: dictionary?.name ?? fieldLabel(key) })}
-        <Link to={`/${workspaceSlug}/settings/data-dictionaries`} className="text-accent-primary hover:underline">
+        <Link to={`/${workspaceSlug}/templates/data-dictionaries`} className="text-accent-primary hover:underline">
           {t("workspace_products.validation.manage_dictionaries")}
         </Link>
       </span>

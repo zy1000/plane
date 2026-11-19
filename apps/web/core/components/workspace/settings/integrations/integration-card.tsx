@@ -78,7 +78,7 @@ export function IntegrationCard(props: Props) {
     if (target?.kind === "dictionary" && target.dictionary_id) {
       return (
         <>
-          <Link to={`/${workspaceSlug}/settings/data-dictionaries`} className="text-accent-primary hover:underline">
+          <Link to={`/${workspaceSlug}/templates/data-dictionaries`} className="text-accent-primary hover:underline">
             {t(`${I18N}.card.mapping_to`, { name: target.dictionary_name ?? target.dictionary_key })}
           </Link>
           <span className="text-tertiary">{t(`${I18N}.card.target_count`, { count: target.item_count })}</span>

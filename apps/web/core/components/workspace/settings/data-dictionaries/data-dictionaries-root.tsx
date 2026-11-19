@@ -14,6 +14,7 @@ import type {
   TUpdateDataDictionaryPayload,
 } from "@plane/types";
 import { AlertModalCore, Loader } from "@plane/ui";
+import { TemplatePageHeader, TemplatePageSearch } from "@/components/template-management/template-page-header";
 import { useDictionaryUsage } from "@/hooks/store/use-dictionary-usage";
 import { DictionaryCreateModal } from "./dictionary-create-modal";
 import { DictionaryDetailPanel } from "./dictionary-detail-panel";
@@ -51,7 +52,10 @@ type Props = {
 
 const I18N = "workspace_settings.settings.data_dictionaries";
 
-/** 数据字典设置页：左栏目录 + 右栏字典详情。纯受控，数据与 mutation 来自页面层的 useDataDictionaries。 */
+/**
+ * 模板中心「数据字典」页：页头（标题 / 搜索字典 / 新建字典）+ 贴边目录栏 + 右栏字典详情。
+ * 纯受控，数据与 mutation 来自页面层的 useDataDictionaries。
+ */
 export function DataDictionariesRoot(props: Props) {
   const {
     workspaceSlug,
@@ -198,8 +202,8 @@ export function DataDictionariesRoot(props: Props) {
   const renderBody = () => {
     if (isLoading && dictionaries.length === 0) {
       return (
-        <Loader className="mx-auto flex min-h-0 w-full max-w-280 flex-1 gap-4 md:flex-row">
-          <Loader.Item height="420px" width="256px" className="hidden md:block" />
+        <Loader className="flex min-h-0 w-full flex-1 gap-4 px-7 pt-5">
+          <Loader.Item height="420px" width="200px" />
           <Loader.Item height="420px" width="100%" className="flex-1" />
         </Loader>
       );
@@ -207,7 +211,7 @@ export function DataDictionariesRoot(props: Props) {
 
     if (error && dictionaries.length === 0) {
       return (
-        <div className="rounded-lg border border-subtle p-10 text-center">
+        <div className="m-7 rounded-lg border border-subtle p-10 text-center">
           <p className="text-13 font-medium text-primary">{t(`${I18N}.toast.load_failed`)}</p>
           <p className="mt-1 text-12 text-secondary">{error}</p>
           <Button className="mt-3" variant="secondary" onClick={() => void fetchDictionaries().catch(() => undefined)}>
@@ -218,20 +222,17 @@ export function DataDictionariesRoot(props: Props) {
     }
 
     return (
-      // 宽屏下限宽居中：值列是唯一的弹性列，不限宽时值和右侧「引用 / 添加时间」之间会拉出几百像素空白
-      <div className="mx-auto flex min-h-0 w-full max-w-280 flex-1 flex-col gap-4 md:flex-row">
-        <div className="min-h-0 shrink-0 max-md:max-h-56 md:w-64">
+      <div className="flex min-h-0 w-full flex-1">
+        <div className="min-h-0 w-[220px] shrink-0 border-r border-subtle">
           <DictionarySidebar
             dictionaries={dictionaries}
             selectedId={selectedDictionary?.id ?? null}
-            canEdit={canEdit}
             search={sidebarSearch}
-            onSearchChange={setSidebarSearch}
             onSelect={setSelectedId}
-            onCreate={() => setIsCreateOpen(true)}
           />
         </div>
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        {/* 宽屏下限宽：值列是唯一的弹性列，不限宽时值和右侧「引用 / 添加时间」之间会拉出几百像素空白 */}
+        <div className="flex min-h-0 w-full max-w-280 min-w-0 flex-1 flex-col px-7 py-5">
           {selectedDictionary ? (
             <DictionaryDetailPanel
               // 切换字典靠重新挂载重置搜索 / 分页 / 编辑态
@@ -267,6 +268,21 @@ export function DataDictionariesRoot(props: Props) {
 
   return (
     <>
+      <TemplatePageHeader
+        title={t(`${I18N}.title`)}
+        count={isLoading && dictionaries.length === 0 ? undefined : dictionaries.length}
+      >
+        <TemplatePageSearch
+          value={sidebarSearch}
+          onChange={setSidebarSearch}
+          placeholder={t(`${I18N}.list.search_placeholder`)}
+        />
+        {canEdit && (
+          <Button variant="primary" size="xl" className="px-3" onClick={() => setIsCreateOpen(true)}>
+            {t(`${I18N}.list.create`)}
+          </Button>
+        )}
+      </TemplatePageHeader>
       {renderBody()}
 
       <DictionaryCreateModal isOpen={isCreateOpen} onClose={() => setIsCreateOpen(false)} onSubmit={handleCreate} />

@@ -180,7 +180,7 @@ type ValuesProps = {
   /** 当前引用字典的值；还没选字典时传空数组并把 isEmptySelection 置 true */
   values: string[];
   isEmptySelection: boolean;
-  /** 数据字典设置页地址，新标签页打开 */
+  /** 模板中心「数据字典」页地址，新标签页打开 */
   href?: string;
   dense?: boolean;
 };

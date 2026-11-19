@@ -18,8 +18,6 @@ export type TWorkspaceSettingsTabs =
   | "export"
   | "webhooks"
   | "issue-type-categories"
-  | "data-dictionaries"
-  | "stage-types"
   | "integrations"
   | "changelog";
 export type TWorkspaceSettingsItem = {

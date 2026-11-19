@@ -85,7 +85,7 @@ export const ProjectCreateProperties = observer(function ProjectCreateProperties
           <AlertTriangle className="size-3.5 shrink-0" />
           <span className="truncate">{t("workspace_projects.validation.dictionary_empty_short")}</span>
           <Link
-            to={`/${dictionaries.workspaceSlug}/settings/data-dictionaries`}
+            to={`/${dictionaries.workspaceSlug}/templates/data-dictionaries`}
             className="shrink-0 text-accent-primary hover:underline"
           >
             {t("workspace_projects.validation.manage_dictionaries")}

@@ -40,12 +40,8 @@ export const GROUPED_WORKSPACE_SETTINGS = {
   // 「模板」分区现在是空的：需求类型挪进了模板中心（/templates/requirement-types），
   // 项目权限组模板已并进「管理 › 权限组」的第二个页签。空分区侧栏不渲染
   [WORKSPACE_SETTINGS_CATEGORY.TEMPLATE]: [],
-  // 「项目」分区：工作项类别 + 数据字典（产品阶段/类别/状态等下拉值）+ 阶段类型（评审模板树的骨架）
-  [WORKSPACE_SETTINGS_CATEGORY.PROJECT]: [
-    WORKSPACE_SETTINGS["issue-type-categories"],
-    WORKSPACE_SETTINGS["data-dictionaries"],
-    WORKSPACE_SETTINGS["stage-types"],
-  ],
+  // 「项目」分区：工作项类别。数据字典、阶段类型挪进了模板中心（/templates/data-dictionaries、/templates/stage-types）
+  [WORKSPACE_SETTINGS_CATEGORY.PROJECT]: [WORKSPACE_SETTINGS["issue-type-categories"]],
   [WORKSPACE_SETTINGS_CATEGORY.FEATURES]: [],
   // 「开发者」分区：Webhooks + 第三方集成（简道云等外部系统的数据同步）
   [WORKSPACE_SETTINGS_CATEGORY.DEVELOPER]: [WORKSPACE_SETTINGS["webhooks"], WORKSPACE_SETTINGS["integrations"]],
