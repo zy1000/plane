@@ -43,7 +43,10 @@ from plane.db.models import (
     RequirementRelease,
     StateGroup,
 )
-from plane.utils.requirement import RequirementScopeHandle
+from plane.utils.requirement import (
+    RequirementScopeHandle,
+    soft_delete_requirement_references,
+)
 from plane.utils.requirement_module import expand_requirement_module_subtree_ids
 from plane.utils.visibility import visible_projects_q
 
@@ -750,9 +753,11 @@ def resolve_linkable_projects(*, user, slug, product, project_ids):
 
 def unlink_product_from_project(*, slug, project_id, product_id):
     """解除一条产品 ↔ 项目关联。该项目下还有本产品需求时拒绝，避免留下孤儿引用。"""
-    linked_count = RequirementProject.objects.filter(
+    links = RequirementProject.objects.filter(
         project_id=project_id, requirement__product_id=product_id
-    ).count()
+    )
+    # FK 穿透不走软删 manager：已删需求留下的关联行不算数
+    linked_count = links.filter(requirement__deleted_at__isnull=True).count()
     if linked_count:
         raise RequirementLinkError(
             "Unlink this product's requirements from the project first.",
@@ -763,6 +768,8 @@ def unlink_product_from_project(*, slug, project_id, product_id):
                 "requirement_count": linked_count,
             },
         )
+    # 剩下的都是已删需求的残留关联行（删除路径曾不同步清理的存量），顺手清掉
+    soft_delete_requirement_references(links.values_list("requirement_id", flat=True))
     ProductProject.objects.filter(
         workspace__slug=slug, project_id=project_id, product_id=product_id
     ).delete()

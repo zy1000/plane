@@ -43,6 +43,7 @@ from plane.utils.requirement import (
     get_requirement_eligible_user_ids,
     prune_requirement_data_to_fields,
     serialize_builtin_values,
+    soft_delete_requirement_references,
 )
 from plane.utils.requirement_notification import (
     notify_rejected_by_approver,
@@ -595,10 +596,13 @@ def _apply_approved_items(change_request, *, actor):
                 ]
             )
             # 从未通过审批的后代没有需要保护的已批准内容，随父项一起删
+            deleted_ids = [row.id]
             for child in descendant_requirements(row):
                 if child.approved_version is None:
                     child.delete()
+                    deleted_ids.append(child.id)
             row.delete()
+            soft_delete_requirement_references(deleted_ids)
             continue
 
         row.approved_row_version = row.version

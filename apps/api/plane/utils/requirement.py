@@ -13,11 +13,16 @@ from plane.db.models import (
     Requirement,
     RequirementChangeItem,
     RequirementChangeStatus,
+    RequirementCycle,
     RequirementField,
     RequirementFieldType,
+    RequirementIssue,
     RequirementItemStatus,
     RequirementLibrary,
     RequirementPriority,
+    RequirementProject,
+    RequirementRelease,
+    RequirementTestCase,
     RequirementType,
     User,
     Workspace,
@@ -1406,6 +1411,31 @@ def insert_library_item(
     )
 
 
+def soft_delete_requirement_references(requirement_ids):
+    """需求软删后，同步清掉指向它们的反向引用。
+
+    SoftDeleteModel.delete() 的级联走 Celery（无 worker 不跑、有窗口期），
+    queryset.delete() 则完全不级联；两条路都会留下指向已删需求的活关联行，
+    按关联行计数的地方（如解除产品关联）就会把已删需求算进去。这里做的就是
+    soft_delete_related_objects 对 Requirement 会做的事：关联表 CASCADE、
+    子需求的 parent SET_NULL。
+    """
+    ids = list(requirement_ids)
+    if not ids:
+        return
+    for link_model in (
+        RequirementProject,
+        RequirementCycle,
+        RequirementRelease,
+        RequirementIssue,
+        RequirementTestCase,
+    ):
+        link_model.objects.filter(requirement_id__in=ids).delete()
+    Requirement.objects.filter(parent_id__in=ids).exclude(id__in=ids).update(
+        parent=None
+    )
+
+
 def save_requirement_row_batch(
     *,
     model,
@@ -1584,6 +1614,7 @@ def save_requirement_row_batch(
             doomed.delete(soft=False)
         else:
             doomed.delete()
+            soft_delete_requirement_references(delete_ids)
 
     # 不再全量重排 sort_order。新增行在 ordered_rows 里插进位置时已经拿到了中值，
     # 删除留下的空隙是特性 —— 见 _sort_order_for_insert 的说明。

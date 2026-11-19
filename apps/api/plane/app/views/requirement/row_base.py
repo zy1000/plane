@@ -50,6 +50,7 @@ from plane.utils.requirement import (
     requirement_content_values,
     resync_approved_row_version,
     row_was_approved,
+    soft_delete_requirement_references,
     source_display_id_map,
 )
 from plane.utils.requirement_module import (
@@ -691,7 +692,9 @@ class BaseRequirementRowViewSet(RequirementExcelMixin, BaseViewSet):
         error = self._check_deletable([row])
         if error is not None:
             return error
-        row.delete()
+        with transaction.atomic():
+            row.delete()
+            soft_delete_requirement_references([row.id])
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     def bulk_destroy(self, request, *args, **kwargs):
@@ -718,7 +721,9 @@ class BaseRequirementRowViewSet(RequirementExcelMixin, BaseViewSet):
         error = self._check_deletable(rows)
         if error is not None:
             return error
-        layer.queryset.filter(id__in=row_ids).delete()
+        with transaction.atomic():
+            layer.queryset.filter(id__in=row_ids).delete()
+            soft_delete_requirement_references(row_ids)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     def bulk_save(self, request, *args, **kwargs):
