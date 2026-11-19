@@ -1,9 +1,13 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { PageHead } from "@/components/core/page-title";
-import { RepositoryService } from "@/services/qa/repository.service";
+import type { TModuleTreeNode } from "@/components/qa/module-tree";
+import { UNASSIGNED_MODULE_KEY } from "@/components/qa/module-tree";
+import { RequirementModuleSidebar, type TModuleSidebarStore } from "@/components/requirements/module-tree";
+import { useCaseRepositoryModules } from "@/hooks/store/use-case-repository-modules";
+import { RepositoryService, type TCaseRepositoryModule } from "@/services/qa/repository.service";
 import { Space, Table, Tag, Input, Button, Modal, message, Tooltip } from "antd";
 import { SearchOutlined, EditOutlined, DeleteOutlined, PlusOutlined } from "@ant-design/icons";
 import type { TableProps, InputRef, TableColumnType } from "antd";
@@ -16,6 +20,29 @@ import { useTestHub } from "@/components/qa/shared/testhub/testhub-context";
 import styles from "./reviews/reviews.module.css";
 
 const repositoryService = new RepositoryService();
+
+/** 模块 id → 「父 / 子」路径，表格「所属模块」列用 */
+const buildModulePathMap = (list: TCaseRepositoryModule[], parentPath = "", map = new Map<string, string>()) => {
+  for (const item of list) {
+    const path = parentPath ? `${parentPath} / ${item.name}` : item.name;
+    map.set(item.id, path);
+    buildModulePathMap(item.children ?? [], path, map);
+  }
+  return map;
+};
+
+const countDescendants = (node: TModuleTreeNode): number =>
+  (node.children ?? []).reduce((sum, child) => sum + 1 + countDescendants(child), 0);
+
+/** 删除模块的确认文案：子模块一并删除，用例库移到「未归类」 */
+const getModuleDeleteContent = (node: TModuleTreeNode) => {
+  const childCount = countDescendants(node);
+  const repositoryCount = node.count ?? 0;
+  const parts = [`确定删除模块「${node.label}」吗？`];
+  if (childCount > 0) parts.push(`其下 ${childCount} 个子模块将一并删除。`);
+  if (repositoryCount > 0) parts.push(`所含 ${repositoryCount} 个用例库移至「未归类」，用例库及其中的用例不受影响。`);
+  return parts.join("");
+};
 
 export default function TestManagementHomePage() {
   const { workspaceSlug, productId } = useParams<{ workspaceSlug: string; productId: string }>();
@@ -63,6 +90,13 @@ export default function TestManagementHomePage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<any | null>(null);
   const [apiLoading, setApiLoading] = useState(false);
+  // 左侧用例库模块树：null = 全部用例库，UNASSIGNED_MODULE_KEY = 未归类
+  const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null);
+  const moduleStore = useCaseRepositoryModules(
+    workspaceSlug ? String(workspaceSlug) : undefined,
+    productId ? String(productId) : undefined
+  );
+  const modulePathMap = useMemo(() => buildModulePathMap(moduleStore.modules), [moduleStore.modules]);
 
   const { registerOpenNewModal, registerOverviewSearch, setOverviewSearchValue } = useTestHub();
   useEffect(() => {
@@ -161,6 +195,7 @@ export default function TestManagementHomePage() {
       title: "名称",
       dataIndex: "name",
       key: "name",
+      width: 180,
       render: (text, record) => (
         <a
           onClick={() => {
@@ -177,6 +212,24 @@ export default function TestManagementHomePage() {
         </a>
       ),
       ...getColumnSearchProps("name"),
+    },
+    {
+      title: "所属模块",
+      dataIndex: "module_id",
+      key: "module_id",
+      width: 200,
+      render: (moduleId: string | null) => {
+        const path = moduleId ? modulePathMap.get(moduleId) : undefined;
+        if (!path) return <span className="text-placeholder">—</span>;
+        return (
+          <span
+            className="inline-block max-w-full truncate rounded-sm bg-layer-1 px-1.5 py-0.5 align-middle text-12 text-secondary"
+            title={path}
+          >
+            {path}
+          </span>
+        );
+      },
     },
     {
       title: "描述",
@@ -198,6 +251,7 @@ export default function TestManagementHomePage() {
       title: "创建者",
       key: "created_by",
       dataIndex: "created_by",
+      width: 140,
       render: (_: any, record: any) => (
         <MemberDropdown
           multiple={true}
@@ -218,7 +272,8 @@ export default function TestManagementHomePage() {
       title: "创建时间",
       key: "created_at",
       dataIndex: "created_at",
-      render: (dateString: string) => formatDateTime(dateString),
+      width: 190,
+      render: (dateString: string) => <span className="whitespace-nowrap">{formatDateTime(dateString)}</span>,
       defaultSortOrder: "descend",
       sorter: (a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
     },
@@ -243,7 +298,12 @@ export default function TestManagementHomePage() {
     },
   ];
 
-  const fetchRepositories = async (page: number = currentPage, size: number = pageSize, filterParams = filters) => {
+  const fetchRepositories = async (
+    page: number = currentPage,
+    size: number = pageSize,
+    filterParams = filters,
+    moduleId: string | null = selectedModuleId
+  ) => {
     if (!workspaceSlug) return;
     try {
       setLoading(true);
@@ -251,6 +311,7 @@ export default function TestManagementHomePage() {
       const queryParams: any = { page, page_size: size };
       if (filterParams.name) queryParams.name__icontains = filterParams.name;
       if (productId) queryParams.product_id = String(productId);
+      if (moduleId) queryParams.module_id = moduleId;
       const response: any = await repositoryService.getRepositories(String(workspaceSlug), queryParams);
       const list = response?.data || [];
       setRepositories(list);
@@ -278,6 +339,7 @@ export default function TestManagementHomePage() {
           await repositoryService.deleteRepository(String(workspaceSlug), { ids: [repo.id] });
           message.success("删除成功");
           await fetchRepositories(1, pageSize, filters);
+          void moduleStore.refresh().catch(() => undefined);
         } catch (e: any) {
           message.error(e?.message || e?.detail || e?.error || "删除失败，请稍后重试");
         } finally {
@@ -306,14 +368,45 @@ export default function TestManagementHomePage() {
     setSearchedColumn("");
     setFilters({});
     setOverviewSearchValue("");
-    fetchRepositories(1, 20, {});
+    setSelectedModuleId(null);
+    fetchRepositories(1, 20, {}, null);
   }, [workspaceSlug, productId]);
+
+  const handleSelectModule = (moduleId: string | null) => {
+    setSelectedModuleId(moduleId);
+    fetchRepositories(1, pageSize, filters, moduleId);
+  };
+
+  // 删模块后其下的库回到「未归类」：看「全部 / 未归类」时右表要重拉；
+  // 选中项在被删子树里时侧栏会退回「全部」（走 handleSelectModule），其余模块的列表不受影响
+  const sidebarStore: TModuleSidebarStore = {
+    ...moduleStore,
+    deleteModule: async (moduleId: string) => {
+      await moduleStore.deleteModule(moduleId);
+      if (selectedModuleId === null || selectedModuleId === UNASSIGNED_MODULE_KEY) {
+        void fetchRepositories(1, pageSize, filters);
+      }
+    },
+  };
+
+  const refreshAfterRepositoryChange = () => {
+    fetchRepositories(1, pageSize, filters);
+    void moduleStore.refresh().catch(() => undefined);
+  };
 
   return (
     <>
       <PageHead title="测试管理" />
-      <div className="">
-        <div className="">
+      <div className="flex h-full w-full overflow-hidden">
+        <RequirementModuleSidebar
+          store={sidebarStore}
+          selectedModuleId={selectedModuleId}
+          onSelect={handleSelectModule}
+          allLabel="全部用例库"
+          getDeleteConfirmContent={getModuleDeleteContent}
+          onModuleMoved={() => fetchRepositories(1, pageSize, filters)}
+        />
+        <div className="min-w-0 flex-1 overflow-auto">
           {loading && (
             <div className="flex items-center justify-center py-12">
               <div className="text-secondary">加载中...</div>
@@ -346,6 +439,7 @@ export default function TestManagementHomePage() {
                   loading={loading}
                   rowKey="id"
                   bordered={true}
+                  tableLayout="fixed"
                   pagination={{
                     current: currentPage,
                     pageSize: pageSize,
@@ -364,8 +458,12 @@ export default function TestManagementHomePage() {
                   workspaceSlug={String(workspaceSlug || "")}
                   productId={String(productId || "")}
                   initialValues={editing}
+                  modules={moduleStore.modules}
+                  defaultModuleId={
+                    selectedModuleId && selectedModuleId !== UNASSIGNED_MODULE_KEY ? selectedModuleId : null
+                  }
                   onCancel={() => setModalOpen(false)}
-                  onSuccess={() => fetchRepositories(1, pageSize, filters)}
+                  onSuccess={refreshAfterRepositoryChange}
                 />
               </div>
             </>

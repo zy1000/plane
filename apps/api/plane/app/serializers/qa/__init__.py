@@ -36,6 +36,7 @@ from plane.db.models import (
     TestCaseVersion,
     TestReport,
     ProductCategory,
+    CaseRepositoryModule,
 )
 from plane.utils.issue_product import is_product_linked
 from plane.utils.product_category import seed_repository_root_modules
@@ -456,6 +457,13 @@ class TestCaseRepositorySerializer(ModelSerializer):
         allow_null=True,
         required=False,
     )
+    # 所属用例库模块（产品下的分组）；null = 未归类
+    module_id = serializers.PrimaryKeyRelatedField(
+        source="module",
+        queryset=CaseRepositoryModule.objects.all(),
+        allow_null=True,
+        required=False,
+    )
 
     class Meta:
         model = TestCaseRepository
@@ -466,6 +474,7 @@ class TestCaseRepositorySerializer(ModelSerializer):
             "workspace",
             "is_template",
             "product_category_id",
+            "module_id",
         ]
         # workspace 由 view 按 URL slug 注入，不信任客户端传值
         extra_kwargs = {"workspace": {"required": False}}
@@ -484,6 +493,9 @@ class TestCaseRepositorySerializer(ModelSerializer):
             raise serializers.ValidationError({"product": "模板库不能关联产品"})
         if not is_template and product is None:
             raise serializers.ValidationError({"product": "用例库必须属于一个产品"})
+        module = attrs.get("module")
+        if module is not None and (is_template or module.product_id != product.id):
+            raise serializers.ValidationError({"module_id": "用例库模块必须属于用例库所在的产品。"})
         product_category = attrs.get("product_category")
         if product_category is not None:
             if not is_template:
@@ -517,13 +529,15 @@ class TestCaseRepositoryDetailSerializer(ModelSerializer):
     # 不让 depth=1 把整个产品模板对象嵌进来，与标准库同形：id + {id, name}
     product_category_id = serializers.UUIDField(read_only=True, allow_null=True)
     product_category_detail = serializers.SerializerMethodField()
+    # 所属用例库模块只给 id，名称路径由前端从模块树里取（不让 depth=1 展开整行）
+    module_id = serializers.UUIDField(read_only=True, allow_null=True)
     # 只有列表接口 annotate 了这个值；新建 / 修改的返回里没有，字段自动省略
     case_count = serializers.IntegerField(read_only=True, required=False)
     module_count = serializers.IntegerField(read_only=True, required=False)
 
     class Meta:
         model = TestCaseRepository
-        exclude = ["product_category"]
+        exclude = ["product_category", "module"]
         depth = 1
 
     def get_product_category_detail(self, obj):

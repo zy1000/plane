@@ -43,6 +43,58 @@ def generate_case_code(*, prefix, product_id=None, repository_id=None):
     return f"{prefix}{max_number + 1}"
 
 
+class CaseRepositoryModule(BaseModel):
+    """用例库模块：产品下给用例库分组的一棵树。
+
+    只用来归类用例库，与库内的用例模块（CaseModule）、产品需求模块（RequirementModule）都无关。
+    删模块连带删整棵子树（parent CASCADE）；挂在上面的用例库走 TestCaseRepository.module 的
+    SET_NULL 回到「未归类」，库和用例都不受影响。
+    """
+
+    workspace = models.ForeignKey(
+        "db.Workspace",
+        on_delete=models.CASCADE,
+        related_name="case_repository_modules",
+        verbose_name="所属工作区",
+    )
+    product = models.ForeignKey(
+        "db.Product",
+        on_delete=models.CASCADE,
+        related_name="case_repository_modules",
+        verbose_name="所属产品",
+    )
+    parent = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        related_name="children",
+        null=True,
+        blank=True,
+        verbose_name="父模块",
+    )
+    name = models.CharField(max_length=30, verbose_name="模块名称")
+    sort_order = models.FloatField(default=65535, verbose_name="排序")
+
+    class Meta:
+        db_table = "test_repository_modules"
+        ordering = ("sort_order", "created_at", "id")
+        constraints = [
+            # 同级不重名：根级与子级分开判（parent 为 NULL 时不参与唯一索引比较）
+            models.UniqueConstraint(
+                fields=["product", "name"],
+                condition=Q(parent__isnull=True, deleted_at__isnull=True),
+                name="case_repo_module_unique_root_name",
+            ),
+            models.UniqueConstraint(
+                fields=["product", "name", "parent"],
+                condition=Q(parent__isnull=False, deleted_at__isnull=True),
+                name="case_repo_module_unique_child_name",
+            ),
+        ]
+
+    def __str__(self):
+        return str(self.name)
+
+
 class TestCaseRepository(BaseModel):
     name = models.CharField(max_length=255, verbose_name="TestCaseRepository Name")
     description = models.TextField(
@@ -84,6 +136,15 @@ class TestCaseRepository(BaseModel):
         related_name="case_repositories",
         verbose_name="产品模板",
     )
+    # 所属用例库模块（产品下的分组）；为空 = 未归类。模板库不挂。
+    module = models.ForeignKey(
+        CaseRepositoryModule,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="repositories",
+        verbose_name="所属用例库模块",
+    )
 
     class Meta:
         db_table = "test_repository"
@@ -91,6 +152,8 @@ class TestCaseRepository(BaseModel):
 
     def clean(self):
         super().clean()
+        if self.module_id and self.module.product_id != self.product_id:
+            raise ValidationError({"module": "用例库模块必须属于用例库所在的产品。"})
         if self.product_category_id:
             if not self.is_template:
                 raise ValidationError(

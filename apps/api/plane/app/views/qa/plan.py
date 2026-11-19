@@ -60,6 +60,7 @@ from plane.db.models import (
     TestCaseRepository,
     TestCase,
     CaseModule,
+    CaseRepositoryModule,
     CaseLabel,
     FileAsset,
     Workspace,
@@ -328,6 +329,10 @@ class RepositoryAPIView(BaseAPIView):
         if not repository_ids and not product_ids:
             # 都没指定：只列这个人能读的库
             queryset = queryset.filter(readable_repository_q(request, slug, field="id"))
+        # 产品「测试用例」页左侧的用例库模块树：选中模块含子模块，none = 未归类
+        module_q = build_module_filter_q(params.get("module_id"), CaseRepositoryModule, "module_id")
+        if module_q is not None:
+            queryset = queryset.filter(module_q)
         # 每个库的用例数（项目里切换产品 / 用例库的下拉要显示）。
         # 用子查询而不是 Count("cases")：聚合会带上 GROUP BY，模型默认的 -created_at 排序就丢了
         case_counts = (

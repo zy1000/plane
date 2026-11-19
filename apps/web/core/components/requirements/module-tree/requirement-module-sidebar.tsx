@@ -4,7 +4,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FolderLock, FolderPlus, Lock, Pencil, Trash2 } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import type { TRequirementModule } from "@plane/types";
+import type {
+  TCreateRequirementModulePayload,
+  TMoveRequirementModulePayload,
+  TRequirementModule,
+  TUpdateRequirementModulePayload,
+} from "@plane/types";
 import { AlertModalCore } from "@plane/ui";
 import {
   MODULE_TREE_ROOT_KEY,
@@ -19,7 +24,21 @@ import {
   type TModuleTreeMenuItem,
   type TModuleTreeNode,
 } from "@/components/qa/module-tree";
-import type { TRequirementModulesStore } from "@/hooks/store/use-requirement-modules";
+
+/**
+ * 侧栏用到的模块树数据入口：需求模块（useRequirementModules）与用例库模块
+ * （useCaseRepositoryModules）都满足这个形状。
+ */
+export type TModuleSidebarStore = {
+  modules: TRequirementModule[];
+  total: number;
+  unassigned: number;
+  isLoading: boolean;
+  createModule: (payload: TCreateRequirementModulePayload) => Promise<unknown>;
+  updateModule: (moduleId: string, payload: TUpdateRequirementModulePayload) => Promise<unknown>;
+  moveModule: (payload: TMoveRequirementModulePayload) => Promise<unknown>;
+  deleteModule: (moduleId: string) => Promise<void>;
+};
 
 const getErrorMessage = (error: unknown, fallback: string) => {
   if (error && typeof error === "object") {
@@ -53,7 +72,7 @@ const collectLockedKeys = (list: TRequirementModule[], keys = new Set<string>())
 };
 
 type TProps = {
-  store: TRequirementModulesStore;
+  store: TModuleSidebarStore;
   selectedModuleId: string | null;
   onSelect: (moduleId: string | null) => void;
   /** 无写权限的成员仍可按模块过滤，只是没有增删改入口 */
@@ -65,6 +84,10 @@ type TProps = {
   lockedRootCategoryName?: string;
   /** 拖动模块成功后回调：选中的模块子树可能变了，页面据此重拉右侧列表 */
   onModuleMoved?: () => void;
+  /** 「全部」行的文字，默认「全部需求」 */
+  allLabel?: string;
+  /** 删除确认的正文，默认按需求的口径 */
+  getDeleteConfirmContent?: (node: TModuleTreeNode) => string;
 };
 
 /**
@@ -72,7 +95,16 @@ type TProps = {
  * 外壳与树体用测试管理共用的 ModuleTreePanel（可拖宽、可收起、可搜索），行样式同项目研发需求页。
  */
 export const RequirementModuleSidebar = (props: TProps) => {
-  const { store, selectedModuleId, onSelect, readonly = false, lockedRootCategoryName, onModuleMoved } = props;
+  const {
+    store,
+    selectedModuleId,
+    onSelect,
+    readonly = false,
+    lockedRootCategoryName,
+    onModuleMoved,
+    allLabel: allLabelProp,
+    getDeleteConfirmContent,
+  } = props;
   const isRootLocked = Boolean(lockedRootCategoryName);
   const { t } = useTranslation();
   const [expandedKeys, setExpandedKeys] = useState<string[]>([]);
@@ -229,7 +261,7 @@ export const RequirementModuleSidebar = (props: TProps) => {
     ];
   };
 
-  const allLabel = t("requirement_modules.all");
+  const allLabel = allLabelProp ?? t("requirement_modules.all");
 
   return (
     <>
@@ -258,7 +290,11 @@ export const RequirementModuleSidebar = (props: TProps) => {
         handleSubmit={() => void handleDeleteConfirm()}
         isSubmitting={isDeleting}
         title={t("requirement_modules.delete_confirm_title")}
-        content={t("requirement_modules.delete_confirm_content", { name: deleteTarget?.label ?? "" })}
+        content={
+          deleteTarget && getDeleteConfirmContent
+            ? getDeleteConfirmContent(deleteTarget)
+            : t("requirement_modules.delete_confirm_content", { name: deleteTarget?.label ?? "" })
+        }
         // AlertModalCore 的按钮默认是英文硬编码
         primaryButtonText={{ default: t("delete"), loading: t("deleting") }}
         secondaryButtonText={t("cancel")}

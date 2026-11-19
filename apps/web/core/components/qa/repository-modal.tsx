@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Modal, Form, Input, message } from "antd";
+import { Modal, Form, Input, TreeSelect, message } from "antd";
 import { Button } from "@plane/propel/button";
 import {
   ProductCategoryModulesPreview,
@@ -9,7 +9,7 @@ import {
   ProductCategorySelect,
 } from "@/components/template-management/libraries/product-category-select";
 import { useProductCategories } from "@/hooks/store/use-product-categories";
-import { RepositoryService } from "@/services/qa/repository.service";
+import { RepositoryService, type TCaseRepositoryModule } from "@/services/qa/repository.service";
 import { WorkspaceService } from "@/services/workspace.service";
 
 type Props = {
@@ -19,27 +19,46 @@ type Props = {
     id?: string;
     name?: string;
     description?: string;
+    /** 所属用例库模块，null = 未归类 */
+    module_id?: string | null;
     /** 模板库：所选产品模板（创建后不可改，编辑时只读） */
     product_category_detail?: { id: string; name: string } | null;
   } | null;
   /** 用例库所属产品（2026-11 起用例库归产品）；模板库模式不传 */
   productId?: string;
+  /** 产品的用例库模块树：传了才显示「所属模块」（模板库不传） */
+  modules?: TCaseRepositoryModule[];
+  /** 新建时「所属模块」的默认值（通常是左侧树当前选中的模块） */
+  defaultModuleId?: string | null;
   /** 模板库模式：创建时固定 is_template=true、product=null */
   templateMode?: boolean;
   onCancel: () => void;
   onSuccess: () => void;
 };
 
+type TModuleTreeSelectNode = { title: string; value: string; path: string; children: TModuleTreeSelectNode[] };
+
+/** 下拉里每个节点带完整路径，选中后输入框显示「父 / 子」 */
+const toTreeSelectData = (list: TCaseRepositoryModule[], parentPath = ""): TModuleTreeSelectNode[] =>
+  list.map((item) => {
+    const path = parentPath ? `${parentPath} / ${item.name}` : item.name;
+    return { title: item.name, value: item.id, path, children: toTreeSelectData(item.children ?? [], path) };
+  });
+
 export const RepositoryModal: React.FC<Props> = ({
   open,
   workspaceSlug,
   initialValues,
   productId,
+  modules,
+  defaultModuleId,
   templateMode = false,
   onCancel,
   onSuccess,
 }) => {
   const [form] = Form.useForm();
+  const showModuleField = !templateMode && Array.isArray(modules);
+  const moduleTreeData = React.useMemo(() => toTreeSelectData(modules ?? []), [modules]);
   const [submitting, setSubmitting] = React.useState(false);
   const [workspaceId, setWorkspaceId] = React.useState<string | null>(null);
   const isCreate = !initialValues?.id;
@@ -73,13 +92,15 @@ export const RepositoryModal: React.FC<Props> = ({
     setProductCategoryError(null);
     if (!initialValues) {
       form.resetFields();
+      form.setFieldsValue({ module_id: defaultModuleId ?? undefined });
     } else {
       form.setFieldsValue({
         name: initialValues.name ?? "",
         description: initialValues.description ?? "",
+        module_id: initialValues.module_id ?? undefined,
       });
     }
-  }, [open, initialValues, form]);
+  }, [open, initialValues, defaultModuleId, form]);
 
   const handleSubmit = async () => {
     try {
@@ -94,6 +115,7 @@ export const RepositoryModal: React.FC<Props> = ({
       if (!initialValues?.id) payload.product = templateMode ? null : productId || null;
       if (templateMode) payload.is_template = true;
       if (templateMode && isCreate) payload.product_category_id = productCategoryId;
+      if (showModuleField) payload.module_id = values.module_id ?? null;
 
       const entityLabel = templateMode ? "模板库" : "用例库";
       if (initialValues?.id) {
@@ -153,6 +175,20 @@ export const RepositoryModal: React.FC<Props> = ({
         >
           <Input placeholder="请输入名称" maxLength={255} />
         </Form.Item>
+        {showModuleField && (
+          <Form.Item name="module_id" label="所属模块">
+            <TreeSelect
+              treeData={moduleTreeData}
+              treeNodeLabelProp="path"
+              treeNodeFilterProp="title"
+              treeDefaultExpandAll
+              showSearch
+              allowClear
+              placeholder="未归类"
+              notFoundContent="暂无模块"
+            />
+          </Form.Item>
+        )}
         {templateMode && (
           <Form.Item
             label="产品模板"

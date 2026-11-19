@@ -37,6 +37,11 @@ from plane.app.views.qa.case_version import (
     CaseVersionCompareAPIView,
 )
 from plane.app.views.qa.module import CaseModuleCountAPIView, CaseModuleDetailAPIView, CaseModuleMoveAPIView
+from plane.app.views.qa.repository_module import (
+    CaseRepositoryModuleAPIView,
+    CaseRepositoryModuleDetailAPIView,
+    CaseRepositoryModuleMoveAPIView,
+)
 from plane.app.views.qa.plan import (
     PlanModuleDetailAPIView,
     PlanListAPIView,
@@ -217,6 +222,22 @@ urlpatterns = [
         "workspaces/<str:slug>/test/repository/",
         RepositoryAPIView.as_view(),
         name="test-repository",
+    ),
+    # 用例库模块：产品下给用例库分组的树
+    path(
+        "workspaces/<str:slug>/products/<uuid:product_id>/test/repository-modules/",
+        CaseRepositoryModuleAPIView.as_view(),
+        name="test-repository-modules",
+    ),
+    path(
+        "workspaces/<str:slug>/products/<uuid:product_id>/test/repository-modules/move/",
+        CaseRepositoryModuleMoveAPIView.as_view(),
+        name="test-repository-module-move",
+    ),
+    path(
+        "workspaces/<str:slug>/products/<uuid:product_id>/test/repository-modules/<uuid:module_id>/",
+        CaseRepositoryModuleDetailAPIView.as_view(),
+        name="test-repository-module-detail",
     ),
     path(
         "workspaces/<str:slug>/test/template-case/",
