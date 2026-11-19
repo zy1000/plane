@@ -8,6 +8,7 @@ import type {
   TUpdateProductPayload,
 } from "@plane/types";
 import { APIService } from "@/services/api.service";
+import type { TProductWorkItemsQuery, TProductWorkItemsResponse } from "@/types/product-work-items";
 
 type TProductSharedField =
   | "owner_detail"
@@ -102,6 +103,19 @@ export class ProductService extends APIService {
   /** 概览页的汇总数字：需求 / 测试；关联项目与发布走各自页签的接口 */
   async getOverview(workspaceSlug: string, productId: string): Promise<TProductOverview> {
     return this.get(`/api/workspaces/${workspaceSlug}/products/${productId}/overview/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 工作项页签：Issue.product 指向本产品的工作项（跨项目、只读、分页） */
+  async getWorkItems(
+    workspaceSlug: string,
+    productId: string,
+    params: TProductWorkItemsQuery
+  ): Promise<TProductWorkItemsResponse> {
+    return this.get(`/api/workspaces/${workspaceSlug}/products/${productId}/work-items/`, { params })
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;

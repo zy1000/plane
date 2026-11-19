@@ -158,6 +158,11 @@ export class IssueStore implements IIssueStore {
       parent_id: issue?.parent_id,
       cycle_id: issue?.cycle_id,
       module_ids: issue?.module_ids,
+      // 详情接口都带这四个字段；不放进来的话，从列表以外的地方（产品页、个人主页）打开抽屉会显示成「无产品 / 无阶段」
+      release_ids: issue?.release_ids,
+      product_id: issue?.product_id,
+      product_module_id: issue?.product_module_id,
+      stage_id: issue?.stage_id,
       type_id: issue?.type_id,
       type_name: issue?.type_name,
       created_at: issue?.created_at,

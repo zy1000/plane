@@ -8,6 +8,7 @@ from plane.app.views.product import (
     ProductMyPermissionKeysAPIView,
     ProductOverviewEndpoint,
     ProductViewSet,
+    ProductWorkItemsEndpoint,
 )
 from plane.app.views.project.product import ProductProjectViewSet, ProjectProductViewSet
 from plane.app.views.project.product_team import ProductTeamAPIView, ProjectProductTeamAPIView
@@ -36,6 +37,12 @@ urlpatterns = [
         "workspaces/<str:slug>/products/<uuid:product_id>/overview/",
         ProductOverviewEndpoint.as_view(),
         name="product-overview",
+    ),
+    # --- 产品 › 工作项（Issue.product 指向本产品的工作项，跨项目只读） ----------
+    path(
+        "workspaces/<str:slug>/products/<uuid:product_id>/work-items/",
+        ProductWorkItemsEndpoint.as_view(),
+        name="product-work-items",
     ),
     # --- 产品 ↔ 项目 ------------------------------------------------------
     path(

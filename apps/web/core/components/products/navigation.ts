@@ -1,8 +1,15 @@
 import type { ComponentType } from "react";
 import { ClipboardCheck, FolderKanban, Rocket, Rss } from "lucide-react";
-import { RequirementIcon, TestManagementIcon } from "@plane/propel/icons";
+import { RequirementIcon, TestManagementIcon, WorkItemsIcon } from "@plane/propel/icons";
 
-export type TProductTabKey = "overview" | "requirements" | "projects" | "stage-reviews" | "releases" | "testhub";
+export type TProductTabKey =
+  | "overview"
+  | "requirements"
+  | "work-items"
+  | "projects"
+  | "stage-reviews"
+  | "releases"
+  | "testhub";
 
 export type TProductNavigationItem = {
   key: TProductTabKey;
@@ -23,6 +30,13 @@ export const PRODUCT_NAVIGATION_ITEMS: TProductNavigationItem[] = [
     key: "requirements",
     icon: RequirementIcon,
     i18nKey: "workspace_products.navigation.requirements",
+    managerOnly: false,
+  },
+  {
+    // Issue.product 指向本产品的工作项（跨项目只读，2026-11 新增）
+    key: "work-items",
+    icon: WorkItemsIcon,
+    i18nKey: "workspace_products.navigation.work_items",
     managerOnly: false,
   },
   {

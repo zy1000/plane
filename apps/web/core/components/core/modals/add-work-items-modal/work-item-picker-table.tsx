@@ -76,7 +76,7 @@ const ContainerCell = (props: { kind: "cycle" | "release"; items: TWorkItemPicke
   );
 };
 
-const Assignees = observer(function Assignees(props: { ids: string[] }) {
+export const Assignees = observer(function Assignees(props: { ids: string[] }) {
   const { getUserDetails } = useMember();
   const users = props.ids.flatMap((id) => {
     const user = getUserDetails(id);
