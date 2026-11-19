@@ -8,11 +8,9 @@ import json
 # Django imports
 from django.utils import timezone
 from django.core import serializers
+from django.core.exceptions import FieldError
 from django.core.serializers.json import DjangoJSONEncoder
-from django.contrib.postgres.aggregates import ArrayAgg
-from django.contrib.postgres.fields import ArrayField
-from django.db.models import Q, UUIDField, Value, Subquery, OuterRef
-from django.db.models.functions import Coalesce
+from django.db.models import Subquery, OuterRef
 from django.utils.decorators import method_decorator
 from django.views.decorators.gzip import gzip_page
 
@@ -29,7 +27,6 @@ from plane.app.serializers import (
     DraftIssueDetailSerializer,
 )
 from plane.db.models import (
-    Issue,
     DraftIssue,
     CycleIssue,
     ModuleIssue,
@@ -41,6 +38,32 @@ from .. import BaseViewSet
 from plane.bgtasks.issue_activities_task import issue_activity
 from plane.utils.issue_filters import issue_filters
 from plane.utils.host import base_host
+from plane.utils.issue_id_arrays import draft_issue_id_array_annotations
+
+
+# issue_filters 按工作项表生成条件；草稿的关联表名字不同，换成草稿的
+DRAFT_RELATION_NAMES = {
+    "label_issue__": "draft_label_issue__",
+    "issue_assignee__": "draft_issue_assignee__",
+    "issue_cycle__": "draft_issue_cycle__",
+    "issue_module__": "draft_issue_module__",
+}
+
+
+def draft_issue_filters(filters):
+    """把工作项筛选条件换成草稿能用的；草稿没有的条件（提及、订阅、产品、阶段等）跳过，不再报 500。"""
+    result = {}
+    for key, value in filters.items():
+        for issue_name, draft_name in DRAFT_RELATION_NAMES.items():
+            if key.startswith(issue_name):
+                key = draft_name + key[len(issue_name) :]
+                break
+        try:
+            DraftIssue.objects.filter(**{key: value})
+        except FieldError:
+            continue
+        result[key] = value
+    return result
 
 
 class WorkspaceDraftIssueViewSet(BaseViewSet):
@@ -58,46 +81,14 @@ class WorkspaceDraftIssueViewSet(BaseViewSet):
                     )[:1]
                 )
             )
-            .annotate(
-                label_ids=Coalesce(
-                    ArrayAgg(
-                        "labels__id",
-                        distinct=True,
-                        filter=Q(~Q(labels__id__isnull=True) & (Q(draft_label_issue__deleted_at__isnull=True))),
-                    ),
-                    Value([], output_field=ArrayField(UUIDField())),
-                ),
-                assignee_ids=Coalesce(
-                    ArrayAgg(
-                        "assignees__id",
-                        distinct=True,
-                        filter=Q(
-                            ~Q(assignees__id__isnull=True)
-                            & Q(assignees__member_project__is_active=True)
-                            & Q(draft_issue_assignee__deleted_at__isnull=True)
-                        ),
-                    ),
-                    Value([], output_field=ArrayField(UUIDField())),
-                ),
-                module_ids=Coalesce(
-                    ArrayAgg(
-                        "draft_issue_module__module_id",
-                        distinct=True,
-                        filter=Q(
-                            ~Q(draft_issue_module__module_id__isnull=True)
-                            & Q(draft_issue_module__module__archived_at__isnull=True)
-                            & Q(draft_issue_module__deleted_at__isnull=True)
-                        ),
-                    ),
-                    Value([], output_field=ArrayField(UUIDField())),
-                ),
-            )
+            # id 数组走关联子查询，不 JOIN + GROUP BY（见 issue_id_arrays 模块说明）
+            .annotate(**draft_issue_id_array_annotations())
         ).distinct()
 
     @method_decorator(gzip_page)
     @allow_workspace_member
     def list(self, request, slug):
-        filters = issue_filters(request.query_params, "GET")
+        filters = draft_issue_filters(issue_filters(request.query_params, "GET"))
         issues = self.get_queryset().filter(created_by=request.user).order_by("-created_at")
 
         issues = issues.filter(**filters)
@@ -153,7 +144,7 @@ class WorkspaceDraftIssueViewSet(BaseViewSet):
             return Response(issue, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    @allow_creator_or(model=Issue, level="WORKSPACE")
+    @allow_creator_or(model=DraftIssue, level="WORKSPACE")
     def partial_update(self, request, slug, pk):
         issue = self.get_queryset().filter(pk=pk, created_by=request.user).first()
 
@@ -178,7 +169,7 @@ class WorkspaceDraftIssueViewSet(BaseViewSet):
             return Response(status=status.HTTP_204_NO_CONTENT)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    @allow_creator_or(model=Issue, level="WORKSPACE")
+    @allow_creator_or(model=DraftIssue, level="WORKSPACE")
     def retrieve(self, request, slug, pk=None):
         issue = self.get_queryset().filter(pk=pk, created_by=request.user).first()
 

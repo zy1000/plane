@@ -9,10 +9,6 @@ import json
 from django.utils import timezone
 from django.db.models import Q, Count, OuterRef, Func, F, Prefetch, Subquery
 from django.core.serializers.json import DjangoJSONEncoder
-from django.contrib.postgres.aggregates import ArrayAgg
-from django.contrib.postgres.fields import ArrayField
-from django.db.models import Value, UUIDField
-from django.db.models.functions import Coalesce
 
 # Third party imports
 from rest_framework import status
@@ -51,6 +47,7 @@ from plane.app.views.base import BaseAPIView
 from plane.utils.timezone_converter import user_timezone_converter
 from plane.utils.global_paginator import paginate
 from plane.utils.host import base_host
+from plane.utils.issue_id_arrays import issue_id_array_annotations
 from plane.db.models.intake import SourceType
 
 
@@ -149,40 +146,8 @@ class IntakeIssueViewSet(BaseViewSet):
                 .annotate(count=Func(F("id"), function="Count"))
                 .values("count")
             )
-            .annotate(
-                label_ids=Coalesce(
-                    ArrayAgg(
-                        "labels__id",
-                        distinct=True,
-                        filter=Q(~Q(labels__id__isnull=True) & Q(label_issue__deleted_at__isnull=True)),
-                    ),
-                    Value([], output_field=ArrayField(UUIDField())),
-                ),
-                assignee_ids=Coalesce(
-                    ArrayAgg(
-                        "assignees__id",
-                        distinct=True,
-                        filter=Q(
-                            ~Q(assignees__id__isnull=True)
-                            & Q(assignees__member_project__is_active=True)
-                            & Q(issue_assignee__deleted_at__isnull=True)
-                        ),
-                    ),
-                    Value([], output_field=ArrayField(UUIDField())),
-                ),
-                module_ids=Coalesce(
-                    ArrayAgg(
-                        "issue_module__module_id",
-                        distinct=True,
-                        filter=Q(
-                            ~Q(issue_module__module_id__isnull=True)
-                            & Q(issue_module__module__archived_at__isnull=True)
-                            & Q(issue_module__deleted_at__isnull=True)
-                        ),
-                    ),
-                    Value([], output_field=ArrayField(UUIDField())),
-                ),
-            )
+            # id 数组走关联子查询，不 JOIN + GROUP BY（见 issue_id_arrays 模块说明）
+            .annotate(**issue_id_array_annotations("label_ids", "assignee_ids", "module_ids"))
         ).distinct()
 
     @allow_fine_permission(PermissionKey.PROJECT_INTAKE_VIEW)
@@ -197,16 +162,9 @@ class IntakeIssueViewSet(BaseViewSet):
             IntakeIssue.objects.filter(intake_id=intake.id, project_id=project_id, **filters)
             .select_related("issue")
             .prefetch_related("issue__labels")
-            .annotate(
-                label_ids=Coalesce(
-                    ArrayAgg(
-                        "issue__labels__id",
-                        distinct=True,
-                        filter=Q(~Q(issue__labels__id__isnull=True) & Q(issue__label_issue__deleted_at__isnull=True)),
-                    ),
-                    Value([], output_field=ArrayField(UUIDField())),
-                )
-            )
+            # 标签数组走关联子查询，不再 GROUP BY；筛选会 JOIN 标签/负责人等多值关联，靠 distinct 去重
+            .annotate(**issue_id_array_annotations("label_ids", issue_ref="issue_id"))
+            .distinct()
         ).order_by(request.GET.get("order_by", "-issue__created_at"))
         # Intake status filter
         intake_status = [item for item in request.GET.get("status", "-2").split(",") if item != "null"]
@@ -293,27 +251,9 @@ class IntakeIssueViewSet(BaseViewSet):
             intake_issue = (
                 IntakeIssue.objects.select_related("issue")
                 .prefetch_related("issue__labels", "issue__assignees")
-                .annotate(
-                    label_ids=Coalesce(
-                        ArrayAgg(
-                            "issue__labels__id",
-                            distinct=True,
-                            filter=Q(
-                                ~Q(issue__labels__id__isnull=True) & Q(issue__label_issue__deleted_at__isnull=True)
-                            ),
-                        ),
-                        Value([], output_field=ArrayField(UUIDField())),
-                    ),
-                    assignee_ids=Coalesce(
-                        ArrayAgg(
-                            "issue__assignees__id",
-                            distinct=True,
-                            filter=~Q(issue__assignees__id__isnull=True)
-                            & Q(issue__assignees__member_project__is_active=True),
-                        ),
-                        Value([], output_field=ArrayField(UUIDField())),
-                    ),
-                )
+                # id 数组走关联子查询（见 issue_id_arrays 模块说明）。旧写法负责人没排除软删行，
+                # 但这里是刚建的工作项，不会有软删的负责人关联，结果一样
+                .annotate(**issue_id_array_annotations("label_ids", "assignee_ids", issue_ref="issue_id"))
                 .get(
                     intake_id=intake_id.id,
                     issue_id=serializer.data["id"],
@@ -372,23 +312,9 @@ class IntakeIssueViewSet(BaseViewSet):
 
         # Validate issue data if provided
         if bool(issue_data):
+            # id 数组走关联子查询（见 issue_id_arrays 模块说明）；这里负责人原本就不看成员身份，照旧
             issue = Issue.objects.annotate(
-                label_ids=Coalesce(
-                    ArrayAgg(
-                        "labels__id",
-                        distinct=True,
-                        filter=Q(~Q(labels__id__isnull=True) & Q(label_issue__deleted_at__isnull=True)),
-                    ),
-                    Value([], output_field=ArrayField(UUIDField())),
-                ),
-                assignee_ids=Coalesce(
-                    ArrayAgg(
-                        "assignees__id",
-                        distinct=True,
-                        filter=Q(~Q(assignees__id__isnull=True) & Q(issue_assignee__deleted_at__isnull=True)),
-                    ),
-                    Value([], output_field=ArrayField(UUIDField())),
-                ),
+                **issue_id_array_annotations("label_ids", "assignee_ids", active_assignees_only=False)
             ).get(pk=intake_issue.issue_id, workspace__slug=slug, project_id=project_id)
 
             # 没有收件箱管理权（投递人自己改）只能改标题与描述，状态、负责人等字段收窄掉
@@ -468,25 +394,11 @@ class IntakeIssueViewSet(BaseViewSet):
         intake_issue = (
             IntakeIssue.objects.select_related("issue")
             .prefetch_related("issue__labels", "issue__assignees")
+            # id 数组走关联子查询（见 issue_id_arrays 模块说明）；这里负责人原本就不看成员身份，照旧
             .annotate(
-                label_ids=Coalesce(
-                    ArrayAgg(
-                        "issue__labels__id",
-                        distinct=True,
-                        filter=Q(~Q(issue__labels__id__isnull=True) & Q(issue__label_issue__deleted_at__isnull=True)),
-                    ),
-                    Value([], output_field=ArrayField(UUIDField())),
-                ),
-                assignee_ids=Coalesce(
-                    ArrayAgg(
-                        "issue__assignees__id",
-                        distinct=True,
-                        filter=Q(
-                            ~Q(issue__assignees__id__isnull=True) & Q(issue__issue_assignee__deleted_at__isnull=True)
-                        ),
-                    ),
-                    Value([], output_field=ArrayField(UUIDField())),
-                ),
+                **issue_id_array_annotations(
+                    "label_ids", "assignee_ids", issue_ref="issue_id", active_assignees_only=False
+                )
             )
             .get(intake_id=intake_id.id, issue_id=pk, project_id=project_id)
         )
@@ -500,25 +412,11 @@ class IntakeIssueViewSet(BaseViewSet):
         intake_issue = (
             IntakeIssue.objects.select_related("issue")
             .prefetch_related("issue__labels", "issue__assignees")
+            # id 数组走关联子查询（见 issue_id_arrays 模块说明）；这里负责人原本就不看成员身份，照旧
             .annotate(
-                label_ids=Coalesce(
-                    ArrayAgg(
-                        "issue__labels__id",
-                        distinct=True,
-                        filter=Q(~Q(issue__labels__id__isnull=True) & Q(issue__label_issue__deleted_at__isnull=True)),
-                    ),
-                    Value([], output_field=ArrayField(UUIDField())),
-                ),
-                assignee_ids=Coalesce(
-                    ArrayAgg(
-                        "issue__assignees__id",
-                        distinct=True,
-                        filter=Q(
-                            ~Q(issue__assignees__id__isnull=True) & Q(issue__issue_assignee__deleted_at__isnull=True)
-                        ),
-                    ),
-                    Value([], output_field=ArrayField(UUIDField())),
-                ),
+                **issue_id_array_annotations(
+                    "label_ids", "assignee_ids", issue_ref="issue_id", active_assignees_only=False
+                )
             )
             .get(intake_id=intake_id.id, issue_id=pk, project_id=project_id)
         )

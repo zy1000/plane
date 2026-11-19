@@ -8,10 +8,7 @@ import json
 # Django imports
 from django.core.serializers.json import DjangoJSONEncoder
 from django.utils import timezone
-from django.db.models import Q, Value, UUIDField
-from django.db.models.functions import Coalesce
-from django.contrib.postgres.aggregates import ArrayAgg
-from django.contrib.postgres.fields import ArrayField
+from django.db.models import Q
 
 # Third party imports
 from rest_framework import status
@@ -30,6 +27,7 @@ from plane.app.permissions.base import resolve_project_grant
 from plane.bgtasks.issue_activities_task import issue_activity
 from plane.db.models import Intake, IntakeIssue, Issue, Project, ProjectMember, State, StateGroup
 from plane.utils.host import base_host
+from plane.utils.issue_id_arrays import issue_id_array_annotations
 from .base import BaseAPIView
 from plane.db.models.intake import SourceType
 from plane.utils.openapi import (
@@ -344,28 +342,10 @@ class IntakeIssueDetailAPIEndpoint(BaseAPIView):
 
         # Validate issue data if provided
         if bool(issue_data):
-            issue = Issue.objects.annotate(
-                label_ids=Coalesce(
-                    ArrayAgg(
-                        "labels__id",
-                        distinct=True,
-                        filter=Q(~Q(labels__id__isnull=True) & Q(label_issue__deleted_at__isnull=True)),
-                    ),
-                    Value([], output_field=ArrayField(UUIDField())),
-                ),
-                assignee_ids=Coalesce(
-                    ArrayAgg(
-                        "assignees__id",
-                        distinct=True,
-                        filter=Q(
-                            ~Q(assignees__id__isnull=True)
-                            & Q(assignees__member_project__is_active=True)
-                            & Q(issue_assignee__deleted_at__isnull=True)
-                        ),
-                    ),
-                    Value([], output_field=ArrayField(UUIDField())),
-                ),
-            ).get(pk=issue_id, workspace__slug=slug, project_id=project_id)
+            # id 数组走关联子查询，不 JOIN + GROUP BY（见 issue_id_arrays 模块说明）
+            issue = Issue.objects.annotate(**issue_id_array_annotations("label_ids", "assignee_ids")).get(
+                pk=issue_id, workspace__slug=slug, project_id=project_id
+            )
 
             # 没有收件箱管理权只能改标题与描述
             if not can_manage_intake:

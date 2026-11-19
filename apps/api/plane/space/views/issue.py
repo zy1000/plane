@@ -7,8 +7,7 @@ import json
 
 # Django imports
 from django.contrib.postgres.aggregates import ArrayAgg
-from django.contrib.postgres.fields import ArrayField
-from django.db.models.functions import Coalesce, JSONObject
+from django.db.models.functions import JSONObject
 from django.core.serializers.json import DjangoJSONEncoder
 from django.utils import timezone
 from django.db.models import (
@@ -16,7 +15,6 @@ from django.db.models import (
     F,
     Q,
     Prefetch,
-    UUIDField,
     Case,
     When,
     JSONField,
@@ -68,6 +66,7 @@ from plane.db.models import (
 )
 from plane.bgtasks.issue_activities_task import issue_activity
 from plane.utils.issue_filters import issue_filters
+from plane.utils.issue_id_arrays import issue_id_array_annotations
 
 
 class ProjectIssuesPublicEndpoint(BaseAPIView):
@@ -610,38 +609,8 @@ class IssueRetrievePublicEndpoint(BaseAPIView):
                     CycleIssue.objects.filter(issue=OuterRef("id"), deleted_at__isnull=True).values("cycle_id")[:1]
                 )
             )
-            .annotate(
-                label_ids=Coalesce(
-                    ArrayAgg(
-                        "labels__id",
-                        distinct=True,
-                        filter=Q(~Q(labels__id__isnull=True) & Q(label_issue__deleted_at__isnull=True)),
-                    ),
-                    Value([], output_field=ArrayField(UUIDField())),
-                ),
-                assignee_ids=Coalesce(
-                    ArrayAgg(
-                        "assignees__id",
-                        distinct=True,
-                        filter=Q(
-                            ~Q(assignees__id__isnull=True)
-                            & Q(assignees__member_project__is_active=True)
-                            & Q(issue_assignee__deleted_at__isnull=True)
-                        ),
-                    ),
-                    Value([], output_field=ArrayField(UUIDField())),
-                ),
-                module_ids=Coalesce(
-                    ArrayAgg(
-                        "issue_module__module_id",
-                        distinct=True,
-                        filter=~Q(issue_module__module_id__isnull=True)
-                        & Q(issue_module__module__archived_at__isnull=True)
-                        & Q(issue_module__deleted_at__isnull=True),
-                    ),
-                    Value([], output_field=ArrayField(UUIDField())),
-                ),
-            )
+            # 标签/负责人/模块数组走关联子查询，不和投票、表情一起 JOIN 连乘（见 issue_id_arrays 模块说明）
+            .annotate(**issue_id_array_annotations("label_ids", "assignee_ids", "module_ids"))
             .prefetch_related(
                 Prefetch(
                     "issue_reactions",

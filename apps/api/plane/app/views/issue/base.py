@@ -786,55 +786,8 @@ class IssueViewSet(BaseViewSet):
         is_description_update = request.data.get("description_html") is not None
 
         issue = (
-            queryset.annotate(
-                label_ids=Coalesce(
-                    ArrayAgg(
-                        "labels__id",
-                        distinct=True,
-                        filter=Q(
-                            ~Q(labels__id__isnull=True)
-                            & Q(label_issue__deleted_at__isnull=True)
-                        ),
-                    ),
-                    Value([], output_field=ArrayField(UUIDField())),
-                ),
-                assignee_ids=Coalesce(
-                    ArrayAgg(
-                        "assignees__id",
-                        distinct=True,
-                        filter=Q(
-                            ~Q(assignees__id__isnull=True)
-                            & Q(assignees__member_project__is_active=True)
-                            & Q(issue_assignee__deleted_at__isnull=True)
-                        ),
-                    ),
-                    Value([], output_field=ArrayField(UUIDField())),
-                ),
-                module_ids=Coalesce(
-                    ArrayAgg(
-                        "issue_module__module_id",
-                        distinct=True,
-                        filter=Q(
-                            ~Q(issue_module__module_id__isnull=True)
-                            & Q(issue_module__module__archived_at__isnull=True)
-                            & Q(issue_module__deleted_at__isnull=True)
-                        ),
-                    ),
-                    Value([], output_field=ArrayField(UUIDField())),
-                ),
-                release_ids=Coalesce(
-                    ArrayAgg(
-                        "issue_release__release_id",
-                        distinct=True,
-                        filter=Q(
-                            ~Q(issue_release__release_id__isnull=True)
-                            & Q(issue_release__release__archived_at__isnull=True)
-                            & Q(issue_release__deleted_at__isnull=True)
-                        ),
-                    ),
-                    Value([], output_field=ArrayField(UUIDField())),
-                ),
-            )
+            # 四个 id 数组走关联子查询，不 JOIN + GROUP BY（见 issue_id_arrays 模块说明）
+            queryset.annotate(**issue_id_array_annotations())
             .filter(pk=pk)
             .first()
         )

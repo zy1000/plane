@@ -7,11 +7,8 @@ import json
 
 # Django imports
 from django.utils import timezone
-from django.db.models import Q, OuterRef, F, Func, UUIDField, Value, CharField, Subquery
+from django.db.models import Q, OuterRef, F, Func, Value, CharField, Subquery
 from django.core.serializers.json import DjangoJSONEncoder
-from django.db.models.functions import Coalesce
-from django.contrib.postgres.aggregates import ArrayAgg
-from django.contrib.postgres.fields import ArrayField
 
 # Third Party imports
 from rest_framework.response import Response
@@ -32,6 +29,7 @@ from plane.db.models import (
 from plane.bgtasks.issue_activities_task import issue_activity
 from plane.utils.issue_relation_mapper import get_actual_relation
 from plane.utils.host import base_host
+from plane.utils.issue_id_arrays import issue_id_array_annotations
 
 
 class IssueRelationViewSet(BaseViewSet):
@@ -129,28 +127,8 @@ class IssueRelationViewSet(BaseViewSet):
                 .annotate(count=Func(F("id"), function="Count"))
                 .values("count")
             )
-            .annotate(
-                label_ids=Coalesce(
-                    ArrayAgg(
-                        "labels__id",
-                        distinct=True,
-                        filter=Q(~Q(labels__id__isnull=True) & (Q(label_issue__deleted_at__isnull=True))),
-                    ),
-                    Value([], output_field=ArrayField(UUIDField())),
-                ),
-                assignee_ids=Coalesce(
-                    ArrayAgg(
-                        "assignees__id",
-                        distinct=True,
-                        filter=Q(
-                            ~Q(assignees__id__isnull=True)
-                            & Q(assignees__member_project__is_active=True)
-                            & Q(issue_assignee__deleted_at__isnull=True)
-                        ),
-                    ),
-                    Value([], output_field=ArrayField(UUIDField())),
-                ),
-            )
+            # id 数组走关联子查询，不 JOIN + GROUP BY（见 issue_id_arrays 模块说明）
+            .annotate(**issue_id_array_annotations("label_ids", "assignee_ids"))
         ).distinct()
 
         # Fields
