@@ -162,7 +162,7 @@ export function IssueFieldLibraryTable({
 }: Props) {
   return (
     <div className="overflow-x-auto rounded-lg border border-subtle">
-      <table className="w-full min-w-[1040px] table-fixed border-collapse text-left text-13" aria-label="工作项通用字段库">
+      <table className="w-full min-w-[1040px] table-fixed border-collapse text-left text-13" aria-label="工作项通用字段">
         <colgroup>
           <col style={{ width: "24%" }} />
           <col style={{ width: "12%" }} />

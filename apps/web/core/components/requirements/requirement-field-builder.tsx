@@ -1137,7 +1137,7 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
         {draggedCommonFieldId
           ? "通用字段只能作为一级字段，不能放进表单。"
           : isCommon
-            ? "该表单是通用字段，子字段在需求通用字段库里统一维护。"
+            ? "该表单是通用字段，子字段在模板中心「通用字段」里统一维护。"
             : t("requirement_fields.builder.nested_form_not_supported")}
       </div>
     );

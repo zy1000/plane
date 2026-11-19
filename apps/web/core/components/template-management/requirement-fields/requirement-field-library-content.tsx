@@ -128,7 +128,7 @@ export function RequirementFieldLibraryContent({
   return (
     <div className="flex min-h-full min-w-0 flex-col">
       <TemplatePageHeader
-        title="通用字段库"
+        title="通用字段"
         bordered={false}
         after={<FieldLibrarySwitch activeKey="requirement" libraries={libraries} />}
       >

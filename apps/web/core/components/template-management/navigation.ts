@@ -99,7 +99,7 @@ export const TEMPLATE_MANAGEMENT_NAVIGATION_ITEMS: TTemplateManagementNavigation
     key: "requirement-types",
     group: "templates",
     icon: ClipboardList,
-    label: "需求模板库",
+    label: "需求模板",
     permissionKeys: WORKSPACE_REQUIREMENT_TYPE_READ_PERMISSION_KEYS,
   },
   {
@@ -108,7 +108,7 @@ export const TEMPLATE_MANAGEMENT_NAVIGATION_ITEMS: TTemplateManagementNavigation
     key: "issue-fields",
     group: "templates",
     icon: Rows3,
-    label: "通用字段库",
+    label: "通用字段",
     permissionKeys: WORKSPACE_DEV_MODE_READ_PERMISSION_KEYS,
     alternates: [{ key: "requirement-fields", permissionKeys: WORKSPACE_REQUIREMENT_TYPE_READ_PERMISSION_KEYS }],
   },

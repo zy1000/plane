@@ -211,7 +211,7 @@ export function RequirementCommonFieldCard(props: TCommonFieldCardProps) {
         </div>
         {description && <p className="text-13 leading-5 text-secondary">{description}</p>}
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-md bg-layer-1 px-3 py-2.5">
-          <span className="text-13 text-secondary">定义由通用字段库统一维护</span>
+          <span className="text-13 text-secondary">定义在模板中心「通用字段」统一维护</span>
           <Button variant="secondary" size="sm" onClick={onOpenLibrary}>
             编辑通用字段
           </Button>

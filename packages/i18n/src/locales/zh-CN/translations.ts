@@ -2418,7 +2418,7 @@ export default {
   },
   // 模板中心「产品分类」：工作区级分类与它的一级模块
   product_categories: {
-    title: "产品模板库",
+    title: "产品模板",
     description: "标准需求库、测试用例库选用产品模板后，库的第一层模块由这里统一维护。",
     create: "创建分类",
     all_categories: "全部分类",
@@ -3850,9 +3850,9 @@ export default {
       requirement_types: "需求类型",
       libraries: "标准需求库",
       test_cases: "测试用例库",
-      reviews: "评审模板库",
+      reviews: "评审模板",
       dev_modes: "研发模式",
-      product_categories: "产品模板库",
+      product_categories: "产品模板",
     },
     dev_modes: {
       title: "研发模式",
@@ -4045,7 +4045,7 @@ export default {
       },
     },
     reviews: {
-      title: "评审模板库",
+      title: "评审模板",
       create: "新建评审",
       add_child: "在此评审下加评审活动",
       search_placeholder: "搜索编号、标题或角色",
@@ -4118,7 +4118,7 @@ export default {
       },
       empty: {
         title: "还没有评审模板",
-        description: "评审模板库是工作区级的标准研发流程，按阶段维护评审与评审活动。",
+        description: "评审模板是工作区级的标准研发流程，按阶段维护评审与评审活动。",
       },
     },
     requirement_types: {

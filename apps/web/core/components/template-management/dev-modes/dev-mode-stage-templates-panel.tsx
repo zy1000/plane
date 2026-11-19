@@ -67,7 +67,7 @@ export function DevModeStageTemplatesPanel({
             to={reviewTemplatesPath(workspaceSlug, stage.stage_type_id)}
             className="flex shrink-0 items-center gap-1 text-link-primary hover:text-link-primary-hover"
           >
-            评审模板库
+            评审模板
             <ExternalLink className="size-3.5" />
           </Link>
         </div>

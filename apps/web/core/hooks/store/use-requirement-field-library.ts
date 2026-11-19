@@ -9,9 +9,9 @@ const getErrorMessage = (error: unknown) => {
   if (typeof error === "string") return error;
   if (error && typeof error === "object") {
     const payload = error as { error?: string; detail?: string };
-    return payload.error ?? payload.detail ?? "无法加载通用字段库。";
+    return payload.error ?? payload.detail ?? "无法加载通用字段。";
   }
-  return "无法加载通用字段库。";
+  return "无法加载通用字段。";
 };
 
 const sortFields = (fields: TRequirementFieldDefinition[]) =>

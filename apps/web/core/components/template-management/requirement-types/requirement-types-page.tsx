@@ -27,7 +27,7 @@ export const RequirementTypesPage = observer(function RequirementTypesPage({ wor
   return (
     <>
       <PageHead
-        title={`需求模板库 - ${t("workspace_templates.title")}`}
+        title={`需求模板 - ${t("workspace_templates.title")}`}
       />
       <ContentWrapper className="flex min-h-0 flex-col overflow-hidden bg-surface-1">
         <RequirementTypesList

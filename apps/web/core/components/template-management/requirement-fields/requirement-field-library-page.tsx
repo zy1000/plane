@@ -93,7 +93,7 @@ export const RequirementFieldLibraryPage = observer(function RequirementFieldLib
 
   return (
     <>
-      <PageHead title={`通用字段库 - ${t("workspace_templates.title")}`} />
+      <PageHead title={`通用字段 - ${t("workspace_templates.title")}`} />
       <ContentWrapper className="bg-surface-1">
         <RequirementFieldLibraryContent
           fields={fields}

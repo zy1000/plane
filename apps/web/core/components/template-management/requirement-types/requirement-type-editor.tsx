@@ -64,7 +64,7 @@ export const RequirementTypeEditor = observer(function RequirementTypeEditor() {
     }
     if (
       !window.confirm(
-        `将「${field.name}」转为通用字段？转换后字段定义由需求通用字段库统一维护，本类型内不能再修改；已有的字段值不受影响。`
+        `将「${field.name}」转为通用字段？转换后字段定义在模板中心「通用字段」统一维护，本类型内不能再修改；已有的字段值不受影响。`
       )
     )
       return;
@@ -115,7 +115,7 @@ export const RequirementTypeEditor = observer(function RequirementTypeEditor() {
 
   return (
     <>
-      <PageHead title={`${metadata.name} - 需求模板库`} />
+      <PageHead title={`${metadata.name} - 需求模板`} />
       <SettingsFullBleedContentWrapper
         header={
           <Header>
@@ -126,7 +126,7 @@ export const RequirementTypeEditor = observer(function RequirementTypeEditor() {
                     /* 不能用 Link：离开编辑器前要先确认丢弃草稿 */
                     <button type="button" onClick={handleBack}>
                       <BreadcrumbLink
-                        label="需求模板库"
+                        label="需求模板"
                         icon={<RequirementIcon className="size-4 text-secondary" />}
                       />
                     </button>

@@ -387,7 +387,7 @@ def promote_field_to_definition(field):
         workspace_id=workspace_id, parent__isnull=True, name__iexact=field.name
     ).exists():
         raise RequirementFieldLibraryError(
-            f"通用字段库里已有名为「{field.name}」的字段，请先改名。",
+            f"通用字段里已有名为「{field.name}」的字段，请先改名。",
             code="REQUIREMENT_FIELD_DEFINITION_NAME_TAKEN",
         )
 

@@ -148,7 +148,7 @@ export function RequirementTypesList(props: Props) {
   // 模板中心统一页头：标题 + 数量，右侧搜索 + 主按钮
   const heading = (
     <TemplatePageHeader
-      title="需求模板库"
+      title="需求模板"
       count={isLoading && requirementTypes.length === 0 ? undefined : requirementTypes.length}
     >
       <TemplatePageSearch value={search} onChange={setSearch} placeholder="搜索类型" />
