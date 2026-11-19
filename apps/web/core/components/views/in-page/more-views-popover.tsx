@@ -7,7 +7,7 @@ import { Tooltip } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { ButtonAvatars } from "@/components/dropdowns/member/avatar";
 import { isModeView, ModeViewBadge } from "./mode-view";
-import { getViewTabClassName, ViewLayoutIcon } from "./view-tab-parts";
+import { getViewUnderlineTabClassName, ViewLayoutIcon } from "./view-tab-parts";
 
 type TMoreViewsPopoverProps = {
   /** 没放进页签栏的视图：放不下的 + 收起的 */
@@ -108,14 +108,10 @@ export const MoreViewsPopover = (props: TMoreViewsPopoverProps) => {
 
   return (
     <Popover open={isOpen} onOpenChange={setIsOpen}>
-      <Popover.Button
-        className={cn(getViewTabClassName(false), isOpen && "bg-layer-transparent-active text-primary")}
-      >
+      <Popover.Button className={cn(getViewUnderlineTabClassName(false), "gap-1", isOpen && "text-primary")}>
         更多
-        <span className="grid h-[18px] min-w-[18px] place-items-center rounded-full bg-layer-3 px-1 text-11 font-semibold text-secondary">
-          {views.length}
-        </span>
-        <ChevronDown className="size-3.5" />
+        <span className="text-12 font-normal text-tertiary">{views.length}</span>
+        <ChevronDown className="size-3.5 text-tertiary" />
       </Popover.Button>
       <Popover.Panel
         placement="bottom-start"

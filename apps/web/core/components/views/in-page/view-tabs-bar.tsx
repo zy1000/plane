@@ -1,6 +1,6 @@
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { Check, ChevronDown, Copy, Layers, Plus, SlidersHorizontal, Star } from "lucide-react";
+import { Check, ChevronDown, Copy, Plus, SlidersHorizontal, Star } from "lucide-react";
 import { Button } from "@plane/propel/button";
 import type { IProjectView } from "@plane/types";
 import { CustomMenu, Tooltip } from "@plane/ui";
@@ -16,7 +16,7 @@ import {
   ViewActionsMenu,
   ViewMenuSeparator,
 } from "./view-actions-menu";
-import { getViewTabClassName, ViewLayoutIcon, ViewTabContent } from "./view-tab-parts";
+import { getViewUnderlineTabClassName, ViewTabContent } from "./view-tab-parts";
 
 type TViewTabsBarProps = {
   allLabel: string;
@@ -60,13 +60,6 @@ const RESERVED_WIDTH = 150;
 /** 页签之间的 gap-1 */
 const TAB_GAP = 4;
 
-const allIcon = (isActive: boolean) => (
-  <Layers className={cn("size-3.5 shrink-0", isActive ? "text-accent-primary" : "text-tertiary")} />
-);
-
-const viewIcon = (view: IProjectView, isActive: boolean) => (
-  <ViewLayoutIcon view={view} className={isActive ? "text-accent-primary" : "text-tertiary"} />
-);
 
 type TSaveSplitButtonProps = {
   viewName: string;
@@ -221,10 +214,8 @@ export const ViewTabsBar = (props: TViewTabsBarProps) => {
           canDelete={canDeleteView(view)}
           canCreate={canCreate}
           className="shrink-0"
-          customButton={
-            <ViewTabContent icon={viewIcon(view, true)} label={view.name} isModeView={isModeView(view)} withChevron />
-          }
-          customButtonClassName={getViewTabClassName(true)}
+          customButton={<ViewTabContent label={view.name} isModeView={isModeView(view)} withChevron />}
+          customButtonClassName={getViewUnderlineTabClassName(true)}
           onRename={onRename}
           onDuplicate={onDuplicate}
           onToggleAccess={onToggleAccess}
@@ -241,10 +232,9 @@ export const ViewTabsBar = (props: TViewTabsBarProps) => {
         key={view.id}
         type="button"
         onClick={() => onSelect(view.id)}
-        className={getViewTabClassName(isActive)}
+        className={getViewUnderlineTabClassName(isActive)}
       >
         <ViewTabContent
-          icon={viewIcon(view, isActive)}
           label={view.name}
           isModeView={isModeView(view)}
           isDirty={isActive && isDirty}
@@ -258,8 +248,8 @@ export const ViewTabsBar = (props: TViewTabsBarProps) => {
       return (
         <CustomMenu
           className="shrink-0"
-          customButton={<ViewTabContent icon={allIcon(true)} label={allLabel} withChevron />}
-          customButtonClassName={getViewTabClassName(true)}
+          customButton={<ViewTabContent label={allLabel} withChevron />}
+          customButtonClassName={getViewUnderlineTabClassName(true)}
           placement="bottom-start"
           optionsClassName={VIEW_MENU_OPTIONS_CLASS}
           maxHeight="lg"
@@ -282,17 +272,16 @@ export const ViewTabsBar = (props: TViewTabsBarProps) => {
         </CustomMenu>
       );
     return (
-      <button type="button" onClick={() => onSelect(null)} className={getViewTabClassName(isAllActive)}>
-        <ViewTabContent icon={allIcon(isAllActive)} label={allLabel} isDirty={isAllActive && isDirty} />
+      <button type="button" onClick={() => onSelect(null)} className={getViewUnderlineTabClassName(isAllActive)}>
+        <ViewTabContent label={allLabel} isDirty={isAllActive && isDirty} />
       </button>
     );
   };
 
   /** 量宽行里的副本：样式与真页签一致（当前页签带 ▾ 或改动点） */
-  const renderGhost = (key: string, label: string, isActive: boolean, icon: ReactNode, isMode = false) => (
-    <span key={key} className={getViewTabClassName(isActive)}>
+  const renderGhost = (key: string, label: string, isActive: boolean, isMode = false) => (
+    <span key={key} className={getViewUnderlineTabClassName(isActive)}>
       <ViewTabContent
-        icon={icon}
         label={label}
         isModeView={isMode}
         isDirty={isActive && isDirty}
@@ -302,9 +291,10 @@ export const ViewTabsBar = (props: TViewTabsBarProps) => {
   );
 
   return (
+    // 底线用 inset 阴影而不是 border：页签下划线要正好压在这条线上
     <div
       data-view-tabs
-      className="relative flex h-12 shrink-0 items-center gap-2 border-b border-subtle bg-surface-1 px-4"
+      className="relative flex h-12 shrink-0 items-center gap-2 bg-surface-1 pr-4 pl-2.5 shadow-[inset_0_-1px_0_var(--border-subtle)]"
     >
       {/* 隐藏的量宽行 */}
       <div
@@ -312,18 +302,9 @@ export const ViewTabsBar = (props: TViewTabsBarProps) => {
         aria-hidden
         className="pointer-events-none absolute top-0 left-0 flex h-0 items-center gap-1 overflow-hidden opacity-0"
       >
-        {renderGhost("all", allLabel, isAllActive, allIcon(isAllActive))}
-        {views.map((view) =>
-          renderGhost(view.id, view.name, view.id === activeViewId, viewIcon(view, false), isModeView(view))
-        )}
-        {activeOutsideBar &&
-          renderGhost(
-            "extra",
-            activeOutsideBar.name,
-            true,
-            viewIcon(activeOutsideBar, true),
-            isModeView(activeOutsideBar)
-          )}
+        {renderGhost("all", allLabel, isAllActive)}
+        {views.map((view) => renderGhost(view.id, view.name, view.id === activeViewId, isModeView(view)))}
+        {activeOutsideBar && renderGhost("extra", activeOutsideBar.name, true, isModeView(activeOutsideBar))}
       </div>
 
       <div ref={containerRef} data-view-tabs-strip className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
@@ -348,19 +329,16 @@ export const ViewTabsBar = (props: TViewTabsBarProps) => {
           />
         )}
         {canCreate && (
-          <>
-            <span className="mx-1.5 h-[18px] w-px shrink-0 bg-layer-3" />
-            <Tooltip tooltipContent="新建视图">
-              <button
-                type="button"
-                onClick={onCreate}
-                className="grid size-8 shrink-0 place-items-center rounded-lg text-secondary hover:bg-layer-transparent-hover hover:text-primary"
-                aria-label="新建视图"
-              >
-                <Plus className="size-4" />
-              </button>
-            </Tooltip>
-          </>
+          <Tooltip tooltipContent="新建视图">
+            <button
+              type="button"
+              onClick={onCreate}
+              className="ml-1 grid size-7 shrink-0 place-items-center rounded-md text-tertiary hover:bg-layer-transparent-hover hover:text-primary"
+              aria-label="新建视图"
+            >
+              <Plus className="size-4" />
+            </button>
+          </Tooltip>
         )}
       </div>
 
