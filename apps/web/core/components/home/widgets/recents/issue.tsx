@@ -76,7 +76,13 @@ export const RecentIssue = observer(function RecentIssue(props: BlockProps) {
           {issueDetails.type ? (
             <div className="flex items-center gap-2">
               <div className="grid size-8 flex-shrink-0 place-items-center rounded-sm bg-layer-2">
-                <WorkItemTypeIcon typeName={issueDetails.type_name} size={16} className="flex-shrink-0" />
+                <WorkItemTypeIcon
+                  typeName={issueDetails.type_name}
+                  projectId={issueDetails.project_id}
+                  typeId={issueDetails.type}
+                  size={16}
+                  className="flex-shrink-0"
+                />
               </div>
               <IssueIdentifier
                 size="lg"

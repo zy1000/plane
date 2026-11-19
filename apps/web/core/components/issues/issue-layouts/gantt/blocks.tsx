@@ -149,7 +149,11 @@ export const IssueGanttSidebarBlock = observer(function IssueGanttSidebarBlock(p
       disabled={!!issueDetails?.tempId}
     >
       <div className="relative flex h-full w-max cursor-pointer items-center gap-2 whitespace-nowrap">
-        <WorkItemTypeIcon typeName={issueDetails?.type_name} />
+        <WorkItemTypeIcon
+          typeName={issueDetails?.type_name}
+          projectId={issueDetails?.project_id}
+          typeId={issueDetails?.type_id}
+        />
         {issueDetails?.project_id && (
           <IssueIdentifier
             issueId={issueDetails.id}

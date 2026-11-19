@@ -76,8 +76,8 @@ type TTimesheetRowAddModalProps = {
   onClose: () => void;
 };
 
-function renderIssueTypeIcon(issue: TIssueItem) {
-  return <WorkItemTypeIcon typeName={issue.type_name} />;
+function renderIssueTypeIcon(issue: TIssueItem, projectId?: string) {
+  return <WorkItemTypeIcon typeName={issue.type_name} projectId={projectId} typeId={issue.type_id} />;
 }
 
 function parseIssueItems(raw: any): TIssueItem[] {
@@ -645,7 +645,7 @@ export const TimesheetRowAddModal = observer(function TimesheetRowAddModal({
                       ) : (
                         <Square className="h-4 w-4 shrink-0 text-tertiary" />
                       )}
-                      {renderIssueTypeIcon(issue)}
+                      {renderIssueTypeIcon(issue, selectedCategory?.projectId)}
                       <span className="text-tertiary text-sm tabular-nums shrink-0">
                         #{issue.sequence_id}
                       </span>

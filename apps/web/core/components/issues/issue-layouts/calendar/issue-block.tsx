@@ -125,7 +125,7 @@ export const CalendarIssueBlock = observer(
                         backgroundColor: stateColor,
                       }}
                     />
-                    <WorkItemTypeIcon typeName={issue.type_name} />
+                    <WorkItemTypeIcon typeName={issue.type_name} projectId={issue.project_id} typeId={issue.type_id} />
                     {issue.project_id && (
                       <IssueIdentifier
                         issueId={issue.id}

@@ -178,10 +178,18 @@ function buildBlocks(
   });
 }
 
-function renderIssueTypeIcon(typeName: string | null | undefined, size = 3) {
+function renderIssueTypeIcon(block: TTimesheetBlock, size = 3) {
   const sizeClass = size === 3 ? "h-3 w-3" : "h-3.5 w-3.5";
   const wrapClass = size === 3 ? "h-4 w-4" : "h-5 w-5";
-  return <WorkItemTypeIcon typeName={typeName} className={wrapClass} iconClassName={sizeClass} />;
+  return (
+    <WorkItemTypeIcon
+      typeName={block.issue_detail?.type_name}
+      projectId={block.project}
+      typeId={block.issue_detail?.type_id}
+      className={wrapClass}
+      iconClassName={sizeClass}
+    />
+  );
 }
 
 function renderBlockIcon(
@@ -193,7 +201,7 @@ function renderBlockIcon(
   const wrapClass = size === 3 ? "h-4 w-4" : "h-5 w-5";
 
   if (block.blockType === "issue") {
-    return renderIssueTypeIcon(block.issue_detail?.type_name, size);
+    return renderIssueTypeIcon(block, size);
   }
 
   if (block.blockType === "test_case") {

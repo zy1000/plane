@@ -381,7 +381,12 @@ const IssueRowDetails = observer(function IssueRowDetails(props: IssueRowDetails
 
               {(displayProperties?.key || displayProperties?.issue_type) && (
                 <div className="relative flex h-full cursor-pointer items-center gap-2 flex-shrink-0">
-                  <WorkItemTypeIcon typeName={issueDetail.type_name} fallbackIcon={issueTypeLogoIcon} />
+                  <WorkItemTypeIcon
+                    typeName={issueDetail.type_name}
+                    fallbackIcon={issueTypeLogoIcon}
+                    projectId={issueDetail.project_id}
+                    typeId={issueDetail.type_id}
+                  />
                   <p className="flex font-medium leading-7" style={{ minWidth: `${keyMinWidth}px` }}>
                     {issueDetail.project_id && (
                       <IssueIdentifier

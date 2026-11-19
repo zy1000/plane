@@ -135,7 +135,14 @@ export const WorkItemSelectModal: React.FC<Props> = ({
   // 渲染类型图标（优先使用后端返回的 type_name）
   const renderIssueTypeIcon = (record: TIssue) => {
     const typeName = (record as any)?.type_name || (record as any)?.type?.name || "";
-    return <WorkItemTypeIcon typeName={typeName} />;
+    return (
+      <WorkItemTypeIcon
+        typeName={typeName}
+        fallbackIcon={(record as any)?.type?.logo_props?.icon}
+        projectId={record.project_id}
+        typeId={record.type_id}
+      />
+    );
   };
   // 新增：Table 列定义（展示名称与状态）
   const columns = useMemo(

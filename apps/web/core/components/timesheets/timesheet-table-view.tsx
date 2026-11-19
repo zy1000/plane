@@ -209,6 +209,8 @@ export const TimesheetTableView = observer(function TimesheetTableView({
                           {row.type === "issue" ? (
                             <WorkItemTypeIcon
                               typeName={row.issueTypeName}
+                              projectId={row.projectId}
+                              typeId={row.issueTypeId}
                               className="h-5 w-5"
                               size={20}
                               plain

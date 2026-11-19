@@ -316,7 +316,12 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
 
               {displayProperties && (displayProperties.key || displayProperties.issue_type) && (
                 <div className="flex-shrink-0  flex items-center gap-1" style={{ minWidth: `${keyMinWidth}px` }}>
-                  <WorkItemTypeIcon typeName={issue.type_name} fallbackIcon={issueTypeLogoIcon} />
+                  <WorkItemTypeIcon
+                    typeName={issue.type_name}
+                    fallbackIcon={issueTypeLogoIcon}
+                    projectId={issue.project_id}
+                    typeId={issue.type_id}
+                  />
                   {issue.project_id && (
                     <IssueIdentifier
                       issueId={issueId}
