@@ -27,6 +27,7 @@ from plane.app.permissions import ProjectEntityPermission
 from plane.db.models import Issue, IssueLink, FileAsset, CycleIssue
 from plane.bgtasks.issue_activities_task import issue_activity
 from plane.utils.timezone_converter import user_timezone_converter
+from plane.utils.issue_id_arrays import issue_id_array_annotations
 from collections import defaultdict
 from plane.utils.host import base_host
 from plane.utils.order_queryset import order_issue_queryset
@@ -240,8 +241,6 @@ class SubIssuesEndpoint(BaseAPIView):
     def get(self, request, slug, project_id, issue_id):
         sub_issues = (
             Issue.issue_objects.filter(parent_id=issue_id, workspace__slug=slug)
-            .select_related("workspace", "project", "state", "parent")
-            .prefetch_related("assignees", "labels", "issue_module__module")
             .annotate(
                 cycle_id=Subquery(
                     CycleIssue.objects.filter(issue=OuterRef("id"), deleted_at__isnull=True).values("cycle_id")[:1]
@@ -268,52 +267,8 @@ class SubIssuesEndpoint(BaseAPIView):
                 .annotate(count=Func(F("id"), function="Count"))
                 .values("count")
             )
-            .annotate(
-                label_ids=Coalesce(
-                    ArrayAgg(
-                        "labels__id",
-                        distinct=True,
-                        filter=Q(~Q(labels__id__isnull=True) & Q(label_issue__deleted_at__isnull=True)),
-                    ),
-                    Value([], output_field=ArrayField(UUIDField())),
-                ),
-                assignee_ids=Coalesce(
-                    ArrayAgg(
-                        "assignees__id",
-                        distinct=True,
-                        filter=Q(
-                            ~Q(assignees__id__isnull=True)
-                            & Q(assignees__member_project__is_active=True)
-                            & Q(issue_assignee__deleted_at__isnull=True)
-                        ),
-                    ),
-                    Value([], output_field=ArrayField(UUIDField())),
-                ),
-                module_ids=Coalesce(
-                    ArrayAgg(
-                        "issue_module__module_id",
-                        distinct=True,
-                        filter=Q(
-                            ~Q(issue_module__module_id__isnull=True)
-                            & Q(issue_module__module__archived_at__isnull=True)
-                            & Q(issue_module__deleted_at__isnull=True)
-                        ),
-                    ),
-                    Value([], output_field=ArrayField(UUIDField())),
-                ),
-                release_ids=Coalesce(
-                    ArrayAgg(
-                        "issue_release__release_id",
-                        distinct=True,
-                        filter=Q(
-                            ~Q(issue_release__release_id__isnull=True)
-                            & Q(issue_release__release__archived_at__isnull=True)
-                            & Q(issue_release__deleted_at__isnull=True)
-                        ),
-                    ),
-                    Value([], output_field=ArrayField(UUIDField())),
-                ),
-            )
+            # 四个 id 数组走关联子查询，不 JOIN + GROUP BY（见 issue_id_arrays 模块说明）
+            .annotate(**issue_id_array_annotations())
             .annotate(state_group=F("state__group"))
             .order_by("-created_at")
         )
@@ -324,11 +279,6 @@ class SubIssuesEndpoint(BaseAPIView):
 
         if order_by_param:
             sub_issues, order_by_param = order_issue_queryset(sub_issues, order_by_param)
-
-        # create's a dict with state group name with their respective issue id's
-        result = defaultdict(list)
-        for sub_issue in sub_issues:
-            result[sub_issue.state_group].append(str(sub_issue.id))
 
         sub_issues = sub_issues.values(
             "id",
@@ -362,9 +312,17 @@ class SubIssuesEndpoint(BaseAPIView):
             "link_count",
             "is_draft",
             "archived_at",
+            "state_group",
         )
         datetime_fields = ["created_at", "updated_at"]
         sub_issues = user_timezone_converter(sub_issues, datetime_fields, request.user.user_timezone)
+
+        # create's a dict with state group name with their respective issue id's
+        # 和列表同一次查询算出来；state_group 只用于这里，不进响应
+        result = defaultdict(list)
+        for sub_issue in sub_issues:
+            result[sub_issue.pop("state_group")].append(str(sub_issue["id"]))
+
         # Grouping
         if group_by:
             result_dict = defaultdict(list)

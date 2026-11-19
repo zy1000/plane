@@ -94,6 +94,7 @@ from plane.utils.grouper import (
 )
 from plane.utils.host import base_host
 from plane.utils.issue_filters import issue_filters
+from plane.utils.issue_id_arrays import issue_id_array_annotations
 from plane.utils.issue_product import module_path_label
 from plane.utils.order_queryset import order_issue_queryset
 from plane.utils.paginator import GroupedOffsetPaginator, SubGroupedOffsetPaginator
@@ -2018,55 +2019,8 @@ class IssueDetailIdentifierEndpoint(BaseAPIView):
                 .values("count")
             )
             .filter(sequence_id=issue_identifier)
-            .annotate(
-                label_ids=Coalesce(
-                    ArrayAgg(
-                        "labels__id",
-                        distinct=True,
-                        filter=Q(
-                            ~Q(labels__id__isnull=True)
-                            & Q(label_issue__deleted_at__isnull=True)
-                        ),
-                    ),
-                    Value([], output_field=ArrayField(UUIDField())),
-                ),
-                assignee_ids=Coalesce(
-                    ArrayAgg(
-                        "assignees__id",
-                        distinct=True,
-                        filter=Q(
-                            ~Q(assignees__id__isnull=True)
-                            & Q(assignees__member_project__is_active=True)
-                            & Q(issue_assignee__deleted_at__isnull=True)
-                        ),
-                    ),
-                    Value([], output_field=ArrayField(UUIDField())),
-                ),
-                module_ids=Coalesce(
-                    ArrayAgg(
-                        "issue_module__module_id",
-                        distinct=True,
-                        filter=Q(
-                            ~Q(issue_module__module_id__isnull=True)
-                            & Q(issue_module__module__archived_at__isnull=True)
-                            & Q(issue_module__deleted_at__isnull=True)
-                        ),
-                    ),
-                    Value([], output_field=ArrayField(UUIDField())),
-                ),
-                release_ids=Coalesce(
-                    ArrayAgg(
-                        "issue_release__release_id",
-                        distinct=True,
-                        filter=Q(
-                            ~Q(issue_release__release_id__isnull=True)
-                            & Q(issue_release__release__archived_at__isnull=True)
-                            & Q(issue_release__deleted_at__isnull=True)
-                        ),
-                    ),
-                    Value([], output_field=ArrayField(UUIDField())),
-                ),
-            )
+            # 四个 id 数组走关联子查询，不 JOIN + GROUP BY（见 issue_id_arrays 模块说明）
+            .annotate(**issue_id_array_annotations())
             .prefetch_related(
                 Prefetch(
                     "issue_reactions",
