@@ -122,7 +122,9 @@ class BaseRequirementContainerViewSet(BaseViewSet):
         linked = {
             str(value)
             for value in RequirementProject.objects.filter(
-                project_id=project_id, requirement_id__in=requested
+                project_id=project_id,
+                requirement_id__in=requested,
+                requirement__deleted_at__isnull=True,
             )
             .order_by()
             .values_list("requirement_id", flat=True)

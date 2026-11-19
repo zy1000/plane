@@ -469,6 +469,7 @@ def annotate_project_ids(queryset):
             requirement_id=OuterRef("pk"),
             deleted_at__isnull=True,
             project__archived_at__isnull=True,
+            project__deleted_at__isnull=True,
         )
         .values("requirement_id")
         .annotate(arr=ArrayAgg("project_id"))

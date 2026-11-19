@@ -23,23 +23,23 @@ class CycleStateCheckResult:
 
 
 def has_issues(cycle: Cycle):
-    return CycleIssue.objects.filter(cycle=cycle).exists()
+    return CycleIssue.objects.filter(cycle=cycle, issue__deleted_at__isnull=True).exists()
 
 
 def all_issues_done(cycle: Cycle):
     """判断迭代下面的工作项是否全部完成（忽略已取消）。"""
-    return not CycleIssue.objects.filter(cycle=cycle).exclude(
+    return not CycleIssue.objects.filter(cycle=cycle, issue__deleted_at__isnull=True).exclude(
         issue__state__group__in=[StateGroup.COMPLETED, StateGroup.CANCELLED]
     ).exists()
 
 def all_issues_ready(cycle: Cycle):
-    return not CycleIssue.objects.filter(cycle=cycle).exclude(
+    return not CycleIssue.objects.filter(cycle=cycle, issue__deleted_at__isnull=True).exclude(
         issue__state__group__in=[StateGroup.COMPLETED, StateGroup.CANCELLED,StateGroup.STARTED]
     ).exists()
 
 def all_issues_cancelled(cycle: Cycle):
     """判断迭代下的工作项是否全部取消。"""
-    return not CycleIssue.objects.filter(cycle=cycle).exclude(
+    return not CycleIssue.objects.filter(cycle=cycle, issue__deleted_at__isnull=True).exclude(
         issue__state__group=StateGroup.CANCELLED
     ).exists()
 

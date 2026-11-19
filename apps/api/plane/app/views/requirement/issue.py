@@ -111,6 +111,7 @@ class RequirementIssueViewSet(BaseViewSet):
             workspace__slug=slug,
             project_id=project_id,
             requirement_id=requirement_id,
+            requirement__deleted_at__isnull=True,
         ).first()
         if link is None:
             return Response(

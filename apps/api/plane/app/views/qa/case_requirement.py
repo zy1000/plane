@@ -57,7 +57,9 @@ class CaseRequirementAPIView(CaseScopedMixin, BaseAPIView):
             )
 
         links = (
-            RequirementTestCase.objects.filter(case_id=case.id)
+            RequirementTestCase.objects.filter(
+                case_id=case.id, requirement__deleted_at__isnull=True
+            )
             .select_related("requirement", "requirement__product")
             .order_by("-created_at")
         )
