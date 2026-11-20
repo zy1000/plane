@@ -16,6 +16,7 @@ import type { TProductionMode, TShipmentAssessment, TStageReviewDetail, TUpdateS
 import { STAGE_REVIEW_ACTIVITY_KINDS } from "@plane/types";
 import { cn, getDate, renderFormattedDate, renderFormattedPayloadDate } from "@plane/utils";
 import { DateDropdown } from "@/components/dropdowns/date";
+import { NotifyScopeSection } from "@/components/notify";
 import { StageReviewResultBadge } from "../badges";
 import type { TOStageField, TOStageFieldValue } from "../o-stage-fields";
 import { OStageFieldSelect, OStageValue, STAGE_REVIEW_O_STAGE_KINDS } from "../o-stage-fields";
@@ -313,6 +314,16 @@ export const StageReviewSidebar = ({
           </div>
         )}
       </Card>
+
+      {/* 通知对象：评审是流程单据，不设订阅人；邮件发给审核人、负责人，结果知会阶段负责人和阶段订阅人 */}
+      <NotifyScopeSection
+        variant="card"
+        workspaceSlug={workspaceSlug}
+        projectId={projectId}
+        entityType="stage_review"
+        entityId={detail.id}
+        revision={detail.updated_at}
+      />
 
       {/* 来源与创建时间：查证用的一行小字，跟在卡片后面，不钉到最底 */}
       <p className="px-1 text-12 leading-relaxed text-placeholder">

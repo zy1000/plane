@@ -8,6 +8,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   ArrowUpToLine,
   BadgeCheck,
+  Bell,
   Building,
   FolderKanban,
   IdCard,
@@ -32,6 +33,7 @@ export const WORKSPACE_SETTINGS_ICONS: Record<TWorkspaceSettingsTabs, LucideIcon
   "job-roles": IdCard,
   groups: UsersRound,
   roles: ShieldCheck,
+  notifications: Bell,
   templates: FolderKanban,
   export: ArrowUpToLine,
   webhooks: Webhook,

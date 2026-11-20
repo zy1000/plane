@@ -19,6 +19,7 @@ import { Avatar, AvatarGroup } from "@plane/ui";
 import { cn, getDate, getFileURL, renderFormattedPayloadDate } from "@plane/utils";
 import { DateDropdown } from "@/components/dropdowns/date";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
+import { NotifyScopeSection } from "@/components/notify";
 import { useMember } from "@/hooks/store/use-member";
 import {
   RISK_I18N,
@@ -175,10 +176,12 @@ const EditMember = ({
  * 查看时全是纯文本；顶栏点「编辑」后换成带边框的下拉，改动进草稿，与正文一起保存。
  */
 export const RiskSidebar = ({
+  workspaceSlug,
   projectId,
   detail,
   session,
 }: {
+  workspaceSlug: string;
   projectId: string;
   detail: TRiskDetail;
   session: TRiskEditSession;
@@ -372,6 +375,18 @@ export const RiskSidebar = ({
           )}
         </Row>
       </Card>
+
+      {/* 通知对象：这条风险的邮件发给谁。名单跟着责任人、提出人、干系人走，编辑中的改动保存后才生效，所以编辑态不显示 */}
+      {!isEditing && (
+        <NotifyScopeSection
+          variant="card"
+          workspaceSlug={workspaceSlug}
+          projectId={projectId}
+          entityType="risk"
+          entityId={detail.id}
+          revision={detail.updated_at}
+        />
+      )}
 
       {/* 创建与更新信息：查证用的两行小字，跟在卡片后面，不钉到最底 */}
       <p className="flex flex-col gap-0.5 px-1 text-12 leading-relaxed text-placeholder tabular-nums">

@@ -31,6 +31,19 @@ app.conf.beat_schedule = {
         "task": "plane.bgtasks.email_notification_task.stack_email_notification",
         "schedule": crontab(minute="*/5"),  # Every 5 minutes
     },
+    # 统一通知入口：即时邮件的合并 / 投递 / 重试每分钟跑一次；每日摘要工作日北京时间 08:30
+    "flush-notify-mails-every-minute": {
+        "task": "plane.bgtasks.notify_task.flush_notify_mails",
+        "schedule": crontab(),  # Every minute
+    },
+    "send-notify-digests-on-workdays": {
+        "task": "plane.bgtasks.notify_task.send_notify_digests",
+        "schedule": crontab(hour=0, minute=30, day_of_week="1-5"),  # UTC 00:30, Beijing 08:30, Mon-Fri
+    },
+    "purge-notify-records-daily": {
+        "task": "plane.bgtasks.notify_task.purge_notify_records",
+        "schedule": crontab(hour=2, minute=50),  # UTC 02:50
+    },
     "run-every-6-hours-for-instance-trace": {
         "task": "plane.license.bgtasks.tracer.instance_traces",
         "schedule": crontab(hour="*/6", minute=0),  # Every 6 hours

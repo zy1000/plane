@@ -35,6 +35,7 @@ export const GROUPED_WORKSPACE_SETTINGS = {
     WORKSPACE_SETTINGS["job-roles"],
     WORKSPACE_SETTINGS["groups"],
     WORKSPACE_SETTINGS["roles"],
+    WORKSPACE_SETTINGS["notifications"],
     WORKSPACE_SETTINGS["export"],
   ],
   // 「模板」分区现在是空的：需求类型挪进了模板中心（/templates/requirement-types），

@@ -4,40 +4,35 @@
  * See the LICENSE file for details.
  */
 
-import useSWR from "swr";
 import { observer } from "mobx-react";
-// plane imports
-import { useTranslation } from "@plane/i18n";
-// components
-import { ProfileSettingsHeading } from "@/components/settings/profile/heading";
-import { EmailSettingsLoader } from "@/components/ui/loader/settings/email";
-// services
-import { UserService } from "@/services/user.service";
+import { useSearchParams } from "next/navigation";
+// hooks
+import { useUserSettings } from "@/hooks/store/user";
+import { useAppRouter } from "@/hooks/use-app-router";
 // local imports
-import { NotificationsProfileSettingsForm } from "./email-notification-form";
+import { MyNotifySubscriptions } from "./my-subscriptions";
+import { NotifyPreferenceSettings } from "./preference-settings";
 
-const userService = new UserService();
+const NOTIFICATIONS_PATH = "/settings/profile/notifications";
 
+/**
+ * 个人设置 › 通知。默认是接收方式；`?view=subscriptions` 是「我的订阅」子页
+ * （邮件页脚的「管理订阅」也指到这里）。个人设置的地址里没有工作区，订阅按最近使用的工作区取。
+ */
 export const NotificationsProfileSettings = observer(function NotificationsProfileSettings() {
-  const { t } = useTranslation();
-  // fetching user email notification settings
-  const { data, isLoading } = useSWR("CURRENT_USER_EMAIL_NOTIFICATION_SETTINGS", () =>
-    userService.currentUserEmailNotificationSettings()
-  );
+  const router = useAppRouter();
+  const searchParams = useSearchParams();
+  const { data: userSettings } = useUserSettings();
+  const workspaceSlug =
+    userSettings?.workspace?.last_workspace_slug || userSettings?.workspace?.fallback_workspace_slug || undefined;
 
-  if (!data || isLoading) {
-    return <EmailSettingsLoader />;
-  }
+  if (workspaceSlug && searchParams.get("view") === "subscriptions")
+    return <MyNotifySubscriptions workspaceSlug={workspaceSlug} onBack={() => router.push(NOTIFICATIONS_PATH)} />;
 
   return (
-    <div className="size-full">
-      <ProfileSettingsHeading
-        title={t("account_settings.notifications.heading")}
-        description={t("account_settings.notifications.description")}
-      />
-      <div className="mt-7">
-        <NotificationsProfileSettingsForm data={data} />
-      </div>
-    </div>
+    <NotifyPreferenceSettings
+      workspaceSlug={workspaceSlug}
+      onManageSubscriptions={() => router.push(`${NOTIFICATIONS_PATH}?view=subscriptions`)}
+    />
   );
 });

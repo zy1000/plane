@@ -30,6 +30,7 @@ import { Loader, TextArea } from "@plane/ui";
 import { getDate, renderFormattedPayloadDate } from "@plane/utils";
 import { DateRangeDropdown } from "@/components/dropdowns/date-range";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
+import { NotifyScopeSection, NotifySubscribersSection } from "@/components/notify";
 import { CreateUpdateReleaseLinkModal, ReleaseLinksList } from "@/components/releases/links";
 import { ReleaseAnalyticsProgress } from "@/components/releases/analytics-sidebar/issue-progress";
 import { ReleaseOverdueRecordsSection } from "@/components/releases/release-overdue-records-section";
@@ -363,6 +364,24 @@ export const ReleaseAnalyticsSidebar = observer(function ReleaseAnalyticsSidebar
             projectId={projectId.toString()}
             releaseId={releaseDetails.id}
           />
+        )}
+
+        {workspaceSlug && projectId && releaseDetails?.id && (
+          <>
+            <NotifySubscribersSection
+              workspaceSlug={workspaceSlug.toString()}
+              projectId={projectId.toString()}
+              entityType="release"
+              entityId={releaseDetails.id}
+            />
+            <NotifyScopeSection
+              workspaceSlug={workspaceSlug.toString()}
+              projectId={projectId.toString()}
+              entityType="release"
+              entityId={releaseDetails.id}
+              revision={`${releaseDetails.lead_id ?? ""}|${(releaseDetails.member_ids ?? []).join(",")}`}
+            />
+          </>
         )}
 
         <div className="flex flex-col">

@@ -72,6 +72,7 @@ from .release import (
     ReleaseOverdueTrigger,
 )
 from .notification import EmailNotificationLog, Notification, UserNotificationPreference
+from .notify import NotifyCategory, NotifyEvent, NotifyMail, NotifyMode, NotifyRuleOverride, NotifySubscriber
 from .page import Page, PageLabel, PageLog, ProjectPage, PageVersion
 from .permission import Permission
 from .project import (

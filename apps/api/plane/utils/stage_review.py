@@ -32,6 +32,7 @@ from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
+from plane.utils.notify import emit
 from plane.db.models import (
     FileAsset,
     ProjectMember,
@@ -349,7 +350,34 @@ def advance(review, *, actor, payload=None):
             field=field,
             new_value=_activity_value(field, value),
         )
+    _emit_advance(review, actor=actor, new_status=new_status, extra=extra)
     return review
+
+
+def _emit_advance(review, *, actor, new_status, extra):
+    """邮件：提交审核通知审核人；审核通过通知负责人，并知会阶段负责人和阶段订阅人。"""
+    result_label = StageReviewResult(review.result).label if review.result else ""
+    details = [("评审结论", result_label)] if result_label else []
+    if new_status == StageReviewStatus.IN_APPROVAL:
+        emit(
+            "review.submitted",
+            "stage_review",
+            review.id,
+            actor_id=actor.id,
+            summary=f"{actor.display_name} 提交审核，待你审核",
+            details=details,
+        )
+    elif new_status == StageReviewStatus.COMPLETED:
+        if extra.get("approval_comment"):
+            details.append(("审核意见", extra["approval_comment"][:300]))
+        emit(
+            "review.approved",
+            "stage_review",
+            review.id,
+            actor_id=actor.id,
+            summary=f"审核通过，评审结论 {result_label}" if result_label else "审核通过",
+            details=details,
+        )
 
 
 def assert_not_locked(review):
@@ -409,6 +437,16 @@ def rollback(review, *, actor, reason=""):
         comment=ROLLBACK_VERB,
         extra={"rollback_reason": reason},
     )
+    # 邮件：只有审核人把评审退回给负责人时才发；负责人自己退回自己的步骤不用通知
+    if old_status == StageReviewStatus.IN_APPROVAL:
+        emit(
+            "review.returned",
+            "stage_review",
+            review.id,
+            actor_id=actor.id,
+            summary=f"{actor.display_name} 退回了评审",
+            details=[("退回理由", reason[:300])],
+        )
     return review
 
 
@@ -738,6 +776,21 @@ def update_review(review, *, actor, validated_data):
                 new_value=user.display_name,
                 new_identifier=user.id,
             )
+    # 邮件：新加进名单的负责人 / 审核人
+    new_people = {
+        f"new_{_MEMBER_FIELDS[relation]}": [user.id for user in added]
+        for relation, (_users, added, _removed) in member_changes.items()
+        if added
+    }
+    if new_people:
+        emit(
+            "review.people_added",
+            "stage_review",
+            review.id,
+            actor_id=actor.id,
+            summary=f"{actor.display_name} 把你加入了评审",
+            extra_roles=new_people,
+        )
     return review
 
 

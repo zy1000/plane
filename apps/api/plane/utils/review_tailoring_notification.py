@@ -12,6 +12,7 @@
 """
 
 from plane.db.models import Notification, ReviewTailoringApproval
+from plane.utils.notify import emit
 
 
 ENTITY_NAME = "review_tailoring"
@@ -110,6 +111,14 @@ def notify_approval_requested(tailoring, *, actor=None):
         actor=actor,
         title=f"需要你签批裁剪表：{_summary(tailoring)}",
     )
+    emit(
+        "tailoring.requested",
+        "review_tailoring",
+        tailoring.id,
+        actor_id=getattr(actor, "id", None),
+        summary="裁剪表提交签批，待你签批",
+        extra_roles={"approver": _round_approver_ids(tailoring)},
+    )
 
 
 def notify_approval_approved(tailoring, *, actor=None):
@@ -122,6 +131,14 @@ def notify_approval_approved(tailoring, *, actor=None):
         actor=actor,
         title=f"裁剪表已生效：{_summary(tailoring)}",
     )
+    emit(
+        "tailoring.approved",
+        "review_tailoring",
+        tailoring.id,
+        actor_id=getattr(actor, "id", None),
+        summary="裁剪表签批通过，已生效",
+        extra_roles={"initiator": [tailoring.submitted_by_id]},
+    )
 
 
 def notify_approval_rejected(tailoring, *, actor=None):
@@ -133,6 +150,14 @@ def notify_approval_rejected(tailoring, *, actor=None):
         field=FIELD_REJECTED,
         actor=actor,
         title=f"裁剪表被驳回：{_summary(tailoring)}",
+    )
+    emit(
+        "tailoring.rejected",
+        "review_tailoring",
+        tailoring.id,
+        actor_id=getattr(actor, "id", None),
+        summary="裁剪表签批被退回",
+        extra_roles={"initiator": [tailoring.submitted_by_id]},
     )
 
 

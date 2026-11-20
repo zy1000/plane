@@ -832,6 +832,14 @@ def track_assignees(
             )
         )
 
+    # 订阅收紧：不再是负责人的，把指派时自动加的订阅去掉（创建人除外）；还想关注可以自己再点订阅
+    dropped_ids = [value for value in dropped_assginees if is_valid_uuid(value)]
+    if dropped_ids:
+        creator_id = Issue.objects.filter(pk=issue_id).values_list("created_by_id", flat=True).first()
+        IssueSubscriber.objects.filter(issue_id=issue_id, subscriber_id__in=dropped_ids).exclude(
+            subscriber_id=creator_id
+        ).delete()
+
 
 def track_estimate_points(
     requested_data,

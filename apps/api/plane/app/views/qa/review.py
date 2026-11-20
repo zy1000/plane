@@ -28,6 +28,7 @@ from plane.app.views.qa.case_scope import (
 from plane.db.models import CaseReview, CaseReviewModule, CaseReviewThrough, CaseModule, TestCase, CaseReviewRecord, \
     TestCaseRepository, TestCaseVersion, Product
 from plane.bgtasks.test_case_activities_task import test_case_activity
+from plane.utils.notify import emit
 from plane.utils.paginator import CustomPaginator
 from plane.utils.qa import (
     build_review_case_rows,
@@ -51,6 +52,19 @@ def _member_error(request, slug):
     if not is_workspace_member(request.user, slug):
         return Response({"error": "You must be an active workspace member."}, status=status.HTTP_403_FORBIDDEN)
     return None
+
+
+def _emit_case_review_assigned(review, actor, assignee_ids, case_count):
+    """邮件按「人 × 评审」发：一封写明这次评审有多少条用例待评审；同一评审当天再追加的进第二天摘要。"""
+    emit(
+        "casereview.assigned",
+        "case_review",
+        review.id,
+        actor_id=actor.id,
+        summary=f"{case_count} 条用例待你评审",
+        extra_roles={"reviewer": list(assignee_ids)},
+        dedupe_key=f"casereview.assigned:{review.id}",
+    )
 
 
 def _review_workspace_q(slug, prefix=""):
@@ -375,6 +389,7 @@ class CaseReviewView(BaseViewSet):
                 for crt in created:
                     update_case_review_status(review, crt)
                 sync_review_reviewer_summary(review)
+                _emit_case_review_assigned(review, request.user, assignee_ids, len(created))
             update_review_status(review)
 
 
@@ -425,6 +440,8 @@ class CaseReviewView(BaseViewSet):
         for crt in crts:
             update_case_review_status(review, crt)
         sync_review_reviewer_summary(review)
+        if assignee_ids:
+            _emit_case_review_assigned(review, request.user, assignee_ids, len(crts))
 
         return Response(status=status.HTTP_200_OK)
 
@@ -535,6 +552,7 @@ class CaseReviewView(BaseViewSet):
 
         cr = CaseReview.objects.filter(_review_workspace_q(slug)).get(id=review_id)
         skipped_case_ids = []
+        rejected_owner_ids = set()
 
         for case_id in case_ids:
             crt = CaseReviewThrough.objects.get(review=cr, case_id=case_id)
@@ -597,6 +615,19 @@ class CaseReviewView(BaseViewSet):
             # 如果评审通过，则创建用例快照
             if crt.result == CaseReviewThrough.Result.PASS:
                 TestCaseVersion.create_from_case(case=TestCase.objects.get(id=case_id))
+            elif crt.result == CaseReviewThrough.Result.FAIL and old_review_result != CaseReviewThrough.Result.FAIL:
+                rejected_owner_ids.add(crt.case.assignee_id or crt.case.created_by_id)
+
+        if rejected_owner_ids:
+            emit(
+                "casereview.rejected",
+                "case_review",
+                cr.id,
+                actor_id=request.user.id,
+                summary="有用例评审不通过，请修改后重新提审",
+                extra_roles={"case_owner": list(rejected_owner_ids)},
+                dedupe_key=f"casereview.rejected:{cr.id}",
+            )
 
         return Response({"skipped_case_ids": skipped_case_ids}, status=status.HTTP_200_OK)
 

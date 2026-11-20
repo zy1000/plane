@@ -251,6 +251,14 @@ export const WORKSPACE_SETTINGS = {
     permissionKeys: [PERMISSION_KEYS.WORKSPACE_DATA_DICTIONARY_VIEW, PERMISSION_KEYS.WORKSPACE_DATA_DICTIONARY_MANAGE],
     highlight: (pathname: string, baseUrl: string) => pathname.startsWith(`${baseUrl}/settings/job-roles`),
   },
+  // 通知：邮件通知规则（什么事件发给哪些角色、即时还是每日摘要）+ 邮件发送记录，与后端 notify/rules、notify/mails 同一口径
+  notifications: {
+    key: "notifications",
+    i18n_label: "workspace_settings.settings.notifications.title",
+    href: `/settings/notifications`,
+    permissionKeys: [PERMISSION_KEYS.WORKSPACE_SETTINGS_EDIT],
+    highlight: (pathname: string, baseUrl: string) => pathname.startsWith(`${baseUrl}/settings/notifications`),
+  },
   integrations: {
     key: "integrations",
     i18n_label: "workspace_settings.settings.integrations.title",

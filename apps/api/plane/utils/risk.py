@@ -9,7 +9,9 @@ from zoneinfo import ZoneInfo
 from django.db import transaction
 from django.utils import timezone
 
-from plane.db.models import Issue, Risk, RiskActivity, RiskIssue, RiskLevel, RiskSyncStatus
+from plane.db.models import Issue, Risk, RiskActivity, RiskIssue, RiskLevel, RiskStatus, RiskSyncStatus
+from plane.utils.notify import emit
+from plane.utils.notify.entities import names_of
 
 BEIJING_TZ = ZoneInfo("Asia/Shanghai")
 #: 判定「缺陷」看工作项类型的类别名，口径同 ``views/issue/base.py`` 的缺陷页
@@ -454,3 +456,41 @@ def unlink_issue(risk, actor, issue_id):
             risk, actor=actor, verb="removed", field="issues", old_identifier=issue_id
         )
     return True
+
+
+# --- 邮件通知 --------------------------------------------------------------
+# 只在页面操作时调用（视图里）；简道云同步进来的改动不发，避免一次同步刷出一批邮件。
+
+
+def notify_risk_created(risk, actor):
+    emit("risk.created", "risk", risk.pk, actor_id=actor.id, summary=f"{actor.display_name} 新建了风险")
+
+
+def notify_risk_updated(risk_id, actor, changed, old_owner_id):
+    """``changed`` 是 ``update_risk`` 返回的字段名。责任人变更单独发给新责任人，其余合成一条更新。"""
+    if not changed:
+        return
+    risk = Risk.objects.filter(pk=risk_id).first()
+    if risk is None:
+        return
+    if "owner" in changed and risk.owner_id:
+        old_name = "".join(names_of([old_owner_id])) or "未设置"
+        new_name = "".join(names_of([risk.owner_id]))
+        emit(
+            "risk.owner_changed",
+            "risk",
+            risk.pk,
+            actor_id=actor.id,
+            summary=f"责任人 {old_name} → {new_name}",
+            extra_roles={"new_owner": [risk.owner_id]},
+        )
+    others = [field for field in changed if field != "owner"]
+    if not others:
+        return
+    parts = []
+    if "status" in others:
+        parts.append(f"状态变更为 {RiskStatus(risk.status).label}")
+    labels = [str(Risk._meta.get_field(field).verbose_name) for field in others if field != "status"]
+    if labels:
+        parts.append("更新了 " + "、".join(labels[:4]) + (" 等" if len(labels) > 4 else ""))
+    emit("risk.updated", "risk", risk.pk, actor_id=actor.id, summary="；".join(parts))

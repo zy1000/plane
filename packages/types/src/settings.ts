@@ -14,6 +14,7 @@ export type TWorkspaceSettingsTabs =
   | "job-roles"
   | "groups"
   | "roles"
+  | "notifications"
   | "templates"
   | "export"
   | "webhooks"

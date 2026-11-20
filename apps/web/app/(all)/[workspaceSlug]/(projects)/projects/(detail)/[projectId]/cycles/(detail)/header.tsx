@@ -43,6 +43,7 @@ import { SwitcherLabel } from "@/components/common/switcher-label";
 import { ProjectRequirementLinkModal } from "@/components/requirements/project-requirement-link-modal";
 import { useCycleRequirements } from "@/components/cycles/cycle-overview/use-cycle-requirements";
 import { CycleQuickActions } from "@/components/cycles/quick-actions";
+import { NotifySubscribeButton } from "@/components/notify";
 import {
   DisplayFiltersSelection,
   FiltersDropdown,
@@ -441,6 +442,14 @@ export const CycleIssuesHeader = observer(function CycleIssuesHeader() {
                   </CustomMenu.MenuItem>
                 </CustomMenu>
               )}
+              {workspaceSlug && projectId && cycleId && (
+                <NotifySubscribeButton
+                  workspaceSlug={workspaceSlug.toString()}
+                  projectId={projectId.toString()}
+                  entityType="cycle"
+                  entityId={cycleId.toString()}
+                />
+              )}
               <IconButton
                 variant="tertiary"
                 size="lg"
@@ -476,6 +485,14 @@ export const CycleIssuesHeader = observer(function CycleIssuesHeader() {
               >
                 {t("project_requirements.container.link_button")}
               </Button>
+              {workspaceSlug && projectId && cycleId && (
+                <NotifySubscribeButton
+                  workspaceSlug={workspaceSlug.toString()}
+                  projectId={projectId.toString()}
+                  entityType="cycle"
+                  entityId={cycleId.toString()}
+                />
+              )}
               <IconButton
                 variant="tertiary"
                 size="lg"

@@ -5965,6 +5965,9 @@ export default {
       job_roles: {
         title: "Job roles",
       },
+      notifications: {
+        title: "Notifications",
+      },
       integrations: {
         title: "Integrations",
         description:

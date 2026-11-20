@@ -55,6 +55,7 @@ import type { ReleaseDetailTabKey } from "@/components/releases/release-overview
 import { ReleaseRequirementsAssociateModal } from "@/components/releases/release-overview/release-requirements-associate-modal";
 import { useReleaseRequirements } from "@/components/releases/release-overview/use-release-requirements";
 import { ReleaseQuickActions } from "@/components/releases/release-quick-actions";
+import { NotifySubscribeButton } from "@/components/notify";
 import { WorkItemFiltersToggle } from "@/components/work-item-filters/filters-toggle";
 import { useCommandPalette } from "@/hooks/store/use-command-palette";
 import { useIssues } from "@/hooks/store/use-issues";
@@ -400,6 +401,14 @@ export const ReleaseIssuesHeader = observer(function ReleaseIssuesHeader() {
                 <span className="flex items-center justify-start gap-2">{t("issue.add.existing")}</span>
               </CustomMenu.MenuItem>
             </CustomMenu>
+            {releaseId && (
+              <NotifySubscribeButton
+                workspaceSlug={workspaceSlug.toString()}
+                projectId={projectId.toString()}
+                entityType="release"
+                entityId={releaseId}
+              />
+            )}
             <IconButton
               variant="tertiary"
               size="lg"
@@ -436,6 +445,14 @@ export const ReleaseIssuesHeader = observer(function ReleaseIssuesHeader() {
               >
                 {t("project_requirements.container.link_button")}
               </Button>
+              {releaseId && (
+                <NotifySubscribeButton
+                  workspaceSlug={workspaceSlug.toString()}
+                  projectId={projectId.toString()}
+                  entityType="release"
+                  entityId={releaseId}
+                />
+              )}
               <IconButton
                 variant="tertiary"
                 size="lg"

@@ -632,6 +632,8 @@ class IssueSubscriber(ProjectBaseModel):
         on_delete=models.CASCADE,
         related_name="issue_subscribers",
     )
+    # 邮件接收方式：instant / digest（见 notify.NotifyMode）
+    mode = models.CharField(max_length=16, default="digest")
 
     class Meta:
         unique_together = ["issue", "subscriber", "deleted_at"]

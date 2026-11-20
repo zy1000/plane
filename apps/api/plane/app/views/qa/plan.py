@@ -79,6 +79,7 @@ from plane.db.models import (
     CaseReviewThrough,
     TestCaseVersion,
 )
+from plane.utils.notify import emit
 from plane.utils.paginator import CustomPaginator
 from plane.utils.qa import (
     project_case_repository_ids,
@@ -975,6 +976,16 @@ class PlanView(BaseViewSet):
 
         # 计划状态按用例结果派生（规则见 utils/qa.py::sync_plan_states）
         sync_plan_states([plan.id])
+        # 邮件：执行完的用例待复核人复核。按「人 × 计划」发，同一计划当天后续的执行进第二天摘要
+        if created_records:
+            emit(
+                "planreview.requested",
+                "test_plan",
+                plan.id,
+                actor_id=request.user.id,
+                summary=f"{len(created_records)} 条用例已执行，待你复核",
+                dedupe_key=f"planreview.requested:{plan.id}",
+            )
         return Response(
             status=status.HTTP_201_CREATED,
             data={"records": created_records},
@@ -1055,6 +1066,20 @@ class PlanView(BaseViewSet):
             # 本次投票未必就是最终状态：多人复核要按通过规则折算
             statuses = recompute_plan_case_review_statuses(plan, updated_ids)
             PlanCase.objects.filter(id__in=updated_ids).update(updated_at=timezone.now())
+            # 邮件：复核不通过的，告诉这些用例的执行人（按计划合并，当天只即时发一次）
+            if result == PlanCaseReviewRecord.Result.FAIL:
+                executor_ids = {
+                    plan_case.assignee_id for plan_case in plan_cases if plan_case.id in updated_ids and plan_case.assignee_id
+                }
+                emit(
+                    "planreview.rejected",
+                    "test_plan",
+                    plan.id,
+                    actor_id=request.user.id,
+                    summary="有用例复核不通过，请重新执行",
+                    extra_roles={"executor": list(executor_ids)},
+                    dedupe_key=f"planreview.rejected:{plan.id}",
+                )
 
         return Response(
             status=status.HTTP_200_OK,

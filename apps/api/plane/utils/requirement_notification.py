@@ -12,6 +12,7 @@
 """
 
 from plane.db.models import Notification, RequirementChangeStatus
+from plane.utils.notify import emit
 
 
 ENTITY_NAME = "requirement_change_request"
@@ -137,6 +138,14 @@ def notify_review_requested(change_request, *, actor=None):
         actor=actor,
         title=f"需要你审批变更单 CR-{change_request.sequence_id}：{_summary(change_request)}",
     )
+    emit(
+        "reqchange.requested",
+        "requirement_change",
+        change_request.id,
+        actor_id=getattr(actor, "id", None),
+        summary=f"待你审批：{_summary(change_request)}",
+        extra_roles={"approver": [approval.approver_id for approval in change_request.approvals.all()]},
+    )
 
 
 def notify_review_settled(change_request, *, actor=None):
@@ -158,6 +167,14 @@ def notify_review_settled(change_request, *, actor=None):
         field=field,
         actor=actor,
         title=f"变更单 CR-{change_request.sequence_id} {verb}：{_summary(change_request)}",
+    )
+    emit(
+        "reqchange.approved" if change_request.status == RequirementChangeStatus.APPROVED else "reqchange.rejected",
+        "requirement_change",
+        change_request.id,
+        actor_id=getattr(actor, "id", None),
+        summary=f"变更单{verb}：{_summary(change_request)}",
+        extra_roles={"initiator": [change_request.created_by_id]},
     )
 
 

@@ -37,6 +37,7 @@ from plane.db.models import (
     RequirementModule,
 )
 from plane.utils.asset_zip import build_assets_zip_response
+from plane.utils.notify import emit
 from plane.utils.network_zone import (
     ZONE_DOWNLOAD_DENIED,
     asset_zone_map,
@@ -560,6 +561,7 @@ class BaseRequirementRowViewSet(RequirementExcelMixin, BaseViewSet):
             # 前快照与 was_approved 都要在改动之前抓，且用这个 select_for_update 到的实例
             before = requirement_content_values(row)
             was_approved = row_was_approved(row)
+            old_assignee_id = row.assignee_id
             for column, value in serializer.validated_data["builtin"].items():
                 # status 不由内容路径写（见 ROW_WRITABLE_BUILTIN_COLUMNS）
                 if column in ROW_WRITABLE_BUILTIN_COLUMNS:
@@ -590,6 +592,16 @@ class BaseRequirementRowViewSet(RequirementExcelMixin, BaseViewSet):
                 ]
             )
         [row] = self.reload_with_extra([row])
+        # 邮件：换了负责人，即时告诉新负责人（批量保存和 Excel 导入不发）
+        if row.assignee_id and row.assignee_id != old_assignee_id:
+            emit(
+                "requirement.assigned",
+                "requirement",
+                row.id,
+                actor_id=request.user.id,
+                summary=f"{request.user.display_name} 将需求指派给你",
+                extra_roles={"new_assignee": [row.assignee_id]},
+            )
         return Response(
             RequirementSerializer(
                 row, context=self._row_context(layer, owner, [row])

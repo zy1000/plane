@@ -22,6 +22,8 @@ from plane.db.models import (
     TypeExtraFieldValue,
 )
 from plane.db.models.workflow import WorkflowTransitionRequiredField
+from plane.utils.notify import emit
+from plane.utils.notify.entities import names_of
 from plane.utils.extra_field_value import (
     get_missing_required_extra_fields,
     is_extra_field_value_empty,
@@ -565,8 +567,69 @@ def ensure_transition_record(
     return record, created
 
 
+def _flow_text(record: IssueTransitionRecord) -> str:
+    from_name = record.from_state.name if record.from_state_id else "（初始）"
+    to_name = record.to_state.name if record.to_state_id else ""
+    return f"{from_name} → {to_name}"
+
+
+def _emit_approval_request(event: str, record: IssueTransitionRecord, issue: Issue, approver_ids: list) -> None:
+    """邮件：待审批 / 重新审批。发给谁、怎么合并由统一通知入口决定。"""
+    initiator = record.created_by
+    initiator_name = (initiator.display_name or initiator.email) if initiator else ""
+    details = [("状态流转", _flow_text(record))]
+    if initiator_name:
+        details.append(("申请人", initiator_name))
+    names = names_of(approver_ids)
+    if names:
+        transition = record.transition
+        if transition is not None and transition.approval_type == ApprovalType.N_OF_M:
+            rule = f"，至少 {transition.required_count} 人通过"
+        else:
+            rule = "，任一人通过即可" if len(names) > 1 else ""
+        details.append(("审批人", "、".join(names) + rule))
+    if record.approval_reason:
+        details.append(("变更原因", record.approval_reason[:300]))
+    if event == "workflow.requested":
+        summary = f"{initiator_name} 申请状态流转，待你审批" if initiator_name else "状态流转申请，待你审批"
+        actor_id = record.created_by_id
+    else:
+        summary, actor_id = "申请内容有变更，请重新审批", None
+    emit(
+        event,
+        "issue",
+        issue.id,
+        actor_id=actor_id,
+        summary=summary,
+        details=details,
+        extra_roles={"approver": list(approver_ids or [])},
+    )
+
+
+def _emit_approval_result(event: str, record: IssueTransitionRecord, acted_by=None, reason="") -> None:
+    """邮件：审批有结果了，告诉发起人。"""
+    summary = {
+        "workflow.approved": "状态流转申请已通过",
+        "workflow.rejected": "状态流转申请被驳回",
+        "workflow.cancelled": "状态流转申请已取消",
+    }[event]
+    details = [("状态流转", _flow_text(record))]
+    if reason:
+        details.append(("原因", str(reason)[:300]))
+    emit(
+        event,
+        "issue",
+        record.issue_id,
+        actor_id=getattr(acted_by, "id", None),
+        summary=summary,
+        details=details,
+        extra_roles={"initiator": [record.created_by_id]},
+    )
+
+
 def _send_approval_notifications(record: IssueTransitionRecord, issue: Issue, approver_ids: list) -> None:
     """向所有审批人发送站内通知，提示其前往审批。"""
+    _emit_approval_request("workflow.requested", record, issue, approver_ids)
     if not approver_ids:
         return
 
@@ -614,6 +677,7 @@ def _send_approval_notifications(record: IssueTransitionRecord, issue: Issue, ap
 
 def _send_approval_reset_notifications(record: IssueTransitionRecord, issue: Issue, approver_ids: list) -> None:
     """工作项关键内容变更后，通知所有审批人重新审批。"""
+    _emit_approval_request("workflow.reset", record, issue, approver_ids)
     if not approver_ids:
         return
 
@@ -895,6 +959,8 @@ def cancel_issue_pending_transitions(issue: Issue, cancelled_by, project_id: str
             )
         )
     IssueActivity.objects.bulk_create(activities, batch_size=100)
+    for record in pending_records:
+        _emit_approval_result("workflow.cancelled", record, cancelled_by, reason="工作项状态被直接更改")
 
     return len(pending_records)
 
@@ -950,6 +1016,7 @@ def recompute_transition_record_status(record: IssueTransitionRecord, acted_by=N
         record.status = TransitionRecordStatus.REJECTED
         record.completed_at = timezone.now()
         record.save(update_fields=["status", "completed_at", "updated_at"])
+        _emit_approval_result("workflow.rejected", record, acted_by)
         from_name = record.from_state.name if record.from_state_id else "（初始）"
         to_name = record.to_state.name if record.to_state_id else ""
         IssueActivity.objects.create(
@@ -983,6 +1050,7 @@ def recompute_transition_record_status(record: IssueTransitionRecord, acted_by=N
             record.status = TransitionRecordStatus.CANCELLED
             record.completed_at = timezone.now()
             record.save(update_fields=["status", "completed_at", "updated_at"])
+            _emit_approval_result("workflow.cancelled", record, acted_by, reason=error)
             from_name = record.from_state.name if record.from_state_id else "（初始）"
             to_name = record.to_state.name if record.to_state_id else ""
             IssueActivity.objects.create(
@@ -1011,6 +1079,7 @@ def recompute_transition_record_status(record: IssueTransitionRecord, acted_by=N
             record.status = TransitionRecordStatus.CANCELLED
             record.completed_at = timezone.now()
             record.save(update_fields=["status", "completed_at", "updated_at"])
+            _emit_approval_result("workflow.cancelled", record, acted_by, reason=error)
             from_name = record.from_state.name if record.from_state_id else "（初始）"
             to_name = record.to_state.name if record.to_state_id else ""
             IssueActivity.objects.create(
@@ -1032,6 +1101,7 @@ def recompute_transition_record_status(record: IssueTransitionRecord, acted_by=N
         record.status = TransitionRecordStatus.APPROVED
         record.completed_at = timezone.now()
         record.save(update_fields=["status", "completed_at", "updated_at"])
+        _emit_approval_result("workflow.approved", record, acted_by)
 
         # 同事务落 issue 状态
         if record.to_state_id:

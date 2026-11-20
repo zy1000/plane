@@ -47,6 +47,7 @@ from plane.utils.requirement import (
     RequirementScopeHandle,
     soft_delete_requirement_references,
 )
+from plane.utils.notify import emit
 from plane.utils.requirement_module import expand_requirement_module_subtree_ids
 from plane.utils.visibility import visible_projects_q
 
@@ -825,6 +826,9 @@ def resolve_scope_for_linked_requirement(requirement, *, for_update=False):
     return RequirementScopeHandle.for_product(product)
 
 
+_STATUS_LABELS = dict(RequirementItemStatus.choices)
+
+
 def set_requirement_status(requirement_id, *, status, actor=None):
     """需求状态的人工写入口，产品侧与项目侧共用。
 
@@ -835,11 +839,21 @@ def set_requirement_status(requirement_id, *, status, actor=None):
     不判 closed（closed → 任意非 closed 值就是「重开」）、不判 is_locked（评审轴与
     状态轴正交）。status 的合法性由调用方的 ChoiceField 校验。
     """
+    old_status = Requirement.objects.filter(id=requirement_id).values_list("status", flat=True).first()
     Requirement.objects.filter(id=requirement_id).update(
         status=status,
         updated_at=timezone.now(),
         updated_by_id=actor.id if actor else None,
     )
+    # 邮件：状态变化进负责人、创建人和订阅人的每日摘要
+    if old_status is not None and old_status != status:
+        emit(
+            "requirement.status_changed",
+            "requirement",
+            requirement_id,
+            actor_id=actor.id if actor else None,
+            summary=f"状态 {_STATUS_LABELS.get(old_status, old_status)} → {_STATUS_LABELS.get(status, status)}",
+        )
 
 
 def promote_on_project_link(requirement_ids):

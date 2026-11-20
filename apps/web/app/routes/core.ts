@@ -737,6 +737,11 @@ export const coreRoutes: RouteConfigEntry[] = [
             ":workspaceSlug/settings/job-roles/:jobRoleId",
             "./(all)/[workspaceSlug]/(settings)/settings/(workspace)/job-roles/[jobRoleId]/page.tsx"
           ),
+          // Workspace notifications（邮件通知规则 + 发送记录）
+          route(
+            ":workspaceSlug/settings/notifications",
+            "./(all)/[workspaceSlug]/(settings)/settings/(workspace)/notifications/page.tsx"
+          ),
           // Workspace third-party integrations
           route(
             ":workspaceSlug/settings/integrations",

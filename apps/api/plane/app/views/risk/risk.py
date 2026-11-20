@@ -46,6 +46,8 @@ from plane.utils.risk import (
     delete_risk,
     link_issues,
     link_risks_to_issue,
+    notify_risk_created,
+    notify_risk_updated,
     resync_risk,
     unlink_issue,
     update_risk,
@@ -167,6 +169,7 @@ class RiskViewSet(BaseViewSet):
         serializer = RiskWriteSerializer(data=data, context={"project_id": project_id})
         serializer.is_valid(raise_exception=True)
         risk = create_risk(project, request.user, dict(serializer.validated_data))
+        notify_risk_created(risk, request.user)
         return self._detail(slug, project_id, risk.pk, status.HTTP_201_CREATED)
 
     @allow_fine_permission(PermissionKey.PROJECT_RISK_EDIT)
@@ -178,10 +181,12 @@ class RiskViewSet(BaseViewSet):
             risk, data=request.data, partial=True, context={"project_id": project_id}
         )
         serializer.is_valid(raise_exception=True)
+        old_owner_id = risk.owner_id
         try:
-            update_risk(risk, request.user, dict(serializer.validated_data))
+            changed = update_risk(risk, request.user, dict(serializer.validated_data))
         except RiskError as exc:
             return risk_error_response(exc)
+        notify_risk_updated(pk, request.user, changed, old_owner_id)
         return self._detail(slug, project_id, pk)
 
     @allow_fine_permission(PermissionKey.PROJECT_RISK_DELETE)

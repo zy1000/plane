@@ -34,6 +34,8 @@ from plane.db.models import (
     StageReviewTemplate,
 )
 from plane.db.models.dev_mode import MAX_WORKLOAD_RATIO_TOTAL, SORT_ORDER_STEP
+from plane.utils.notify import emit
+from plane.utils.notify.entities import names_of
 from plane.utils.stage_review import follow_stage_dates, stage_plan_dates
 
 #: 周期上限（天）。只为挡住离谱输入
@@ -559,6 +561,7 @@ def update_stage(stage, *, actor, validated_data):
         )
 
     old_dates = stage_plan_dates(stage)
+    old_owner_id, old_status = stage.owner_id, stage.status
     changed = []
     for field, value in data.items():
         if getattr(stage, field) != value:
@@ -579,7 +582,30 @@ def update_stage(stage, *, actor, validated_data):
     stage.save(update_fields=[*dict.fromkeys(changed), "updated_by", "updated_at"])
     if any(field in changed for field in _DATE_FIELDS):
         follow_stage_dates(stage, old=old_dates, actor=actor)
+    _emit_stage_changes(stage, actor=actor, changed=changed, old_owner_id=old_owner_id, old_status=old_status)
     return stage
+
+
+def _emit_stage_changes(stage, *, actor, changed, old_owner_id, old_status):
+    """邮件：换负责人即时告诉新负责人；状态、计划时间的变化进负责人和订阅人的每日摘要。"""
+    actor_id = getattr(actor, "id", None)
+    if "owner" in changed and stage.owner_id:
+        old_name = "".join(names_of([old_owner_id])) or "未设置"
+        emit(
+            "stage.owner_changed",
+            "project_stage",
+            stage.id,
+            actor_id=actor_id,
+            summary=f"负责人 {old_name} → {''.join(names_of([stage.owner_id]))}",
+            extra_roles={"new_owner": [stage.owner_id]},
+        )
+    parts = []
+    if "status" in changed and stage.status != old_status:
+        parts.append(f"状态 {ProjectStageStatus(old_status).label} → {ProjectStageStatus(stage.status).label}")
+    if any(field in changed for field in _DATE_FIELDS):
+        parts.append(f"计划时间调整为 {stage.start_date or '未设置'} 至 {stage.end_date or '未设置'}")
+    if parts:
+        emit("stage.updated", "project_stage", stage.id, actor_id=actor_id, summary="；".join(parts))
 
 
 def bulk_update_stages(stages, *, actor, changes):

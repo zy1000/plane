@@ -107,6 +107,12 @@ class UserNotificationPreference(BaseModel):
     mention = models.BooleanField(default=True)
     issue_completed = models.BooleanField(default=True)
 
+    # 统一通知入口用的邮件接收方式（取值见 notify.NotifyMode）。上面五个开关已不再读取。
+    # 「待我审批」固定即时，不设字段。
+    assign_mode = models.CharField(max_length=16, default="instant")
+    result_mode = models.CharField(max_length=16, default="instant")
+    inform_mode = models.CharField(max_length=16, default="digest")
+
     class Meta:
         verbose_name = "UserNotificationPreference"
         verbose_name_plural = "UserNotificationPreferences"

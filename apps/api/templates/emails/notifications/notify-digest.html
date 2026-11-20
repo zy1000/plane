@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ subject }}</title>
+  </head>
+  <body style="margin:0;padding:0;background:#eef0f2;font-family:'PingFang SC','Microsoft YaHei','Noto Sans SC',Helvetica,Arial,sans-serif;color:#1f2328;font-size:14.5px;line-height:1.6;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef0f2;">
+      <tr>
+        <td align="center" style="padding:28px 16px 36px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:680px;background:#ffffff;border-radius:14px;">
+            <tr>
+              <td style="padding:18px 28px;border-bottom:1px solid #eef0f2;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                  <tr>
+                    <td style="font-size:17px;font-weight:600;letter-spacing:.02em;color:#1f62a3;">PMS</td>
+                    <td align="right" style="font-size:14px;color:#4b5259;">{{ date_label }}</td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:24px 28px 8px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                  <tr>
+                    {% for tile in tiles %}
+                    <td width="25%" style="padding:0 {% if forloop.last %}0{% else %}10px{% endif %} 0 0;">
+                      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid {% if tile.hot %}#bcd4ec{% else %}#e6e8ea{% endif %};border-radius:12px;border-collapse:separate;background:{% if tile.hot %}#f6faff{% else %}#ffffff{% endif %};">
+                        <tr>
+                          <td style="padding:12px 16px;">
+                            <div style="font-size:13px;color:#646b72;">{{ tile.label }}</div>
+                            <div style="font-size:26px;font-weight:600;line-height:1.3;color:{% if tile.hot %}#1f62a3{% else %}#1f2328{% endif %};">{{ tile.value }}</div>
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                    {% endfor %}
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            {% for section in sections %}
+            <tr>
+              <td style="padding:18px 28px 0;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                  <tr>
+                    <td style="font-size:16px;font-weight:600;">{{ section.title }}<span style="font-size:13.5px;font-weight:400;color:#646b72;">&nbsp;&nbsp;{{ section.count }}</span></td>
+                    <td align="right" style="font-size:14px;">
+                      {% if section.more_url %}<a href="{{ section.more_url }}" style="color:#1f62a3;font-weight:500;text-decoration:none;">{{ section.more_label }}</a>{% elif section.more_label %}<span style="color:#646b72;font-size:13px;">{{ section.more_label }}</span>{% endif %}
+                    </td>
+                  </tr>
+                </table>
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:10px;border:1px solid #e6e8ea;border-radius:12px;border-collapse:separate;">
+                  {% for group in section.groups %}
+                  {% if group.name %}
+                  <tr>
+                    <td style="padding:9px 16px;background:#f7f8f9;border-bottom:1px solid #eef0f2;font-size:13.5px;">
+                      <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                        <tr>
+                          <td style="font-size:13.5px;font-weight:500;color:#1f2328;">{{ group.name }}</td>
+                          <td align="right" style="font-size:13.5px;">
+                            {% if group.more_url %}<a href="{{ group.more_url }}" style="color:#1f62a3;font-weight:500;text-decoration:none;">{{ group.more_label }}</a>{% endif %}
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+                  {% endif %}
+                  {% for row in group.rows %}
+                  <tr>
+                    <td style="padding:11px 16px;{% if not forloop.last or not forloop.parentloop.last %}border-bottom:1px solid #eef0f2;{% endif %}">
+                      <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                        <tr>
+                          {% if row.tag %}
+                          <td width="84" valign="top">
+                            <span style="display:inline-block;padding:2px 8px;border-radius:6px;background:{{ row.tag_bg }};color:{{ row.tag_fg }};font-size:12.5px;font-weight:500;white-space:nowrap;">{{ row.tag }}</span>
+                          </td>
+                          {% endif %}
+                          <td valign="top" style="font-size:14.5px;">
+                            {% if row.url %}<a href="{{ row.url }}" style="color:#1f2328;font-weight:500;text-decoration:none;">{{ row.title }}</a>{% else %}<span style="font-weight:500;">{{ row.title }}</span>{% endif %}
+                            {% if row.change %}<span style="color:#4b5259;">&nbsp;&nbsp;{{ row.change }}</span>{% endif %}
+                          </td>
+                          <td align="right" valign="top" style="font-size:13px;color:#646b72;white-space:nowrap;padding-left:12px;">{{ row.meta }}</td>
+                          {% if row.action and row.url %}
+                          <td width="44" align="right" valign="top">
+                            <a href="{{ row.url }}" style="color:#1f62a3;font-size:14px;font-weight:500;text-decoration:none;white-space:nowrap;">{{ row.action }}</a>
+                          </td>
+                          {% endif %}
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+                  {% endfor %}
+                  {% endfor %}
+                </table>
+              </td>
+            </tr>
+            {% endfor %}
+            <tr>
+              <td style="padding:28px 0 0;"></td>
+            </tr>
+            <tr>
+              <td style="padding:16px 28px 20px;border-top:1px solid #eef0f2;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                  <tr>
+                    <td style="font-size:13px;color:#646b72;">本邮件由 PMS 自动发送，请勿直接回复</td>
+                    <td align="right" style="font-size:13px;white-space:nowrap;">
+                      {% if subscriptions_url %}<a href="{{ subscriptions_url }}" style="color:#1f62a3;text-decoration:none;">管理订阅</a>&nbsp;&nbsp;&nbsp;&nbsp;{% endif %}
+                      {% if settings_url %}<a href="{{ settings_url }}" style="color:#1f62a3;text-decoration:none;">通知设置</a>{% endif %}
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

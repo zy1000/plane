@@ -8,6 +8,7 @@ import React from "react";
 import { observer } from "mobx-react";
 // plane imports
 import { Loader } from "@plane/ui";
+import { NotifyScopeSection, NotifySubscribersSection } from "@/components/notify";
 // local imports
 import useCyclesDetails from "../active-cycle/use-cycles-details";
 import { CycleOverdueRecordsSection } from "../cycle-overdue-records-section";
@@ -66,6 +67,23 @@ export const CycleDetailsSidebar = observer(function CycleDetailsSidebar(props: 
       )}
       {workspaceSlug && projectId && cycleDetails?.id && (
         <CycleOverdueRecordsSection workspaceSlug={workspaceSlug} projectId={projectId} cycleId={cycleDetails.id} />
+      )}
+      {workspaceSlug && projectId && cycleDetails?.id && !isArchived && (
+        <>
+          <NotifySubscribersSection
+            workspaceSlug={workspaceSlug}
+            projectId={projectId}
+            entityType="cycle"
+            entityId={cycleDetails.id}
+          />
+          <NotifyScopeSection
+            workspaceSlug={workspaceSlug}
+            projectId={projectId}
+            entityType="cycle"
+            entityId={cycleDetails.id}
+            revision={`${cycleDetails.owned_by_id ?? ""}|${(cycleDetails.assignee_ids ?? []).join(",")}`}
+          />
+        </>
       )}
     </div>
   );

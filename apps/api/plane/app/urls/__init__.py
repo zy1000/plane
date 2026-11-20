@@ -13,6 +13,7 @@ from .issue import urlpatterns as issue_urls
 from .module import urlpatterns as module_urls
 from .release import urlpatterns as release_urls
 from .notification import urlpatterns as notification_urls
+from .notify import urlpatterns as notify_urls
 from .page import urlpatterns as page_urls
 from .project import urlpatterns as project_urls
 from .product import urlpatterns as product_urls
@@ -56,6 +57,7 @@ urlpatterns = [
     *module_urls,
     *release_urls,
     *notification_urls,
+    *notify_urls,
     *page_urls,
     *project_urls,
     *product_urls,

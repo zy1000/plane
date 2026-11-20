@@ -370,7 +370,7 @@ export const RiskDetailRoot = ({
           </div>
         </div>
 
-        <RiskSidebar projectId={projectId} detail={detail} session={session} />
+        <RiskSidebar workspaceSlug={workspaceSlug} projectId={projectId} detail={detail} session={session} />
       </div>
 
       <DeleteRiskModal

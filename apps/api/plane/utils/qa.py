@@ -2,7 +2,10 @@ import uuid
 from collections import defaultdict
 
 from django.db.models import Count
+from crum import get_current_user
 from django.utils import timezone
+
+from plane.utils.notify import emit
 
 from plane.db.models import (
     CaseReview,
@@ -117,6 +120,7 @@ def sync_review_reviewer_summary(cr: CaseReview):
 
 def update_review_status(cr: CaseReview):
     """用例评审状态变更"""
+    old_state = cr.state
     through_results = set(
         CaseReviewThrough.objects.filter(review=cr).values_list('result', flat=True)
     )
@@ -129,6 +133,20 @@ def update_review_status(cr: CaseReview):
     else:
         cr.state = CaseReview.State.COMPLETED
     cr.save()
+    # 整个评审刚变成已完成：给发起人发一封汇总（逐条结论不发邮件）
+    if cr.state == CaseReview.State.COMPLETED and old_state != CaseReview.State.COMPLETED and through_results:
+        results = list(CaseReviewThrough.objects.filter(review=cr).values_list('result', flat=True))
+        passed = results.count(CaseReviewThrough.Result.PASS)
+        failed = results.count(CaseReviewThrough.Result.FAIL)
+        actor = get_current_user()
+        emit(
+            "casereview.completed",
+            "case_review",
+            cr.id,
+            actor_id=getattr(actor, "id", None),
+            summary=f"评审完成：通过 {passed} 条，不通过 {failed} 条",
+            extra_roles={"initiator": [cr.created_by_id]},
+        )
 
 def update_case_review_status(cr, crt):
     """按该条用例自己的评审人重算它的评审结论。
