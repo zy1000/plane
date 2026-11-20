@@ -5,18 +5,22 @@ import type { TLogoProps } from "./common";
  *
  * 标准库可选一个分类（可不选）；选了之后库的第一层模块 = 分类的一级模块，由后端实时同步，
  * 库里不能对第一层增 / 改名 / 删，只能在其下建二、三级。
+ *
+ * 一级模块分两份清单：需求一级模块只跟标准需求库，用例一级模块只跟模板用例库，各自维护、可以重名。
  */
+
+/** 用这个分类的库类型：标准需求库 / 模板用例库；一级模块所在的清单也用这组值（哪类库跟哪份清单） */
+export type TProductCategoryLibraryKind = "requirement" | "case";
 
 export type TProductCategoryModule = {
   id: string;
   name: string;
+  /** 所在清单：requirement = 需求一级模块，case = 用例一级模块 */
+  kind: TProductCategoryLibraryKind;
   sort_order: number;
-  /** 所有用该分类的库里，对应一级模块整棵子树下的条目数（需求数 + 用例数） */
+  /** 所有用该分类的对应那类库里，这个一级模块整棵子树下的条目数（需求清单是需求数，用例清单是用例数） */
   item_count: number;
 };
-
-/** 用这个分类的库类型：标准需求库 / 模板用例库 */
-export type TProductCategoryLibraryKind = "requirement" | "case";
 
 /** 正在用这个分类的库（标准需求库在前，模板用例库在后） */
 export type TProductCategoryLibrary = {
@@ -35,8 +39,10 @@ export type TProductCategory = {
   id: string;
   name: string;
   sort_order: number;
-  /** 已按 sort_order 排好 */
+  /** 需求一级模块，已按 sort_order 排好 */
   modules: TProductCategoryModule[];
+  /** 用例一级模块，已按 sort_order 排好 */
+  case_modules: TProductCategoryModule[];
   libraries: TProductCategoryLibrary[];
   created_at: string;
   updated_at: string;

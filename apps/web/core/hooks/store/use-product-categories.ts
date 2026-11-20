@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { TProductCategory } from "@plane/types";
+import type { TProductCategory, TProductCategoryLibraryKind } from "@plane/types";
 import { ProductCategoryService } from "@/services/product-category.service";
 
 const service = new ProductCategoryService();
@@ -122,11 +122,11 @@ export const useProductCategories = (workspaceSlug: string | undefined) => {
   );
 
   const bulkCreateModules = useCallback(
-    async (categoryId: string, names: string[]) => {
+    async (categoryId: string, names: string[], kind: TProductCategoryLibraryKind) => {
       if (!workspaceSlug) throw new Error("Workspace is required.");
       setIsMutating(true);
       try {
-        const response = await service.bulkCreateModules(workspaceSlug, categoryId, names);
+        const response = await service.bulkCreateModules(workspaceSlug, categoryId, names, kind);
         upsertCategory(response.category);
         return response;
       } finally {
@@ -148,20 +148,22 @@ export const useProductCategories = (workspaceSlug: string | undefined) => {
   );
 
   const reorderModules = useCallback(
-    async (categoryId: string, orderedIds: string[]) => {
+    async (categoryId: string, orderedIds: string[], kind: TProductCategoryLibraryKind) => {
       if (!workspaceSlug) throw new Error("Workspace is required.");
       const previous = categories.find((item) => item.id === categoryId);
       if (!previous) return;
-      const byId = new Map(previous.modules.map((module) => [module.id, module]));
+      // 只重排 kind 那一份清单，另一份原样
+      const listKey = kind === "case" ? "case_modules" : "modules";
+      const byId = new Map(previous[listKey].map((module) => [module.id, module]));
       upsertCategory({
         ...previous,
-        modules: orderedIds.flatMap((id, index) => {
+        [listKey]: orderedIds.flatMap((id, index) => {
           const module = byId.get(id);
           return module ? [{ ...module, sort_order: (index + 1) * 10000 }] : [];
         }),
       });
       try {
-        upsertCategory(await service.reorderModules(workspaceSlug, categoryId, orderedIds));
+        upsertCategory(await service.reorderModules(workspaceSlug, categoryId, orderedIds, kind));
       } catch (requestError) {
         upsertCategory(previous);
         throw requestError;

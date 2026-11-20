@@ -2,14 +2,21 @@ import { useEffect, useMemo, useState } from "react";
 import { FolderPlus, Plus, Tag, X } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
-import type { TProductCategory, TProductCategoryBulkModulesResponse, TProductCategoryModuleSkipReason } from "@plane/types";
+import type {
+  TProductCategory,
+  TProductCategoryBulkModulesResponse,
+  TProductCategoryLibraryKind,
+  TProductCategoryModuleSkipReason,
+} from "@plane/types";
 import { EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
 import { cn } from "@plane/utils";
-import { getProductCategoryErrorMessage, previewBulkModules } from "./helpers";
+import { getProductCategoryErrorMessage, getProductCategoryModules, previewBulkModules } from "./helpers";
 
 type Props = {
   isOpen: boolean;
   category: TProductCategory;
+  /** 往哪份清单里加：需求一级模块 / 用例一级模块 */
+  kind: TProductCategoryLibraryKind;
   onSubmit: (names: string[]) => Promise<TProductCategoryBulkModulesResponse>;
   onClose: () => void;
 };
@@ -20,9 +27,12 @@ const REASON_KEY: Record<TProductCategoryModuleSkipReason, string> = {
   too_long: "product_categories.bulk.reason_too_long",
 };
 
-/** 批量添加一级模块：每行一个，下方实时预览将添加 / 跳过（已存在、重复、超过 30 字） */
-export function ModuleBulkAddModal({ isOpen, category, onSubmit, onClose }: Props) {
+/** 往一份清单里批量添加一级模块：每行一个，下方实时预览将添加 / 跳过（这份清单里已存在、重复、超过 30 字） */
+export function ModuleBulkAddModal({ isOpen, category, kind, onSubmit, onClose }: Props) {
   const { t } = useTranslation();
+  const existingModules = getProductCategoryModules(category, kind);
+  // 新模块只同步到跟这份清单的那类库
+  const syncLibraryCount = category.libraries.filter((library) => library.kind === kind).length;
   const [raw, setRaw] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -37,9 +47,9 @@ export function ModuleBulkAddModal({ isOpen, category, onSubmit, onClose }: Prop
     () =>
       previewBulkModules(
         raw,
-        category.modules.map((module) => module.name)
+        existingModules.map((module) => module.name)
       ),
-    [raw, category.modules]
+    [raw, existingModules]
   );
   const hasInput = preview.toAdd.length > 0 || preview.skipped.length > 0;
 
@@ -62,7 +72,9 @@ export function ModuleBulkAddModal({ isOpen, category, onSubmit, onClose }: Prop
         <span className="grid size-8 shrink-0 place-items-center rounded-md bg-accent-subtle text-accent-primary">
           <FolderPlus className="size-4" />
         </span>
-        <h2 className="min-w-0 flex-1 truncate text-16 font-semibold text-primary">{t("product_categories.bulk.title")}</h2>
+        <h2 className="min-w-0 flex-1 truncate text-16 font-semibold text-primary">
+          {t(kind === "case" ? "product_categories.bulk.title_case" : "product_categories.bulk.title_requirement")}
+        </h2>
         <span className="inline-flex max-w-40 shrink-0 items-center gap-1 rounded-md bg-layer-1 px-2 py-0.5 text-12 text-secondary">
           <Tag className="size-3 shrink-0" />
           <span className="truncate">{category.name}</span>
@@ -153,9 +165,7 @@ export function ModuleBulkAddModal({ isOpen, category, onSubmit, onClose }: Prop
 
       <div className="flex items-center gap-2 border-t border-subtle px-5 py-3">
         <span className="min-w-0 flex-1 truncate text-12 text-tertiary">
-          {category.libraries.length > 0
-            ? t("product_categories.bulk.sync_add", { count: category.libraries.length })
-            : null}
+          {syncLibraryCount > 0 ? t("product_categories.bulk.sync_add", { count: syncLibraryCount }) : null}
         </span>
         <Button variant="secondary" size="xl" className="px-3" onClick={onClose} disabled={isSubmitting}>
           {t("cancel")}

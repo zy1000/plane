@@ -6,6 +6,9 @@
 自己增删改第一层，只能在第一层下面建子模块。同步规则集中在
 ``plane.utils.product_category``。
 
+2026-11-20 起一级模块分两份清单（``ProductCategoryModule.kind``）：需求一级模块只同步到
+标准库，用例一级模块只同步到模板用例库，两份各自维护、各自排序、可以重名。
+
 与数据字典里的「产品类别」（``product_category`` 字典，产品上的属性）无关。
 """
 
@@ -16,6 +19,13 @@ from .base import BaseModel
 
 DEFAULT_SORT_ORDER = 65535
 SORT_ORDER_STEP = 10000
+
+MODULE_KIND_REQUIREMENT = "requirement"
+MODULE_KIND_CASE = "case"
+MODULE_KIND_CHOICES = (
+    (MODULE_KIND_REQUIREMENT, "需求一级模块"),
+    (MODULE_KIND_CASE, "用例一级模块"),
+)
 
 
 class ProductCategory(BaseModel):
@@ -61,7 +71,10 @@ class ProductCategory(BaseModel):
 
 
 class ProductCategoryModule(BaseModel):
-    """分类下的一个一级模块。名称长度与 RequirementModule.name 保持一致。"""
+    """分类下的一个一级模块。名称长度与 RequirementModule.name 保持一致。
+
+    ``kind`` 决定它同步到哪类库：requirement → 标准库的根模块，case → 模板用例库的根模块。
+    """
 
     workspace = models.ForeignKey(
         "db.Workspace",
@@ -75,6 +88,12 @@ class ProductCategoryModule(BaseModel):
         related_name="modules",
         verbose_name="所属产品分类",
     )
+    kind = models.CharField(
+        max_length=20,
+        choices=MODULE_KIND_CHOICES,
+        default=MODULE_KIND_REQUIREMENT,
+        verbose_name="清单类型",
+    )
     name = models.CharField(max_length=30, verbose_name="模块名称")
     sort_order = models.FloatField(default=DEFAULT_SORT_ORDER, verbose_name="排序")
 
@@ -85,9 +104,9 @@ class ProductCategoryModule(BaseModel):
         verbose_name_plural = "Product Category Modules"
         constraints = [
             models.UniqueConstraint(
-                fields=["category", "name"],
+                fields=["category", "kind", "name"],
                 condition=Q(deleted_at__isnull=True),
-                name="product_category_module_unique_name_active",
+                name="product_category_module_unique_kind_name_active",
             ),
         ]
 
@@ -96,7 +115,7 @@ class ProductCategoryModule(BaseModel):
             self.workspace_id = self.category.workspace_id
         if self._state.adding and self.sort_order == DEFAULT_SORT_ORDER:
             last = ProductCategoryModule.objects.filter(
-                category_id=self.category_id
+                category_id=self.category_id, kind=self.kind
             ).aggregate(largest=models.Max("sort_order"))["largest"]
             if last is not None:
                 self.sort_order = last + SORT_ORDER_STEP

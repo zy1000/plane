@@ -7,6 +7,7 @@ import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type {
   TProductCategory,
   TProductCategoryInUseError,
+  TProductCategoryLibraryKind,
   TProductCategoryModule,
   TProductCategoryModuleInUseError,
 } from "@plane/types";
@@ -14,26 +15,41 @@ import { PRODUCT_CATEGORY_MODULE_NAME_MAX_LENGTH } from "@plane/types";
 import { AlertModalCore } from "@plane/ui";
 import { TypeIcon } from "@/components/common/type-icon-picker";
 import type { TProductCategoriesStore } from "@/hooks/store/use-product-categories";
+import { TemplatePageTabs } from "../template-page-header";
 import { DeleteBlockedModal, type TDeleteBlocked } from "./delete-blocked-modal";
-import { getProductCategoryErrorMessage, getProductCategoryLibraryPath } from "./helpers";
+import { getProductCategoryErrorMessage, getProductCategoryLibraryPath, getProductCategoryModules } from "./helpers";
 import { ModuleBulkAddModal } from "./module-bulk-add-modal";
 import { NameFormModal } from "./name-form-modal";
 import { ProductCategoryModuleTable } from "./product-category-module-table";
+
+const MODULE_KINDS: TProductCategoryLibraryKind[] = ["requirement", "case"];
 
 type Props = {
   workspaceSlug: string;
   category: TProductCategory;
   store: TProductCategoriesStore;
   canManage: boolean;
+  /** 当前页签：需求一级模块 / 用例一级模块。由页面持有，换分类时停在同一个页签 */
+  kind: TProductCategoryLibraryKind;
+  onKindChange: (kind: TProductCategoryLibraryKind) => void;
   /** 进 / 出「调整顺序」时通知页面，页面据此锁住左栏和创建按钮 */
   onSortingChange: (sorting: boolean) => void;
 };
 
 /**
- * 产品分类页右侧：分类名 + 在用标准库 + 编辑 / 删除；一级模块表（添加、调整顺序、行内编辑 / 删除）。
- * 模块的增删改排都会被后端同步到所有用该分类的库。调用方按分类 id 给 key。
+ * 产品分类页右侧：分类名 + 编辑 / 删除；「需求一级模块 | 用例一级模块」两个页签，各有自己的在用库与
+ * 模块表（添加、调整顺序、行内编辑 / 删除）。
+ * 需求清单的增删改排由后端同步到用该分类的标准需求库，用例清单同步到模板用例库。调用方按分类 id 给 key。
  */
-export function ProductCategoryDetail({ workspaceSlug, category, store, canManage, onSortingChange }: Props) {
+export function ProductCategoryDetail({
+  workspaceSlug,
+  category,
+  store,
+  canManage,
+  kind,
+  onKindChange,
+  onSortingChange,
+}: Props) {
   const { t } = useTranslation();
   const [isEditingCategory, setIsEditingCategory] = useState(false);
   const [isDeletingCategory, setIsDeletingCategory] = useState(false);
@@ -45,14 +61,17 @@ export function ProductCategoryDetail({ workspaceSlug, category, store, canManag
   const [sortDraft, setSortDraft] = useState<TProductCategoryModule[] | null>(null);
   const [isSavingSort, setIsSavingSort] = useState(false);
 
-  const libraryCount = category.libraries.length;
+  const modules = getProductCategoryModules(category, kind);
+  // 同步范围按清单算：需求清单只跟标准需求库，用例清单只跟模板用例库
+  const libraries = category.libraries.filter((library) => library.kind === kind);
+  const libraryCount = libraries.length;
   const sorting = sortDraft !== null;
 
   // 卸载（换分类、分类被删）时别把页面留在「排序中」
   useEffect(() => () => onSortingChange(false), [onSortingChange]);
 
   const startSort = () => {
-    setSortDraft(category.modules);
+    setSortDraft(modules);
     onSortingChange(true);
   };
   const endSort = () => {
@@ -66,7 +85,8 @@ export function ProductCategoryDetail({ workspaceSlug, category, store, canManag
     try {
       await store.reorderModules(
         category.id,
-        sortDraft.map((module) => module.id)
+        sortDraft.map((module) => module.id),
+        kind
       );
       setToast({ type: TOAST_TYPE.SUCCESS, title: t("product_categories.toast.order_saved") });
       endSort();
@@ -144,10 +164,8 @@ export function ProductCategoryDetail({ workspaceSlug, category, store, canManag
         <div className="flex min-w-0 items-baseline gap-3">
           <h2 className="truncate text-20 leading-7 font-semibold text-primary">{category.name}</h2>
           <span className="shrink-0 text-13 text-tertiary">
-            {t("product_categories.meta_modules", { count: category.modules.length })}
-            {" · "}
-            {libraryCount > 0
-              ? t("product_categories.meta_libraries", { count: libraryCount })
+            {category.libraries.length > 0
+              ? t("product_categories.meta_libraries", { count: category.libraries.length })
               : t("product_categories.meta_no_libraries")}
           </span>
         </div>
@@ -175,35 +193,35 @@ export function ProductCategoryDetail({ workspaceSlug, category, store, canManag
         )}
       </div>
 
-      {libraryCount > 0 && (
-        <div className="flex shrink-0 flex-wrap items-center gap-2 px-7 pt-4">
-          <span className="mr-1 text-13 text-tertiary">{t("product_categories.in_use_libraries")}</span>
-          {category.libraries.map((library) => (
-            <Link
-              key={`${library.kind}-${library.id}`}
-              to={getProductCategoryLibraryPath(workspaceSlug, library)}
-              className="inline-flex h-7 max-w-60 items-center gap-1.5 rounded-md border border-subtle-1 bg-surface-1 pr-2.5 pl-2 text-13 text-primary transition-colors hover:bg-layer-transparent-hover"
-            >
-              {library.kind === "case" ? (
-                <FlaskConical className="size-3.5 shrink-0 text-tertiary" strokeWidth={1.75} />
-              ) : (
-                <TypeIcon
-                  iconProps={library.requirement_type_detail?.logo_props?.icon}
-                  className="size-3.5 rounded-none"
-                  iconClassName="size-3.5"
-                />
-              )}
-              <span className="shrink-0 text-11 text-tertiary">
-                {t(`product_categories.library_kind.${library.kind}`)}
-              </span>
-              <span className="truncate">{library.name}</span>
-            </Link>
-          ))}
-        </div>
-      )}
+      {/* 页签行：左边两份清单，右边是当前清单的操作；调整顺序期间不能切页签 */}
+      <TemplatePageTabs
+        className="mx-7 mt-4 px-0"
+        ariaLabel={t("product_categories.modules_title")}
+        tabs={MODULE_KINDS.map((key) => ({
+          key,
+          label: t(`product_categories.module_kind.${key}`),
+          count: getProductCategoryModules(category, key).length,
+        }))}
+        activeKey={kind}
+        onChange={onKindChange}
+        disabled={sorting}
+      >
+        {canManage && !sorting && (
+          <>
+            {modules.length > 1 && (
+              <Button variant="secondary" size="xl" className="px-3" onClick={startSort}>
+                {t("product_categories.adjust_order")}
+              </Button>
+            )}
+            <Button variant="secondary" size="xl" className="px-3" onClick={() => setIsAddingModules(true)}>
+              {t("product_categories.add_module")}
+            </Button>
+          </>
+        )}
+      </TemplatePageTabs>
 
       {sorting ? (
-        <div className="mx-7 mt-6 mb-3 flex shrink-0 items-center gap-3 rounded-lg bg-accent-subtle px-4 py-2.5">
+        <div className="mx-7 mt-4 mb-3 flex shrink-0 items-center gap-3 rounded-lg bg-accent-subtle px-4 py-2.5">
           <ArrowUpDown className="size-4 shrink-0 text-accent-primary" />
           <span className="min-w-0 flex-1 text-13 text-primary">
             {libraryCount > 0
@@ -217,31 +235,37 @@ export function ProductCategoryDetail({ workspaceSlug, category, store, canManag
             {t("product_categories.save_order")}
           </Button>
         </div>
-      ) : (
-        <div className="flex shrink-0 items-center justify-between gap-4 px-7 pt-6 pb-3">
-          <div className="flex h-8 items-center gap-2">
-            <span className="text-[15px] font-semibold text-primary">{t("product_categories.modules_title")}</span>
-            <span className="text-13 tabular-nums text-tertiary">{category.modules.length}</span>
-          </div>
-          {canManage && (
-            <div className="flex items-center gap-2">
-              {category.modules.length > 1 && (
-                <Button variant="secondary" size="xl" className="px-3" onClick={startSort}>
-                  {t("product_categories.adjust_order")}
-                </Button>
+      ) : libraryCount > 0 ? (
+        <div className="flex shrink-0 flex-wrap items-center gap-2 px-7 pt-4 pb-3.5">
+          <span className="mr-1 text-13 text-tertiary">{t("product_categories.in_use_libraries")}</span>
+          {libraries.map((library) => (
+            <Link
+              key={library.id}
+              to={getProductCategoryLibraryPath(workspaceSlug, library)}
+              className="inline-flex h-7 max-w-60 items-center gap-1.5 rounded-md border border-subtle-1 bg-surface-1 pr-2.5 pl-2 text-13 text-primary transition-colors hover:bg-layer-transparent-hover"
+            >
+              {library.kind === "case" ? (
+                <FlaskConical className="size-3.5 shrink-0 text-tertiary" strokeWidth={1.75} />
+              ) : (
+                <TypeIcon
+                  iconProps={library.requirement_type_detail?.logo_props?.icon}
+                  className="size-3.5 rounded-none"
+                  iconClassName="size-3.5"
+                />
               )}
-              <Button variant="secondary" size="xl" className="px-3" onClick={() => setIsAddingModules(true)}>
-                {t("product_categories.add_module")}
-              </Button>
-            </div>
-          )}
+              <span className="truncate">{library.name}</span>
+            </Link>
+          ))}
         </div>
+      ) : (
+        <div className="h-4 shrink-0" />
       )}
 
       <div className="vertical-scrollbar scrollbar-sm min-h-0 flex-1 overflow-y-auto px-7 pb-6">
         <div className="overflow-hidden rounded-lg border border-subtle">
           <ProductCategoryModuleTable
-            modules={sortDraft ?? category.modules}
+            modules={sortDraft ?? modules}
+            kind={kind}
             canManage={canManage}
             sorting={sorting}
             onSortChange={setSortDraft}
@@ -286,8 +310,9 @@ export function ProductCategoryDetail({ workspaceSlug, category, store, canManag
       <ModuleBulkAddModal
         isOpen={isAddingModules}
         category={category}
+        kind={kind}
         onSubmit={async (names) => {
-          const response = await store.bulkCreateModules(category.id, names);
+          const response = await store.bulkCreateModules(category.id, names, kind);
           setToast({
             type: TOAST_TYPE.SUCCESS,
             title:

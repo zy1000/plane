@@ -58,20 +58,30 @@ export function TemplatePageSearch({
 
 export type TTemplatePageTab<K extends string> = { key: K; label: string; count?: number };
 
-/** 页头下的筛选页签（下划线样式）：标准需求库按需求类型、通用字段库按范围 */
+/**
+ * 页头下的筛选页签（下划线样式）：标准需求库按需求类型、通用字段库按范围、产品模板按需求 / 用例清单。
+ * `children` 是跟页签同一行、靠右的本页签操作（如「调整顺序」「添加模块」）。
+ */
 export function TemplatePageTabs<K extends string>({
   tabs,
   activeKey,
   onChange,
   ariaLabel,
+  className,
+  disabled = false,
+  children,
 }: {
   tabs: TTemplatePageTab<K>[];
   activeKey: K;
   onChange: (key: K) => void;
   ariaLabel: string;
+  className?: string;
+  /** 页签暂时不可切换（如正在调整顺序） */
+  disabled?: boolean;
+  children?: ReactNode;
 }) {
   return (
-    <nav aria-label={ariaLabel} className="flex shrink-0 flex-wrap gap-x-7 border-b border-subtle px-7">
+    <nav aria-label={ariaLabel} className={cn("flex shrink-0 flex-wrap gap-x-7 border-b border-subtle px-7", className)}>
       {tabs.map((tab) => {
         const isActive = tab.key === activeKey;
         return (
@@ -79,9 +89,10 @@ export function TemplatePageTabs<K extends string>({
             key={tab.key}
             type="button"
             aria-pressed={isActive}
+            disabled={disabled}
             onClick={() => onChange(tab.key)}
             className={cn(
-              "-mb-px flex h-10 shrink-0 items-center gap-1.5 border-b-2 text-14 whitespace-nowrap focus-visible:outline-2 focus-visible:outline-accent-strong",
+              "-mb-px flex h-10 shrink-0 items-center gap-1.5 border-b-2 text-14 whitespace-nowrap focus-visible:outline-2 focus-visible:outline-accent-strong disabled:cursor-not-allowed",
               isActive
                 ? "border-accent-strong font-semibold text-primary"
                 : "border-transparent text-secondary hover:text-primary"
@@ -96,6 +107,7 @@ export function TemplatePageTabs<K extends string>({
           </button>
         );
       })}
+      {children && <div className="ml-auto flex shrink-0 items-center gap-2 pb-2">{children}</div>}
     </nav>
   );
 }

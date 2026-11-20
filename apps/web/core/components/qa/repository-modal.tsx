@@ -197,7 +197,7 @@ export const RepositoryModal: React.FC<Props> = ({
             extra={
               isCreate && selectedProductCategory ? (
                 <div className="mt-2">
-                  <ProductCategoryModulesPreview category={selectedProductCategory} />
+                  <ProductCategoryModulesPreview category={selectedProductCategory} kind="case" />
                 </div>
               ) : undefined
             }
@@ -205,6 +205,7 @@ export const RepositoryModal: React.FC<Props> = ({
             {isCreate ? (
               <ProductCategorySelect
                 categories={productCategories}
+                kind="case"
                 value={productCategoryId}
                 onChange={(next) => {
                   setProductCategoryId(next);

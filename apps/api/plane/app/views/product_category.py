@@ -5,6 +5,9 @@
 
 分类与一级模块的每次写入都会同步到用该分类的标准库与模板用例库（规则在 utils.product_category）。
 模块相关的写接口返回整个分类，前端直接替换，不用自己拼计数。
+
+一级模块分需求 / 用例两份清单：新增、批量添加、排序用请求体里的 ``kind`` 指明哪一份
+（缺省需求），改名与删除按模块自己的清单走。
 """
 
 from django.db import IntegrityError, transaction
@@ -20,7 +23,11 @@ from plane.app.views.base import BaseAPIView
 from plane.app.views.qa.template_permissions import CASE_TEMPLATE_READ_KEYS
 from plane.app.views.requirement.library import LIBRARY_READ_KEYS
 from plane.db.models import ProductCategory, ProductCategoryModule, Workspace
-from plane.db.models.product_category import SORT_ORDER_STEP
+from plane.db.models.product_category import (
+    MODULE_KIND_CHOICES,
+    MODULE_KIND_REQUIREMENT,
+    SORT_ORDER_STEP,
+)
 from plane.utils.product_category import (
     CATEGORY_IN_USE_CODE,
     CATEGORY_MODULE_IN_USE_CODE,
@@ -45,8 +52,24 @@ MANAGE_KEYS = (
 )
 
 
+MODULE_KINDS = {kind for kind, _ in MODULE_KIND_CHOICES}
+
+
 def _not_found(message):
     return Response({"error": message}, status=status.HTTP_404_NOT_FOUND)
+
+
+def _module_kind(data):
+    """请求体里的清单类型（缺省需求）；不认识的值返回 None。"""
+    kind = data.get("kind") or MODULE_KIND_REQUIREMENT
+    return kind if kind in MODULE_KINDS else None
+
+
+def _invalid_kind():
+    return Response(
+        {"error": "kind must be requirement or case."},
+        status=status.HTTP_400_BAD_REQUEST,
+    )
 
 
 def _ordered(queryset, ids):
@@ -176,7 +199,10 @@ class ProductCategoryModuleEndpoint(_ProductCategoryMixin, BaseAPIView):
         serializer.is_valid(raise_exception=True)
         try:
             add_category_module(
-                category, serializer.validated_data["name"], actor=request.user
+                category,
+                serializer.validated_data["name"],
+                actor=request.user,
+                kind=serializer.validated_data["kind"],
             )
         except IntegrityError:
             return Response(
@@ -187,7 +213,7 @@ class ProductCategoryModuleEndpoint(_ProductCategoryMixin, BaseAPIView):
 
 
 class ProductCategoryModuleBulkEndpoint(_ProductCategoryMixin, BaseAPIView):
-    """批量添加一级模块（每行一个）。已有 / 重复 / 超长的跳过并原样告诉前端。"""
+    """往一份清单里批量添加一级模块（每行一个）。已有 / 重复 / 超长的跳过并原样告诉前端。"""
 
     @allow_fine_permission(*MANAGE_KEYS, level="WORKSPACE")
     def post(self, request, slug, category_id):
@@ -200,9 +226,12 @@ class ProductCategoryModuleBulkEndpoint(_ProductCategoryMixin, BaseAPIView):
                 {"error": "names must be a non-empty list."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        kind = _module_kind(request.data)
+        if kind is None:
+            return _invalid_kind()
         try:
             created, skipped = bulk_add_category_modules(
-                category, names, actor=request.user
+                category, names, actor=request.user, kind=kind
             )
         except IntegrityError:
             # 并发下别人刚加了同名模块：整批回滚，让用户重试
@@ -226,13 +255,17 @@ class ProductCategoryModuleReorderEndpoint(_ProductCategoryMixin, BaseAPIView):
         category = self.category_or_none(slug, category_id)
         if category is None:
             return _not_found("Product category not found.")
+        kind = _module_kind(request.data)
+        if kind is None:
+            return _invalid_kind()
+        # 只在一份清单内排序：混进另一份清单的 id 视为不在范围内
         ordered = _ordered(
-            ProductCategoryModule.objects.filter(category=category),
+            ProductCategoryModule.objects.filter(category=category, kind=kind),
             request.data.get("ids"),
         )
         if ordered is None:
             return Response(
-                {"error": "ids must list modules of this category."},
+                {"error": "ids must list modules of this category and kind."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         reorder_category_modules(category, ordered, SORT_ORDER_STEP)

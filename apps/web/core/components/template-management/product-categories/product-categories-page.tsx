@@ -5,7 +5,7 @@ import { AlertCircle, Tags } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import type { TProductCategory } from "@plane/types";
+import type { TProductCategory, TProductCategoryLibraryKind } from "@plane/types";
 import { Loader } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { ContentWrapper } from "@/components/core/content-wrapper";
@@ -18,7 +18,8 @@ import { ProductCategoryDetail } from "./product-category-detail";
 import { ProductCategoryList } from "./product-category-list";
 
 /**
- * 模板中心「产品模板库」：统一页头（搜索分类 + 新建分类）、左贴边分类列、右分类详情（在用的库 + 一级模块表）。
+ * 模板中心「产品模板库」：统一页头（搜索分类 + 新建分类）、左贴边分类列、右分类详情
+ * （「需求一级模块 | 用例一级模块」两个页签，各有在用的库 + 一级模块表）。
  *
  * 读写口径：需求库或用例模板任一（requirement_library / case_template 的 view / manage）；无管理权限时只读。
  * 新建 / 编辑走弹窗表单，排序走显式的「调整顺序」模式（保存才提交），排序时锁住另一侧。
@@ -40,6 +41,8 @@ export const ProductCategoriesPage = observer(function ProductCategoriesPage({
   const [categorySortDraft, setCategorySortDraft] = useState<TProductCategory[] | null>(null);
   const [isSavingCategorySort, setIsSavingCategorySort] = useState(false);
   const [isSortingModules, setIsSortingModules] = useState(false);
+  // 详情按分类 id 重挂，页签放在这里：换分类时停在同一份清单
+  const [moduleKind, setModuleKind] = useState<TProductCategoryLibraryKind>("requirement");
 
   const isSortingCategories = categorySortDraft !== null;
   const selectedId = searchParams.get("category");
@@ -156,6 +159,8 @@ export const ProductCategoriesPage = observer(function ProductCategoriesPage({
               category={selected}
               store={store}
               canManage={canManage}
+              kind={moduleKind}
+              onKindChange={setModuleKind}
               onSortingChange={handleModuleSortingChange}
             />
           </div>

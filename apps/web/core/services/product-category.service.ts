@@ -2,6 +2,7 @@ import { API_BASE_URL } from "@plane/constants";
 import type {
   TProductCategory,
   TProductCategoryBulkModulesResponse,
+  TProductCategoryLibraryKind,
   TProductCategoryNamePayload,
 } from "@plane/types";
 import { APIService } from "@/services/api.service";
@@ -9,6 +10,7 @@ import { APIService } from "@/services/api.service";
 /**
  * 工作区级产品分类与它的一级模块。列表一次返回全部（已按 sort_order 排好）；
  * 模块的增删改排都返回整个分类，调用方直接替换。
+ * 一级模块分需求 / 用例两份清单：批量添加与排序用 kind 指明哪一份，改名与删除按模块自己的清单走。
  */
 export class ProductCategoryService extends APIService {
   constructor() {
@@ -65,13 +67,14 @@ export class ProductCategoryService extends APIService {
       });
   }
 
-  /** 批量添加（每行一个），后端负责去空、去重、跳过已有与超长 */
+  /** 往一份清单里批量添加（每行一个），后端负责去空、去重、跳过已有与超长 */
   async bulkCreateModules(
     workspaceSlug: string,
     categoryId: string,
-    names: string[]
+    names: string[],
+    kind: TProductCategoryLibraryKind
   ): Promise<TProductCategoryBulkModulesResponse> {
-    return this.post(`${this.root(workspaceSlug)}/${categoryId}/modules/bulk/`, { names })
+    return this.post(`${this.root(workspaceSlug)}/${categoryId}/modules/bulk/`, { names, kind })
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
@@ -100,9 +103,14 @@ export class ProductCategoryService extends APIService {
       });
   }
 
-  /** 分类内一级模块整段重排 */
-  async reorderModules(workspaceSlug: string, categoryId: string, ids: string[]): Promise<TProductCategory> {
-    return this.post(`${this.root(workspaceSlug)}/${categoryId}/modules/reorder/`, { ids })
+  /** 一份清单内整段重排：ids 是这份清单完整的有序 id 列表 */
+  async reorderModules(
+    workspaceSlug: string,
+    categoryId: string,
+    ids: string[],
+    kind: TProductCategoryLibraryKind
+  ): Promise<TProductCategory> {
+    return this.post(`${this.root(workspaceSlug)}/${categoryId}/modules/reorder/`, { ids, kind })
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;

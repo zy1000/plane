@@ -54,7 +54,6 @@ export function ProductCategoryList(props: Props) {
       <>
         {sorting && <GripVertical data-sortable-drag-handle className="size-4 shrink-0 cursor-grab text-tertiary" />}
         <span className="min-w-0 flex-1 truncate">{category.name}</span>
-        <span className="shrink-0 text-12 font-normal tabular-nums text-tertiary">{category.modules.length}</span>
       </>
     );
     const rowClass = "flex h-[38px] w-full shrink-0 items-center gap-2.5 rounded-lg px-2.5 text-left text-14";

@@ -1,9 +1,10 @@
 import { Folder, Tags } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { ChevronDownIcon } from "@plane/propel/icons";
-import type { TProductCategory } from "@plane/types";
+import type { TProductCategory, TProductCategoryLibraryKind } from "@plane/types";
 import { CustomSearchSelect } from "@plane/ui";
 import { cn } from "@plane/utils";
+import { getProductCategoryModules } from "../product-categories/helpers";
 
 /** 「不选择」的哨兵值：CustomSearchSelect 的空串 / null 不好区分「没选」和「选了不选择」 */
 const NONE = "__none__";
@@ -12,6 +13,8 @@ const FIELD_BOX = "flex h-9 w-full items-center justify-between gap-2 rounded-md
 
 type TSelectProps = {
   categories: TProductCategory[];
+  /** 给哪类库选：标准需求库看需求一级模块，模板用例库看用例一级模块 */
+  kind: TProductCategoryLibraryKind;
   value: string | null;
   onChange: (categoryId: string | null) => void;
   disabled?: boolean;
@@ -20,9 +23,10 @@ type TSelectProps = {
   optionsClassName?: string;
 };
 
-/** 创建标准库时选产品分类（非必填）：首项「不选择」，其余带「N 个模块」，可搜索 */
+/** 创建标准库 / 模板用例库时选产品分类（非必填）：首项「不选择」，其余带对应清单的「N 个模块」，可搜索 */
 export function ProductCategorySelect({
   categories,
+  kind,
   value,
   onChange,
   disabled = false,
@@ -46,7 +50,7 @@ export function ProductCategorySelect({
           <Tags className="size-3.5 shrink-0 text-accent-primary" strokeWidth={1.75} />
           <span className="min-w-0 flex-1 truncate text-13">{category.name}</span>
           <span className="shrink-0 text-11 text-tertiary">
-            {t("product_categories.module_count", { count: category.modules.length })}
+            {t("product_categories.module_count", { count: getProductCategoryModules(category, kind).length })}
           </span>
         </span>
       ),
@@ -103,19 +107,26 @@ export function ProductCategoryReadonly({ category }: { category: { id: string; 
   );
 }
 
-/** 选中分类后预览库会自动带出的一级模块 */
-export function ProductCategoryModulesPreview({ category }: { category: TProductCategory | null }) {
+/** 选中分类后预览库会自动带出的一级模块：标准需求库带需求清单，模板用例库带用例清单 */
+export function ProductCategoryModulesPreview({
+  category,
+  kind,
+}: {
+  category: TProductCategory | null;
+  kind: TProductCategoryLibraryKind;
+}) {
   const { t } = useTranslation();
   if (!category) return null;
+  const modules = getProductCategoryModules(category, kind);
   return (
     <div>
       <div className="mb-1.5 flex items-baseline gap-2 text-12 font-medium text-secondary">
-        <span>{t("product_categories.modules_title")}</span>
-        <span className="font-normal tabular-nums text-tertiary">{category.modules.length}</span>
+        <span>{t(`product_categories.module_kind.${kind}`)}</span>
+        <span className="font-normal tabular-nums text-tertiary">{modules.length}</span>
       </div>
-      {category.modules.length > 0 && (
+      {modules.length > 0 && (
         <div className="vertical-scrollbar scrollbar-sm flex max-h-40 flex-wrap gap-1.5 overflow-y-auto rounded-lg bg-layer-1 p-3">
-          {category.modules.map((module) => (
+          {modules.map((module) => (
             <span
               key={module.id}
               className="inline-flex h-7 items-center gap-1.5 rounded-md border border-subtle bg-surface-1 px-2.5 text-13 text-primary"

@@ -1,6 +1,6 @@
 import { Folder, GripVertical } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
-import type { TProductCategoryModule } from "@plane/types";
+import type { TProductCategoryLibraryKind, TProductCategoryModule } from "@plane/types";
 import { Sortable } from "@plane/ui";
 import { cn } from "@plane/utils";
 
@@ -9,6 +9,8 @@ const keyExtractor = (module: TProductCategoryModule) => module.id;
 
 type Props = {
   modules: TProductCategoryModule[];
+  /** 哪份清单：决定数量列叫「需求数」还是「用例数」 */
+  kind: TProductCategoryLibraryKind;
   /** 有管理权限才出「操作」列 */
   canManage: boolean;
   /** 调整顺序模式：出拖柄、收起操作列，拖完只改草稿，保存才提交 */
@@ -18,9 +20,9 @@ type Props = {
   onDelete: (module: TProductCategoryModule) => void;
 };
 
-/** 分类详情里的一级模块表（外框由详情页包）：序号 · 模块名称 · 需求数 · 操作（编辑 / 删除常显） */
+/** 分类详情里一份清单的一级模块表（外框由详情页包）：序号 · 模块名称 · 需求数 / 用例数 · 操作（编辑 / 删除常显） */
 export function ProductCategoryModuleTable(props: Props) {
-  const { modules, canManage, sorting, onSortChange, onEdit, onDelete } = props;
+  const { modules, kind, canManage, sorting, onSortChange, onEdit, onDelete } = props;
   const { t } = useTranslation();
   const showActions = canManage && !sorting;
   const columns = cn(
@@ -73,7 +75,9 @@ export function ProductCategoryModuleTable(props: Props) {
         {sorting && <span />}
         <span>{t("product_categories.table.index")}</span>
         <span>{t("product_categories.table.name")}</span>
-        <span className="text-right">{t("product_categories.table.item_count")}</span>
+        <span className="text-right">
+          {t(kind === "case" ? "product_categories.table.case_count" : "product_categories.table.requirement_count")}
+        </span>
         {showActions && <span className="text-right">{t("product_categories.table.actions")}</span>}
       </div>
       {modules.length === 0 ? (

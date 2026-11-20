@@ -1,4 +1,4 @@
-import type { TProductCategoryLibraryKind, TProductCategoryModuleSkipReason } from "@plane/types";
+import type { TProductCategory, TProductCategoryLibraryKind, TProductCategoryModuleSkipReason } from "@plane/types";
 import { PRODUCT_CATEGORY_MODULE_NAME_MAX_LENGTH } from "@plane/types";
 
 type TTranslate = (key: string, params?: Record<string, unknown>) => string;
@@ -11,6 +11,10 @@ export const getProductCategoryErrorMessage = (error: unknown, t: TTranslate) =>
   if (code === "PRODUCT_CATEGORY_MODULE_NAME_ALREADY_EXISTS") return t("product_categories.errors.module_name_exists");
   return code ?? payload?.detail ?? t("product_categories.errors.generic");
 };
+
+/** 取分类的一份一级模块清单：需求清单跟标准需求库，用例清单跟模板用例库 */
+export const getProductCategoryModules = (category: TProductCategory, kind: TProductCategoryLibraryKind) =>
+  kind === "case" ? category.case_modules : category.modules;
 
 /** 在用库的详情页：标准需求库 / 模板用例库 */
 export const getProductCategoryLibraryPath = (
@@ -31,7 +35,7 @@ export type TBulkModulePreview = {
 
 /**
  * 批量添加的本地预览，口径与后端 bulk_add_category_modules 一致：
- * 去首尾空格、丢空行；超过 30 字、分类里已有、本次重复的跳过。
+ * 去首尾空格、丢空行；超过 30 字、这份清单里已有、本次重复的跳过。
  */
 export const previewBulkModules = (raw: string, existingNames: string[]): TBulkModulePreview => {
   const existing = new Set(existingNames);

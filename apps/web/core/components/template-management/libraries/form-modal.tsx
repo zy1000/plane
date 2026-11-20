@@ -314,6 +314,7 @@ export function RequirementLibraryFormModal() {
               ) : (
                 <ProductCategorySelect
                   categories={productCategories}
+                  kind="requirement"
                   value={productCategoryId}
                   onChange={(value) => {
                     setProductCategoryId(value);
@@ -339,8 +340,8 @@ export function RequirementLibraryFormModal() {
           ) : null}
           {errors.productCategory && <p className="mt-1.5 text-11 text-danger-primary">{errors.productCategory}</p>}
         </div>
-        {/* 选了分类：预览库会自动带出的一级模块 */}
-        {!isEditMode && <ProductCategoryModulesPreview category={selectedProductCategory} />}
+        {/* 选了分类：预览库会自动带出的需求一级模块 */}
+        {!isEditMode && <ProductCategoryModulesPreview category={selectedProductCategory} kind="requirement" />}
         {/* 描述 */}
         <label className="block">
           <span className="mb-1.5 flex items-center gap-1.5 text-12 font-medium text-secondary">

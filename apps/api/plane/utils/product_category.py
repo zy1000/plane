@@ -12,6 +12,10 @@
 规则与标准库一致：根模块 ``CaseModule.category_module`` 指回分类模块，条目是用例。
 分类载荷与拦截列表里两类库合在一个 ``libraries`` 列表，用 ``kind`` 区分。
 
+2026-11-20 起一级模块分两份清单（``ProductCategoryModule.kind``）：需求一级模块只同步到
+标准库，用例一级模块只同步到模板用例库；载荷里分别是 ``modules`` 与 ``case_modules``。
+改名 / 排序 / 删除按 ``category_module`` 外键找库里的根，天然只落到对应那类库。
+
 并发：建库生成根模块与分类的每次写入都先锁分类行（``lock_category``），彼此排队，
 免得「建库读模块列表」和「加模块找在用库」互相看不见对方未提交的数据而漏建根。
 加锁顺序统一为 分类行 → 分类模块行 → 库里的根模块。
@@ -37,14 +41,19 @@ from plane.db.models import (
     TestCase,
     TestCaseRepository,
 )
+from plane.db.models.product_category import (
+    MODULE_KIND_CASE,
+    MODULE_KIND_REQUIREMENT,
+)
 
 ROOT_LOCKED_CODE = "REQUIREMENT_MODULE_ROOT_LOCKED"
 CASE_ROOT_LOCKED_CODE = "CASE_MODULE_ROOT_LOCKED"
 CATEGORY_IN_USE_CODE = "PRODUCT_CATEGORY_IN_USE"
 CATEGORY_MODULE_IN_USE_CODE = "PRODUCT_CATEGORY_MODULE_IN_USE"
 
-LIBRARY_KIND_REQUIREMENT = "requirement"
-LIBRARY_KIND_CASE = "case"
+# 库类型与一级模块清单类型用同一组值：哪类库就跟哪份清单
+LIBRARY_KIND_REQUIREMENT = MODULE_KIND_REQUIREMENT
+LIBRARY_KIND_CASE = MODULE_KIND_CASE
 
 
 # ---------------------------------------------------------------------------
@@ -116,15 +125,16 @@ def _case_root_stats(repository_ids):
 
 
 def build_category_payloads(categories):
-    """分类列表的响应：每个分类带一级模块（含跨库条目数 = 需求数 + 用例数）与正在用它的
-    活库（标准库在前、模板用例库在后，``kind`` 区分）。"""
+    """分类列表的响应：每个分类带两份一级模块（``modules`` 需求、``case_modules`` 用例，
+    各含跨库条目数：需求数 / 用例数）与正在用它的活库（标准库在前、模板用例库在后，
+    ``kind`` 区分）。"""
     categories = list(categories)
     category_ids = [c.id for c in categories]
     modules_by_category = defaultdict(list)
     for module in ProductCategoryModule.objects.filter(
         category_id__in=category_ids
     ).order_by("sort_order", "created_at", "id"):
-        modules_by_category[module.category_id].append(module)
+        modules_by_category[(module.category_id, module.kind)].append(module)
 
     libraries = list(
         RequirementLibrary.objects.filter(product_category_id__in=category_ids)
@@ -153,20 +163,25 @@ def build_category_payloads(categories):
             if category_module_id:
                 items_by_category_module[category_module_id] += stats[root_id]["items"]
 
+    def module_payloads(category, kind):
+        return [
+            {
+                "id": str(module.id),
+                "name": module.name,
+                "kind": module.kind,
+                "sort_order": module.sort_order,
+                "item_count": items_by_category_module.get(module.id, 0),
+            }
+            for module in modules_by_category.get((category.id, kind), [])
+        ]
+
     return [
         {
             "id": str(category.id),
             "name": category.name,
             "sort_order": category.sort_order,
-            "modules": [
-                {
-                    "id": str(module.id),
-                    "name": module.name,
-                    "sort_order": module.sort_order,
-                    "item_count": items_by_category_module.get(module.id, 0),
-                }
-                for module in modules_by_category.get(category.id, [])
-            ],
+            "modules": module_payloads(category, MODULE_KIND_REQUIREMENT),
+            "case_modules": module_payloads(category, MODULE_KIND_CASE),
             "libraries": [
                 {
                     "id": str(library.id),
@@ -247,12 +262,12 @@ def _ensure_library_root(library, category_module, actor=None):
 
 
 def seed_library_root_modules(library, actor=None):
-    """建库时按分类的一级模块建根模块，须在事务里调用。库没有分类时什么也不做。"""
+    """建库时按分类的需求一级模块建根模块，须在事务里调用。库没有分类时什么也不做。"""
     if not library.product_category_id:
         return
     lock_category(library.product_category_id)
     for category_module in ProductCategoryModule.objects.filter(
-        category_id=library.product_category_id
+        category_id=library.product_category_id, kind=MODULE_KIND_REQUIREMENT
     ).order_by("sort_order", "created_at", "id"):
         _ensure_library_root(library, category_module, actor=actor)
 
@@ -289,44 +304,50 @@ def _ensure_repository_root(repository, category_module, actor=None):
 
 
 def seed_repository_root_modules(repository, actor=None):
-    """建模板用例库时按分类的一级模块建根模块，须在事务里调用。库没有分类时什么也不做。"""
+    """建模板用例库时按分类的用例一级模块建根模块，须在事务里调用。库没有分类时什么也不做。"""
     if not repository.product_category_id:
         return
     lock_category(repository.product_category_id)
     for category_module in ProductCategoryModule.objects.filter(
-        category_id=repository.product_category_id
+        category_id=repository.product_category_id, kind=MODULE_KIND_CASE
     ).order_by("sort_order", "created_at", "id"):
         _ensure_repository_root(repository, category_module, actor=actor)
 
 
-def add_category_module(category, name, actor=None):
+def add_category_module(category, name, actor=None, kind=MODULE_KIND_REQUIREMENT):
+    """加一个一级模块并同步到在用的库：需求清单 → 标准库，用例清单 → 模板用例库。"""
     with transaction.atomic():
         lock_category(category.id)
         module = ProductCategoryModule.objects.create(
             workspace_id=category.workspace_id,
             category=category,
+            kind=kind,
             name=name,
             created_by=actor,
         )
-        for library in _active_libraries(category.id):
-            _ensure_library_root(library, module, actor=actor)
-        for repository in _active_repositories(category.id):
-            _ensure_repository_root(repository, module, actor=actor)
+        if kind == MODULE_KIND_CASE:
+            for repository in _active_repositories(category.id):
+                _ensure_repository_root(repository, module, actor=actor)
+        else:
+            for library in _active_libraries(category.id):
+                _ensure_library_root(library, module, actor=actor)
     return module
 
 
 MODULE_NAME_MAX_LENGTH = 30
 
 
-def bulk_add_category_modules(category, raw_names, actor=None):
-    """批量添加一级模块：去空格、去空行，按出现顺序追加。
+def bulk_add_category_modules(
+    category, raw_names, actor=None, kind=MODULE_KIND_REQUIREMENT
+):
+    """批量往一份清单里添加一级模块：去空格、去空行，按出现顺序追加。
 
-    跳过的三种：分类里已有（exists）、本次输入里重复（duplicate）、超长（too_long）。
+    跳过的三种：这份清单里已有（exists）、本次输入里重复（duplicate）、超长（too_long）。
     返回 ``(created_names, skipped)``，skipped 是 ``[{"name", "reason"}]``。整批一个事务，
-    每个新模块照常同步到所有用该分类的库。
+    每个新模块照常同步到所有用该分类的对应那类库。
     """
     existing = set(
-        ProductCategoryModule.objects.filter(category=category).values_list(
+        ProductCategoryModule.objects.filter(category=category, kind=kind).values_list(
             "name", flat=True
         )
     )
@@ -347,7 +368,7 @@ def bulk_add_category_modules(category, raw_names, actor=None):
         seen.add(name)
     with transaction.atomic():
         for name in to_create:
-            add_category_module(category, name, actor=actor)
+            add_category_module(category, name, actor=actor, kind=kind)
     return to_create, skipped
 
 
@@ -565,7 +586,7 @@ def case_root_lock_message(repository):
 def case_root_missing_message(repository, name, *, column=None):
     prefix = f"「{column}」" if column else ""
     category = repository.product_category
-    return f"{prefix}第一层「{name}」不在产品模板「{category.name}」的一级模块中。"
+    return f"{prefix}第一层「{name}」不在产品模板「{category.name}」的用例一级模块中。"
 
 
 def _same_id(left, right):

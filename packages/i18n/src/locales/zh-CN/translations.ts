@@ -2429,10 +2429,13 @@ export default {
       case: "用例",
     },
     modules_title: "一级模块",
+    module_kind: {
+      requirement: "需求一级模块",
+      case: "用例一级模块",
+    },
     locked_root_note: "一级模块由产品模板 {name} 统一维护",
     locked_root_note_unnamed: "一级模块由产品模板统一维护",
     module_count: "{count} 个模块",
-    meta_modules: "{count} 个一级模块",
     meta_libraries: "{count} 个库在用",
     meta_no_libraries: "暂无库在用",
     add_module: "添加模块",
@@ -2447,7 +2450,8 @@ export default {
     table: {
       index: "序号",
       name: "模块名称",
-      item_count: "条目数",
+      requirement_count: "需求数",
+      case_count: "用例数",
       actions: "操作",
     },
     empty: {
@@ -2472,7 +2476,8 @@ export default {
       sync_rename: "将同步修改 {count} 个库",
     },
     bulk: {
-      title: "添加一级模块",
+      title_requirement: "添加需求一级模块",
+      title_case: "添加用例一级模块",
       label: "模块名称（每行一个）",
       placeholder: "可直接从 Excel 整列粘贴",
       will_add: "将添加 {count} 个",

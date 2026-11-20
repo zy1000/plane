@@ -2237,10 +2237,13 @@ export default {
       case: "Test case",
     },
     modules_title: "Top-level modules",
+    module_kind: {
+      requirement: "Requirement modules",
+      case: "Test case modules",
+    },
     locked_root_note: "Top-level modules are maintained by product category {name}",
     locked_root_note_unnamed: "Top-level modules are maintained by the product category",
     module_count: "{count} modules",
-    meta_modules: "{count} top-level modules",
     meta_libraries: "Used by {count} libraries",
     meta_no_libraries: "Not used by any library",
     add_module: "Add modules",
@@ -2255,7 +2258,8 @@ export default {
     table: {
       index: "No.",
       name: "Module",
-      item_count: "Items",
+      requirement_count: "Requirements",
+      case_count: "Test cases",
       actions: "Actions",
     },
     empty: {
@@ -2280,7 +2284,8 @@ export default {
       sync_rename: "Syncs {count} libraries",
     },
     bulk: {
-      title: "Add top-level modules",
+      title_requirement: "Add requirement modules",
+      title_case: "Add test case modules",
       label: "Module names (one per line)",
       placeholder: "Paste a column from Excel",
       will_add: "{count} to add",
