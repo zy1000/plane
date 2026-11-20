@@ -18,6 +18,8 @@ export type TCaseRepositoryModuleTreeResponse = {
   total: number;
   /** 没挂模块的用例库数，「未归类」的计数 */
   unassigned: number;
+  /** 产品下全部用例数，用例库列表页头的统计 */
+  case_total: number;
 };
 
 export class RepositoryService extends APIService {

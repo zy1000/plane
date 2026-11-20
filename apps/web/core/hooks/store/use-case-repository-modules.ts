@@ -8,6 +8,20 @@ import { RepositoryService, type TCaseRepositoryModule } from "@/services/qa/rep
 
 const repositoryService = new RepositoryService();
 
+/** 模块 id → 「父 / 子」路径，用例库的「所属模块」显示用 */
+export const buildRepositoryModulePathMap = (
+  list: TCaseRepositoryModule[],
+  parentPath = "",
+  map = new Map<string, string>()
+) => {
+  for (const item of list) {
+    const path = parentPath ? `${parentPath} / ${item.name}` : item.name;
+    map.set(item.id, path);
+    buildRepositoryModulePathMap(item.children ?? [], path, map);
+  }
+  return map;
+};
+
 /**
  * 产品下用例库模块树的数据入口（产品「测试用例」页左栏）。
  *
@@ -18,6 +32,7 @@ export const useCaseRepositoryModules = (workspaceSlug: string | undefined, prod
   const [modules, setModules] = useState<TCaseRepositoryModule[]>([]);
   const [total, setTotal] = useState(0);
   const [unassigned, setUnassigned] = useState(0);
+  const [caseTotal, setCaseTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(Boolean(workspaceSlug && productId));
 
   const refresh = useCallback(async () => {
@@ -27,6 +42,7 @@ export const useCaseRepositoryModules = (workspaceSlug: string | undefined, prod
       setModules(response.modules);
       setTotal(response.total);
       setUnassigned(response.unassigned);
+      setCaseTotal(response.case_total ?? 0);
     } finally {
       setIsLoading(false);
     }
@@ -94,6 +110,8 @@ export const useCaseRepositoryModules = (workspaceSlug: string | undefined, prod
     total,
     /** 没挂模块的用例库数，「未归类」的计数 */
     unassigned,
+    /** 产品下全部用例数 */
+    caseTotal,
     isLoading,
     refresh,
     createModule,

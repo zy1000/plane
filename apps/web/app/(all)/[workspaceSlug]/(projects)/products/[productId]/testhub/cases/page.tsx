@@ -2,10 +2,10 @@
 
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Library } from "lucide-react";
 import { RepositoryCasesView } from "@/components/qa/cases/repository-cases-view";
+import { TESTHUB_HEADER_ACTIONS_ID } from "@/components/qa/shared/testhub-header-actions";
 import { qaCaseSetToastWarning } from "@/utils/qa-case-error";
-import { RepositorySelect } from "../repository-select";
+import { RepositoryEntityBar } from "../repository-entity-bar";
 
 export default function TestCasesPage() {
   const { workspaceSlug, productId } = useParams();
@@ -14,6 +14,12 @@ export default function TestCasesPage() {
   const repositoryIdFromUrl = searchParams.get("repositoryId");
   const [repositoryId, setRepositoryId] = useState<string | null>(repositoryIdFromUrl);
   const [repositoryName, setRepositoryName] = useState<string>("");
+  const [caseTotal, setCaseTotal] = useState<number | undefined>(undefined);
+  // 本页操作（搜索 / 筛选 / 新建 / 导入导出）挂到页签行右侧，正文第一行留给实体栏
+  const [toolbarHost, setToolbarHost] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    setToolbarHost(document.getElementById(TESTHUB_HEADER_ACTIONS_ID));
+  }, []);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -49,41 +55,41 @@ export default function TestCasesPage() {
   }, [repositoryId, workspaceSlug, searchParams, router]);
 
   return (
-    <RepositoryCasesView
-      workspaceSlug={String(workspaceSlug || "")}
-      productId={String(productId || "")}
-      repositoryId={repositoryId}
-      repositoryName={repositoryName}
-      // 用例库切换放在树头：树只管当前库
-      treeHeader={
-        <RepositorySelect
-          key={`repository-select-${repositoryId || "all"}`}
+    <div className="flex h-full w-full flex-col overflow-hidden">
+      {/* 实体栏：当前在哪个用例库（切换用例库也在这里） */}
+      <RepositoryEntityBar
+        workspaceSlug={String(workspaceSlug || "")}
+        productId={String(productId || "")}
+        repositoryId={repositoryId}
+        caseTotal={caseTotal}
+        onRepositoryChange={({ id, name }) => {
+          setRepositoryId(id);
+          setRepositoryName(name ? String(name) : "");
+          try {
+            if (id) {
+              sessionStorage.setItem("selectedRepositoryId", String(id));
+              if (name) sessionStorage.setItem("selectedRepositoryName", String(name));
+            } else {
+              sessionStorage.removeItem("selectedRepositoryId");
+              sessionStorage.removeItem("selectedRepositoryName");
+            }
+          } catch {}
+          const ws = String(workspaceSlug || "");
+          const pid = String(productId || "");
+          if (id) router.push(`/${ws}/products/${pid}/testhub/cases?repositoryId=${encodeURIComponent(String(id))}`);
+          else router.push(`/${ws}/products/${pid}/testhub/cases`);
+        }}
+      />
+      <div className="min-h-0 flex-1">
+        <RepositoryCasesView
           workspaceSlug={String(workspaceSlug || "")}
           productId={String(productId || "")}
-          className="min-w-0 max-w-full"
-          buttonClassName="h-7 min-w-0 max-w-full gap-1.5 rounded-md border-0 px-1.5 text-13 font-medium text-primary hover:bg-layer-transparent-hover"
-          labelClassName="max-w-[170px] text-13 leading-4"
-          leftIcon={<Library className="size-3.5 text-tertiary" strokeWidth={1.75} />}
-          defaultRepositoryId={repositoryId}
-          onRepositoryChange={({ id, name }) => {
-            setRepositoryId(id);
-            setRepositoryName(name ? String(name) : "");
-            try {
-              if (id) {
-                sessionStorage.setItem("selectedRepositoryId", String(id));
-                if (name) sessionStorage.setItem("selectedRepositoryName", String(name));
-              } else {
-                sessionStorage.removeItem("selectedRepositoryId");
-                sessionStorage.removeItem("selectedRepositoryName");
-              }
-            } catch {}
-            const ws = String(workspaceSlug || "");
-            const pid = String(productId || "");
-            if (id) router.push(`/${ws}/products/${pid}/testhub/cases?repositoryId=${encodeURIComponent(String(id))}`);
-            else router.push(`/${ws}/products/${pid}/testhub/cases`);
-          }}
+          repositoryId={repositoryId}
+          repositoryName={repositoryName}
+          toolbarPortalEl={toolbarHost}
+          onAllTotalChange={setCaseTotal}
         />
-      }
-    />
+      </div>
+    </div>
   );
 }

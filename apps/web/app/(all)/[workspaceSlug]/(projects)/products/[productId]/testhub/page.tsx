@@ -2,12 +2,13 @@
 
 import { useEffect, useMemo, useState, useRef } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { Breadcrumbs } from "@plane/ui";
 import { PageHead } from "@/components/core/page-title";
 import type { TModuleTreeNode } from "@/components/qa/module-tree";
 import { UNASSIGNED_MODULE_KEY } from "@/components/qa/module-tree";
 import { RequirementModuleSidebar, type TModuleSidebarStore } from "@/components/requirements/module-tree";
-import { useCaseRepositoryModules } from "@/hooks/store/use-case-repository-modules";
-import { RepositoryService, type TCaseRepositoryModule } from "@/services/qa/repository.service";
+import { buildRepositoryModulePathMap, useCaseRepositoryModules } from "@/hooks/store/use-case-repository-modules";
+import { RepositoryService } from "@/services/qa/repository.service";
 import { Space, Table, Tag, Input, Button, Modal, message, Tooltip } from "antd";
 import { SearchOutlined, EditOutlined, DeleteOutlined, PlusOutlined } from "@ant-design/icons";
 import type { TableProps, InputRef, TableColumnType } from "antd";
@@ -17,19 +18,10 @@ import { formatDateTime, getEnums, globalEnums } from "@/components/qa/shared/te
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import RepositoryModal from "@/components/qa/repository-modal";
 import { useTestHub } from "@/components/qa/shared/testhub/testhub-context";
+import { TestHubEntityBar } from "@/components/qa/shared/testhub-entity-bar";
 import styles from "./reviews/reviews.module.css";
 
 const repositoryService = new RepositoryService();
-
-/** 模块 id → 「父 / 子」路径，表格「所属模块」列用 */
-const buildModulePathMap = (list: TCaseRepositoryModule[], parentPath = "", map = new Map<string, string>()) => {
-  for (const item of list) {
-    const path = parentPath ? `${parentPath} / ${item.name}` : item.name;
-    map.set(item.id, path);
-    buildModulePathMap(item.children ?? [], path, map);
-  }
-  return map;
-};
 
 const countDescendants = (node: TModuleTreeNode): number =>
   (node.children ?? []).reduce((sum, child) => sum + 1 + countDescendants(child), 0);
@@ -96,7 +88,7 @@ export default function TestManagementHomePage() {
     workspaceSlug ? String(workspaceSlug) : undefined,
     productId ? String(productId) : undefined
   );
-  const modulePathMap = useMemo(() => buildModulePathMap(moduleStore.modules), [moduleStore.modules]);
+  const modulePathMap = useMemo(() => buildRepositoryModulePathMap(moduleStore.modules), [moduleStore.modules]);
 
   const { registerOpenNewModal, registerOverviewSearch, setOverviewSearchValue } = useTestHub();
   useEffect(() => {
@@ -192,10 +184,10 @@ export default function TestManagementHomePage() {
 
   const columns: TableProps<any>["columns"] = [
     {
-      title: "名称",
+      title: "用例库",
       dataIndex: "name",
       key: "name",
-      width: 180,
+      width: 190,
       render: (text, record) => (
         <a
           onClick={() => {
@@ -206,18 +198,26 @@ export default function TestManagementHomePage() {
             const target = `/${ws}/products/${pid}/testhub/cases/?repositoryId=${encodeURIComponent(String(record.id))}`;
             router.push(target);
           }}
-          style={{ cursor: "pointer" }}
+          className="block min-w-0 cursor-pointer font-medium"
         >
-          <span className="block max-w-[440px] truncate text-primary">{text || "-"}</span>
+          <span className="block truncate text-accent-primary hover:underline">{text || "-"}</span>
         </a>
       ),
       ...getColumnSearchProps("name"),
     },
     {
+      title: "用例数",
+      dataIndex: "case_count",
+      key: "case_count",
+      width: 88,
+      align: "right",
+      render: (count?: number) => <span className="tabular-nums">{(count ?? 0).toLocaleString()}</span>,
+    },
+    {
       title: "所属模块",
       dataIndex: "module_id",
       key: "module_id",
-      width: 200,
+      width: 190,
       render: (moduleId: string | null) => {
         const path = moduleId ? modulePathMap.get(moduleId) : undefined;
         if (!path) return <span className="text-placeholder">—</span>;
@@ -251,7 +251,7 @@ export default function TestManagementHomePage() {
       title: "创建者",
       key: "created_by",
       dataIndex: "created_by",
-      width: 140,
+      width: 124,
       render: (_: any, record: any) => (
         <MemberDropdown
           multiple={true}
@@ -280,7 +280,7 @@ export default function TestManagementHomePage() {
     {
       title: "操作",
       key: "actions",
-      width: 120,
+      width: 96,
       render: (_: any, record: any) => (
         <Space>
           <Button
@@ -397,77 +397,93 @@ export default function TestManagementHomePage() {
   return (
     <>
       <PageHead title="测试管理" />
-      <div className="flex h-full w-full overflow-hidden">
-        <RequirementModuleSidebar
-          store={sidebarStore}
-          selectedModuleId={selectedModuleId}
-          onSelect={handleSelectModule}
-          allLabel="全部用例库"
-          getDeleteConfirmContent={getModuleDeleteContent}
-          onModuleMoved={() => fetchRepositories(1, pageSize, filters)}
-        />
-        <div className="min-w-0 flex-1 overflow-auto">
-          {loading && (
-            <div className="flex items-center justify-center py-12">
-              <div className="text-secondary">加载中...</div>
-            </div>
-          )}
-          {error && (
-            <div className="bg-red-50 border-red-200 mb-4 rounded-md border p-4">
-              <div className="text-red-800 text-sm">{error}</div>
-            </div>
-          )}
-          <style
-            dangerouslySetInnerHTML={{
-              __html: `
-                .testhub-overview-table-scroll .ant-table-thead > tr > th {
-                  background: var(--bg-layer-1) !important;
-                  border-color: var(--border-subtle) !important;
-                  font-size: 13px !important;
-                  font-weight: 500 !important;
-                  color: var(--text-color-secondary) !important;
-                }
-              `,
-            }}
+      <div className="flex h-full w-full flex-col overflow-hidden">
+        {/* 实体栏：与库内用例页同一位置、同一样式，这里只有「用例库」一级 */}
+        <TestHubEntityBar
+          meta={
+            !moduleStore.isLoading && (
+              <>
+                <TestHubEntityBar.Meta label="用例库">{moduleStore.total.toLocaleString()}</TestHubEntityBar.Meta>
+                <TestHubEntityBar.Divider />
+                <TestHubEntityBar.Meta label="用例">{moduleStore.caseTotal.toLocaleString()}</TestHubEntityBar.Meta>
+              </>
+            )
+          }
+        >
+          <Breadcrumbs.Item component={<TestHubEntityBar.Current>用例库</TestHubEntityBar.Current>} />
+        </TestHubEntityBar>
+        <div className="flex min-h-0 w-full flex-1 overflow-hidden">
+          <RequirementModuleSidebar
+            store={sidebarStore}
+            selectedModuleId={selectedModuleId}
+            onSelect={handleSelectModule}
+            allLabel="全部用例库"
+            getDeleteConfirmContent={getModuleDeleteContent}
+            onModuleMoved={() => fetchRepositories(1, pageSize, filters)}
           />
-          {!loading && !error && (
-            <>
-              <div className={`${styles.reviewLikeAntTable} testhub-overview-table-scroll`}>
-                <Table
-                  dataSource={repositories}
-                  columns={columns}
-                  loading={loading}
-                  rowKey="id"
-                  bordered={true}
-                  tableLayout="fixed"
-                  pagination={{
-                    current: currentPage,
-                    pageSize: pageSize,
-                    total: total,
-                    showSizeChanger: true,
-                    showQuickJumper: true,
-                    showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条，共 ${total} 条`,
-                    pageSizeOptions: ["10", "20", "50", "100"],
-                    onChange: handlePaginationChange,
-                    onShowSizeChange: handlePageSizeChange,
-                  }}
-                />
-                {apiLoading && <div className="sr-only">processing...</div>}
-                <RepositoryModal
-                  open={modalOpen}
-                  workspaceSlug={String(workspaceSlug || "")}
-                  productId={String(productId || "")}
-                  initialValues={editing}
-                  modules={moduleStore.modules}
-                  defaultModuleId={
-                    selectedModuleId && selectedModuleId !== UNASSIGNED_MODULE_KEY ? selectedModuleId : null
-                  }
-                  onCancel={() => setModalOpen(false)}
-                  onSuccess={refreshAfterRepositoryChange}
-                />
+          <div className="min-w-0 flex-1 overflow-auto">
+            {loading && (
+              <div className="flex items-center justify-center py-12">
+                <div className="text-secondary">加载中...</div>
               </div>
-            </>
-          )}
+            )}
+            {error && (
+              <div className="bg-red-50 border-red-200 mb-4 rounded-md border p-4">
+                <div className="text-red-800 text-sm">{error}</div>
+              </div>
+            )}
+            <style
+              dangerouslySetInnerHTML={{
+                __html: `
+                  .testhub-overview-table-scroll .ant-table-thead > tr > th {
+                    background: var(--bg-layer-1) !important;
+                    border-color: var(--border-subtle) !important;
+                    font-size: 13px !important;
+                    font-weight: 500 !important;
+                    color: var(--text-color-secondary) !important;
+                  }
+                `,
+              }}
+            />
+            {!loading && !error && (
+              <>
+                <div className={`${styles.reviewLikeAntTable} testhub-overview-table-scroll`}>
+                  <Table
+                    dataSource={repositories}
+                    columns={columns}
+                    loading={loading}
+                    rowKey="id"
+                    bordered={true}
+                    tableLayout="fixed"
+                    pagination={{
+                      current: currentPage,
+                      pageSize: pageSize,
+                      total: total,
+                      showSizeChanger: true,
+                      showQuickJumper: true,
+                      showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条，共 ${total} 条`,
+                      pageSizeOptions: ["10", "20", "50", "100"],
+                      onChange: handlePaginationChange,
+                      onShowSizeChange: handlePageSizeChange,
+                    }}
+                  />
+                  {apiLoading && <div className="sr-only">processing...</div>}
+                  <RepositoryModal
+                    open={modalOpen}
+                    workspaceSlug={String(workspaceSlug || "")}
+                    productId={String(productId || "")}
+                    initialValues={editing}
+                    modules={moduleStore.modules}
+                    defaultModuleId={
+                      selectedModuleId && selectedModuleId !== UNASSIGNED_MODULE_KEY ? selectedModuleId : null
+                    }
+                    onCancel={() => setModalOpen(false)}
+                    onSuccess={refreshAfterRepositoryChange}
+                  />
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
     </>

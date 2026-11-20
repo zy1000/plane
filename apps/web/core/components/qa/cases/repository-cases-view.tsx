@@ -124,9 +124,9 @@ export type TRepositoryCasesViewProps = {
   repositoryId: string | null; // 页面在 URL/sessionStorage 解析完成前可能为 null，组件按原页面行为处理空态
   repositoryName?: string;
   mode?: "product" | "template";
-  treeHeader?: ReactNode; // 树头左侧内容（产品页放用例库切换器），由壳层传入
   treeTop?: ReactNode; // 树头上方整行内容（项目入口放产品 / 用例库切换器）
   toolbarPortalEl?: HTMLElement | null; // 传入后搜索/筛选/操作按钮挂到页头右侧
+  onAllTotalChange?: (total: number | undefined) => void; // 库内用例总数变化时通知外壳（产品页的实体栏显示）
   /** 模板库绑了产品模板时传模板名：第一层由产品模板统一维护（不传时行为不变） */
   lockedRootCategoryName?: string;
 };
@@ -136,9 +136,9 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
     workspaceSlug,
     repositoryId,
     repositoryName,
-    treeHeader,
     treeTop,
     toolbarPortalEl,
+    onAllTotalChange,
     mode = "product",
     lockedRootCategoryName,
   } = props;
@@ -196,6 +196,9 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
   const [allTotal, setAllTotal] = useState<number | undefined>(undefined);
   /** 没挂模块的用例数，树末尾「未归类」节点用 */
   const [unassignedTotal, setUnassignedTotal] = useState<number>(0);
+  useEffect(() => {
+    onAllTotalChange?.(allTotal);
+  }, [allTotal, onAllTotalChange]);
 
   const caseService = new CaseService();
   const caseModuleService = new CaseModuleService();
@@ -965,7 +968,6 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
         <div className="flex h-full w-full flex-col">
           <Row wrap={false} className="flex-1 overflow-hidden pb-0" gutter={[0, 16]}>
             <ModuleTreePanel
-              headerLeft={treeHeader}
               top={treeTop}
               root={{ label: "全部用例", count: allTotal }}
               nodes={treeNodes}

@@ -8,7 +8,7 @@ from collections import defaultdict
 
 from django.db.models import Count, Q
 
-from plane.db.models import CaseRepositoryModule, TestCaseRepository
+from plane.db.models import CaseRepositoryModule, TestCase, TestCaseRepository
 
 
 def expand_repository_module_subtree_ids(module_id):
@@ -77,4 +77,6 @@ def build_repository_module_tree_payload(product_id):
         "modules": [node_payload(module) for module in modules if module.parent_id is None],
         "total": repositories.count(),
         "unassigned": repositories.filter(module_id__isnull=True).count(),
+        # 产品下全部用例数：用例库列表页头的统计
+        "case_total": TestCase.objects.filter(repository__in=repositories).count(),
     }
