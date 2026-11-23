@@ -5,6 +5,7 @@ import type {
   TDataDictionaryItemLite,
   TProduct,
   TProductOverview,
+  TProductSetLite,
   TUpdateProductPayload,
 } from "@plane/types";
 import { APIService } from "@/services/api.service";
@@ -21,6 +22,7 @@ type TProductSharedField =
   | "hardware_level_detail"
   | "structure_level_detail"
   | "software_level_detail"
+  | "product_set_detail"
   | "my_permission_keys";
 
 /**
@@ -31,12 +33,18 @@ type TProductListResponse = {
   products: (Omit<TProduct, TProductSharedField> & { permission_set: number })[];
   users: Record<string, IUserLite>;
   dictionary_items: Record<string, TDataDictionaryItemLite>;
+  product_sets: Record<string, TProductSetLite>;
   permission_sets: string[][];
 };
 
 /** 把列表的线上格式还原成完整产品对象。同一个人 / 字典值 / 权限键数组在多个产品间共用，不要原地改。 */
 const hydrateProductList = (response: TProductListResponse): TProduct[] => {
-  const { users, dictionary_items: dictionaryItems, permission_sets: permissionSets } = response;
+  const {
+    users,
+    dictionary_items: dictionaryItems,
+    product_sets: productSets,
+    permission_sets: permissionSets,
+  } = response;
   const user = (id: string | null) => (id ? (users[id] ?? null) : null);
   const dictionaryItem = (id: string | null) => (id ? (dictionaryItems[id] ?? null) : null);
   return response.products.map(({ permission_set: permissionSet, ...row }) => ({
@@ -51,6 +59,7 @@ const hydrateProductList = (response: TProductListResponse): TProduct[] => {
     hardware_level_detail: dictionaryItem(row.hardware_level),
     structure_level_detail: dictionaryItem(row.structure_level),
     software_level_detail: dictionaryItem(row.software_level),
+    product_set_detail: row.product_set ? (productSets[row.product_set] ?? null) : null,
     my_permission_keys: permissionSets[permissionSet] ?? [],
   }));
 };

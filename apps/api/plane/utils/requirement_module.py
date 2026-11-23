@@ -103,8 +103,11 @@ def set_requirement_module(scoped_queryset, requirement_ids, *, module_id, actor
     )
 
 
-def build_module_tree_payload(*, scope_filter, total_queryset):
+def build_module_tree_payload(*, scope_filter, total_queryset, requirement_q=None, hide_empty=False):
     """装配某个库 / 产品的模块树响应：树节点带子树累加计数 + 作用域总数。
+
+    requirement_q：只数满足条件的需求（条件写在 requirements__ 关联上），hide_empty：
+    计数为 0 的节点不出 —— 产品里「产品集模块」那一组只列有引用需求的模块。
 
     一次聚合查询 + 内存建树，避免逐节点 COUNT / 逐节点查子级的 N+1。
     total 是作用域内**全部**需求数（含未挂靠模块的行）—— 「全部」节点的
@@ -115,7 +118,8 @@ def build_module_tree_payload(*, scope_filter, total_queryset):
         RequirementModule.objects.filter(**scope_filter)
         .annotate(
             direct_count=Count(
-                "requirements", filter=Q(requirements__deleted_at__isnull=True)
+                "requirements",
+                filter=Q(requirements__deleted_at__isnull=True) & (requirement_q or Q()),
             )
         )
         .order_by("sort_order", "created_at", "id")
@@ -147,13 +151,16 @@ def build_module_tree_payload(*, scope_filter, total_queryset):
             # 来自产品分类的一级模块：库里不能改名 / 移动 / 删除（utils.product_category）
             "locked": bool(module.category_module_id),
             "children": [
-                node_payload(child) for child in children_map.get(module.id, [])
+                node_payload(child) for child in children_map.get(module.id, []) if visible(child)
             ],
         }
 
+    def visible(module):
+        return not hide_empty or subtree_count(module) > 0
+
     return {
         "modules": [
-            node_payload(module) for module in modules if module.parent_id is None
+            node_payload(module) for module in modules if module.parent_id is None and visible(module)
         ],
         "total": total_queryset.count(),
         "unassigned": total_queryset.filter(module_id__isnull=True).count(),

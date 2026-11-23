@@ -68,8 +68,9 @@ export const ProductRequirementDetailPage = observer(function ProductRequirement
     requirement,
     enabled: isEditable,
     onPatch: detail.submitPatch,
-    onStatusChange: canEdit ? detail.updateStatus : undefined,
-    onModuleChange: canEdit ? detail.updateModule : undefined,
+    // 从产品集引用的行整条只读（状态、模块都归产品集），同抽屉
+    onStatusChange: canEdit && !requirement?.is_reference ? detail.updateStatus : undefined,
+    onModuleChange: canEdit && !requirement?.is_reference ? detail.updateModule : undefined,
   });
   const contentReadOnly = !(isEditable && session.isEditing);
   const onStatusChange = session.onStatusChange;

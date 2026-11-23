@@ -6,6 +6,8 @@ from rest_framework import serializers
 
 from plane.db.models import RequirementItemStatus
 
+from plane.utils.requirement_scope import converted_display_id
+
 from .requirement import ROW_FIELDS, RequirementSerializer
 
 
@@ -38,6 +40,10 @@ class MultiProductRequirementSerializer(RequirementSerializer):
     """
 
     def get_display_id(self, obj):
+        # 转为自有的行沿用来源的主编号 + 副编号（MP01-3-1），与产品页同口径
+        converted = converted_display_id(obj, self._origin_identifiers(obj))
+        if converted:
+            return converted
         # scope_identifiers: {product_id: identifier}
         prefix = (self.context.get("scope_identifiers") or {}).get(str(obj.product_id))
         if not prefix or obj.sequence_id is None:

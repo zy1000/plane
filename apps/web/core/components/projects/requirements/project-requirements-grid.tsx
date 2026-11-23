@@ -15,7 +15,7 @@
  */
 import { type KeyboardEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Loader as LoaderIcon } from "lucide-react";
+import { Loader as LoaderIcon, Unlink } from "lucide-react";
 import { useOutsideClickDetector } from "@plane/hooks";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
@@ -31,6 +31,7 @@ import type {
 } from "@plane/types";
 import { Loader } from "@plane/ui";
 import { cn } from "@plane/utils";
+import { BulkOperationsBar } from "@/components/common/bulk-operations-bar";
 import { FiltersDropdown } from "@/components/issues/issue-layouts/filters";
 import { RequirementApprovalCell } from "@/components/products/requirements/approval/requirement-approval-cell";
 import { ProductChip } from "@/components/products/product-chip";
@@ -42,30 +43,34 @@ import { RequirementGridPagination } from "@/components/requirements/requirement
 import {
   getCurrentPageOffset,
   getRequirementColumnWidth,
-  REQUIREMENT_GRID_BODY_CELL_CLASS,
-  REQUIREMENT_GRID_BODY_CELL_FLUSH_CLASS,
   REQUIREMENT_GRID_COLUMN_WIDTH,
-  REQUIREMENT_GRID_HEADER_CELL_CLASS,
-  REQUIREMENT_GRID_HEADER_CELL_FLUSH_CLASS,
   REQUIREMENT_GRID_ROW_CLASS,
   REQUIREMENT_GRID_ROW_SELECTED_CLASS,
   REQUIREMENT_GRID_SELECT_HOST_PAD_CLASS,
   REQUIREMENT_GRID_STICKY_BODY_CLASS,
   REQUIREMENT_GRID_STICKY_HEADER_CLASS,
   REQUIREMENT_GRID_TABLE_CLASS,
+  REQUIREMENT_LIST_BODY_CELL_CLASS,
+  REQUIREMENT_LIST_BODY_CELL_FLUSH_CLASS,
+  REQUIREMENT_LIST_HEADER_CELL_CLASS,
+  REQUIREMENT_LIST_HEADER_CELL_FLUSH_CLASS,
   RequirementGridColumnResizer,
   RequirementGridHoverSelect,
-  RequirementGridHeaderLabel,
   resolveRequirementTitleColumnWidth,
   useRequirementGridColumnResize,
   useRequirementGridScrollContainer,
 } from "@/components/requirements/requirement-grid-shared";
-import { RequirementIdentifier } from "@/components/requirements/requirement-identifier";
+import {
+  REQUIREMENT_LIST_DISPLAY_ID_CLASS,
+  RequirementListAssignee,
+  RequirementListHeaderLabel,
+  RequirementListModule,
+  RequirementListPriority,
+} from "@/components/requirements/requirement-list-cells";
 import { ProjectRequirementDisplayProperties } from "./project-requirement-display-properties";
 import { ProjectRequirementTypeTable } from "./project-requirement-type-table";
 import { useProjectRequirementTypeColumns } from "./use-project-requirement-type-columns";
 import {
-  COLUMN_ICONS,
   COLUMN_LABEL_KEYS,
   TOGGLEABLE_COLUMNS,
   type TProjectRequirementColumnKey,
@@ -184,8 +189,12 @@ export const ProjectRequirementsGrid = (props: TProps) => {
   // 模块与编号一样特殊：可见时紧跟编号钉在左侧，不进「标题之后」的普通列序
   const isModuleVisible = isVisible("module");
   const propertyColumns = useMemo(
-    () => TOGGLEABLE_COLUMNS.filter((key) => key !== "display_id" && key !== "module" && isVisible(key)),
-    [isVisible]
+    () =>
+      TOGGLEABLE_COLUMNS.filter(
+        (key) =>
+          key !== "display_id" && key !== "module" && (showProductColumn || key !== "product") && isVisible(key)
+      ),
+    [isVisible, showProductColumn]
   );
   const builtinByKey = useMemo(
     () => Object.fromEntries(REQUIREMENT_BUILTIN_COLUMNS.map((column) => [column.key, column])),
@@ -199,10 +208,6 @@ export const ProjectRequirementsGrid = (props: TProps) => {
       return builtin ? t(builtin.labelKey) : key;
     },
     [builtinByKey, t]
-  );
-  const columnIcon = useCallback(
-    (key: TProjectRequirementColumnKey) => COLUMN_ICONS[key] ?? builtinByKey[key]?.icon,
-    [builtinByKey]
   );
 
   /** 类型视图「显示」里的列：编号、标题固定；内置列、类型字段（子表字段单列一项）、项目侧列 */
@@ -395,25 +400,15 @@ export const ProjectRequirementsGrid = (props: TProps) => {
     switch (key) {
       case "display_id":
         return requirement.display_id ? (
-          <button
-            type="button"
-            onClick={() => onOpenDetail(requirement.id)}
-            className="min-w-0 truncate text-left hover:text-accent-primary"
-          >
-            <RequirementIdentifier displayId={requirement.display_id} size="md" />
+          <button type="button" onClick={() => onOpenDetail(requirement.id)} className={REQUIREMENT_LIST_DISPLAY_ID_CLASS}>
+            {requirement.display_id}
           </button>
         ) : (
           <span className="text-placeholder">—</span>
         );
       case "module":
         // 产品侧的模块挂靠，项目侧只读展示；无模块 = 只在「全部需求」里
-        return requirement.module_name ? (
-          <span className="min-w-0 truncate text-secondary" title={requirement.module_name}>
-            {requirement.module_name}
-          </span>
-        ) : (
-          <span className="text-placeholder">—</span>
-        );
+        return <RequirementListModule name={requirement.module_name} />;
       case "product":
         return requirement.product_id ? (
           <ProductChip
@@ -455,9 +450,15 @@ export const ProjectRequirementsGrid = (props: TProps) => {
         return (
           <RequirementStatusCell
             status={requirement.status}
+            pillDot
+            className="h-[22px] rounded-md px-2"
             onChange={canManage && onStatusChange ? (next) => onStatusChange(requirement.id, next) : undefined}
           />
         );
+      case "priority":
+        return <RequirementListPriority priority={requirement.priority} />;
+      case "assignee_id":
+        return <RequirementListAssignee memberId={requirement.assignee_id} />;
       default:
         return <BuiltinCellValue columnKey={key} values={requirement} resolveParentTitle={resolveParentTitle} />;
     }
@@ -465,11 +466,6 @@ export const ProjectRequirementsGrid = (props: TProps) => {
 
   const toolbar = (
     <div className="flex items-center gap-2">
-      {canManage && selectedIds.length > 0 && (
-        <Button variant="error-outline" size="sm" disabled={isMutating} onClick={() => onUnlink(selectedIds)}>
-          {t("project_requirements.unlink_selected", { count: selectedIds.length })}
-        </Button>
-      )}
       <div className="flex items-center">
         {!isSearchOpen && (
           <IconButton
@@ -650,13 +646,13 @@ export const ProjectRequirementsGrid = (props: TProps) => {
                 <col key={key} style={{ width: getWidth(key, defaultColumnWidth(key)) }} />
               ))}
             </colgroup>
-            <thead className="sticky top-0 z-[12] border-b border-subtle text-12 font-medium">
+            <thead className="sticky top-0 z-[12] text-13 font-medium">
               <tr>
                 {isDisplayIdVisible && (
                   <th
                     className={cn(
                       "group/header relative",
-                      REQUIREMENT_GRID_HEADER_CELL_FLUSH_CLASS,
+                      REQUIREMENT_LIST_HEADER_CELL_FLUSH_CLASS,
                       REQUIREMENT_GRID_STICKY_HEADER_CLASS
                     )}
                     style={{
@@ -672,7 +668,7 @@ export const ProjectRequirementsGrid = (props: TProps) => {
                         selectHost === "display_id" ? REQUIREMENT_GRID_SELECT_HOST_PAD_CLASS : "px-page-x"
                       )}
                     >
-                      <RequirementGridHeaderLabel icon={columnIcon("display_id")} label={columnLabel("display_id")} />
+                      <RequirementListHeaderLabel label={columnLabel("display_id")} />
                     </div>
                     {selectHost === "display_id" &&
                       renderHoverSelect({
@@ -690,7 +686,7 @@ export const ProjectRequirementsGrid = (props: TProps) => {
                   <th
                     className={cn(
                       "group/header relative",
-                      REQUIREMENT_GRID_HEADER_CELL_FLUSH_CLASS,
+                      REQUIREMENT_LIST_HEADER_CELL_FLUSH_CLASS,
                       REQUIREMENT_GRID_STICKY_HEADER_CLASS
                     )}
                     style={{
@@ -706,7 +702,7 @@ export const ProjectRequirementsGrid = (props: TProps) => {
                         selectHost === "module" ? REQUIREMENT_GRID_SELECT_HOST_PAD_CLASS : "px-page-x"
                       )}
                     >
-                      <RequirementGridHeaderLabel icon={columnIcon("module")} label={columnLabel("module")} />
+                      <RequirementListHeaderLabel label={columnLabel("module")} />
                     </div>
                     {selectHost === "module" &&
                       renderHoverSelect({
@@ -724,7 +720,7 @@ export const ProjectRequirementsGrid = (props: TProps) => {
                   data-requirement-sticky-cell
                   className={cn(
                     "group/header relative",
-                    REQUIREMENT_GRID_HEADER_CELL_FLUSH_CLASS,
+                    REQUIREMENT_LIST_HEADER_CELL_FLUSH_CLASS,
                     REQUIREMENT_GRID_STICKY_HEADER_CLASS
                   )}
                   style={{
@@ -740,8 +736,7 @@ export const ProjectRequirementsGrid = (props: TProps) => {
                       selectHost === "title" ? REQUIREMENT_GRID_SELECT_HOST_PAD_CLASS : "px-page-x"
                     )}
                   >
-                    <RequirementGridHeaderLabel
-                      icon={titleColumn?.icon}
+                    <RequirementListHeaderLabel
                       label={t(titleColumn?.labelKey ?? "requirement_fields.builtin.title")}
                     />
                   </div>
@@ -755,8 +750,8 @@ export const ProjectRequirementsGrid = (props: TProps) => {
                   <RequirementGridColumnResizer onMouseDown={(event) => startResize("title", columnSnapshot, event)} />
                 </th>
                 {propertyColumns.map((key) => (
-                  <th key={key} className={REQUIREMENT_GRID_HEADER_CELL_CLASS}>
-                    <RequirementGridHeaderLabel icon={columnIcon(key)} label={columnLabel(key)} />
+                  <th key={key} className={REQUIREMENT_LIST_HEADER_CELL_CLASS}>
+                    <RequirementListHeaderLabel label={columnLabel(key)} />
                     <RequirementGridColumnResizer onMouseDown={(event) => startResize(key, columnSnapshot, event)} />
                   </th>
                 ))}
@@ -778,7 +773,7 @@ export const ProjectRequirementsGrid = (props: TProps) => {
                       <td
                         className={cn(
                           "relative",
-                          REQUIREMENT_GRID_BODY_CELL_FLUSH_CLASS,
+                          REQUIREMENT_LIST_BODY_CELL_FLUSH_CLASS,
                           REQUIREMENT_GRID_STICKY_BODY_CLASS
                         )}
                         style={{
@@ -811,7 +806,7 @@ export const ProjectRequirementsGrid = (props: TProps) => {
                       <td
                         className={cn(
                           "relative",
-                          REQUIREMENT_GRID_BODY_CELL_FLUSH_CLASS,
+                          REQUIREMENT_LIST_BODY_CELL_FLUSH_CLASS,
                           REQUIREMENT_GRID_STICKY_BODY_CLASS
                         )}
                         style={{
@@ -844,7 +839,7 @@ export const ProjectRequirementsGrid = (props: TProps) => {
                       data-requirement-sticky-cell
                       className={cn(
                         "relative",
-                        REQUIREMENT_GRID_BODY_CELL_FLUSH_CLASS,
+                        REQUIREMENT_LIST_BODY_CELL_FLUSH_CLASS,
                         REQUIREMENT_GRID_STICKY_BODY_CLASS
                       )}
                       style={{
@@ -882,7 +877,7 @@ export const ProjectRequirementsGrid = (props: TProps) => {
                       </div>
                     </td>
                     {propertyColumns.map((key) => (
-                      <td key={key} className={cn("truncate", REQUIREMENT_GRID_BODY_CELL_CLASS)}>
+                      <td key={key} className={cn("truncate", REQUIREMENT_LIST_BODY_CELL_CLASS)}>
                         {renderCell(key, requirement)}
                       </td>
                     ))}
@@ -898,16 +893,37 @@ export const ProjectRequirementsGrid = (props: TProps) => {
         totalCount > 0 但本页 0 行 = 停在越界的页码上。这时**必须**留着分页，
         否则唯一能回到第一页的控件也没了，用户就卡死在空页上。
       */}
-      {!error && (!isEmpty || totalCount > 0) && (
-        <RequirementGridPagination
-          totalCount={totalCount}
-          perPage={perPage}
-          pageIndex={currentPageOffset}
-          isLoading={isLoading}
-          onPageChange={(pageIndex) => onCursorChange(pageIndex <= 0 ? undefined : `${perPage}:${pageIndex}:0`)}
-          onPerPageChange={onPerPageChange}
-        />
-      )}
+      <div className="relative shrink-0">
+        {/* 勾选后的批量操作：与产品需求页同一种底部浅色浮条 */}
+        {canManage && (
+          <BulkOperationsBar
+            selectedCount={selectedIds.length}
+            selectedLabel={t("requirement_grid.data.selected_count", { count: selectedIds.length })}
+            onClearSelection={() => setSelectedIds([])}
+          >
+            <Button
+              variant="ghost"
+              size="lg"
+              className="text-danger-primary"
+              disabled={isMutating}
+              onClick={() => onUnlink(selectedIds)}
+            >
+              <Unlink className="size-3.5" />
+              {t("project_requirements.unlink")}
+            </Button>
+          </BulkOperationsBar>
+        )}
+        {!error && (!isEmpty || totalCount > 0) && (
+          <RequirementGridPagination
+            totalCount={totalCount}
+            perPage={perPage}
+            pageIndex={currentPageOffset}
+            isLoading={isLoading}
+            onPageChange={(pageIndex) => onCursorChange(pageIndex <= 0 ? undefined : `${perPage}:${pageIndex}:0`)}
+            onPerPageChange={onPerPageChange}
+          />
+        )}
+      </div>
     </div>
   );
 };

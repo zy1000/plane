@@ -38,8 +38,18 @@ export const ProductsRoot = observer(function ProductsRoot() {
   const { workspaceSlug } = useParams();
   const { t } = useTranslation();
   const { allowWorkspacePermissionKeys } = useUserPermissions();
-  const { products, searchQuery, filter, isLoading, error, fetchProducts, openProductModal, setProductToDelete } =
-    useProductsContext();
+  const {
+    products: allProducts,
+    searchQuery,
+    filter,
+    isLoading,
+    error,
+    fetchProducts,
+    openProductModal,
+    setProductToDelete,
+  } = useProductsContext();
+  // 产品集也是产品对象：进过它的详情页后会留在 context 的 products 里，产品列表不列
+  const products = useMemo(() => allProducts.filter((product) => !product.is_set), [allProducts]);
   const slug = workspaceSlug?.toString() ?? "";
   const { currentUserId } = useProductListFiltering(slug, filter, products);
   // 这里是 observer，直接读实例上的条件，改筛选时会重渲

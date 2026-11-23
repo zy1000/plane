@@ -10,6 +10,7 @@ import type {
   TRequirementFilter,
   TRequirementImportPayload,
   TRequirementItemStatus,
+  TRequirementSource,
   TRequirementsResponse,
   TRequirementTypeSchema,
 } from "@plane/types";
@@ -68,6 +69,8 @@ export const useProductRequirements = ({
   const [requirementTypeFilter, setRequirementTypeFilter] = useState<string | undefined>();
   /** 左侧模块树的过滤（含子模块）；null = 「全部」（含未挂靠的需求） */
   const [moduleId, setModuleId] = useState<string | null>(initialModuleId ?? null);
+  /** 产品属于某个产品集时的「全部 / 自有 / 引用」分段；undefined = 全部 */
+  const [source, setSource] = useState<TRequirementSource | undefined>();
 
   const fetchConfiguration = useCallback(async () => {
     if (!workspaceSlug || !productId) return null;
@@ -97,6 +100,7 @@ export const useProductRequirements = ({
         filters,
         requirementTypeId: requirementTypeFilter,
         moduleId: moduleId ?? undefined,
+        source,
       });
       setRequirementsPage(response);
       return response;
@@ -106,12 +110,14 @@ export const useProductRequirements = ({
     } finally {
       setIsRequirementsLoading(false);
     }
-  }, [cursor, filters, moduleId, perPage, search, requirementTypeFilter, productId, workspaceSlug]);
+  }, [cursor, filters, moduleId, perPage, search, requirementTypeFilter, source, productId, workspaceSlug]);
 
   useEffect(() => {
     setConfiguration(null);
     setRequirementsPage(EMPTY_PAGE);
     setCursor(undefined);
+    // 「自有 / 引用」分段只对当前产品有意义：换到不属于产品集的产品时分段被隐藏，残留的「引用」会让列表一直为空
+    setSource(undefined);
     void fetchConfiguration().catch(() => undefined);
   }, [fetchConfiguration]);
 
@@ -253,6 +259,43 @@ export const useProductRequirements = ({
     [productId, t, workspaceSlug]
   );
 
+  /** 产品集的需求改完使用范围：把新的产品 id 回写到列表那一行 */
+  const setScopeProductIds = useCallback((requirementId: string, productIds: string[]) => {
+    setRequirementsPage((current) => ({
+      ...current,
+      results: current.results.map((item) =>
+        item.id === requirementId ? { ...item, scope_product_ids: productIds } : item
+      ),
+    }));
+  }, []);
+
+  /** 批量设置使用范围后回写：{需求 id: 产品 id[]}，没出现在映射里的行使用范围为空 */
+  const applyScopeProductIds = useCallback((requirementIds: string[], scopes: Record<string, string[]>) => {
+    const touched = new Set(requirementIds);
+    setRequirementsPage((current) => ({
+      ...current,
+      results: current.results.map((item) =>
+        touched.has(item.id) ? { ...item, scope_product_ids: scopes[item.id] ?? [] } : item
+      ),
+    }));
+  }, []);
+
+  /** 转为自有：引用的那一行换成本产品新建的需求（编号 MP01-3-1），配置（类型视图）跟着重拉 */
+  const convertReference = useCallback(
+    async (requirementId: string) => {
+      if (!workspaceSlug || !productId) throw new Error("Product is required.");
+      setIsMutating(true);
+      try {
+        const created = await requirementService.convertReferencedRequirement(workspaceSlug, productId, requirementId);
+        await Promise.all([fetchRequirements(), fetchConfiguration()]);
+        return created;
+      } finally {
+        setIsMutating(false);
+      }
+    },
+    [fetchConfiguration, fetchRequirements, productId, workspaceSlug]
+  );
+
   const deleteRequirements = useCallback(
     async (requirementIds: string[]) => {
       if (!workspaceSlug || !productId) throw new Error("Product is required.");
@@ -314,6 +357,10 @@ export const useProductRequirements = ({
     setCursor(undefined);
     setModuleId(value);
   }, []);
+  const updateSource = useCallback((value: TRequirementSource | undefined) => {
+    setCursor(undefined);
+    setSource(value);
+  }, []);
   /** 切类型视图。搜索与筛选一并清空 —— 筛选条件是按字段 ID 定的，换个类型就没有意义了 */
   const updateRequirementTypeFilter = useCallback((value: string | undefined) => {
     setCursor(undefined);
@@ -349,12 +396,14 @@ export const useProductRequirements = ({
     search,
     filters,
     moduleId,
+    source,
     cursor,
     perPage,
     requirementTypeFilter,
     setSearch: updateSearch,
     setFilters: updateFilters,
     setModuleId: updateModuleId,
+    setSource: updateSource,
     setCursor,
     setPerPage: updatePerPage,
     setRequirementTypeFilter: updateRequirementTypeFilter,
@@ -363,6 +412,9 @@ export const useProductRequirements = ({
     createRequirement,
     updateRequirement,
     updateStatus,
+    convertReference,
+    setScopeProductIds,
+    applyScopeProductIds,
     deleteRequirements,
     saveRequirementBatch,
     syncRequirements,

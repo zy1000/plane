@@ -26,6 +26,8 @@ export type TProductWorkItem = {
   type: { id: string; name: string; logo_props: TLogoProps | null } | null;
   product_module: { id: string; name: string } | null;
   assignee_ids: string[];
+  /** 这条工作项挂在本产品所属的产品集上（在产品集里提的，集内每个产品都有） */
+  from_product_set: boolean;
 };
 
 export type TProductWorkItemFacets = {

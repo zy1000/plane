@@ -136,6 +136,12 @@ def visible_product_scope(user, workspace_or_slug) -> ScopeResult:
             if not project_scope.all:
                 linked = linked.filter(project_id__in=list(project_scope.ids))
             ids |= {str(v) for v in linked.values_list("product_id", flat=True)}
+            # 能看到集内任一产品，就能看到它所属的产品集（产品里引用的需求来自产品集）
+            ids |= {
+                str(v)
+                for v in Product.objects.filter(workspace=workspace, id__in=list(ids), product_set__isnull=False)
+                .values_list("product_set_id", flat=True)
+            }
             result = ScopeResult(ids=ids)
     cache[cache_key] = result
     return result

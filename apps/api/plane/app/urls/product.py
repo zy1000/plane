@@ -7,6 +7,8 @@ from django.urls import path
 from plane.app.views.product import (
     ProductMyPermissionKeysAPIView,
     ProductOverviewEndpoint,
+    ProductSetProductsEndpoint,
+    ProductSetViewSet,
     ProductViewSet,
     ProductWorkItemsEndpoint,
 )
@@ -76,5 +78,32 @@ urlpatterns = [
         "workspaces/<str:slug>/products/<uuid:product_id>/my-permission-keys/",
         ProductMyPermissionKeysAPIView.as_view(),
         name="product-my-permission-keys",
+    ),
+    # --- 产品集（is_set=True 的产品；详情页签沿用上面的 products/<id>/… 路由） ----
+    path(
+        "workspaces/<str:slug>/product-sets/",
+        ProductSetViewSet.as_view({"get": "list", "post": "create"}),
+        name="product-sets",
+    ),
+    path(
+        "workspaces/<str:slug>/product-sets/<uuid:pk>/",
+        ProductSetViewSet.as_view(
+            {
+                "get": "retrieve",
+                "patch": "partial_update",
+                "delete": "destroy",
+            }
+        ),
+        name="product-set",
+    ),
+    path(
+        "workspaces/<str:slug>/product-sets/<uuid:product_id>/products/",
+        ProductSetProductsEndpoint.as_view(),
+        name="product-set-products",
+    ),
+    path(
+        "workspaces/<str:slug>/product-sets/<uuid:product_id>/products/<uuid:member_id>/",
+        ProductSetProductsEndpoint.as_view(),
+        name="product-set-product",
     ),
 ]

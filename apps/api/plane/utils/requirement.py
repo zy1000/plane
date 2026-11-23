@@ -20,6 +20,7 @@ from plane.db.models import (
     RequirementItemStatus,
     RequirementLibrary,
     RequirementPriority,
+    RequirementProductScope,
     RequirementProject,
     RequirementRelease,
     RequirementTestCase,
@@ -632,15 +633,18 @@ def serialize_library_field_tree(library):
     return field_tree_from_specs(get_library_field_specs(library))
 
 
-def get_referenced_requirement_type_ids(*, model, scope):
+def get_referenced_requirement_type_ids(*, model, scope, queryset=None):
     """这批需求行引用到的需求类型 ID。
+
+    queryset 给定时用它代替 model.objects.filter(**scope) —— 产品引用了产品集需求时，
+    行的范围不是一个简单的 scope 过滤（见 utils/requirement_scope.product_rows_queryset）。
 
     排序取类型自身的 (sort_order, created_at, id)，而不是「行里首次出现的顺序」——
     后者会随着行的增删改序而变，让 snapshot["fields"] 无谓地重排，diff 里冒出一堆
     并不存在的字段变更。
     """
     requirement_type_ids = (
-        model.objects.filter(**scope)
+        (model.objects.filter(**scope) if queryset is None else queryset.order_by())
         .exclude(requirement_type_id=None)
         .values_list("requirement_type_id", flat=True)
         .distinct()
@@ -1431,6 +1435,8 @@ def soft_delete_requirement_references(requirement_ids):
         RequirementTestCase,
     ):
         link_model.objects.filter(requirement_id__in=ids).delete()
+    # 产品集需求的使用范围：引用它的产品不该再看到一条已删的需求
+    RequirementProductScope.objects.filter(requirement_id__in=ids).delete(soft=False)
     Requirement.objects.filter(parent_id__in=ids).exclude(id__in=ids).update(
         parent=None
     )

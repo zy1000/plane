@@ -667,6 +667,18 @@ export const REQUIREMENT_GRID_ROW_CLASS =
 export const REQUIREMENT_GRID_ROW_SELECTED_CLASS = "bg-accent-primary/5 hover:bg-accent-primary/10";
 
 /**
+ * 只读列表样式（项目需求页「全部」表格）：只画横线、不画竖线，与产品需求总览表
+ * （products/requirements/requirement-default-view-grid.tsx 里的本地常量）同一套数值。
+ * 带子表单 rowSpan 的类型字段表格仍走上面的 REQUIREMENT_GRID_* 网格线版本。
+ */
+export const REQUIREMENT_LIST_HEADER_CELL_FLUSH_CLASS =
+  "group/header relative h-10 border-b border-subtle bg-layer-1 text-left align-middle font-medium";
+export const REQUIREMENT_LIST_HEADER_CELL_CLASS = `${REQUIREMENT_LIST_HEADER_CELL_FLUSH_CLASS} px-page-x`;
+export const REQUIREMENT_LIST_BODY_CELL_FLUSH_CLASS =
+  "h-12 overflow-hidden border-b border-subtle align-middle text-14 text-primary";
+export const REQUIREMENT_LIST_BODY_CELL_CLASS = `${REQUIREMENT_LIST_BODY_CELL_FLUSH_CLASS} px-page-x`;
+
+/**
  * 表头里的「图标 + 列名」。
  *
  * 内置列的图标本来就定义在 REQUIREMENT_BUILTIN_COLUMNS 上（Type / AlignLeft /

@@ -708,6 +708,34 @@ class Requirement(BaseModel):
     source_sequence_id = models.PositiveIntegerField(
         null=True, blank=True, verbose_name="来源标准库条目序号"
     )
+    # 「转为自有」：产品把从产品集引用的需求转成自己的一条（utils/requirement_scope.py）。
+    # 主编号沿用来源、副编号在该来源下流水，展示编号读时拼成
+    # {origin_product.identifier}-{origin_sequence_id}-{sub_sequence_id}（MP01-3-1）；
+    # 这一行在本产品里的 sequence_id 照常分配，只是不用来展示。
+    # 来源需求 / 产品集被删后外键置空：origin_requirement 空了不影响编号（序号有快照），
+    # origin_product 空了才退回本产品自己的编号。
+    origin_requirement = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        related_name="converted_requirements",
+        null=True,
+        blank=True,
+        verbose_name="转为自有的来源需求",
+    )
+    origin_product = models.ForeignKey(
+        "db.Product",
+        on_delete=models.SET_NULL,
+        related_name="converted_requirements",
+        null=True,
+        blank=True,
+        verbose_name="来源需求所属的产品集",
+    )
+    origin_sequence_id = models.PositiveIntegerField(
+        null=True, blank=True, verbose_name="来源需求序号（主编号）"
+    )
+    sub_sequence_id = models.PositiveIntegerField(
+        null=True, blank=True, verbose_name="转为自有的副编号"
+    )
     # 标准库条目的展示编号，用户手填（任意文本，不校验格式，库内唯一非空）；
     # 产品/项目行恒 NULL（req_code_only_on_library_item），它们的展示编号仍由
     # identifier + sequence_id 读时拼接。sequence_id 在库作用域照常分配 ——
@@ -898,6 +926,19 @@ class Requirement(BaseModel):
             models.CheckConstraint(
                 check=Q(library__isnull=False) | Q(code__isnull=True),
                 name="req_code_only_on_library_item",
+            ),
+            # 主编号快照与副编号同生同死
+            models.CheckConstraint(
+                check=Q(origin_sequence_id__isnull=True, sub_sequence_id__isnull=True)
+                | Q(origin_sequence_id__isnull=False, sub_sequence_id__isnull=False),
+                name="req_origin_pair_consistent",
+            ),
+            # 副编号是流水号，永不复用：与 sequence 约束一样不带 deleted_at 条件。
+            # 自有那条删掉后再转一次拿到的是下一个号。
+            models.UniqueConstraint(
+                fields=["origin_product", "origin_sequence_id", "sub_sequence_id"],
+                condition=Q(sub_sequence_id__isnull=False),
+                name="req_unique_origin_sub_sequence",
             ),
         ]
 
@@ -1468,6 +1509,60 @@ class RequirementProject(ProjectBaseModel):
 
     def __str__(self):
         return f"{self.requirement_id} @ {self.project_id}"
+
+
+class RequirementProductScope(BaseModel):
+    """使用范围：产品集里的一条需求给集内哪个产品用，一行 = 一个产品对这条需求的引用。
+
+    需求整条（内容、状态、优先级、负责人、起止日期）只有产品集里那一份，引用方实时跟随、
+    只读；产品要改就先转为自有（2026-11-23 用户修正：这些都共享，不在产品里单独设置）。
+    这一行只表达「给这个产品用」。
+
+    取消勾选、产品移出产品集、转为自有都直接硬删这一行：它没有历史要留，
+    留着软删行只会让唯一约束挡住重新勾选。
+    """
+
+    workspace = models.ForeignKey(
+        "db.Workspace",
+        on_delete=models.CASCADE,
+        related_name="requirement_product_scopes",
+    )
+    requirement = models.ForeignKey(
+        Requirement,
+        on_delete=models.CASCADE,
+        related_name="product_scopes",
+        verbose_name="产品集需求",
+    )
+    product = models.ForeignKey(
+        "db.Product",
+        on_delete=models.CASCADE,
+        related_name="requirement_scopes",
+        verbose_name="引用它的产品",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["requirement", "product"],
+                condition=Q(deleted_at__isnull=True),
+                name="requirement_product_scope_unique_active",
+            )
+        ]
+        indexes = [models.Index(fields=["product", "requirement"], name="req_scope_product_req")]
+        verbose_name = "Requirement Product Scope"
+        verbose_name_plural = "Requirement Product Scopes"
+        db_table = "requirement_product_scopes"
+
+    def save(self, *args, **kwargs):
+        if not self.workspace_id:
+            self.workspace_id = self.requirement.workspace_id
+        return super().save(*args, **kwargs)
+
+    def delete(self, using=None, soft=False, *args, **kwargs):
+        return super().delete(using=using, soft=False, *args, **kwargs)
+
+    def __str__(self):
+        return f"{self.requirement_id} -> {self.product_id}"
 
 
 class RequirementCycle(ProjectBaseModel):

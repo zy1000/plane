@@ -4,17 +4,22 @@
  * See the LICENSE file for details.
  */
 
+import { useEffect, useState } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "react-router";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { WorkItemsIcon } from "@plane/propel/icons";
+import { Tooltip } from "@plane/propel/tooltip";
 import { Loader } from "@plane/ui";
 import { ContentWrapper } from "@/components/core/content-wrapper";
 import { PageHead } from "@/components/core/page-title";
+import { CreateUpdateIssueModal } from "@/components/issues/issue-modal/modal";
 import { IssuePeekOverview } from "@/components/issues/peek-overview";
 import { RequirementGridPagination } from "@/components/requirements/requirement-grid-pagination";
 import { FiltersRow } from "@/components/rich-filters/filters-row";
+import { useProductProjects } from "@/hooks/store/use-product-projects";
+import { useProjectProduct } from "@/hooks/store/use-project-product";
 import { useProductsContext } from "../context";
 import { useProductWorkItemsView } from "./use-product-work-items-view";
 import { ProductWorkItemsStatePanel } from "./work-items-state-panel";
@@ -34,6 +39,25 @@ export const ProductWorkItemsPage = observer(function ProductWorkItemsPage() {
   const product = products.find((item) => item.id === id);
   const view = useProductWorkItemsView({ workspaceSlug: slug, productId: id });
   const { data } = view;
+  /*
+   * 产品集里提缺陷：工作项挂在产品集上，集内每个产品的「工作项」页签都会列出它。
+   * 缺陷必须落在一个项目里，且只能选已关联本产品集的项目（工作项的产品要在项目的关联产品里）。
+   */
+  const isProductSet = Boolean(product?.is_set);
+  const { links: projectLinks } = useProductProjects({
+    workspaceSlug: isProductSet ? slug : undefined,
+    productId: isProductSet ? id : undefined,
+  });
+  const linkedProjectIds = projectLinks.map((link) => link.project);
+  const linkedProjectKey = linkedProjectIds.join(",");
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  // 弹窗里「产品」的名字读的是各项目的关联产品缓存；不在项目路由下没人替它加载，这里先取好，
+  // 否则预置的产品集只显示成占位文字
+  const { fetchProducts: fetchProjectProducts } = useProjectProduct();
+  useEffect(() => {
+    if (!isCreateOpen || !slug || !linkedProjectKey) return;
+    for (const projectId of linkedProjectKey.split(",")) void fetchProjectProducts(slug, projectId).catch(() => undefined);
+  }, [fetchProjectProducts, isCreateOpen, linkedProjectKey, slug]);
 
   const featureTitle = t("workspace_products.navigation.work_items");
   // facets 按本产品全部工作项算（不受搜索 / 筛选影响），没有项目 = 本产品一条工作项都没有
@@ -95,6 +119,23 @@ export const ProductWorkItemsPage = observer(function ProductWorkItemsPage() {
           <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
             <div className="flex shrink-0 items-center justify-end gap-2 border-b border-subtle px-5 py-3">
               <ProductWorkItemsToolbar search={view.search} onSearchChange={view.changeSearch} filter={view.filter} />
+              {isProductSet && (
+                <Tooltip
+                  tooltipContent={t("workspace_product_sets.work_items.no_project")}
+                  disabled={linkedProjectIds.length > 0}
+                >
+                  <span>
+                    <Button
+                      variant="primary"
+                      size="lg"
+                      disabled={linkedProjectIds.length === 0}
+                      onClick={() => setIsCreateOpen(true)}
+                    >
+                      {t("workspace_product_sets.work_items.report_defect")}
+                    </Button>
+                  </span>
+                </Tooltip>
+              )}
             </div>
             <FiltersRow filter={view.filter} />
             <div className="vertical-scrollbar horizontal-scrollbar scrollbar-lg min-h-0 flex-1 overflow-auto">
@@ -114,6 +155,17 @@ export const ProductWorkItemsPage = observer(function ProductWorkItemsPage() {
         </div>
       </ContentWrapper>
       <IssuePeekOverview />
+      {isProductSet && (
+        <CreateUpdateIssueModal
+          isOpen={isCreateOpen}
+          onClose={() => setIsCreateOpen(false)}
+          // 产品预置成本产品集；项目只能在已关联本产品集的项目里选
+          data={{ product_id: id }}
+          allowedProjectIds={linkedProjectIds}
+          modalTitle={t("workspace_product_sets.work_items.report_defect")}
+          onSubmit={async () => view.retry()}
+        />
+      )}
     </>
   );
 });

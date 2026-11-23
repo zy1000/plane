@@ -178,6 +178,7 @@ from .requirement import (
     RequirementLibrary,
     RequirementModule,
     RequirementPriority,
+    RequirementProductScope,
     RequirementProject,
     RequirementRelease,
     RequirementScope,

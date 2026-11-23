@@ -174,6 +174,22 @@ urlpatterns = [
         RequirementViewSet.as_view({"get": "list", "post": "create"}),
         name="product-requirements",
     ),
+    # --- 产品集：使用范围（产品集侧）与引用（产品侧），见 utils/requirement_scope.py ----
+    path(
+        "workspaces/<str:slug>/products/<uuid:product_id>/requirements/bulk-scope/",
+        RequirementViewSet.as_view({"post": "bulk_scope"}),
+        name="product-requirement-bulk-scope",
+    ),
+    path(
+        "workspaces/<str:slug>/products/<uuid:product_id>/requirements/<uuid:pk>/scope/",
+        RequirementViewSet.as_view({"get": "scope", "put": "set_scope"}),
+        name="product-requirement-scope",
+    ),
+    path(
+        "workspaces/<str:slug>/products/<uuid:product_id>/referenced-requirements/<uuid:pk>/convert/",
+        RequirementViewSet.as_view({"get": "preview_convert", "post": "convert_reference"}),
+        name="product-referenced-requirement-convert",
+    ),
     path(
         "workspaces/<str:slug>/products/<uuid:product_id>/requirements/bulk-delete/",
         RequirementViewSet.as_view({"post": "bulk_destroy"}),

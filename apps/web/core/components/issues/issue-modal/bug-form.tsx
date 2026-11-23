@@ -175,12 +175,14 @@ export const BugIssueFormRoot: FC<BugIssueFormProps> = observer((props) => {
 
   useEffect(() => {
     if (isDirty) {
+      // 调用方预置的产品（如产品集页「提缺陷」）对每个可选项目都有效，切项目时保留
+      const presetProduct = !data?.id && data?.product_id ? { product_id: data.product_id } : {};
       if (workItemTemplateId) {
         setWorkItemTemplateId(null);
-        reset(getCreateFormValues({ project_id: projectId }));
+        reset(getCreateFormValues({ project_id: projectId, ...presetProduct }));
         editorRef.current?.clearEditor();
       } else {
-        reset(getCreateFormValues(getUpdateFormDataForReset(projectId, getValues())));
+        reset(getCreateFormValues({ ...getUpdateFormDataForReset(projectId, getValues()), ...presetProduct }));
       }
     }
     if (projectId && routeProjectId !== projectId) fetchCycles(workspaceSlug?.toString(), projectId);

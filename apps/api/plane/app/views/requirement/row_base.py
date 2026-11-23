@@ -54,6 +54,7 @@ from plane.utils.requirement import (
     soft_delete_requirement_references,
     source_display_id_map,
 )
+from plane.utils.requirement_scope import origin_identifier_map
 from plane.utils.requirement_module import (
     expand_requirement_module_subtree_ids,
     module_name_map,
@@ -117,12 +118,14 @@ class RowQuery(NamedTuple):
         module_q = requirement_module_filter_q(self.module_ids)
         return queryset if module_q is None else queryset.filter(module_q)
 
-    def apply_search(self, queryset, layer):
+    def apply_search(self, queryset, layer, prepare_rows=None):
+        """prepare_rows：逐行判定前对行做的加工（产品把引用行上本产品那一份状态 / 排期盖上去，
+        筛选才按列表里看到的值算）。"""
         if not self.search.strip() and not self.filters:
             return queryset
         matching_ids = filter_requirement_row_ids(
             fields=layer.fields,
-            rows=queryset,
+            rows=queryset if prepare_rows is None else prepare_rows(queryset),
             search=self.search,
             filters=self.filters,
             fields_by_requirement_type=layer.fields_by_requirement_type,
@@ -211,9 +214,11 @@ class BaseRequirementRowViewSet(RequirementExcelMixin, BaseViewSet):
         """
         # 大网 / 小网：大网用户才需要按批查附件归属，其余用户一律可下载
         zone_restricted = requester_restricted(self.request)
+        rows = self.prepare_rows(owner, rows)
         return {
             **self._serializer_context(layer, owner),
             "source_display_ids": source_display_id_map(rows),
+            "origin_identifiers": origin_identifier_map(rows),
             # 模块名按批解析：写路径返回的行是内存实例，逐行取 obj.module 会 N+1
             "module_names": module_name_map(rows),
             "zone_restricted": zone_restricted,
@@ -337,7 +342,7 @@ class BaseRequirementRowViewSet(RequirementExcelMixin, BaseViewSet):
         if error is not None:
             return error
 
-        queryset = layer.queryset
+        queryset = self.list_base_queryset(owner, layer)
         if query.requirement_type_ids:
             queryset = queryset.filter(
                 requirement_type_id__in=query.requirement_type_ids
@@ -383,7 +388,9 @@ class BaseRequirementRowViewSet(RequirementExcelMixin, BaseViewSet):
         # 必须排在 apply_search 之前：搜索/筛选走的是 filter_requirement_row_ids，
         # 它会把整个 queryset 拉进 Python 逐行判定，先缩小范围能直接省下那部分扫描
         queryset = self.apply_scope_filters(request, queryset)
-        queryset = query.apply_search(queryset, layer)
+        queryset = query.apply_search(
+            queryset, layer, prepare_rows=lambda rows: self.prepare_rows(owner, rows)
+        )
 
         return self.paginate(
             request=request,
@@ -394,6 +401,19 @@ class BaseRequirementRowViewSet(RequirementExcelMixin, BaseViewSet):
             default_per_page=20,
             max_per_page=100,
         )
+
+    def list_base_queryset(self, owner, layer):
+        """读路径（列表 / 导出 / 附件打包）读哪些行。默认就是 layer.queryset；产品需求会并上
+        从产品集引用的行。写路径一律用 layer.queryset，引用行在那里查不到。"""
+        return layer.queryset
+
+    def row_scope_identifiers(self, owner):
+        """{product_id: 编号前缀}：一批行混着多种前缀时逐行取（产品引用产品集需求）。默认 None。"""
+        return None
+
+    def prepare_rows(self, owner, rows):
+        """行在筛选判定 / 序列化之前的加工，返回行列表。默认原样。"""
+        return rows
 
     def apply_scope_filters(self, request, queryset):
         """列表的作用域专属过滤。默认什么也不过滤。
@@ -618,7 +638,7 @@ class BaseRequirementRowViewSet(RequirementExcelMixin, BaseViewSet):
         if error is not None:
             return error
         layer = self.resolve_layer(owner)
-        row = layer.queryset.filter(id=pk).only("id", "attachments").first()
+        row = self.list_base_queryset(owner, layer).filter(id=pk).only("id", "attachments").first()
         if row is None:
             return Response(
                 {"error": "Requirement not found."},

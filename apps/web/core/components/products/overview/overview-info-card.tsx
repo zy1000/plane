@@ -1,10 +1,11 @@
 import type { ReactNode } from "react";
+import { Link } from "react-router";
 import { useTranslation } from "@plane/i18n";
-import type { IUserLite, TDataDictionaryItemLite, TProduct } from "@plane/types";
+import type { IUserLite, TDataDictionaryItemLite, TProduct, TProductSet } from "@plane/types";
 import { Avatar } from "@plane/ui";
 import { getFileURL, renderFormattedDate, sanitizeHTML } from "@plane/utils";
 import { DictionaryValueTag, resolveDictionaryItemColor } from "@/components/data-dictionaries";
-import { ProductOverviewCard } from "./overview-card";
+import { ProductOverviewCard, ProductOverviewCardLink } from "./overview-card";
 
 const DATE_FORMAT = "yyyy-MM-dd";
 
@@ -117,6 +118,65 @@ export function ProductOverviewInfoCard({ product }: { product: TProduct }) {
         <p className="text-13 leading-relaxed break-words whitespace-pre-line text-primary">
           {description || <Placeholder>{t("workspace_products.fields.no_description")}</Placeholder>}
         </p>
+      </div>
+      {product.created_at && (
+        <div className="border-t border-subtle px-4 py-3.5 text-12 text-tertiary">
+          {t("workspace_products.overview.info.created_at", {
+            date: renderFormattedDate(product.created_at, DATE_FORMAT) ?? "",
+          })}
+        </div>
+      )}
+    </ProductOverviewCard>
+  );
+}
+
+/** 产品集的右栏：编号 / 负责人 / 集内产品。产品集没有阶段、型号、研发等级这些产品属性 */
+export function ProductSetOverviewInfoCard(props: {
+  workspaceSlug: string;
+  product: TProduct;
+  members: TProductSet["products"];
+  membersPath: string;
+}) {
+  const { workspaceSlug, product, members, membersPath } = props;
+  const { t } = useTranslation();
+  const notSet = t("workspace_products.fields.not_set");
+
+  return (
+    <ProductOverviewCard title={t("workspace_product_sets.overview.info_title")}>
+      <dl className="grid grid-cols-[84px_minmax(0,1fr)] items-center gap-x-3 gap-y-3.5 px-4 py-4 text-13">
+        <dt className="text-tertiary">{t("workspace_product_sets.fields.identifier")}</dt>
+        <dd className="font-medium text-primary tabular-nums">{product.identifier}</dd>
+        <dt className="text-tertiary">{t("workspace_product_sets.fields.owner")}</dt>
+        <dd className="flex min-w-0 items-center font-medium text-primary">
+          <Person user={product.owner_detail ?? null} fallback={notSet} />
+        </dd>
+      </dl>
+      <div className="flex flex-col gap-2.5 border-t border-subtle px-4 py-4">
+        <div className="flex items-center gap-2">
+          <span className="text-13 text-tertiary">{t("workspace_product_sets.fields.products")}</span>
+          <span className="text-13 font-medium text-tertiary tabular-nums">{members.length}</span>
+          <span className="flex-1" />
+          <ProductOverviewCardLink to={membersPath}>{t("workspace_product_sets.overview.all_products")}</ProductOverviewCardLink>
+        </div>
+        {members.length === 0 ? (
+          <Placeholder>{t("workspace_product_sets.members.empty_title")}</Placeholder>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {members.map((member) => (
+              <li key={member.id} className="flex min-w-0 items-center gap-2 text-13">
+                <span className="inline-flex h-[22px] shrink-0 items-center rounded-md border border-subtle px-2 text-12 text-primary tabular-nums">
+                  {member.identifier}
+                </span>
+                <Link
+                  to={`/${workspaceSlug}/products/${member.id}/overview`}
+                  className="truncate text-primary hover:underline"
+                >
+                  {member.name}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
       {product.created_at && (
         <div className="border-t border-subtle px-4 py-3.5 text-12 text-tertiary">

@@ -42,12 +42,12 @@ import type {
   TRequirementBatchSaveResponse,
   TRequirementBuiltinFieldConfig,
   TRequirementChangeType,
-  TRequirementFilter,
-  TRequirementItemStatus,
-  TRequirementValue,
   TRequirementField,
+  TRequirementFilter,
   TRequirementFormRow,
+  TRequirementItemStatus,
   TRequirementModule,
+  TRequirementValue,
 } from "@plane/types";
 import { AlertModalCore, CustomMenu, Loader } from "@plane/ui";
 import { cn } from "@plane/utils";
@@ -206,9 +206,24 @@ type TProps = {
   createModalContext?: TRequirementCreateContext;
   /** 勾选行的「移动到模块」入口；不传则不渲染该按钮 */
   onMoveToModule?: (requirementIds: string[]) => void;
+  /** 产品集的需求：勾选行后批量设置使用范围 */
+  onSetScope?: (requirementIds: string[]) => void;
+  /** 从产品集引用的行（is_reference）的行菜单只有这一项：转为自有。不传则这些行没有行菜单 */
+  onConvertReference?: (requirement: TRequirement) => void;
   /** 库 / 产品的模块树：传了筛选里才有「模块」属性 */
   filterModules?: TRequirementModule[];
+  /** 页面追加的只读列（产品集页的「使用范围」、产品页的「来源」「操作」），紧跟标题列 */
+  extraColumns?: TRequirementGridExtraColumn[];
 };
+
+export type TRequirementGridExtraColumn = {
+  key: string;
+  label: string;
+  width: number;
+  render: (requirement: TRequirement) => ReactNode;
+};
+
+const NO_EXTRA_COLUMNS: TRequirementGridExtraColumn[] = [];
 
 /** 页头的「添加需求」打开建行弹窗，所以把 openCreateModal 以 addRow 这个名字露出去 */
 export type TRequirementGridHandle = { addRow: () => void };
@@ -257,7 +272,10 @@ export const RequirementGrid = observer(
       createModuleName = null,
       createModalContext,
       onMoveToModule,
+      onSetScope,
+      onConvertReference,
       filterModules,
+      extraColumns = NO_EXTRA_COLUMNS,
     } = props;
     const { t } = useTranslation();
     const [searchInput, setSearchInput] = useState(search);
@@ -539,6 +557,7 @@ export const RequirementGrid = observer(
         (showModuleColumn ? REQUIREMENT_GRID_COLUMN_WIDTH : 0) +
         (showSourceColumn ? REQUIREMENT_GRID_COLUMN_WIDTH : 0) +
         (showApprovalColumn ? REQUIREMENT_GRID_COLUMN_WIDTH : 0) +
+        extraColumns.reduce((sum, column) => sum + column.width, 0) +
         builtinEntries.reduce((sum, entry) => sum + getRequirementColumnWidth(entry.key), 0) +
         visibleRootFields.reduce((sum, field) => {
           if (field.field_type !== "form" || !field.children.length) return sum + REQUIREMENT_GRID_COLUMN_WIDTH;
@@ -550,6 +569,7 @@ export const RequirementGrid = observer(
         }, 0),
       [
         builtinEntries,
+        extraColumns,
         showActionGutter,
         showApprovalColumn,
         showModuleColumn,
@@ -603,7 +623,10 @@ export const RequirementGrid = observer(
     const nonTitleColumnsWidth =
       Object.entries(columnSnapshot)
         .filter(([key]) => key !== "title")
-        .reduce((sum, [key, defaultWidth]) => sum + getWidth(key, defaultWidth), 0) + gutterWidth;
+        .reduce((sum, [key, defaultWidth]) => sum + getWidth(key, defaultWidth), 0) +
+      gutterWidth +
+      // 页面追加的列是定宽的，不进可拖宽的 columnSnapshot
+      extraColumns.reduce((sum, column) => sum + column.width, 0);
     const tableWidth = titleColumnWidth + nonTitleColumnsWidth;
 
     // Column count for the trailing "add record" affordance row; mirrors the header's column math.
@@ -614,6 +637,7 @@ export const RequirementGrid = observer(
         1 + // 标题列（左固定，行操作折在里面）
         (showSourceColumn ? 1 : 0) + // 标准库编号
         (showApprovalColumn ? 1 : 0) + // 审批态
+        extraColumns.length +
         builtinEntries.length +
         visibleRootFields.reduce(
           (sum, field) =>
@@ -622,6 +646,7 @@ export const RequirementGrid = observer(
         ),
       [
         builtinEntries.length,
+        extraColumns.length,
         showActionGutter,
         showApprovalColumn,
         showModuleColumn,
@@ -740,7 +765,24 @@ export const RequirementGrid = observer(
      *
      * portal 出滚动容器：编号列 sticky 会自建层叠上下文，菜单留在格内会被下面几行盖住。
      */
-    const renderRowActionMenu = (requirement: TRequirement) => (
+    const renderRowActionMenu = (requirement: TRequirement) =>
+      // 从产品集引用的行：插入 / 复制 / 提审 / 删除都不归本产品，行菜单只有「转为自有」（同总览表格）
+      requirement.is_reference ? (
+        onConvertReference ? (
+          <div className="flex justify-center">
+            <CustomMenu
+              ellipsis
+              placement="bottom-end"
+              buttonClassName="text-tertiary hover:text-primary"
+              portalElement={menuPortalEl}
+            >
+              <CustomMenu.MenuItem onClick={() => onConvertReference(requirement)}>
+                <MenuRowLabel icon={Copy} label={t("workspace_product_sets.requirements.convert")} />
+              </CustomMenu.MenuItem>
+            </CustomMenu>
+          </div>
+        ) : null
+      ) : (
       <div className="flex justify-center">
         <CustomMenu
           ellipsis
@@ -788,7 +830,9 @@ export const RequirementGrid = observer(
           )}
           {/* 评审中的行不能删；已通过审批的删除要走评审，所以文案变成「申请删除」。
               草稿直删看 canDelete，申请删除看有没有提评审入口 */}
-          {!requirement.is_locked && (requirement.approved_version !== null ? Boolean(onSubmitReview) : canDelete) && (
+          {!requirement.is_locked &&
+            !requirement.is_reference &&
+            (requirement.approved_version !== null ? Boolean(onSubmitReview) : canDelete) && (
             <CustomMenu.MenuItem
               onClick={() => {
                 if (requirement.approved_version !== null && onSubmitReview) {
@@ -1041,6 +1085,16 @@ export const RequirementGrid = observer(
                   </td>
                 )}
                 {/* 标准库编号：产品需求才有，紧跟标题，跟着整组行 rowSpan */}
+                {isFirstRow &&
+                  extraColumns.map((column) => (
+                    <td
+                      key={column.key}
+                      rowSpan={totalRows}
+                      className={cn(REQUIREMENT_GRID_BODY_CELL_CLASS, groupCellClass)}
+                    >
+                      {column.render(requirement)}
+                    </td>
+                  ))}
                 {isFirstRow && showSourceColumn && (
                   <td rowSpan={totalRows} className={cn("truncate", REQUIREMENT_GRID_BODY_CELL_CLASS, groupCellClass)}>
                     {requirement.source_display_id ? (
@@ -1086,7 +1140,8 @@ export const RequirementGrid = observer(
                             <RequirementStatusCell
                               status={requirement.status}
                               onChange={
-                                !readOnly && onStatusChange
+                                // 从产品集引用的行整条只读（状态也跟随产品集）
+                                !readOnly && onStatusChange && !requirement.is_reference
                                   ? (status) => onStatusChange(requirement.id, status)
                                   : undefined
                               }
@@ -1320,8 +1375,13 @@ export const RequirementGrid = observer(
       () =>
         selectedIds.filter((id) => {
           const row = requirements.find((item) => item.id === id);
-          return row ? !row.is_locked && row.approved_version === null : false;
+          return row ? !row.is_locked && !row.is_reference && row.approved_version === null : false;
         }),
+      [requirements, selectedIds]
+    );
+    // 引用行的模块归产品集，后端整批拒绝：「移动到模块」只带本产品自己的行
+    const movableSelectedIds = useMemo(
+      () => selectedIds.filter((id) => !requirements.find((item) => item.id === id)?.is_reference),
       [requirements, selectedIds]
     );
     const useExternalToolbar = Boolean(toolbarPortalEl);
@@ -1472,6 +1532,9 @@ export const RequirementGrid = observer(
                 <col style={{ width: displayIdWidth }} />
                 {showModuleColumn && <col style={{ width: moduleColumnWidth }} />}
                 <col style={{ width: titleColumnWidth }} />
+                {extraColumns.map((column) => (
+                  <col key={column.key} style={{ width: column.width }} />
+                ))}
                 {showSourceColumn && (
                   <col style={{ width: getWidth("source_display_id", REQUIREMENT_GRID_COLUMN_WIDTH) }} />
                 )}
@@ -1616,6 +1679,10 @@ export const RequirementGrid = observer(
                   },
                 ]}
                 builtinHeaders={[
+                  ...extraColumns.map((column) => ({
+                    key: `extra-${column.key}`,
+                    content: <RequirementGridHeaderLabel label={column.label} />,
+                  })),
                   ...(showSourceColumn
                     ? [
                         {
@@ -1702,7 +1769,10 @@ export const RequirementGrid = observer(
               onSubmitReview={onSubmitReview ? () => onSubmitReview(submittableSelectedIds) : undefined}
               deleteCount={deletableSelectedIds.length}
               onDelete={canDelete ? () => setIdsToDelete(deletableSelectedIds) : undefined}
-              onMoveToModule={onMoveToModule ? () => onMoveToModule(selectedIds) : undefined}
+              onMoveToModule={
+                onMoveToModule && movableSelectedIds.length > 0 ? () => onMoveToModule(movableSelectedIds) : undefined
+              }
+              onSetScope={onSetScope ? () => onSetScope(selectedIds) : undefined}
             />
           )}
           <RequirementGridPagination

@@ -116,6 +116,19 @@ class Product(BaseModel):
     # 外部来源（如 "jiandaoyun_product" = 简道云同步来的产品）与远端记录 _id，见 plane/integrations/product_sync.py
     external_source = models.CharField(max_length=255, null=True, blank=True)
     external_id = models.CharField(max_length=255, blank=True, null=True)
+    # 产品集就是一行 is_set=True 的产品：需求 / 用例 / 工作项 / 项目关联全部沿用产品的能力，
+    # 不给需求再加一种归属。产品集不填六个字典字段和两位负责人（那些只在 ProductSerializer 里必填）。
+    is_set = models.BooleanField(default=False, verbose_name="是否产品集")
+    # 一个产品最多属于一个产品集；产品集自己不能再挂到别的产品集下（见 Meta.constraints）
+    product_set = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="member_products",
+        verbose_name="所属产品集",
+    )
+    product_set_joined_at = models.DateTimeField(null=True, blank=True, verbose_name="加入产品集时间")
 
     def save(self, *args, **kwargs):
         # 最后一道防线 —— 真正的归一化在 ProductSerializer.validate_identifier，
@@ -158,6 +171,10 @@ class Product(BaseModel):
             models.CheckConstraint(
                 check=~models.Q(code=""),
                 name="product_code_not_blank",
+            ),
+            models.CheckConstraint(
+                check=models.Q(is_set=False) | models.Q(product_set__isnull=True),
+                name="product_set_not_nested",
             ),
         ]
 

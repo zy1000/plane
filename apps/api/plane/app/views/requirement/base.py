@@ -9,7 +9,9 @@ from rest_framework import status
 from rest_framework.response import Response
 
 from plane.app.serializers.requirement import (
+    RequirementBulkScopeSerializer,
     RequirementRollbackSerializer,
+    RequirementScopeWriteSerializer,
     RequirementSerializer,
     RequirementStatusWriteSerializer,
 )
@@ -28,6 +30,7 @@ from plane.app.views.requirement.row_base import (
     annotate_pending,
 )
 from plane.db.models import (
+    Product,
     Requirement,
     RequirementChangeRequest,
     RequirementChangeStatus,
@@ -48,6 +51,21 @@ from plane.utils.requirement import (
 from plane.utils.requirement_project import (
     annotate_project_ids,
     set_requirement_status,
+)
+from plane.utils.requirement_scope import (
+    RequirementScopeError,
+    bulk_set_requirement_scope,
+    convert_to_own,
+    get_product_scope,
+    has_references,
+    mark_references,
+    next_converted_display_id,
+    product_rows_queryset,
+    referenced_requirement_ids,
+    scope_overview,
+    scope_product_ids_map,
+    set_requirement_scope,
+    with_referenced_types,
 )
 
 
@@ -85,9 +103,11 @@ class RequirementConfigurationAPIView(BaseAPIView):
 
         # 一个产品下的需求可能分属多个类型：requirement_types 供数据页分视图，
         # fields 保留成扁平并集，让变更记录那个 tab 完全不用改。
+        # 引用了产品集需求的产品：那些需求的类型也要出视图和字段列
         requirement_type_ids = get_referenced_requirement_type_ids(
             model=Requirement,
             scope=scope_row_filter(RequirementScopeHandle.for_product(product)),
+            queryset=product_rows_queryset(product) if has_references(product) else None,
         )
         specs, by_requirement_type = field_specs_for_requirement_types(
             requirement_type_ids
@@ -148,7 +168,51 @@ class RequirementViewSet(BaseRequirementRowViewSet):
         return can_view_requirements(self.request.user, owner.product)
 
     def resolve_layer(self, owner):
-        return resolve_row_layer(owner)
+        return with_referenced_types(resolve_row_layer(owner), owner.product)
+
+    # --- 产品集：引用进来的需求只进读路径（utils/requirement_scope.py） -------------
+
+    def list_base_queryset(self, owner, layer):
+        if not owner.product.product_set_id:
+            return layer.queryset
+        return product_rows_queryset(owner.product)
+
+    def apply_scope_filters(self, request, queryset):
+        """?source=own|referenced：产品需求页的「自有 / 引用」分段。"""
+        source = request.query_params.get("source")
+        product_id = self.kwargs.get("product_id")
+        if source == "own":
+            return queryset.filter(product_id=product_id)
+        if source == "referenced":
+            return queryset.filter(id__in=referenced_requirement_ids(product_id))
+        return queryset
+
+    def prepare_rows(self, owner, rows):
+        if not owner.product.product_set_id:
+            return rows
+        return mark_references(rows, owner.product.id)
+
+    def _row_context(self, layer, owner, rows):
+        context = super()._row_context(layer, owner, rows)
+        product = owner.product
+        if product.is_set:
+            # 产品集的需求列表带「使用范围」列
+            context["scope_product_ids"] = scope_product_ids_map(
+                (row.id for row in rows), product, self.request.user
+            )
+        elif product.product_set_id:
+            context["row_scope_identifiers"] = self.row_scope_identifiers(owner)
+        return context
+
+    def row_scope_identifiers(self, owner):
+        # 引用行的编号前缀是产品集的，不是本产品的
+        product = owner.product
+        if not product.product_set_id:
+            return None
+        return {
+            product.id: product.identifier,
+            product.product_set_id: product.product_set.identifier,
+        }
 
     def resolve_library(self, library_id):
         return get_scoped_library(
@@ -246,6 +310,142 @@ class RequirementViewSet(BaseRequirementRowViewSet):
             ).data,
             status=status.HTTP_200_OK,
         )
+
+    # --- 产品集侧：使用范围 -------------------------------------------------
+
+    def _set_requirement_or_error(self, owner, pk):
+        """使用范围只对产品集里的需求有意义。返回 (需求行, error_response)。"""
+        row = (
+            Requirement.objects.filter(product_id=owner.product.id, id=pk).first()
+            if owner.product.is_set
+            else None
+        )
+        if row is None:
+            return None, Response({"error": "Requirement not found."}, status=status.HTTP_404_NOT_FOUND)
+        return row, None
+
+    def scope(self, request, *args, pk=None, **kwargs):
+        """使用范围浮层：集内每个产品勾没勾、它那一份的状态、是否已转为自有。"""
+        owner, error = self._owner_or_error(require_write=False)
+        if error is not None:
+            return error
+        row, error = self._set_requirement_or_error(owner, pk)
+        if error is not None:
+            return error
+        return Response({"products": scope_overview(owner.product, row, request.user)}, status=status.HTTP_200_OK)
+
+    def set_scope(self, request, *args, pk=None, **kwargs):
+        """把使用范围整份换成请求里的产品。不算内容：不进评审、不动 version。"""
+        serializer = RequirementScopeWriteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        with transaction.atomic():
+            # 锁产品集这一行：与「转为自有」取副编号、往集里加减产品互斥
+            owner, error = self._owner_or_error(for_update=True)
+            if error is not None:
+                return error
+            row, error = self._set_requirement_or_error(owner, pk)
+            if error is not None:
+                return error
+            try:
+                set_requirement_scope(
+                    owner.product, row, serializer.validated_data["product_ids"], request.user
+                )
+            except RequirementScopeError as exc:
+                return Response(exc.payload(), status=exc.status)
+        return Response(
+            {
+                "scope_product_ids": [
+                    str(pid)
+                    for pid in scope_product_ids_map([row.id], owner.product, request.user).get(row.id, [])
+                ],
+                "products": scope_overview(owner.product, row, request.user),
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    def bulk_scope(self, request, *args, **kwargs):
+        """批量设置使用范围（产品集需求列表勾选多行后用）。"""
+        serializer = RequirementBulkScopeSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        with transaction.atomic():
+            owner, error = self._owner_or_error(for_update=True)
+            if error is not None:
+                return error
+            if not owner.product.is_set:
+                return Response({"error": "Product set not found."}, status=status.HTTP_404_NOT_FOUND)
+            try:
+                result = bulk_set_requirement_scope(
+                    owner.product, data["requirement_ids"], data["product_ids"], data["mode"], request.user
+                )
+            except RequirementScopeError as exc:
+                return Response(exc.payload(), status=exc.status)
+        return Response(
+            {
+                **result,
+                "scope_product_ids": {
+                    str(requirement_id): [str(pid) for pid in product_ids]
+                    for requirement_id, product_ids in scope_product_ids_map(
+                        data["requirement_ids"], owner.product, request.user
+                    ).items()
+                },
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    # --- 产品侧：引用的需求 -------------------------------------------------
+
+    def _reference_response(self, owner, requirement_id, status_code=status.HTTP_200_OK):
+        """按列表同一口径（盖上本产品那一份）重读这一行。"""
+        layer = self.resolve_layer(owner)
+        row = (
+            self.annotate_extra(annotate_pending(self.list_base_queryset(owner, layer)))
+            .filter(id=requirement_id)
+            .first()
+        )
+        return Response(
+            RequirementSerializer(row, context=self._row_context(layer, owner, [row])).data,
+            status=status_code,
+        )
+
+    def preview_convert(self, request, *args, pk=None, **kwargs):
+        """转为自有的确认框：转换后的编号。"""
+        owner, error = self._owner_or_error(require_write=False)
+        if error is not None:
+            return error
+        product_scope = get_product_scope(owner.product, pk)
+        if product_scope is None:
+            return Response({"error": "Requirement not found."}, status=status.HTTP_404_NOT_FOUND)
+        return Response(
+            {"display_id": next_converted_display_id(product_scope.requirement)}, status=status.HTTP_200_OK
+        )
+
+    def convert_reference(self, request, *args, pk=None, **kwargs):
+        """转为自有：复制成本产品自己的需求（编号 MP01-3-1），并从使用范围里拿掉本产品。"""
+        not_found = Response({"error": "Requirement not found."}, status=status.HTTP_404_NOT_FOUND)
+        with transaction.atomic():
+            # 加锁顺序与改使用范围、产品集加减产品一致：产品集 → 本产品 → 范围行，免得互相死锁。
+            # 产品集锁住副编号；本产品锁住 sequence_id。
+            owner, error = self._owner_or_error(permission_key=PermissionKey.PROJECT_REQUIREMENT_CREATE)
+            if error is not None:
+                return error
+            product_set_id = owner.product.product_set_id
+            if product_set_id is None:
+                return not_found
+            Product.objects.select_for_update(of=("self",)).filter(id=product_set_id).first()
+            owner, error = self._owner_or_error(
+                for_update=True, permission_key=PermissionKey.PROJECT_REQUIREMENT_CREATE
+            )
+            if error is not None:
+                return error
+            # 两次取之间本产品可能被移出了产品集
+            if owner.product.product_set_id != product_set_id:
+                return not_found
+            product_scope = get_product_scope(owner.product, pk, for_update=True)
+            if product_scope is None or product_scope.requirement.product_id != product_set_id:
+                return not_found
+            row = convert_to_own(scope_handle=owner, product_scope=product_scope, actor=request.user)
+        return self._reference_response(owner, row.id, status.HTTP_201_CREATED)
 
     def importable_library_items(self, request, *args, **kwargs):
         """本产品「还没导过」的标准库条目，按库分组，每条只带 id 与所属模块。

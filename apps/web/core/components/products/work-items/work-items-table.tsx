@@ -78,6 +78,11 @@ export const ProductWorkItemsTable = ({ rows, onOpen }: TProps) => {
                 {row.project_identifier}-{row.sequence_id}
               </td>
               <td className="truncate px-3 font-medium text-primary" title={row.name}>
+                {row.from_product_set && (
+                  <span className="mr-2 inline-flex h-5 items-center rounded bg-accent-subtle px-1.5 align-middle text-11 font-medium text-accent-primary">
+                    {t("workspace_product_sets.title")}
+                  </span>
+                )}
                 {row.name}
               </td>
               <td className="px-3">

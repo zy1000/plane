@@ -47,7 +47,9 @@ export const useProducts = (workspaceSlug: string | undefined) => {
     setError(null);
     try {
       const response = await listProducts(workspaceSlug);
-      setProducts(response);
+      // 列表接口不含产品集。详情页单独取回的产品集（fetchProduct）要留着，
+      // 否则列表晚于详情返回时会把当前产品集冲掉，详情页一直停在加载态
+      setProducts((current) => [...current.filter((product) => product.is_set), ...response]);
       return response;
     } catch (requestError) {
       setError(getErrorMessage(requestError));

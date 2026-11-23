@@ -146,9 +146,22 @@ class RequirementExcelMixin:
     def _excel_export_context(self, owner, layer):
         # 父项列要拼父需求的编号，父项可能不在筛选结果里，所以取整个作用域；
         # 库作用域编号是行上手填的 code，一次 values_list 连它一起取
-        rows = list(layer.queryset.values_list("id", "sequence_id", "code"))
+        # 产品需求要连同从产品集引用的行一起（父项可能是引用行）
+        base_queryset = self.list_base_queryset(owner, layer)
+        rows = list(base_queryset.values_list("id", "sequence_id", "code"))
+        identifier_by_product = {
+            str(product_id): identifier
+            for product_id, identifier in (self.row_scope_identifiers(owner) or {}).items()
+        }
+        product_by_id = (
+            {str(row_id): str(product_id) for row_id, product_id in base_queryset.values_list("id", "product_id")}
+            if identifier_by_product
+            else {}
+        )
         module_path_by_id, _ = self._excel_module_index(owner)
         return xl.ExportContext(
+            identifier_by_product=identifier_by_product,
+            product_by_id=product_by_id,
             scope_identifier=layer.serializer_context.get("scope_identifier") or "",
             user_display={
                 str(user_id): (display_name or email or "")
@@ -211,7 +224,9 @@ class RequirementExcelMixin:
             query, error = self._row_query(request, owner, layer)
             if error is not None:
                 return error
-            queryset = query.apply(layer.queryset, layer)
+            # 与列表同口径：产品需求含引用行，并认 ?source=own|referenced
+            queryset = self.apply_scope_filters(request, self.list_base_queryset(owner, layer))
+            queryset = query.apply(queryset, layer)
             # 上限用 +1 探一下，避免为了计数多打一次 COUNT
             rows = list(queryset[: xl.MAX_ROWS + 1])
             if len(rows) > xl.MAX_ROWS:

@@ -44,14 +44,15 @@ export const isRequirementClosed = (row: { status: TRequirementItemStatus | stri
   row?.status === "closed";
 
 /**
- * 内容能不能编辑的合流判定：页面级写权限 + 不在评审中 + 未关闭。
+ * 内容能不能编辑的合流判定：页面级写权限 + 不在评审中 + 未关闭 + 不是从产品集引用的。
  * 网格行、详情抽屉、整页详情三处共用，别各写一遍。
  * 注意：状态下拉**不**走这个判定 —— closed 行要能重开，只看页面级写权限。
+ * 从产品集引用的需求整条归产品集（回产品集改或转为自有），状态格也只读。
  */
 export const canEditRequirementContent = (
-  row: { is_locked: boolean; status: TRequirementItemStatus | string } | null | undefined,
+  row: { is_locked: boolean; status: TRequirementItemStatus | string; is_reference?: boolean } | null | undefined,
   canEdit: boolean
-) => Boolean(canEdit && row && !row.is_locked && !isRequirementClosed(row));
+) => Boolean(canEdit && row && !row.is_locked && !row.is_reference && !isRequirementClosed(row));
 
 /**
  * pill = 密集网格里的着色胶囊。

@@ -24,6 +24,11 @@ from plane.utils.requirement import (
     library_hidden_builtin_columns,
 )
 from plane.utils.requirement_module import module_scope_filter
+from plane.utils.requirement_scope import (
+    converted_display_id,
+    origin_display_id,
+    origin_identifier_map,
+)
 
 from .base import BaseSerializer
 
@@ -483,6 +488,20 @@ class RequirementStatusWriteSerializer(serializers.Serializer):
     status = serializers.ChoiceField(choices=RequirementItemStatus.choices)
 
 
+class RequirementBulkScopeSerializer(serializers.Serializer):
+    """批量设置使用范围：add 加上 / remove 去掉 / replace 换成这些产品。"""
+
+    requirement_ids = serializers.ListField(child=serializers.UUIDField(), allow_empty=False, max_length=1000)
+    product_ids = serializers.ListField(child=serializers.UUIDField(), allow_empty=True)
+    mode = serializers.ChoiceField(choices=["add", "remove", "replace"])
+
+
+class RequirementScopeWriteSerializer(serializers.Serializer):
+    """产品集需求的使用范围：整份替换成这批产品。空数组 = 不给任何产品用。"""
+
+    product_ids = serializers.ListField(child=serializers.UUIDField(), allow_empty=True)
+
+
 def validate_requirement_builtin_values(
     *, owner, values, parent_queryset, row_id=None, current_row=None
 ):
@@ -598,6 +617,15 @@ ROW_FIELDS = [
     "source_library_id",
     "source_sequence_id",
     "source_display_id",
+    # 产品集相关（utils/requirement_scope.py）。origin_display_id：这条是从产品集的哪条需求
+    # 「转为自有」来的（MP01-3），不是转来的为 None。scope_product_ids：产品集需求的使用范围
+    # （引用它的产品 id），只有产品集的需求列表会带映射，别处为 None。
+    # 产品页里一行是不是引用，前端看 product_id 是否等于当前产品。
+    "origin_display_id",
+    "scope_product_ids",
+    # 这一行是从产品集引用进来的（只在产品的需求列表里为 True）：内容只读，
+    # 整条跟随产品集、只读，要改先转为自有
+    "is_reference",
     *BUILTIN_COLUMNS,
     # 模块挂靠（只读输出）。模块不是内容：不在 BUILTIN_COLUMNS 里、不进版本
     # 快照与变更单 diff，写入口是 set-module 端点与创建时的 module_id。
@@ -646,6 +674,9 @@ class RequirementSerializer(BaseSerializer):
     can_withdraw = serializers.SerializerMethodField()
     display_id = serializers.SerializerMethodField()
     source_display_id = serializers.SerializerMethodField()
+    origin_display_id = serializers.SerializerMethodField()
+    scope_product_ids = serializers.SerializerMethodField()
+    is_reference = serializers.SerializerMethodField()
     project_ids = serializers.SerializerMethodField()
     module_name = serializers.SerializerMethodField()
 
@@ -708,12 +739,40 @@ class RequirementSerializer(BaseSerializer):
             return names.get(str(obj.module_id))
         return obj.module.name if obj.module else None
 
+    def _origin_identifiers(self, obj):
+        """「转为自有」来源产品集的编号映射。_row_context 按批给；别的入口没带时
+        只对转来的行逐行补查（这种行很少，不值得让每个入口都去准备映射）。"""
+        identifiers = self.context.get("origin_identifiers")
+        if identifiers is None and obj.sub_sequence_id is not None:
+            identifiers = origin_identifier_map([obj])
+        return identifiers or {}
+
+    def get_origin_display_id(self, obj):
+        return origin_display_id(obj, self._origin_identifiers(obj))
+
+    def get_is_reference(self, obj):
+        # mark_references 在引用行上留的记号
+        return getattr(obj, "reference_scope_id", None) is not None
+
+    def get_scope_product_ids(self, obj):
+        scope_products = self.context.get("scope_product_ids")
+        if scope_products is None:
+            return None
+        return [str(product_id) for product_id in scope_products.get(obj.id, [])]
+
     def get_display_id(self, obj):
         # 库条目的编号是用户手填的 code，不做任何拼接
         if obj.library_id:
             return obj.code
-        # 产品/项目作用域前缀对一批行是常量 —— 一个 RowLayer 只服务一个产品/项目
-        prefix = self.context.get("scope_identifier")
+        # 转为自有的行沿用来源的主编号 + 副编号（MP01-3-1）
+        converted = converted_display_id(obj, self._origin_identifiers(obj))
+        if converted:
+            return converted
+        # 产品/项目作用域前缀对一批行是常量 —— 一个 RowLayer 只服务一个产品/项目；
+        # 产品引用了产品集需求时同一页混着两种前缀，由 row_scope_identifiers 逐行给
+        prefix = (self.context.get("row_scope_identifiers") or {}).get(
+            obj.product_id
+        ) or self.context.get("scope_identifier")
         if not prefix or obj.sequence_id is None:
             return None
         return f"{prefix}-{obj.sequence_id}"
@@ -745,12 +804,14 @@ class RequirementSerializer(BaseSerializer):
             obj.library_id
             or obj.pending_change_item_id
             or obj.status == RequirementItemStatus.CLOSED
+            # 引用的需求内容归产品集，评审也在产品集里提
+            or self.get_is_reference(obj)
         ):
             return False
         return self._can_write() and obj.approval_state != "approved"
 
     def get_can_withdraw(self, obj):
-        if not obj.pending_change_item_id:
+        if not obj.pending_change_item_id or self.get_is_reference(obj):
             return False
         request = self.context.get("request")
         user = getattr(request, "user", None)

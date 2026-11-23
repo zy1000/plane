@@ -9,6 +9,7 @@
 from collections import defaultdict
 
 from django.db import IntegrityError, transaction
+from django.db.models import Q
 from rest_framework import status
 from rest_framework.response import Response
 
@@ -44,6 +45,7 @@ from plane.utils.product_category import (
     root_lock_violation,
 )
 from plane.utils.requirement_module import build_module_tree_payload
+from plane.utils.requirement_scope import product_rows_queryset, referenced_requirement_ids
 from plane.utils.requirement_project import linked_requirement_ids
 
 
@@ -134,16 +136,37 @@ class RequirementModuleAPIView(_RequirementModuleScopeMixin, BaseAPIView):
     model = RequirementModule
 
     def get(self, request, slug, **kwargs):
-        _, scope_filter, error = self.resolve_scope(require_write=False)
+        owner, scope_filter, error = self.resolve_scope(require_write=False)
         if error is not None:
             return error
-        return Response(
-            build_module_tree_payload(
-                scope_filter=scope_filter,
-                total_queryset=Requirement.objects.filter(**scope_filter),
-            ),
-            status=status.HTTP_200_OK,
+        product_set_id = getattr(owner, "product_set_id", None)
+        if not product_set_id:
+            return Response(
+                build_module_tree_payload(
+                    scope_filter=scope_filter,
+                    total_queryset=Requirement.objects.filter(**scope_filter),
+                ),
+                status=status.HTTP_200_OK,
+            )
+
+        # 产品属于某个产品集：列表里并着从产品集引用的需求（utils/requirement_scope.py），
+        # 「全部 / 未归类」的计数跟着算上它们；它们所在的产品集模块单独成一组。
+        payload = build_module_tree_payload(
+            scope_filter=scope_filter, total_queryset=product_rows_queryset(owner)
         )
+        referenced = build_module_tree_payload(
+            scope_filter={"product_id": product_set_id},
+            total_queryset=Requirement.objects.filter(id__in=referenced_requirement_ids(owner.id)),
+            requirement_q=Q(requirements__id__in=referenced_requirement_ids(owner.id)),
+            hide_empty=True,
+        )
+        product_set = owner.product_set
+        payload["referenced"] = {
+            "product_set": {"id": str(product_set.id), "name": product_set.name, "identifier": product_set.identifier},
+            "modules": referenced["modules"],
+            "total": referenced["total"],
+        }
+        return Response(payload, status=status.HTTP_200_OK)
 
     def post(self, request, slug, **kwargs):
         owner, scope_filter, error = self.resolve_scope(require_write=True)

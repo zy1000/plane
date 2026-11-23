@@ -21,6 +21,9 @@ from plane.utils.product import (
 class ProductViewSet(BaseViewSet):
     model = Product
     serializer_class = ProductSerializer
+    # 产品集是 is_set=True 的产品（ProductSetViewSet 置 True）：列表只出本类，新建时落这个标记。
+    # 详情 / 更新 / 删除不按它过滤 —— 产品集的详情页签沿用产品路由。
+    is_set = False
     search_fields = ["name", "identifier", "code"]
     filterset_fields = {
         "owner_id": ["exact"],
@@ -79,7 +82,7 @@ class ProductViewSet(BaseViewSet):
     @allow_workspace_member
     def list(self, request, slug):
         # 全量返回，但人员 / 字典值 / 权限键只输出一次，格式见 build_product_list_payload
-        products = list(self._visible_queryset())
+        products = list(self._visible_queryset().filter(is_set=False))
         return Response(build_product_list_payload(products, request.user), status=status.HTTP_200_OK)
 
     @allow_workspace_member
@@ -115,6 +118,7 @@ class ProductViewSet(BaseViewSet):
             workspace=workspace,
             owner=serializer.validated_data.get("owner", request.user),
             created_by=request.user,
+            is_set=self.is_set,
         )
         return Response(
             self.get_serializer(product).data,
@@ -159,6 +163,13 @@ class ProductViewSet(BaseViewSet):
             return Response(
                 {"error": "Product not found."},
                 status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # 产品集里还有产品时不让删：先把产品移出，免得产品悄悄失去所属产品集
+        if product.is_set and Product.objects.filter(product_set_id=product.id).exists():
+            return Response(
+                {"error": "产品集里还有产品，请先移出。", "code": "PRODUCT_SET_HAS_PRODUCTS"},
+                status=status.HTTP_409_CONFLICT,
             )
 
         # 产品的用例被项目计划引用时不让删：PlanCase.case 是 CASCADE，删产品会连带

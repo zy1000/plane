@@ -32,6 +32,15 @@ def _dictionary_item_field():
     )
 
 
+class ProductSetLiteSerializer(BaseSerializer):
+    """产品上的「所属产品集」：只给名称与编号。"""
+
+    class Meta:
+        model = Product
+        fields = ["id", "name", "identifier", "logo_props"]
+        read_only_fields = fields
+
+
 class ProductSerializer(BaseSerializer):
     description_html = serializers.CharField(
         required=False, allow_blank=True, allow_null=True
@@ -74,6 +83,9 @@ class ProductSerializer(BaseSerializer):
     )
     owner_detail = UserLiteSerializer(source="owner", read_only=True)
     reviewer_details = UserLiteSerializer(source="reviewers", many=True, read_only=True)
+    # 所属产品集只读：加入 / 移出走产品集的 products 接口（utils/product_set.py）
+    product_set_detail = ProductSetLiteSerializer(source="product_set", read_only=True)
+
     def validate_name(self, value):
         name = value.strip()
         if not name:
@@ -246,6 +258,9 @@ class ProductSerializer(BaseSerializer):
             "o_phase_close_date",
             "v_phase_close_date",
             "logo_props",
+            "is_set",
+            "product_set",
+            "product_set_detail",
             "created_at",
             "updated_at",
             "created_by",
@@ -255,6 +270,9 @@ class ProductSerializer(BaseSerializer):
         read_only_fields = [
             "id",
             "workspace",
+            "is_set",
+            "product_set",
+            "product_set_detail",
             "owner_detail",
             "reviewer_details",
             "stage_detail",
@@ -285,7 +303,7 @@ _DATETIME = serializers.DateTimeField()
 
 # 列表行里不输出、改放进公共表的字段
 PRODUCT_LIST_SHARED_FIELDS = frozenset(
-    {"reviewer_details", "my_permission_keys"}
+    {"reviewer_details", "my_permission_keys", "product_set_detail"}
     | {f"{field}_detail" for field in (*_USER_FIELDS, *PRODUCT_DICTIONARY_FIELD_KEYS)}
 )
 
@@ -312,6 +330,8 @@ _PRODUCT_LIST_ROW_GETTERS = {
     "o_phase_close_date": attrgetter("o_phase_close_date"),
     "v_phase_close_date": attrgetter("v_phase_close_date"),
     "logo_props": attrgetter("logo_props"),
+    "is_set": attrgetter("is_set"),
+    "product_set": attrgetter("product_set_id"),
     "created_at": lambda product: _DATETIME.to_representation(product.created_at),
     "updated_at": lambda product: _DATETIME.to_representation(product.updated_at),
     "created_by": attrgetter("created_by_id"),
@@ -324,7 +344,8 @@ if set(_PRODUCT_LIST_ROW_GETTERS) | {"reviewers"} | PRODUCT_LIST_SHARED_FIELDS !
 
 
 def build_product_list_payload(products, user):
-    """产品列表响应：products 是行，users / dictionary_items / permission_sets 是行里 id、下标指向的公共表。"""
+    """产品列表响应：products 是行，users / dictionary_items / product_sets / permission_sets
+    是行里 id、下标指向的公共表。"""
     # 评审人只要 id；顺序同 product.reviewers 的默认顺序（User 按 -created_at）
     reviewer_ids = defaultdict(list)
     reviewer_rows = (
@@ -337,14 +358,18 @@ def build_product_list_payload(products, user):
 
     user_ids = {user_id for ids in reviewer_ids.values() for user_id in ids}
     item_ids = set()
+    set_ids = set()
     for product in products:
         user_ids.update(getattr(product, attname) for attname in _USER_ATTNAMES)
         item_ids.update(getattr(product, attname) for attname in _DICTIONARY_ATTNAMES)
+        set_ids.add(product.product_set_id)
     user_ids.discard(None)
     item_ids.discard(None)
+    set_ids.discard(None)
     # 与详情接口同口径：头像资源、字典头各自 JOIN，字典值不滤软删
     users = User.objects.filter(id__in=user_ids).select_related("avatar_asset")
     items = DataDictionaryItem.all_objects.filter(id__in=item_ids).select_related("dictionary")
+    product_sets = Product.objects.filter(id__in=set_ids) if set_ids else []
 
     keys_by_product = bulk_product_permission_keys(user, products)
     permission_sets, set_index, rows = [], {}, []
@@ -363,5 +388,54 @@ def build_product_list_payload(products, user):
         "products": rows,
         "users": {str(row["id"]): row for row in UserLiteSerializer(users, many=True).data},
         "dictionary_items": {str(row["id"]): row for row in DataDictionaryItemLiteSerializer(items, many=True).data},
+        "product_sets": {str(row["id"]): row for row in ProductSetLiteSerializer(product_sets, many=True).data},
         "permission_sets": permission_sets,
     }
+
+
+# ---------------------------------------------------------------------------
+# 产品集：一行 is_set=True 的产品，只维护名称 / 编号 / 负责人 / 描述
+# ---------------------------------------------------------------------------
+
+
+class ProductSetSerializer(BaseSerializer):
+    description_html = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    owner = serializers.PrimaryKeyRelatedField(queryset=User.objects.all(), required=False)
+    owner_detail = UserLiteSerializer(source="owner", read_only=True)
+    my_permission_keys = serializers.SerializerMethodField()
+
+    # 名称、编号与产品共用一个命名空间（同一张表、同一组唯一约束），校验口径也共用：
+    # 编号是需求编号前缀，产品集的 MP01-3 不能和某个产品的编号撞前缀。
+    validate_name = ProductSerializer.validate_name
+    validate_identifier = ProductSerializer.validate_identifier
+    validate_owner = ProductSerializer.validate_owner
+    validate_description_html = ProductSerializer.validate_description_html
+    get_my_permission_keys = ProductSerializer.get_my_permission_keys
+
+    class Meta:
+        model = Product
+        fields = [
+            "id",
+            "name",
+            "identifier",
+            "description_html",
+            "workspace",
+            "owner",
+            "owner_detail",
+            "logo_props",
+            "created_at",
+            "updated_at",
+            "created_by",
+            "updated_by",
+            "my_permission_keys",
+        ]
+        read_only_fields = [
+            "id",
+            "workspace",
+            "owner_detail",
+            "created_at",
+            "updated_at",
+            "created_by",
+            "updated_by",
+            "my_permission_keys",
+        ]

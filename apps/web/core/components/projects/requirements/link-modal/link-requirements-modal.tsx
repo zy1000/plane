@@ -12,6 +12,9 @@ import { Button } from "@plane/propel/button";
 import { CloseIcon, SearchIcon } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TProduct, TRequirement } from "@plane/types";
+
+/** 弹窗只读产品的名称 / 编号 / 图标；产品集（is_set）也按这个形状传进来 */
+export type TLinkModalProduct = Pick<TProduct, "id" | "name" | "identifier" | "logo_props"> & { is_set?: boolean };
 import { Checkbox, EModalPosition, EModalWidth, Loader, ModalCore } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { ProductPickTile } from "@/components/projects/products/project-products-table";
@@ -32,7 +35,8 @@ type TProps = {
   workspaceSlug: string;
   projectId: string;
   /** 当前用户看得见的工作区产品：分组名称、图标都从这里取 */
-  products: TProduct[];
+  /** 来源：当前用户可见的产品，以及产品集（is_set） */
+  products: TLinkModalProduct[];
   linkedProductIds: ReadonlySet<string>;
   handleClose: () => void;
   /** 返回后由调用方负责刷新列表与产品关联 */
@@ -98,6 +102,7 @@ export const LinkRequirementsModal = (props: TProps) => {
         name: product?.name ?? "",
         identifier: product?.identifier ?? "",
         logoProps: product?.logo_props ?? null,
+        isSet: Boolean(product?.is_set),
       };
     },
     [productById]

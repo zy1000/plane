@@ -176,6 +176,12 @@ export type TRequirement = TRequirementBuiltinValues & {
   source_sequence_id: number | null;
   /** 拼好的来源编号，如 "SEC-12"。库改名后会自动跟随 */
   source_display_id: string | null;
+  /** 从产品集的哪条需求「转为自有」来的（MP01-3）；不是转来的为 null */
+  origin_display_id: string | null;
+  /** 产品集需求的使用范围（引用它的产品 id）；只有产品集的需求列表会给，别处为 null */
+  scope_product_ids: string[] | null;
+  /** 从产品集引用进来的行（只在产品的需求列表里为 true）：整条跟随产品集、只读，要改先转为自有 */
+  is_reference: boolean;
   /**
    * 模块挂靠；null = 未挂靠（只在「全部」里展示）。模块不是需求内容：
    * 不进 builtin / 版本快照 / 变更单 diff，改挂靠走 set-module 端点，不触发审批。
@@ -419,7 +425,44 @@ export type TRequirementModuleTreeResponse = {
   modules: TRequirementModule[];
   /** 作用域内全部需求数（含未挂靠的行），「全部」节点的计数 */
   total: number;
+  /** 产品属于某个产品集时：引用进来的需求所在的产品集模块（只列有引用需求的），单独成一组 */
+  referenced?: {
+    product_set: { id: string; name: string; identifier: string };
+    modules: TRequirementModule[];
+    total: number;
+  };
 };
+
+/** 产品需求列表的「自有 / 引用」分段（产品属于某个产品集时才有） */
+export type TRequirementSource = "own" | "referenced";
+
+/** 使用范围浮层里的一个产品：GET products/<产品集>/requirements/<id>/scope/ */
+export type TRequirementScopeProduct = {
+  id: string;
+  name: string;
+  identifier: string;
+  in_scope: boolean;
+  /** 已把这条需求转为自有时，自有那条的编号（MP01-3-1）；此时不能再勾选 */
+  converted_display_id: string | null;
+};
+
+/** 批量设置使用范围：add 加上 / remove 去掉 / replace 换成这些产品 */
+export type TRequirementBulkScopeMode = "add" | "remove" | "replace";
+
+export type TRequirementBulkScopeResponse = {
+  /** 使用范围有变化的需求数 */
+  updated: number;
+  /** 已转为自有、没能加上的（需求, 产品）对 */
+  skipped: { requirement_id: string; product_id: string }[];
+  /** 这批需求现在的使用范围 */
+  scope_product_ids: Record<string, string[]>;
+};
+
+export type TRequirementScopeResponse = {
+  products: TRequirementScopeProduct[];
+  scope_product_ids?: string[];
+};
+
 
 /** 模块归属：库模块与产品模块相互独立，两组 URL 前缀 */
 export type TRequirementModuleScope = { libraryId: string } | { productId: string };
@@ -585,6 +628,10 @@ export type TProductProject = {
   /** 产品代号（与开发编号 identifier 是两个字段） */
   product_code: string;
   product_logo_props: TLogoProps | null;
+  /** 关联的是产品集（项目可以关联产品集，需求来源也可以是产品集） */
+  product_is_set: boolean;
+  /** 普通产品所属产品集的名称；不属于任何产品集、或这一行本身是产品集时为 null */
+  product_set_name: string | null;
   /** 产品阶段字典值；老产品迁移后可能为空 */
   product_stage_detail: TDataDictionaryItemLite | null;
   /** 产品负责人（工作区成员，不要求是产品成员） */

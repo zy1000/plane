@@ -20,6 +20,8 @@ export type TLinkGroupProduct = {
   name: string;
   identifier: string;
   logoProps: TLogoProps | null;
+  /** 这一组的来源是产品集 */
+  isSet?: boolean;
 };
 
 const LinkRequirementRow = ({
@@ -154,6 +156,11 @@ export const LinkRequirementsGroup = (props: TProps) => {
           <span className="shrink-0 font-mono text-12 font-semibold tracking-wide text-placeholder">
             {product.identifier}
           </span>
+          {product.isSet && (
+            <span className="inline-flex h-5 shrink-0 items-center rounded bg-accent-subtle px-1.5 text-11 font-medium text-accent-primary">
+              {t("workspace_product_sets.title")}
+            </span>
+          )}
           <span
             className={cn(
               "ml-auto shrink-0 text-12 tabular-nums",

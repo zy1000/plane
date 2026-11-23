@@ -36,8 +36,9 @@ def _cells(queryset):
 
 
 def linked_products(project_id):
+    # 项目关联的产品集（is_set）不进研发矩阵：它不是研发对象，没有「谁担任什么角色」
     return Product.objects.filter(
-        product_projects__project_id=project_id, product_projects__deleted_at__isnull=True
+        product_projects__project_id=project_id, product_projects__deleted_at__isnull=True, is_set=False
     ).order_by("identifier")
 
 

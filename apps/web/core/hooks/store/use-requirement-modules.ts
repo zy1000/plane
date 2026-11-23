@@ -5,6 +5,7 @@ import type {
   TProjectRequirementModuleGroup,
   TRequirementModule,
   TRequirementModuleScope,
+  TRequirementModuleTreeResponse,
   TUpdateRequirementModulePayload,
 } from "@plane/types";
 import { RequirementService } from "@/services/requirement.service";
@@ -54,6 +55,8 @@ export const useRequirementModules = (
   const [groups, setGroups] = useState<TProjectRequirementModuleGroup[]>([]);
   const [total, setTotal] = useState(0);
   const [unassigned, setUnassigned] = useState(0);
+  /** 产品属于某个产品集时：引用进来的需求所在的产品集模块（见 TRequirementModuleTreeResponse.referenced） */
+  const [referenced, setReferenced] = useState<TRequirementModuleTreeResponse["referenced"]>();
   const [isLoading, setIsLoading] = useState(Boolean(workspaceSlug && entityId));
   const [isMutating, setIsMutating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -81,6 +84,7 @@ export const useRequirementModules = (
         setTotal(response.total);
         // 后端树接口新增的字段，@plane/types 的响应类型里还没有
         setUnassigned((response as typeof response & { unassigned?: number }).unassigned ?? 0);
+        setReferenced(response.referenced);
       }
     } catch (requestError) {
       setError(getErrorMessage(requestError));
@@ -188,6 +192,7 @@ export const useRequirementModules = (
     total,
     /** 库 / 产品作用域内未挂靠模块的需求数，「未归类」节点的计数；项目作用域恒为 0 */
     unassigned,
+    referenced,
     isLoading,
     isMutating,
     error,

@@ -50,6 +50,7 @@ class ProjectProductViewSet(BaseViewSet):
             )
             .select_related(
                 "product",
+                "product__product_set",
                 "product__stage__dictionary",
                 "product__project_lead",
                 "project",
@@ -159,6 +160,7 @@ class ProductProjectViewSet(BaseViewSet):
             .filter(visible_projects_q(request.user, slug, "project"))
             .select_related(
                 "product",
+                "product__product_set",
                 "product__stage__dictionary",
                 "product__project_lead",
                 "project",

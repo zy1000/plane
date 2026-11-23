@@ -221,8 +221,10 @@ export const RequirementPeekOverview = (props: TProps) => {
     requirement,
     enabled: canEditContent,
     onPatch: handlePatch,
-    onStatusChange: canEdit && entityKind === "product" ? handleStatusChange : undefined,
-    onModuleChange: canEdit ? handleModuleChange : undefined,
+    // 从产品集引用的行：抽屉里只读。状态是本产品那一份，在列表的状态格里改；模块归产品集
+    onStatusChange:
+      canEdit && entityKind === "product" && !requirement?.is_reference ? handleStatusChange : undefined,
+    onModuleChange: canEdit && !requirement?.is_reference ? handleModuleChange : undefined,
   });
 
   /** 关抽屉（按钮 / 遮罩 / Esc / 打开整页）统一走这里：编辑中有改动先确认，然后丢草稿 */

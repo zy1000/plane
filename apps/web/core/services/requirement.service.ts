@@ -51,6 +51,10 @@ import type {
   TRequirementModuleScope,
   TRequirementModuleTreeResponse,
   TRequirementProjectSubmitChangePayload,
+  TRequirementBulkScopeMode,
+  TRequirementBulkScopeResponse,
+  TRequirementScopeResponse,
+  TRequirementSource,
   TRequirementsResponse,
   TRequirementSubmitReviewPayload,
   TRequirementTestCase,
@@ -644,6 +648,8 @@ export class RequirementService extends APIService {
       excludeClosed?: boolean;
       /** 按模块过滤（含子模块）；"none" = 只看未挂靠的需求；不传 = 全部（含未挂靠的需求） */
       moduleId?: string;
+      /** 产品属于某个产品集时：只看自有 / 只看从产品集引用的 */
+      source?: TRequirementSource;
     } = {}
   ): Promise<TRequirementsResponse> {
     return this.get(`${this.requirementsRoot(workspaceSlug, productId)}/`, {
@@ -656,8 +662,83 @@ export class RequirementService extends APIService {
         ...(params.ids?.length ? { ids: params.ids.join(",") } : {}),
         ...(params.excludeClosed ? { exclude_closed: "true" } : {}),
         ...(params.moduleId ? { module_id: params.moduleId } : {}),
+        ...(params.source ? { source: params.source } : {}),
       },
     })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /* --- 产品集：使用范围（产品集侧）与引用（产品侧） --------------------------- */
+
+  /** 使用范围浮层：集内每个产品勾没勾、它那一份的状态、是否已转为自有 */
+  async getRequirementScope(
+    workspaceSlug: string,
+    productSetId: string,
+    requirementId: string
+  ): Promise<TRequirementScopeResponse> {
+    return this.get(`${this.requirementsRoot(workspaceSlug, productSetId)}/${requirementId}/scope/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 把使用范围整份换成这批产品 */
+  async setRequirementScope(
+    workspaceSlug: string,
+    productSetId: string,
+    requirementId: string,
+    productIds: string[]
+  ): Promise<TRequirementScopeResponse> {
+    return this.put(`${this.requirementsRoot(workspaceSlug, productSetId)}/${requirementId}/scope/`, {
+      product_ids: productIds,
+    })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 批量设置使用范围（产品集需求列表勾选多行后用） */
+  async bulkSetRequirementScope(
+    workspaceSlug: string,
+    productSetId: string,
+    payload: { requirement_ids: string[]; product_ids: string[]; mode: TRequirementBulkScopeMode }
+  ): Promise<TRequirementBulkScopeResponse> {
+    return this.post(`${this.requirementsRoot(workspaceSlug, productSetId)}/bulk-scope/`, payload)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 转为自有的确认框：转换后会拿到的编号 */
+  async previewConvertReferencedRequirement(
+    workspaceSlug: string,
+    productId: string,
+    requirementId: string
+  ): Promise<{ display_id: string }> {
+    return this.get(
+      `/api/workspaces/${workspaceSlug}/products/${productId}/referenced-requirements/${requirementId}/convert/`
+    )
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 转为自有：返回本产品新建的那条需求（编号 MP01-3-1） */
+  async convertReferencedRequirement(
+    workspaceSlug: string,
+    productId: string,
+    requirementId: string
+  ): Promise<TRequirement> {
+    return this.post(
+      `/api/workspaces/${workspaceSlug}/products/${productId}/referenced-requirements/${requirementId}/convert/`
+    )
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;

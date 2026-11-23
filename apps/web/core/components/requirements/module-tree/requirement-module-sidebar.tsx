@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { FolderLock, FolderPlus, Lock, Pencil, Trash2 } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
@@ -88,6 +89,8 @@ type TProps = {
   allLabel?: string;
   /** 删除确认的正文，默认按需求的口径 */
   getDeleteConfirmContent?: (node: TModuleTreeNode) => string;
+  /** 树下面的附加内容（产品需求页的「产品集模块」分组） */
+  bottom?: ReactNode;
 };
 
 /**
@@ -104,6 +107,7 @@ export const RequirementModuleSidebar = (props: TProps) => {
     onModuleMoved,
     allLabel: allLabelProp,
     getDeleteConfirmContent,
+    bottom,
   } = props;
   const isRootLocked = Boolean(lockedRootCategoryName);
   const { t } = useTranslation();
@@ -283,6 +287,7 @@ export const RequirementModuleSidebar = (props: TProps) => {
         railLabel={(selectedModuleId && nodeByKey.get(selectedModuleId)?.label) || allLabel}
         loading={store.isLoading}
         emptyText={t("requirement_modules.empty")}
+        bottom={bottom}
       />
       <AlertModalCore
         isOpen={deleteTarget !== null}

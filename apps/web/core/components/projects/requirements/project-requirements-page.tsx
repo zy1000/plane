@@ -35,6 +35,7 @@ import { FiltersRow } from "@/components/rich-filters/filters-row";
 import { FiltersToggle } from "@/components/rich-filters/filters-toggle";
 import { ViewTabsRoot, getFilterPropertyLabels, getFilterSummaryRow } from "@/components/views/in-page";
 import type { TViewSnapshot, TViewSummaryRow } from "@/components/views/in-page";
+import { useProductSets } from "@/hooks/store/use-product-sets";
 import { useProducts } from "@/hooks/store/use-products";
 import { useProject } from "@/hooks/store/use-project";
 import { useProjectProducts } from "@/hooks/store/use-project-products";
@@ -54,8 +55,9 @@ import {
   useProjectRequirementFiltersConfig,
   type TProjectRequirementFilterExpression,
 } from "./filters";
-import { LinkRequirementsModal } from "./link-modal/link-requirements-modal";
+import { LinkRequirementsModal, type TLinkModalProduct } from "./link-modal/link-requirements-modal";
 import { ProjectRequirementCreateModal } from "./project-requirement-create-modal";
+import { ProjectRequirementScopeBar } from "./project-requirement-scope-bar";
 import { ProjectRequirementTypeTabs } from "./project-requirement-type-tabs";
 import {
   PRODUCT_PARAM,
@@ -123,6 +125,12 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
   const linkedProductIds = useMemo(() => new Set(productLinks.map((link) => link.product)), [productLinks]);
   /** 提研发需求 / 关联研发需求都能选未关联本项目的产品，候选是当前用户看得见的全部产品 */
   const { products: visibleProducts, isLoading: isVisibleProductsLoading } = useProducts(slug);
+  // 关联需求的来源也可以是产品集：分组名、图标要认得它们（产品列表接口不含产品集）
+  const { productSets } = useProductSets(slug);
+  const linkSources = useMemo<TLinkModalProduct[]>(
+    () => [...visibleProducts, ...productSets.map((productSet) => ({ ...productSet, is_set: true }))],
+    [productSets, visibleProducts]
+  );
 
   const moduleStore = useRequirementModules(slug, project ? { kind: "project", projectId: project } : undefined);
 
@@ -515,6 +523,15 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
             onSelectProduct={setSelectedProductId}
           />
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <ProjectRequirementScopeBar
+              groups={moduleStore.groups}
+              productLinks={productLinks}
+              selectedProductId={selectedProductId}
+              selectedModuleId={selectedModuleId}
+              totalCount={store.requirementsPage.total_count ?? 0}
+              isLoading={store.isRequirementsLoading}
+              onSelectModule={setSelectedModuleId}
+            />
             <ProjectRequirementsGrid
               requirementTypes={store.requirementTypes}
               requirements={rows}
@@ -618,7 +635,7 @@ export const ProjectRequirementsPage = observer(function ProjectRequirementsPage
         isOpen={isLinkModalOpen}
         workspaceSlug={slug}
         projectId={project}
-        products={visibleProducts}
+        products={linkSources}
         linkedProductIds={linkedProductIds}
         handleClose={() => setIsLinkModalOpen(false)}
         onSubmit={handleLink}

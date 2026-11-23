@@ -1,5 +1,8 @@
 """产品「工作项」页签的取数：只认工作项自身的产品字段（Issue.product）。
 
+产品属于某个产品集时，挂在产品集上的工作项（在产品集里提的缺陷）集内每个产品都算有，
+一并列出，行上带 from_product_set。
+
 范围 = 本产品的工作项 ∩ 当前用户能访问的项目（与工作项详情接口 allow_project_member 同口径，
 能进项目就能点开详情），归档项目不列。左栏按状态组计数：计数跟随搜索与筛选，不跟随所选状态组。
 """
@@ -34,14 +37,16 @@ _ROW_FIELDS = (
     "type__logo_props",
     "product_module_id",
     "product_module__name",
+    "product_id",
     "created_at",
 )
 
 
 def product_work_item_queryset(user, product):
+    product_ids = [product.id, product.product_set_id] if product.product_set_id else [product.id]
     return Issue.issue_objects.filter(
         workspace_id=product.workspace_id,
-        product_id=product.id,
+        product_id__in=product_ids,
         project__archived_at__isnull=True,
     ).filter(visible_projects_q(user, product.workspace, "project"))
 
@@ -111,7 +116,8 @@ def facets(queryset):
     }
 
 
-def page_rows(queryset, *, offset, limit):
+def page_rows(queryset, *, offset, limit, product_id=None):
+    """product_id：当前页面的产品；行的产品不是它，就是从所属产品集带过来的。"""
     rows = list(queryset.order_by("-created_at").values(*_ROW_FIELDS)[offset : offset + limit])
     assignees = {}
     for issue_id, assignee_id in IssueAssignee.objects.filter(
@@ -149,6 +155,7 @@ def page_rows(queryset, *, offset, limit):
                 else None
             ),
             "assignee_ids": assignees.get(row["id"], []),
+            "from_product_set": product_id is not None and row["product_id"] != product_id,
         }
         for row in rows
     ]

@@ -1,5 +1,6 @@
 import { createContext, useContext, useMemo, useState } from "react";
-import type { TProduct } from "@plane/types";
+import type { TProduct, TProductSet } from "@plane/types";
+import { useProductSets } from "@/hooks/store/use-product-sets";
 import { useProducts } from "@/hooks/store/use-products";
 import type { TProductRichFilter } from "./filters/use-product-list-filter";
 import { useProductListFilterInstance } from "./filters/use-product-list-filter";
@@ -12,8 +13,19 @@ export type TProductModalState = {
   product: TProduct | null;
 };
 
+/** 产品集的创建 / 编辑弹窗：productSet 为空是创建 */
+export type TProductSetModalState = {
+  isOpen: boolean;
+  productSet: TProductSet | null;
+};
+
 type TProductsContext = ReturnType<typeof useProducts> & {
   workspaceSlug: string;
+  /** 产品集列表与增删改（列表页的「产品集」页签、详情页的切换器与编辑入口共用） */
+  sets: ReturnType<typeof useProductSets>;
+  productSetModal: TProductSetModalState;
+  openProductSetModal: (productSet?: TProductSet) => void;
+  closeProductSetModal: () => void;
   searchQuery: string;
   setSearchQuery: (value: string) => void;
   /** 列表页的富筛选实例（页头漏斗 + 筛选行共用），属性配置由列表页根注册 */
@@ -30,6 +42,8 @@ const ProductsContext = createContext<TProductsContext | undefined>(undefined);
 export function ProductsProvider(props: { children: React.ReactNode; workspaceSlug: string }) {
   const { children, workspaceSlug } = props;
   const products = useProducts(workspaceSlug);
+  const sets = useProductSets(workspaceSlug);
+  const [productSetModal, setProductSetModal] = useState<TProductSetModalState>({ isOpen: false, productSet: null });
   const filter = useProductListFilterInstance(workspaceSlug);
   const [searchQuery, setSearchQuery] = useState("");
   const [modal, setModal] = useState<TProductModalState>({
@@ -57,10 +71,23 @@ export function ProductsProvider(props: { children: React.ReactNode; workspaceSl
     setModal((current) => ({ ...current, isOpen: false }));
   };
 
+  const openProductSetModal = (productSet?: TProductSet) => {
+    setProductSetModal({ isOpen: true, productSet: productSet ?? null });
+  };
+
+  // 只收起、不清对象：关闭动画期间标题和表单不跳变
+  const closeProductSetModal = () => {
+    setProductSetModal((current) => ({ ...current, isOpen: false }));
+  };
+
   const value = useMemo<TProductsContext>(
     () => ({
       ...products,
       workspaceSlug,
+      sets,
+      productSetModal,
+      openProductSetModal,
+      closeProductSetModal,
       searchQuery,
       setSearchQuery,
       filter,
@@ -70,7 +97,7 @@ export function ProductsProvider(props: { children: React.ReactNode; workspaceSl
       closeProductModal,
       setProductToDelete,
     }),
-    [filter, modal, productToDelete, products, searchQuery, workspaceSlug]
+    [filter, modal, productSetModal, productToDelete, products, searchQuery, sets, workspaceSlug]
   );
 
   return <ProductsContext.Provider value={value}>{children}</ProductsContext.Provider>;

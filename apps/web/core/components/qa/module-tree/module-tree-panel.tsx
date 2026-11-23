@@ -46,6 +46,8 @@ export type TModuleTreePanelProps = Omit<TModuleTreeProps, "query" | "className"
   headerLeft?: ReactNode;
   /** 树头上方的整行内容（项目里看产品用例时放产品 / 用例库切换器） */
   top?: ReactNode;
+  /** 树下面、同一个滚动区里的附加内容（产品需求页的「产品集模块」分组） */
+  bottom?: ReactNode;
   /** 传了才显示「新建一级模块」按钮 */
   onAddRoot?: () => void;
   searchable?: boolean;
@@ -65,6 +67,7 @@ export const ModuleTreePanel = ({
   title = "模块",
   headerLeft,
   top,
+  bottom,
   onAddRoot,
   searchable = true,
   collapsible = true,
@@ -218,6 +221,7 @@ export const ModuleTreePanel = ({
           </div>
         )}
         {noMatch && <NoMatchHint nodes={treeProps.nodes} query={query} />}
+        {bottom}
       </div>
 
       <div

@@ -27,6 +27,12 @@ class ProductProjectSerializer(BaseSerializer):
     product_logo_props = serializers.JSONField(
         source="product.logo_props", read_only=True
     )
+    # 项目也可以关联产品集（is_set 的产品）：项目「产品」页据此分「产品集 / 产品」两组；
+    # 普通产品带出所属产品集的名称。视图 select_related 到 product__product_set
+    product_is_set = serializers.BooleanField(source="product.is_set", read_only=True)
+    product_set_name = serializers.CharField(
+        source="product.product_set.name", read_only=True, allow_null=True
+    )
     # 项目概览「关联产品」卡要一眼看到产品处在哪个阶段、谁在负责；老产品这两项
     # 可能为空（迁移后未补齐），前端按空处理。视图 select_related 到
     # product__stage__dictionary / product__project_lead，否则每行两次查询
@@ -53,6 +59,8 @@ class ProductProjectSerializer(BaseSerializer):
             "product_identifier",
             "product_code",
             "product_logo_props",
+            "product_is_set",
+            "product_set_name",
             "product_stage_detail",
             "product_project_lead_detail",
             "project_detail",

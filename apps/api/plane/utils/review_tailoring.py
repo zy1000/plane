@@ -136,9 +136,10 @@ def _write_activity(
 
 
 def _linked_product_ids(project_id):
-    """项目当前关联的产品。裁剪表的横轴只能从这里面选。"""
+    """项目当前关联的产品。裁剪表的横轴只能从这里面选。
+    关联的产品集（is_set）不算：阶段评审评的是具体产品。"""
     return set(
-        ProductProject.objects.filter(project_id=project_id).values_list(
+        ProductProject.objects.filter(project_id=project_id, product__is_set=False).values_list(
             "product_id", flat=True
         )
     )

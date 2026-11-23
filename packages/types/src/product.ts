@@ -39,12 +39,59 @@ export type TProduct = {
   o_phase_close_date: string | null;
   v_phase_close_date: string | null;
   logo_props: TLogoProps;
+  /** 产品集是一种特殊的产品：需求 / 用例 / 工作项 / 关联项目沿用产品的页面，另有「产品」页签 */
+  is_set: boolean;
+  /** 所属产品集（一个产品最多属于一个）。只读，加入 / 移出走产品集的「产品」页签 */
+  product_set: string | null;
+  product_set_detail: TProductSetLite | null;
   created_at: string;
   updated_at: string;
   created_by: string | null;
   updated_by: string | null;
   /** 当前用户在这个产品里的有效 product.* 权限；产品内所有按钮显隐都读它 */
   my_permission_keys: string[];
+};
+
+export type TProductSetLite = Pick<TProduct, "id" | "name" | "identifier" | "logo_props">;
+
+/** 产品集列表行：GET /product-sets/。汇总数字只有列表接口给，增改接口的返回里没有 */
+export type TProductSet = Pick<
+  TProduct,
+  | "id"
+  | "name"
+  | "identifier"
+  | "description_html"
+  | "workspace"
+  | "owner"
+  | "owner_detail"
+  | "logo_props"
+  | "created_at"
+  | "updated_at"
+  | "created_by"
+  | "updated_by"
+  | "my_permission_keys"
+> & {
+  /** 集内产品（按当前用户的产品可见范围） */
+  products: Pick<TProduct, "id" | "name" | "identifier">[];
+  requirement_count: number;
+  case_count: number;
+  open_defect_count: number;
+};
+
+export type TProductSetPayload = {
+  name: string;
+  identifier: string;
+  owner?: string;
+  description_html?: string | null;
+};
+
+/** 产品集「产品」页签的一行：GET /product-sets/<id>/products/ */
+export type TProductSetMember = Pick<TProduct, "id" | "name" | "identifier" | "code" | "logo_props"> & {
+  status_detail: TDataDictionaryItemLite | null;
+  joined_at: string | null;
+  /** 这个产品引用了几条产品集需求 / 把几条转成了自有（没删的） */
+  referenced_requirement_count: number;
+  converted_requirement_count: number;
 };
 
 export type TCreateProductPayload = {

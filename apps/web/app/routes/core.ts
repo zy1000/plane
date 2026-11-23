@@ -148,6 +148,11 @@ export const coreRoutes: RouteConfigEntry[] = [
               ":workspaceSlug/products/:productId/projects",
               "./(all)/[workspaceSlug]/(projects)/products/[productId]/projects/page.tsx"
             ),
+            // 产品集（is_set 的产品）独有：集内产品
+            route(
+              ":workspaceSlug/products/:productId/set-products",
+              "./(all)/[workspaceSlug]/(projects)/products/[productId]/set-products/page.tsx"
+            ),
             route(
               ":workspaceSlug/products/:productId/stage-reviews",
               "./(all)/[workspaceSlug]/(projects)/products/[productId]/stage-reviews/page.tsx"

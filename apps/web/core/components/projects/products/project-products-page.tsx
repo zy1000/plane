@@ -37,8 +37,10 @@ import {
 import { ProjectContextChip } from "@/components/projects/project-context-chip";
 import { useProducts } from "@/hooks/store/use-products";
 import { useProject } from "@/hooks/store/use-project";
+import { useProductSets } from "@/hooks/store/use-product-sets";
 import { useProjectProducts } from "@/hooks/store/use-project-products";
 import { useUserPermissions } from "@/hooks/store/user";
+import { LinkProductSetsModal } from "./link-product-sets-modal";
 import { ProjectProductsModal } from "./project-products-modal";
 
 export const ProjectProductsPage = observer(function ProjectProductsPage() {
@@ -72,6 +74,19 @@ export const ProjectProductsPage = observer(function ProjectProductsPage() {
   // 关联弹窗的候选项 = 当前用户可见的工作区产品。没有管理权限就不拉这份列表。
   // 创建产品也走这个 hook：新产品会进同一份列表，关联弹窗里立刻可见
   const { products, isLoading: isProductsLoading, createProduct } = useProducts(canManage ? slug : undefined);
+
+  // 项目也可以关联产品集（后端是 is_set 的产品，走同一个关联接口）
+  const { productSets } = useProductSets(canManage ? slug : undefined);
+  const setLinks = links.filter((link) => link.product_is_set);
+  const productLinks = links.filter((link) => !link.product_is_set);
+  /** 有产品集时一张表分两组，各带组头；没有就还是原来的一张平表 */
+  const linkGroups = setLinks.length
+    ? [
+        { key: "sets", label: t("project_products.sets.group_sets"), rows: setLinks },
+        { key: "products", label: t("project_products.sets.group_products"), rows: productLinks },
+      ]
+    : [{ key: "products", label: null, rows: productLinks }];
+  const [isSetModalOpen, setIsSetModalOpen] = useState(false);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -155,7 +170,9 @@ export const ProjectProductsPage = observer(function ProjectProductsPage() {
             <Header.LeftItem>
               {!isLoading && !error && (
                 <span className="text-13 text-tertiary">
-                  {t("project_products.result_count", { count: links.length })}
+                  {setLinks.length
+                    ? t("project_products.sets.result_count", { sets: setLinks.length, products: productLinks.length })
+                    : t("project_products.result_count", { count: links.length })}
                 </span>
               )}
             </Header.LeftItem>
@@ -172,6 +189,9 @@ export const ProjectProductsPage = observer(function ProjectProductsPage() {
                   onClick={() => setIsModalOpen(true)}
                 >
                   {t("project_products.link")}
+                </Button>
+                <Button variant="secondary" size="lg" onClick={() => setIsSetModalOpen(true)}>
+                  {t("project_products.sets.link")}
                 </Button>
               </Header.RightItem>
             )}
@@ -236,6 +256,7 @@ export const ProjectProductsPage = observer(function ProjectProductsPage() {
                 <tr className="border-b border-subtle text-11 font-medium text-secondary">
                   <th className="px-5 py-2.5">{t("project_products.columns.product")}</th>
                   <th className="w-44 px-4 py-2.5">{t("project_products.columns.code")}</th>
+                  <th className="w-40 px-4 py-2.5">{t("workspace_product_sets.fields.product_set")}</th>
                   <th className="w-24 px-4 py-2.5">{t("project_products.columns.requirement_count")}</th>
                   <th className="w-56 px-4 py-2.5">{t("project_products.columns.status_distribution")}</th>
                   <th className="w-24 px-4 py-2.5">{t("project_products.columns.completion")}</th>
@@ -248,7 +269,16 @@ export const ProjectProductsPage = observer(function ProjectProductsPage() {
                 </tr>
               </thead>
               <tbody>
-                {links.map((link) => (
+                {linkGroups.flatMap((group) => [
+                  group.label && (
+                    <tr key={`group-${group.key}`} className="border-b border-subtle bg-layer-1">
+                      <td colSpan={canManage ? 8 : 7} className="px-5 py-2 text-12 font-medium text-secondary">
+                        {group.label}
+                        <span className="ml-2 font-normal text-tertiary tabular-nums">{group.rows.length}</span>
+                      </td>
+                    </tr>
+                  ),
+                  ...group.rows.map((link) => (
                   <tr key={link.id} className="group border-b border-subtle hover:bg-layer-transparent-hover">
                     <td className="px-5 py-3">
                       <ProductChip
@@ -261,7 +291,13 @@ export const ProjectProductsPage = observer(function ProjectProductsPage() {
                     </td>
                     <td className="px-4 py-3 text-13 text-secondary">
                       <span className="block truncate" title={link.product_code}>
-                        {link.product_code || "—"}
+                        {/* 产品集没有项目代号（库里的 code 只是名称的副本） */}
+                        {(!link.product_is_set && link.product_code) || "—"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-13 text-secondary">
+                      <span className="block truncate" title={link.product_set_name ?? undefined}>
+                        {link.product_set_name || "—"}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-13 tabular-nums text-primary">
@@ -301,7 +337,8 @@ export const ProjectProductsPage = observer(function ProjectProductsPage() {
                       </td>
                     )}
                   </tr>
-                ))}
+                  )),
+                ])}
               </tbody>
             </table>
           )}
@@ -327,11 +364,33 @@ export const ProjectProductsPage = observer(function ProjectProductsPage() {
           isOpen={isModalOpen}
           products={products}
           isProductsLoading={isProductsLoading}
-          links={links}
+          // 产品集另有「关联产品集」弹窗，这里只管产品
+          links={productLinks}
           projectCode={projectDetail?.code?.trim() ?? ""}
           isSubmitting={isMutating}
           handleClose={() => setIsModalOpen(false)}
           onSubmit={handleModalSubmit}
+        />
+      )}
+
+      {canManage && (
+        <LinkProductSetsModal
+          isOpen={isSetModalOpen}
+          productSets={productSets}
+          linkedIds={new Set(setLinks.map((link) => link.product))}
+          isSubmitting={isMutating}
+          handleClose={() => setIsSetModalOpen(false)}
+          onSubmit={(productSetIds) => {
+            void (async () => {
+              try {
+                await updateProducts({ products: productSetIds });
+                setIsSetModalOpen(false);
+                setToast({ type: TOAST_TYPE.SUCCESS, title: t("project_products.sets.toast_linked") });
+              } catch (error) {
+                notifyLinkError(error);
+              }
+            })();
+          }}
         />
       )}
 

@@ -474,30 +474,37 @@ class ExportContext:
     #: module_id(str) -> 名称路径文本。行查询没有 select_related("module")（要给
     #: select_for_update 让路），所以必须一次建好索引，不能逐行取 requirement.module
     module_path_by_id: dict = dataclass_field(default_factory=dict)
+    #: 产品引用了产品集需求时，一份导出里混着两种前缀：product_id(str) -> 编号前缀
+    identifier_by_product: dict = dataclass_field(default_factory=dict)
+    #: requirement_id(str) -> product_id(str)，父项列按父需求所属产品取前缀
+    product_by_id: dict = dataclass_field(default_factory=dict)
 
     def module_text(self, module_id):
         if not module_id:
             return ""
         return self.module_path_by_id.get(str(module_id), "")
 
-    def display_id(self, sequence_id):
+    def display_id(self, sequence_id, product_id=None):
         if sequence_id is None:
             return ""
-        if not self.scope_identifier:
+        prefix = self.identifier_by_product.get(str(product_id)) or self.scope_identifier
+        if not prefix:
             return str(sequence_id)
-        return f"{self.scope_identifier}-{sequence_id}"
+        return f"{prefix}-{sequence_id}"
 
     def row_display_id(self, requirement):
         if self.is_library:
             return requirement.code or ""
-        return self.display_id(requirement.sequence_id)
+        return self.display_id(requirement.sequence_id, getattr(requirement, "product_id", None))
 
     def display_id_of(self, requirement_id):
         if not requirement_id:
             return ""
         if self.is_library:
             return self.code_by_id.get(str(requirement_id), "")
-        return self.display_id(self.sequence_by_id.get(str(requirement_id)))
+        return self.display_id(
+            self.sequence_by_id.get(str(requirement_id)), self.product_by_id.get(str(requirement_id))
+        )
 
     def user_name(self, user_id):
         """成员的展示名。

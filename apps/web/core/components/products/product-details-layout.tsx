@@ -11,6 +11,7 @@ import { ContentWrapper } from "@/components/core/content-wrapper";
 import { PageHead } from "@/components/core/page-title";
 import { useProductsContext } from "./context";
 import { ProductTopNavigation } from "./product-top-navigation";
+import { ProductSetModal } from "./sets/product-set-modal";
 
 type TProductDetailsLayoutProps = {
   children: React.ReactNode;
@@ -108,6 +109,8 @@ export const ProductDetailsLayout = observer(function ProductDetailsLayout(props
       ) : (
         children
       )}
+      {/* 产品集的编辑弹窗：页签行的设置入口和概览页的「编辑产品集」共用 */}
+      {currentProduct?.is_set && <ProductSetModal />}
     </>
   );
 });

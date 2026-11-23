@@ -17,7 +17,7 @@ import { ProductModal } from "../modal";
 import { getProductTabPath } from "../navigation";
 import { hasProductPermission } from "../permissions";
 import { ProductOverviewHeader } from "./overview-header";
-import { ProductOverviewInfoCard } from "./overview-info-card";
+import { ProductOverviewInfoCard, ProductSetOverviewInfoCard } from "./overview-info-card";
 import { ProductOverviewProjectsCard } from "./overview-projects-card";
 import { ProductOverviewReleasesCard } from "./overview-releases-card";
 import { ProductOverviewRequirementsCard } from "./overview-requirements-card";
@@ -33,8 +33,10 @@ export const ProductOverviewPage = observer(function ProductOverviewPage() {
   const { workspaceSlug, productId } = useParams();
   const slug = workspaceSlug?.toString() ?? "";
   const id = productId?.toString() ?? "";
-  const { products, openProductModal } = useProductsContext();
+  const { products, sets, openProductModal, openProductSetModal } = useProductsContext();
   const product = products.find((item) => item.id === id);
+  // 产品集沿用这个页面：编辑走产品集弹窗，右栏换成产品集信息，没有发布卡
+  const productSet = product?.is_set ? sets.productSets.find((item) => item.id === id) : undefined;
   const { canViewLibraries } = useTemplatePermissions(slug || undefined);
 
   const scope = { workspaceSlug: slug || undefined, productId: id || undefined };
@@ -55,7 +57,16 @@ export const ProductOverviewPage = observer(function ProductOverviewPage() {
       <PageHead title={`${t("workspace_products.navigation.overview")} - ${product.name}`} />
       <ContentWrapper className="bg-surface-1">
         <div className="flex flex-col gap-5 px-7 pt-6 pb-10">
-          <ProductOverviewHeader product={product} onEdit={canEdit ? () => openProductModal("edit", product) : undefined} />
+          <ProductOverviewHeader
+            product={product}
+            onEdit={
+              !canEdit
+                ? undefined
+                : !product.is_set
+                  ? () => openProductModal("edit", product)
+                  : productSet && (() => openProductSetModal(productSet))
+            }
+          />
 
           <div className="flex flex-wrap items-start gap-5">
             <div className="flex min-w-0 flex-[999_1_620px] flex-col gap-4">
@@ -74,12 +85,14 @@ export const ProductOverviewPage = observer(function ProductOverviewPage() {
                 canLink={canLinkProjects}
               />
               <div className="flex flex-wrap items-stretch gap-4">
-                <ProductOverviewReleasesCard
-                  workspaceSlug={slug}
-                  releases={releaseData.releases}
-                  isLoading={isReleasesLoading}
-                  releasesPath={pathOf("releases")}
-                />
+                {!product.is_set && (
+                  <ProductOverviewReleasesCard
+                    workspaceSlug={slug}
+                    releases={releaseData.releases}
+                    isLoading={isReleasesLoading}
+                    releasesPath={pathOf("releases")}
+                  />
+                )}
                 <ProductOverviewTestCard
                   test={overview?.test}
                   coverage={overview?.requirements === null ? null : overview?.requirements?.coverage}
@@ -89,7 +102,16 @@ export const ProductOverviewPage = observer(function ProductOverviewPage() {
               </div>
             </div>
             <aside className="flex min-w-0 flex-[1_1_300px] flex-col">
-              <ProductOverviewInfoCard product={product} />
+              {product.is_set ? (
+                <ProductSetOverviewInfoCard
+                  workspaceSlug={slug}
+                  product={product}
+                  members={productSet?.products ?? []}
+                  membersPath={pathOf("set-products")}
+                />
+              ) : (
+                <ProductOverviewInfoCard product={product} />
+              )}
             </aside>
           </div>
         </div>

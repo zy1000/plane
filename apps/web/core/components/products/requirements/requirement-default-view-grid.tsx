@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { observer } from "mobx-react";
 import { Copy, History, Send, Trash2, Undo2 } from "lucide-react";
@@ -15,11 +16,10 @@ import type {
   TRequirementFilter,
   TRequirementItemStatus,
   TRequirementModule,
-  TRequirementPriority,
   TRequirementTypeSchema,
 } from "@plane/types";
-import { AlertModalCore, Avatar, CustomMenu, Loader } from "@plane/ui";
-import { cn, getFileURL } from "@plane/utils";
+import { AlertModalCore, CustomMenu, Loader } from "@plane/ui";
+import { cn } from "@plane/utils";
 import {
   collectRequirementGridFilterFields,
   useRequirementGridFilter,
@@ -31,9 +31,15 @@ import {
   resolveBuiltinColumns,
 } from "@/components/requirements/requirement-builtin-layout";
 import { RequirementDataToolbar } from "@/components/requirements/requirement-data-toolbar";
+import {
+  REQUIREMENT_LIST_DISPLAY_ID_CLASS,
+  RequirementListAssignee,
+  RequirementListHeaderLabel,
+  RequirementListModule,
+  RequirementListPriority,
+} from "@/components/requirements/requirement-list-cells";
 import { RequirementGridPagination } from "@/components/requirements/requirement-grid-pagination";
 import { FiltersRow } from "@/components/rich-filters/filters-row";
-import { useMember } from "@/hooks/store/use-member";
 import { RequirementApprovalCell } from "./approval/requirement-approval-cell";
 import {
   getCurrentPageOffset,
@@ -85,38 +91,6 @@ const HEADER_CELL_CLASS = `${HEADER_CELL_FLUSH_CLASS} px-page-x`;
 const BODY_CELL_FLUSH_CLASS = "h-12 overflow-hidden border-b border-subtle align-middle text-14 text-primary";
 const BODY_CELL_CLASS = `${BODY_CELL_FLUSH_CLASS} px-page-x`;
 
-const HeaderLabel = ({ label }: { label: string }) => (
-  <span className="block min-w-0 truncate text-13 font-medium text-tertiary">{label}</span>
-);
-
-/** 优先级只给文字着色，不配图标；颜色走 priority token */
-const PRIORITY_TEXT_CLASS: Record<TRequirementPriority, string> = {
-  urgent: "text-priority-urgent",
-  high: "text-priority-high",
-  medium: "text-priority-medium",
-  low: "text-priority-low",
-  none: "text-placeholder",
-};
-
-const PriorityValue = ({ priority }: { priority: TRequirementPriority | null | undefined }) => {
-  const { t } = useTranslation();
-  const key = priority ?? "none";
-  return <span className={`text-13 ${PRIORITY_TEXT_CLASS[key] ?? "text-secondary"}`}>{t(key)}</span>;
-};
-
-const AssigneeValue = observer(function AssigneeValue({ memberId }: { memberId: string | null | undefined }) {
-  const { getUserDetails } = useMember();
-  if (!memberId) return <span className="text-placeholder">—</span>;
-  const member = getUserDetails(memberId);
-  const name = member?.display_name ?? memberId;
-  return (
-    <span className="inline-flex max-w-full items-center gap-2">
-      <Avatar size={22} name={name} src={getFileURL(member?.avatar_url ?? "")} showTooltip={false} />
-      <span className="truncate text-13 text-secondary">{name}</span>
-    </span>
-  );
-});
-
 type TProps = {
   /** 父项列要把 UUID 换成标题，跨页的父项得回头查接口 */
   workspaceSlug: string;
@@ -165,9 +139,26 @@ type TProps = {
   toolbarPortalEl?: HTMLElement | null;
   /** 批量「移到模块」；不传则批量条不给这个动作 */
   onMoveToModule?: (requirementIds: string[]) => void;
+  /** 产品集的需求：勾选行后批量设置使用范围 */
+  onSetScope?: (requirementIds: string[]) => void;
   /** 产品的模块树：传了筛选里才有「模块」属性（基线快照页不传） */
   filterModules?: TRequirementModule[];
+  /** 页面追加的列（产品集页的「使用范围」、产品页的「来源」「操作」），内容由页面给 */
+  extraColumns?: TRequirementExtraColumn[];
+  /** 从产品集引用的行（is_reference）的行菜单只有这一项：转为自有。不传则这些行没有行菜单 */
+  onConvertReference?: (requirement: TRequirement) => void;
 };
+
+export type TRequirementExtraColumn = {
+  key: string;
+  label: string;
+  width: number;
+  /** 默认排在最右；"after-title" 紧跟标题列，不用横向滚动就能看到 */
+  position?: "after-title" | "end";
+  render: (requirement: TRequirement) => ReactNode;
+};
+
+const NO_EXTRA_COLUMNS: TRequirementExtraColumn[] = [];
 
 export const RequirementDefaultViewGrid = observer(function RequirementDefaultViewGrid(props: TProps) {
   const {
@@ -204,7 +195,10 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
     onStatusChange,
     toolbarPortalEl,
     onMoveToModule,
+    onSetScope,
     filterModules,
+    extraColumns = NO_EXTRA_COLUMNS,
+    onConvertReference,
   } = props;
   const { t } = useTranslation();
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -381,8 +375,11 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
           : total,
       0
     ) +
-    (isRequirementTypeVisible ? getWidth("requirement_type", REQUIREMENT_GRID_COLUMN_WIDTH) : 0);
+    (isRequirementTypeVisible ? getWidth("requirement_type", REQUIREMENT_GRID_COLUMN_WIDTH) : 0) +
+    extraColumns.reduce((total, column) => total + column.width, 0);
   const tableWidth = titleColumnWidth + propertyColumnsWidth;
+  const leadingExtraColumns = extraColumns.filter((column) => column.position === "after-title");
+  const trailingExtraColumns = extraColumns.filter((column) => column.position !== "after-title");
   // 父项列存的是 UUID，页内命中不发请求，跨页父项攒成一次批量取
   const parentTitles = useRequirementTitles({
     workspaceSlug,
@@ -403,9 +400,12 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
    */
   const canSubmitReviewByIdRef = useRef<Map<string, boolean>>(new Map());
   const deletableByIdRef = useRef<Map<string, boolean>>(new Map());
+  const referenceByIdRef = useRef<Map<string, boolean>>(new Map());
   for (const item of requirements) {
     canSubmitReviewByIdRef.current.set(item.id, Boolean(item.can_submit_review));
-    deletableByIdRef.current.set(item.id, !item.is_locked && item.approved_version === null);
+    // 从产品集引用的行不归本产品删
+    deletableByIdRef.current.set(item.id, !item.is_locked && !item.is_reference && item.approved_version === null);
+    referenceByIdRef.current.set(item.id, Boolean(item.is_reference));
   }
   /** 可提交的选中行。撤回不做批量 —— 撤回作用在变更单上，一个选区可能跨多张单 */
   const submittableSelectedIds = useMemo(
@@ -415,6 +415,11 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
   /** 只有从未通过审批的草稿能直接删；已确认的走「申请删除」评审（与类型视图同一条规则） */
   const deletableSelectedIds = useMemo(
     () => selectedIds.filter((id) => deletableByIdRef.current.get(id)),
+    [requirements, selectedIds]
+  );
+  /** 引用行的模块归产品集，后端整批拒绝：「移动到模块」只带本产品自己的行 */
+  const movableSelectedIds = useMemo(
+    () => selectedIds.filter((id) => !referenceByIdRef.current.get(id)),
     [requirements, selectedIds]
   );
 
@@ -465,7 +470,24 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
     });
   };
 
-  const renderRowActionMenu = (requirement: TRequirement) => (
+  const renderRowActionMenu = (requirement: TRequirement) =>
+    // 从产品集引用的行：复制 / 提审 / 删除都不归本产品，行菜单只有「转为自有」
+    requirement.is_reference ? (
+      onConvertReference ? (
+        <span className="shrink-0 opacity-0 transition-opacity group-hover/requirement:opacity-100 focus-within:opacity-100">
+          <CustomMenu
+            ellipsis
+            placement="bottom-end"
+            buttonClassName="text-tertiary hover:text-primary"
+            portalElement={menuPortalEl}
+          >
+            <CustomMenu.MenuItem onClick={() => onConvertReference(requirement)}>
+              <MenuRowLabel icon={Copy} label={t("workspace_product_sets.requirements.convert")} />
+            </CustomMenu.MenuItem>
+          </CustomMenu>
+        </span>
+      ) : null
+    ) : (
     <span className="shrink-0 opacity-0 transition-opacity group-hover/requirement:opacity-100 focus-within:opacity-100">
       {/* 总览视图只给复制与删除：改字段值要回到对应的类型视图 */}
       <CustomMenu
@@ -578,6 +600,9 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
           <colgroup>
             {isDisplayIdVisible && <col style={{ width: displayIdWidth }} />}
             <col style={{ width: titleColumnWidth }} />
+            {leadingExtraColumns.map((column) => (
+              <col key={column.key} style={{ width: column.width }} />
+            ))}
             {isModuleVisible && <col style={{ width: moduleWidth }} />}
             {isDescriptionVisible && descriptionColumn && (
               <col
@@ -597,6 +622,9 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
             {isRequirementTypeVisible && (
               <col style={{ width: getWidth("requirement_type", REQUIREMENT_GRID_COLUMN_WIDTH) }} />
             )}
+            {trailingExtraColumns.map((column) => (
+              <col key={column.key} style={{ width: column.width }} />
+            ))}
           </colgroup>
           <thead className="sticky top-0 z-[12] text-13 font-medium">
             <tr>
@@ -616,7 +644,7 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
                       selectHost === "display_id" ? REQUIREMENT_GRID_SELECT_HOST_PAD_CLASS : "px-page-x"
                     )}
                   >
-                    <HeaderLabel label={t("requirements.identifier.column")} />
+                    <RequirementListHeaderLabel label={t("requirements.identifier.column")} />
                   </div>
                   {selectHost === "display_id" && (
                     <RequirementGridHoverSelect
@@ -650,7 +678,7 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
                     selectHost === "title" ? REQUIREMENT_GRID_SELECT_HOST_PAD_CLASS : "px-page-x"
                   )}
                 >
-                  <HeaderLabel label={t(titleColumn?.labelKey ?? "requirement_fields.builtin.title")} />
+                  <RequirementListHeaderLabel label={t(titleColumn?.labelKey ?? "requirement_fields.builtin.title")} />
                 </div>
                 {selectHost === "title" && (
                   <RequirementGridHoverSelect
@@ -665,16 +693,21 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
                 )}
                 <RequirementGridColumnResizer onMouseDown={(event) => startResize("title", columnSnapshot, event)} />
               </th>
+              {leadingExtraColumns.map((column) => (
+                <th key={column.key} className={HEADER_CELL_CLASS}>
+                  <RequirementListHeaderLabel label={column.label} />
+                </th>
+              ))}
               {/* 模块紧跟标题：只读展示（挂靠走左侧树 / 批量移动） */}
               {isModuleVisible && (
                 <th className={HEADER_CELL_CLASS}>
-                  <HeaderLabel label={t("requirement_modules.column")} />
+                  <RequirementListHeaderLabel label={t("requirement_modules.column")} />
                   <RequirementGridColumnResizer onMouseDown={(event) => startResize("module", columnSnapshot, event)} />
                 </th>
               )}
               {isDescriptionVisible && descriptionColumn && (
                 <th className={HEADER_CELL_CLASS}>
-                  <HeaderLabel label={t(descriptionColumn.labelKey)} />
+                  <RequirementListHeaderLabel label={t(descriptionColumn.labelKey)} />
                   <RequirementGridColumnResizer
                     onMouseDown={(event) => startResize(descriptionColumn.key, columnSnapshot, event)}
                   />
@@ -683,7 +716,7 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
               {/* 审批紧跟描述：每行都要扫一眼，不能放到要横滚才看得见的地方 */}
               {isApprovalVisible && (
                 <th className={HEADER_CELL_CLASS}>
-                  <HeaderLabel label={t("requirement_approval.column")} />
+                  <RequirementListHeaderLabel label={t("requirement_approval.column")} />
                   <RequirementGridColumnResizer
                     onMouseDown={(event) => startResize("approval", columnSnapshot, event)}
                   />
@@ -692,7 +725,7 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
               {/* 状态紧跟审批：需求级交付状态（人工维护），同样是逐行要扫的信号 */}
               {!hiddenFieldIds.includes("status") && statusColumn && (
                 <th className={HEADER_CELL_CLASS}>
-                  <HeaderLabel label={t(statusColumn.labelKey)} />
+                  <RequirementListHeaderLabel label={t(statusColumn.labelKey)} />
                   <RequirementGridColumnResizer
                     onMouseDown={(event) => startResize(statusColumn.key, columnSnapshot, event)}
                   />
@@ -701,7 +734,7 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
               {remainingBuiltinColumns.map((column) =>
                 !hiddenFieldIds.includes(column.key) ? (
                   <th key={column.key} className={HEADER_CELL_CLASS}>
-                    <HeaderLabel label={t(column.labelKey)} />
+                    <RequirementListHeaderLabel label={t(column.labelKey)} />
                     <RequirementGridColumnResizer
                       onMouseDown={(event) => startResize(column.key, columnSnapshot, event)}
                     />
@@ -711,7 +744,7 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
               {/* 标准库编号排在末尾：只在追溯标准库来源时才看，不该占着靠前的位置 */}
               {isSourceDisplayIdVisible && (
                 <th className={HEADER_CELL_CLASS}>
-                  <HeaderLabel label={t("requirements.identifier.source_column")} />
+                  <RequirementListHeaderLabel label={t("requirements.identifier.source_column")} />
                   <RequirementGridColumnResizer
                     onMouseDown={(event) => startResize("source_display_id", columnSnapshot, event)}
                   />
@@ -719,12 +752,17 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
               )}
               {isRequirementTypeVisible && (
                 <th className={HEADER_CELL_CLASS}>
-                  <HeaderLabel label={t("workspace_products.requirements.data.views.requirement_type_column")} />
+                  <RequirementListHeaderLabel label={t("workspace_products.requirements.data.views.requirement_type_column")} />
                   <RequirementGridColumnResizer
                     onMouseDown={(event) => startResize("requirement_type", columnSnapshot, event)}
                   />
                 </th>
               )}
+              {trailingExtraColumns.map((column) => (
+                <th key={column.key} className={HEADER_CELL_CLASS}>
+                  <RequirementListHeaderLabel label={column.label} />
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
@@ -765,7 +803,7 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
                           <button
                             type="button"
                             onClick={() => onOpenDetail(requirement.id)}
-                            className="min-w-0 flex-1 truncate text-left font-mono text-[12.5px] font-medium text-tertiary hover:text-accent-primary"
+                            className={REQUIREMENT_LIST_DISPLAY_ID_CLASS}
                           >
                             {requirement.display_id}
                           </button>
@@ -821,18 +859,14 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
                       {!readOnly && !isDisplayIdVisible && renderRowActionMenu(requirement)}
                     </div>
                   </td>
+                  {leadingExtraColumns.map((column) => (
+                    <td key={column.key} className={BODY_CELL_CLASS}>
+                      {column.render(requirement)}
+                    </td>
+                  ))}
                   {isModuleVisible && (
                     <td className={BODY_CELL_CLASS}>
-                      {requirement.module_name ? (
-                        <span
-                          className="inline-flex h-[22px] max-w-full items-center rounded px-[7px] bg-layer-1 text-12 text-secondary"
-                          title={requirement.module_name}
-                        >
-                          <span className="truncate">{requirement.module_name}</span>
-                        </span>
-                      ) : (
-                        <span className="text-placeholder">—</span>
-                      )}
+                      <RequirementListModule name={requirement.module_name} />
                     </td>
                   )}
                   {/* 总览列一律单行截断：描述是富文本，长短不一会把行高拉得参差不齐 */}
@@ -863,7 +897,10 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
                         pillDot
                         className="h-[22px] rounded-md px-2"
                         onChange={
-                          !readOnly && onStatusChange ? (status) => onStatusChange(requirement.id, status) : undefined
+                          // 从产品集引用的行整条只读（状态也跟随产品集）
+                          !readOnly && onStatusChange && !requirement.is_reference
+                            ? (status) => onStatusChange(requirement.id, status)
+                            : undefined
                         }
                       />
                     </td>
@@ -872,9 +909,9 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
                     !hiddenFieldIds.includes(column.key) ? (
                       <td key={column.key} className={`${BODY_CELL_CLASS} truncate`}>
                         {column.key === "priority" ? (
-                          <PriorityValue priority={requirement.priority} />
+                          <RequirementListPriority priority={requirement.priority} />
                         ) : column.key === "assignee_id" ? (
-                          <AssigneeValue memberId={requirement.assignee_id} />
+                          <RequirementListAssignee memberId={requirement.assignee_id} />
                         ) : (
                           <BuiltinCellValue
                             columnKey={column.key}
@@ -921,6 +958,11 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
                       )}
                     </td>
                   )}
+                  {trailingExtraColumns.map((column) => (
+                    <td key={column.key} className={BODY_CELL_CLASS}>
+                      {column.render(requirement)}
+                    </td>
+                  ))}
                 </tr>
               );
             })}
@@ -943,7 +985,10 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
             onClearSelection={() => setSelectedIds([])}
             submitReviewCount={submittableSelectedIds.length}
             onSubmitReview={onSubmitReview ? () => onSubmitReview(submittableSelectedIds) : undefined}
-            onMoveToModule={onMoveToModule ? () => onMoveToModule(selectedIds) : undefined}
+            onMoveToModule={
+              onMoveToModule && movableSelectedIds.length > 0 ? () => onMoveToModule(movableSelectedIds) : undefined
+            }
+            onSetScope={onSetScope ? () => onSetScope(selectedIds) : undefined}
             deleteCount={deletableSelectedIds.length}
             onDelete={() => setIdsToDelete(deletableSelectedIds)}
           />

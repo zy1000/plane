@@ -6,7 +6,12 @@ import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { EmptyStateDetailed } from "@plane/propel/empty-state";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import type { TRequirementBatchSavePayload, TRequirementItemStatus } from "@plane/types";
+import type {
+  TProductSet,
+  TRequirement,
+  TRequirementBatchSavePayload,
+  TRequirementItemStatus,
+} from "@plane/types";
 import { cn } from "@plane/utils";
 import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
 import { ContentWrapper } from "@/components/core/content-wrapper";
@@ -25,6 +30,7 @@ import { useProductRequirements } from "@/hooks/store/use-product-requirements";
 import { useRequirementModules } from "@/hooks/store/use-requirement-modules";
 import { useRequirementBaselines } from "@/hooks/store/use-requirement-baselines";
 import { useRequirementApprovalInbox, useRequirementChangeRequests } from "@/hooks/store/use-requirement-changes";
+import { useProductsContext } from "../context";
 import { useProductMemberCandidates } from "../use-product-member-candidates";
 import { RequirementBaselinesTab } from "./baseline/requirement-baselines-tab";
 import { RequirementChangesTab } from "./change/requirement-changes-tab";
@@ -42,7 +48,17 @@ import {
   type TRequirementDataView,
 } from "./requirement-data-views";
 import { RequirementPeekOverview } from "@/components/requirements/requirement-detail";
-import { RequirementDefaultViewGrid } from "./requirement-default-view-grid";
+import { RequirementDefaultViewGrid, type TRequirementExtraColumn } from "./requirement-default-view-grid";
+import { BulkScopeModal } from "./product-set/bulk-scope-modal";
+import { ConvertToOwnModal } from "./product-set/convert-to-own-modal";
+import { RequirementScopeModal } from "./product-set/requirement-scope-modal";
+import {
+  ReferencedModuleGroup,
+  RequirementConvertCell,
+  RequirementScopeCell,
+  RequirementSourceCell,
+  RequirementSourceSwitcher,
+} from "./product-set/requirement-set-cells";
 
 const TABS = ["data", "changes", "baselines"] as const;
 
@@ -79,6 +95,24 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
   const moduleStore = useRequirementModules(workspaceSlug, productId ? { kind: "product", productId } : undefined);
   /** 批量移动弹窗的目标行；空数组 = 关着 */
   const [moveIds, setMoveIds] = useState<string[]>([]);
+  /*
+   * 产品集相关（后端 utils/requirement_scope.py）：
+   * - 当前是产品集：需求多一列「使用范围」，点开勾选集内哪些产品用这条需求；
+   * - 当前产品属于某个产品集：列表并着从产品集引用的需求，多「来源」「操作」两列和「全部 / 自有 / 引用」分段。
+   */
+  const { products, sets } = useProductsContext();
+  const product = products.find((item) => item.id === productId);
+  const isProductSet = Boolean(product?.is_set);
+  const parentSet = isProductSet ? null : (product?.product_set_detail ?? null);
+  const setMembers = useMemo<TProductSet["products"]>(
+    () => (isProductSet ? (sets.productSets.find((item) => item.id === productId)?.products ?? []) : []),
+    [isProductSet, productId, sets.productSets]
+  );
+  const [scopeTarget, setScopeTarget] = useState<TRequirement | null>(null);
+  const [convertTarget, setConvertTarget] = useState<TRequirement | null>(null);
+  /** 批量设置使用范围的需求；空数组 = 关着 */
+  const [bulkScopeIds, setBulkScopeIds] = useState<string[]>([]);
+
   const requestedTab = searchParams.get("tab") as TProductRequirementsTab | null;
   const activeTab: TProductRequirementsTab = requestedTab && TABS.includes(requestedTab) ? requestedTab : "data";
   const openedChangeRequestId = searchParams.get("cr");
@@ -97,6 +131,8 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
   const [peekRequirementId, setPeekRequirement] = useState<string | null>(urlPeekRequirementId);
   /** 能不能录入/修改需求条目。行级的锁由每一行自己的 is_locked 决定 */
   const canEdit = store.canEdit;
+  /** 产品集的需求勾选多行后批量设置使用范围 */
+  const onSetScope = isProductSet && canEdit ? setBulkScopeIds : undefined;
   const { canCreate, canDelete, canManageModules, canSubmitReview, canManageBaselines } = store;
   const changesStore = useRequirementChangeRequests({ workspaceSlug, productId });
   const baselinesStore = useRequirementBaselines({ workspaceSlug, productId });
@@ -138,6 +174,14 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
   const selectedModuleName = useMemo(
     () => findRequirementModuleName(moduleStore.modules, selectedModuleId),
     [moduleStore.modules, selectedModuleId]
+  );
+  // 选中的是产品集的模块（左栏「产品集模块」组）时只用于浏览筛选：新建需求不能挂别人的模块
+  const assignableModuleId = useMemo(
+    () =>
+      findRequirementModuleName(moduleStore.referenced?.modules ?? [], selectedModuleId)
+        ? null
+        : toAssignableModuleId(selectedModuleId),
+    [moduleStore.referenced, selectedModuleId]
   );
   const syncedModuleRef = useRef(urlModuleId);
 
@@ -318,6 +362,43 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
     ? (requirementId: string, status: TRequirementItemStatus) => void store.updateStatus(requirementId, status)
     : undefined;
 
+  const extraColumns: TRequirementExtraColumn[] | undefined = isProductSet
+    ? [
+        {
+          key: "scope",
+          label: t("workspace_product_sets.requirements.scope"),
+          width: 280,
+          position: "after-title",
+          render: (requirement) => (
+            <RequirementScopeCell
+              requirement={requirement}
+              members={setMembers}
+              onEdit={canEdit ? setScopeTarget : undefined}
+            />
+          ),
+        },
+      ]
+    : parentSet
+      ? [
+          {
+            key: "source",
+            label: t("workspace_product_sets.requirements.source"),
+            width: 148,
+            position: "after-title",
+            render: (requirement) => <RequirementSourceCell requirement={requirement} />,
+          },
+          {
+            key: "convert",
+            label: t("workspace_product_sets.fields.actions"),
+            width: 104,
+            render: (requirement) => (
+              <RequirementConvertCell requirement={requirement} onConvert={canCreate ? setConvertTarget : undefined} />
+            ),
+          },
+        ]
+      : undefined;
+  const referencedTotal = moduleStore.referenced?.total ?? 0;
+
   if (isNotAuthorized) return <NotAuthorizedView section="general" className="h-full" />;
 
   return (
@@ -388,6 +469,17 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
               activeKey={getViewKey(activeView)}
               onChange={changeView}
             />
+            {parentSet && (
+              <RequirementSourceSwitcher
+                value={store.source}
+                counts={{
+                  all: moduleStore.total,
+                  own: Math.max(0, moduleStore.total - referencedTotal),
+                  referenced: referencedTotal,
+                }}
+                onChange={store.setSource}
+              />
+            )}
             <div className="ml-auto flex min-w-0 items-center gap-2">
               <div ref={setDataToolbarHost} className="flex min-w-0 items-center" />
               {canCreate && <span aria-hidden className="mx-1 h-5 shrink-0 border-l border-subtle" />}
@@ -457,6 +549,15 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
               onSelect={setSelectedModuleId}
               readonly={!canManageModules}
               onModuleMoved={() => void store.fetchRequirements().catch(() => undefined)}
+              bottom={
+                moduleStore.referenced ? (
+                  <ReferencedModuleGroup
+                    modules={moduleStore.referenced.modules}
+                    selectedModuleId={selectedModuleId}
+                    onSelect={setSelectedModuleId}
+                  />
+                ) : undefined
+              }
             />
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
               {requirementTypes.length === 0 ? (
@@ -517,6 +618,9 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
                   toolbarPortalEl={dataToolbarHost}
                   onMoveToModule={canEdit ? setMoveIds : undefined}
                   filterModules={moduleStore.modules}
+                  extraColumns={extraColumns}
+                  onConvertReference={parentSet && canCreate ? setConvertTarget : undefined}
+                  onSetScope={onSetScope}
                 />
               ) : (
                 <RequirementGrid
@@ -568,10 +672,13 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
                   onOpenChangeRequest={openChangeRequest}
                   onStatusChange={onStatusChange}
                   toolbarPortalEl={dataToolbarHost}
-                  createModuleId={toAssignableModuleId(selectedModuleId)}
+                  createModuleId={assignableModuleId}
                   createModuleName={selectedModuleName}
                   onMoveToModule={canEdit ? setMoveIds : undefined}
                   filterModules={moduleStore.modules}
+                  extraColumns={extraColumns}
+                  onConvertReference={parentSet && canCreate ? setConvertTarget : undefined}
+                  onSetScope={onSetScope}
                 />
               )}
             </div>
@@ -669,7 +776,7 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
           entityId={productId ?? ""}
           entityKind="product"
           allowTypeSelection
-          moduleId={toAssignableModuleId(selectedModuleId)}
+          moduleId={assignableModuleId}
           moduleName={selectedModuleName}
           onClose={() => setIsCreateOpen(false)}
           onSave={handleBulkSave}
@@ -688,6 +795,41 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
         onClose={approvalActions.closeSubmitModal}
         onSubmit={(payload) => void approvalActions.submit(payload)}
       />
+
+      {isProductSet && (
+        <BulkScopeModal
+          workspaceSlug={workspaceSlug ?? ""}
+          productSetId={productId ?? ""}
+          requirementIds={bulkScopeIds}
+          members={setMembers}
+          handleClose={() => setBulkScopeIds([])}
+          onSaved={store.applyScopeProductIds}
+        />
+      )}
+      {isProductSet && (
+        <RequirementScopeModal
+          workspaceSlug={workspaceSlug ?? ""}
+          productSetId={productId ?? ""}
+          requirement={scopeTarget}
+          handleClose={() => setScopeTarget(null)}
+          onSaved={store.setScopeProductIds}
+        />
+      )}
+      {parentSet && product && (
+        <ConvertToOwnModal
+          workspaceSlug={workspaceSlug ?? ""}
+          productId={productId ?? ""}
+          productIdentifier={product.identifier}
+          productSetName={parentSet.name}
+          requirement={convertTarget}
+          handleClose={() => setConvertTarget(null)}
+          onConvert={async (requirementId) => {
+            await store.convertReference(requirementId);
+            // 引用少一条、自有多一条：左栏的计数与「产品集模块」分组跟着变
+            void refreshModules().catch(() => undefined);
+          }}
+        />
+      )}
 
       <ApprovalInboxModal
         isOpen={isInboxOpen}

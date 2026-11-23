@@ -1,7 +1,8 @@
 import { useCallback, useMemo } from "react";
 import { observer } from "mobx-react";
-import { ChevronDown, MoreHorizontal, PackageOpen, Settings } from "lucide-react";
+import { ChevronDown, Layers, MoreHorizontal, PackageOpen, Settings } from "lucide-react";
 import { Link, useLocation } from "react-router";
+import { PRODUCT_SETTINGS_EDIT_PERMISSION_KEY } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Logo } from "@plane/propel/emoji-icon-picker";
 import { Menu } from "@plane/propel/menu";
@@ -13,7 +14,13 @@ import { useResponsiveTabLayout } from "@/components/navigation/use-responsive-t
 import { useAppTheme } from "@/hooks/store/use-app-theme";
 import { useAppRouter } from "@/hooks/use-app-router";
 import { useProductsContext } from "./context";
-import { getProductTabPath, PRODUCT_NAVIGATION_ITEMS, PRODUCT_PREFIX_ACTIVE_TABS } from "./navigation";
+import {
+  getProductTabPath,
+  PRODUCT_NAVIGATION_ITEMS,
+  PRODUCT_PREFIX_ACTIVE_TABS,
+  PRODUCT_SET_NAVIGATION_ITEMS,
+} from "./navigation";
+import { hasProductPermission } from "./permissions";
 import { buildProductSettingsPath } from "./settings/navigation";
 
 type TProductTopNavigationProps = {
@@ -26,12 +33,19 @@ type TProductRouteNavigationItem = (typeof PRODUCT_NAVIGATION_ITEMS)[number] & {
   href: string;
 };
 
+/** 产品集与产品用不同的默认图标，切换器、页签行一眼能分清当前是哪一种 */
+function ProductIcon({ product, size }: { product: Pick<TProduct, "logo_props"> & { is_set?: boolean }; size: number }) {
+  if (product.logo_props?.in_use) return <Logo logo={product.logo_props} size={size} />;
+  const Icon = product.is_set ? Layers : PackageOpen;
+  return <Icon style={{ width: size, height: size }} />;
+}
+
 function ProductSwitcherButton({ product }: { product: TProduct }) {
   return (
     <Tooltip tooltipContent={product.name} position="bottom">
       <div className="relative flex w-full max-w-48 items-center pr-1 text-left select-none">
         <div className="flex size-7 flex-shrink-0 items-center justify-center rounded-md bg-layer-1 text-secondary">
-          {product.logo_props?.in_use ? <Logo logo={product.logo_props} size={16} /> : <PackageOpen className="size-4" />}
+          <ProductIcon product={product} size={16} />
         </div>
         <div className="relative min-w-0 flex-1 hover:rounded">
           <p className="truncate px-2 text-14 font-medium text-secondary">{product.name}</p>
@@ -118,39 +132,42 @@ const ProductNavigationRoot = observer(function ProductNavigationRoot(props: TPr
   const { t } = useTranslation();
   const router = useAppRouter();
   const { pathname, search } = useLocation();
-  const { products } = useProductsContext();
+  const { products, sets, openProductSetModal } = useProductsContext();
   const currentProduct = products.find((product) => product.id === productId);
+  // 产品集沿用产品的详情外壳：页签、切换器候选、设置入口按 is_set 换一套
+  const isSet = Boolean(currentProduct?.is_set);
+  const currentSet = isSet ? sets.productSets.find((productSet) => productSet.id === productId) : undefined;
+  const parentSet = currentProduct?.product_set_detail ?? null;
 
   const navigationItems = useMemo<TProductRouteNavigationItem[]>(
     () =>
-      PRODUCT_NAVIGATION_ITEMS.filter((item) => !item.managerOnly || canManage).map((item) => ({
+      (isSet ? PRODUCT_SET_NAVIGATION_ITEMS : PRODUCT_NAVIGATION_ITEMS).filter((item) => !item.managerOnly || canManage).map((item) => ({
         key: item.key,
         icon: item.icon,
         i18nKey: item.i18nKey,
         managerOnly: item.managerOnly,
         href: getProductTabPath(workspaceSlug, productId, item.key),
       })),
-    [canManage, productId, workspaceSlug]
+    [canManage, isSet, productId, workspaceSlug]
   );
   const switcherOptions = useMemo<ICustomSearchSelectOption[]>(
     () =>
-      products.map((product) => ({
+      (isSet
+        ? sets.productSets.map((productSet) => ({ ...productSet, is_set: true }))
+        : products.filter((product) => !product.is_set)
+      ).map((product) => ({
         value: product.id,
         query: product.name,
         content: (
           <div className="flex min-w-0 items-center gap-2">
             <span className="flex size-6 shrink-0 items-center justify-center rounded bg-layer-1 text-secondary">
-              {product.logo_props?.in_use ? (
-                <Logo logo={product.logo_props} size={14} />
-              ) : (
-                <PackageOpen className="size-3.5" />
-              )}
+              <ProductIcon product={product} size={14} />
             </span>
             <span className="truncate text-12 text-primary">{product.name}</span>
           </div>
         ),
       })),
-    [products]
+    [isSet, products, sets.productSets]
   );
   const isActive = useCallback(
     (item: TProductRouteNavigationItem) =>
@@ -175,7 +192,10 @@ const ProductNavigationRoot = observer(function ProductNavigationRoot(props: TPr
   return (
     <div className="flex size-full items-center gap-3 overflow-hidden">
       <div className="flex h-full shrink-0 items-center gap-2">
-        <Link to={`/${workspaceSlug}/products`} className="cursor-pointer text-13 font-medium text-primary">
+        <Link
+          to={`/${workspaceSlug}/products${isSet ? "?tab=sets" : ""}`}
+          className="cursor-pointer text-13 font-medium text-primary"
+        >
           {t("workspace_products.title")}
         </Link>
         <div className="mx-2 h-5 w-px shrink-0 border-l border-subtle" />
@@ -189,22 +209,40 @@ const ProductNavigationRoot = observer(function ProductNavigationRoot(props: TPr
               className="h-full rounded"
               customButtonClassName="group flex h-full cursor-pointer items-center gap-0.5 rounded-sm outline-none hover:bg-surface-2"
               optionsClassName="min-w-64"
-              noResultsMessage={t("workspace_products.navigation.no_products")}
+              noResultsMessage={t(
+                isSet ? "workspace_product_sets.navigation.no_product_sets" : "workspace_products.navigation.no_products"
+              )}
             />
-            {canManage && (
-              <Tooltip tooltipContent={t("workspace_products.navigation.product_settings")} position="bottom">
-                <Link
-                  to={buildProductSettingsPath({
-                    currentPath: `${pathname}${search}`,
-                    productId,
-                    workspaceSlug,
-                  })}
-                  className="ml-1 flex size-6 shrink-0 items-center justify-center rounded text-tertiary transition-colors hover:bg-surface-2 hover:text-secondary"
-                  aria-label={t("workspace_products.navigation.product_settings")}
-                >
-                  <Settings className="size-3.5" />
-                </Link>
-              </Tooltip>
+            {isSet ? (
+              currentSet &&
+              hasProductPermission(currentSet, PRODUCT_SETTINGS_EDIT_PERMISSION_KEY) && (
+                <Tooltip tooltipContent={t("workspace_product_sets.edit")} position="bottom">
+                  <button
+                    type="button"
+                    onClick={() => openProductSetModal(currentSet)}
+                    className="ml-1 flex size-6 shrink-0 items-center justify-center rounded text-tertiary transition-colors hover:bg-surface-2 hover:text-secondary"
+                    aria-label={t("workspace_product_sets.edit")}
+                  >
+                    <Settings className="size-3.5" />
+                  </button>
+                </Tooltip>
+              )
+            ) : (
+              canManage && (
+                <Tooltip tooltipContent={t("workspace_products.navigation.product_settings")} position="bottom">
+                  <Link
+                    to={buildProductSettingsPath({
+                      currentPath: `${pathname}${search}`,
+                      productId,
+                      workspaceSlug,
+                    })}
+                    className="ml-1 flex size-6 shrink-0 items-center justify-center rounded text-tertiary transition-colors hover:bg-surface-2 hover:text-secondary"
+                    aria-label={t("workspace_products.navigation.product_settings")}
+                  >
+                    <Settings className="size-3.5" />
+                  </Link>
+                </Tooltip>
+              )
             )}
           </>
         ) : (
@@ -250,6 +288,16 @@ const ProductNavigationRoot = observer(function ProductNavigationRoot(props: TPr
               </div>
             )}
           </div>
+          {parentSet && (
+            <Link
+              to={getProductTabPath(workspaceSlug, parentSet.id, "overview")}
+              className="flex h-7 max-w-64 shrink-0 items-center gap-1.5 rounded-md border border-subtle px-2.5 text-13 text-secondary hover:bg-surface-2"
+            >
+              <Layers className="size-3.5 shrink-0" />
+              <span className="shrink-0">{t("workspace_product_sets.title")}</span>
+              <span className="truncate font-medium text-primary">{parentSet.name}</span>
+            </Link>
+          )}
         </>
       )}
     </div>
