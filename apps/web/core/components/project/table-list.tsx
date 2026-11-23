@@ -41,6 +41,8 @@ import {
   ACTIONS_COLUMN_WIDTH,
   NAME_COLUMN_MIN_WIDTH,
   PROJECT_COLUMN_WIDTH,
+  TABLE_HEADER_CELL_CLASS,
+  TABLE_STICKY_CELL_CLASS,
   getVisibleProjectColumns,
   isProjectClosed,
   renderProjectCell,
@@ -65,9 +67,8 @@ const DEFAULT_SORT_DIRECTION: Record<TSortKey, "asc" | "desc"> = {
   members_length: "desc",
 };
 
-const HEADER_CELL_CLASS = "px-4 py-3 text-left text-xs font-medium text-secondary whitespace-nowrap";
-/** 名称列左侧固定；横向滚动时底色要自己画，否则后面的列会从它底下透出来 */
-const STICKY_CELL_CLASS = "sticky left-0 z-[1]";
+const HEADER_CELL_CLASS = TABLE_HEADER_CELL_CLASS;
+const STICKY_CELL_CLASS = TABLE_STICKY_CELL_CLASS;
 
 export const ProjectTableList = observer(function ProjectTableList(props: Props) {
   const { totalProjectIds: totalProjectIdsProps, filteredProjectIds: filteredProjectIdsProps, lookups: lookupsProps } = props;

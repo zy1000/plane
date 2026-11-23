@@ -13,11 +13,20 @@ import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { Logo } from "@plane/propel/emoji-icon-picker";
 import { Tooltip } from "@plane/propel/tooltip";
-import type { IUserLite, TProduct } from "@plane/types";
-import { Avatar, ContentWrapper, ERowVariant, Loader } from "@plane/ui";
-import { cn, getFileURL, renderFormattedDate } from "@plane/utils";
+import type { TProduct } from "@plane/types";
+import { ContentWrapper, ERowVariant, Loader } from "@plane/ui";
+import { cn } from "@plane/utils";
 import { PageHead } from "@/components/core/page-title";
 import { DictionaryValueTag, resolveDictionaryItemColor } from "@/components/data-dictionaries";
+import {
+  DateCell,
+  EmptyCell,
+  NAME_COLUMN_MIN_WIDTH,
+  TABLE_HEADER_CELL_CLASS,
+  TABLE_STICKY_CELL_CLASS,
+  TextCell,
+  UserCell,
+} from "@/components/project/table/columns";
 import { FiltersRow } from "@/components/rich-filters/filters-row";
 import { useUserPermissions } from "@/hooks/store/user";
 import { DeleteProductModal } from "./delete-modal";
@@ -27,12 +36,16 @@ import { productMatchesConditions } from "./filters/match-product";
 import { useProductListFiltering } from "./filters/use-product-list-filter";
 import { hasProductPermission } from "./permissions";
 
-const ProductUserCell = ({ user }: { user: IUserLite | null | undefined }) => (
-  <div className="flex min-w-0 items-center gap-2">
-    <Avatar size="sm" name={user?.display_name} src={getFileURL(user?.avatar_url ?? "")} showTooltip={false} />
-    <span className="truncate text-xs text-primary">{user?.display_name ?? "-"}</span>
-  </div>
-);
+/** 名称列之后各列宽度：代号 / 编号 / 阶段 / 状态 / 负责人 / 更新时间 / 操作（4 个图标按钮），与项目列表同档 */
+const PRODUCT_COLUMN_WIDTHS = [168, 112, 112, 112, 140, 112, 160];
+const PRODUCT_TABLE_MIN_WIDTH = NAME_COLUMN_MIN_WIDTH + PRODUCT_COLUMN_WIDTHS.reduce((sum, width) => sum + width, 0);
+
+const ProductDictionaryCell = ({ item }: { item: TProduct["stage_detail"] }) =>
+  item ? (
+    <DictionaryValueTag label={item.label} color={resolveDictionaryItemColor(item)} className="text-xs" />
+  ) : (
+    <EmptyCell />
+  );
 
 export const ProductsRoot = observer(function ProductsRoot() {
   const { workspaceSlug } = useParams();
@@ -151,34 +164,27 @@ export const ProductsRoot = observer(function ProductsRoot() {
         ) : (
           <ContentWrapper variant={ERowVariant.HUGGING} className="overflow-hidden">
             <div className="m-0 flex h-full w-full flex-col overflow-hidden rounded border border-subtle bg-surface-1">
-              <div className="vertical-scrollbar scrollbar-lg min-h-0 flex-1 overflow-auto">
-                <table className="w-full min-w-[1280px] table-fixed text-sm">
-                  <thead className="border-b border-subtle bg-layer-1">
+              <div className="vertical-scrollbar horizontal-scrollbar scrollbar-lg min-h-0 flex-1 overflow-auto">
+                {/* 样式与项目列表（project/table-list.tsx）一致：吸顶表头、行分隔线、名称列左固定 */}
+                <table className="w-full table-fixed text-sm" style={{ minWidth: PRODUCT_TABLE_MIN_WIDTH }}>
+                  <colgroup>
+                    <col />
+                    {PRODUCT_COLUMN_WIDTHS.map((width, index) => (
+                      <col key={index} style={{ width }} />
+                    ))}
+                  </colgroup>
+                  <thead className="sticky top-0 z-[2] border-b border-subtle bg-layer-1">
                     <tr>
-                      <th className="px-4 py-3 text-left font-medium text-secondary">
+                      <th className={cn(TABLE_HEADER_CELL_CLASS, TABLE_STICKY_CELL_CLASS, "bg-layer-1")}>
                         {t("workspace_products.fields.name")}
                       </th>
-                      <th className="w-44 px-4 py-3 text-left font-medium text-secondary">
-                        {t("workspace_products.fields.code")}
-                      </th>
-                      <th className="hidden w-32 px-4 py-3 text-left font-medium text-secondary md:table-cell">
-                        {t("workspace_products.fields.identifier")}
-                      </th>
-                      <th className="hidden w-28 px-4 py-3 text-left font-medium text-secondary md:table-cell">
-                        {t("workspace_products.fields.stage")}
-                      </th>
-                      <th className="hidden w-28 px-4 py-3 text-left font-medium text-secondary md:table-cell">
-                        {t("workspace_products.fields.status")}
-                      </th>
-                      <th className="hidden w-36 px-4 py-3 text-left font-medium text-secondary lg:table-cell">
-                        {t("workspace_products.fields.owner")}
-                      </th>
-                      <th className="hidden w-32 px-4 py-3 text-left font-medium text-secondary xl:table-cell">
-                        {t("workspace_products.fields.updated_at")}
-                      </th>
-                      <th className="w-36 px-4 py-3 text-left font-medium text-secondary">
-                        {t("workspace_products.fields.actions")}
-                      </th>
+                      <th className={TABLE_HEADER_CELL_CLASS}>{t("workspace_products.fields.code")}</th>
+                      <th className={TABLE_HEADER_CELL_CLASS}>{t("workspace_products.fields.identifier")}</th>
+                      <th className={TABLE_HEADER_CELL_CLASS}>{t("workspace_products.fields.stage")}</th>
+                      <th className={TABLE_HEADER_CELL_CLASS}>{t("workspace_products.fields.status")}</th>
+                      <th className={TABLE_HEADER_CELL_CLASS}>{t("workspace_products.fields.owner")}</th>
+                      <th className={TABLE_HEADER_CELL_CLASS}>{t("workspace_products.fields.updated_at")}</th>
+                      <th className={TABLE_HEADER_CELL_CLASS}>{t("workspace_products.fields.actions")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -188,8 +194,10 @@ export const ProductsRoot = observer(function ProductsRoot() {
                       const settingsPath = `/${slug}/settings/products/${product.id}`;
 
                       return (
-                        <tr key={product.id} className="hover:bg-layer-1-hover">
-                          <td className="px-4 py-3">
+                        <tr key={product.id} className="group border-b border-subtle hover:bg-layer-1-hover">
+                          <td
+                            className={cn(TABLE_STICKY_CELL_CLASS, "bg-surface-1 px-4 py-3 group-hover:bg-layer-1-hover")}
+                          >
                             <Link
                               to={`/${slug}/products/${product.id}/overview`}
                               className="flex min-w-0 items-center gap-1.5 text-primary"
@@ -204,29 +212,23 @@ export const ProductsRoot = observer(function ProductsRoot() {
                               <p className="min-w-0 truncate text-sm font-medium text-primary">{product.name}</p>
                             </Link>
                           </td>
-                          <td className="px-4 py-3 text-xs text-primary">
-                            <span className="block truncate">{product.code || "-"}</span>
+                          <td className="px-4 py-3">
+                            <TextCell value={product.code} />
                           </td>
-                          <td className="font-mono hidden px-4 py-3 text-xs text-primary uppercase md:table-cell">
-                            <span className="block truncate">{product.identifier}</span>
+                          <td className="px-4 py-3">
+                            <TextCell value={product.identifier} />
                           </td>
-                          <td className="hidden px-4 py-3 text-xs text-primary md:table-cell">
-                            <DictionaryValueTag
-                              label={product.stage_detail?.label ?? "-"}
-                              color={resolveDictionaryItemColor(product.stage_detail)}
-                            />
+                          <td className="px-4 py-3">
+                            <ProductDictionaryCell item={product.stage_detail} />
                           </td>
-                          <td className="hidden px-4 py-3 text-xs text-primary md:table-cell">
-                            <DictionaryValueTag
-                              label={product.status_detail?.label ?? "-"}
-                              color={resolveDictionaryItemColor(product.status_detail)}
-                            />
+                          <td className="px-4 py-3">
+                            <ProductDictionaryCell item={product.status_detail} />
                           </td>
-                          <td className="hidden px-4 py-3 lg:table-cell">
-                            <ProductUserCell user={product.owner_detail} />
+                          <td className="px-4 py-3">
+                            <UserCell user={product.owner_detail} />
                           </td>
-                          <td className="hidden px-4 py-3 whitespace-nowrap text-secondary xl:table-cell">
-                            {product.updated_at ? renderFormattedDate(product.updated_at) : "-"}
+                          <td className="px-4 py-3">
+                            <DateCell value={product.updated_at} />
                           </td>
                           <td className="px-4 py-3">
                             <div className="flex items-center justify-start gap-2">

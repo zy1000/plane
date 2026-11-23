@@ -47,9 +47,14 @@ export type TProjectTableContext = {
 export const getVisibleProjectColumns = (displayProperties: TProjectDisplayProperties) =>
   PROJECT_DISPLAY_PROPERTIES.filter((column) => displayProperties[column.key]);
 
-const EmptyCell = () => <span className="text-placeholder">—</span>;
+/** 列表表格的表头单元格 / 左侧固定列样式；产品列表等同类表格共用，保持两边外观一致 */
+export const TABLE_HEADER_CELL_CLASS = "px-4 py-3 text-left text-xs font-medium text-secondary whitespace-nowrap";
+/** 名称列左侧固定；横向滚动时底色要自己画，否则后面的列会从它底下透出来 */
+export const TABLE_STICKY_CELL_CLASS = "sticky left-0 z-[1]";
 
-const UserCell = ({ user, muted }: { user: IUserLite | undefined; muted: boolean }) => {
+export const EmptyCell = () => <span className="text-placeholder">—</span>;
+
+export const UserCell = ({ user, muted = false }: { user: IUserLite | null | undefined; muted?: boolean }) => {
   if (!user) return <EmptyCell />;
   return (
     <div className="flex min-w-0 items-center gap-2">
@@ -91,7 +96,7 @@ const DevModeCell = ({ project }: { project: TProject }) => {
   );
 };
 
-const DateCell = ({ value }: { value: string | Date | null | undefined }) => {
+export const DateCell = ({ value }: { value: string | Date | null | undefined }) => {
   const formatted = value ? renderFormattedPayloadDate(value) : undefined;
   if (!formatted) return <EmptyCell />;
   return <span className="whitespace-nowrap tabular-nums text-xs text-secondary">{formatted}</span>;
@@ -132,7 +137,7 @@ const DurationCell = ({ project, ctx }: { project: TProject; ctx: TProjectTableC
   return <span className="tabular-nums text-xs text-secondary">{ctx.t(`${I18N}.fields.duration_days`, { count: days })}</span>;
 };
 
-const TextCell = ({ value }: { value: string | null | undefined }) =>
+export const TextCell = ({ value }: { value: string | null | undefined }) =>
   value ? <span className="block truncate text-xs text-secondary">{value}</span> : <EmptyCell />;
 
 export const renderProjectCell = (
