@@ -3,8 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { PanelLeftClose, PanelLeftOpen, Plus, Search, X } from "lucide-react";
+import { Button } from "@plane/propel/button";
 import { CustomMenu, Tooltip } from "@plane/ui";
 import { cn } from "@plane/utils";
+import { REQUIREMENT_TOOLBAR_BUTTON_CLASS } from "@/components/requirements/requirement-data-toolbar";
 import useLocalStorage from "@/hooks/use-local-storage";
 import { ModuleTree, type TModuleTreeProps } from "./module-tree";
 
@@ -232,23 +234,14 @@ export const ModuleTreePanel = ({
             <span>{emptyText}</span>
             <div className="flex items-center gap-2">
               {onAddRoot && (
-                <button
-                  type="button"
-                  onClick={onAddRoot}
-                  className="flex h-[30px] items-center gap-1.5 rounded-md border border-strong bg-surface-1 px-3 text-13 font-medium text-primary hover:bg-layer-transparent-hover"
-                >
-                  <Plus className="size-3.5" strokeWidth={2} />
+                <Button variant="secondary" size="xl" className={REQUIREMENT_TOOLBAR_BUTTON_CLASS} onClick={onAddRoot}>
                   新建模块
-                </button>
+                </Button>
               )}
               {onBulkAdd && (
-                <button
-                  type="button"
-                  onClick={onBulkAdd}
-                  className="flex h-[30px] items-center rounded-md border border-strong bg-surface-1 px-3 text-13 font-medium text-primary hover:bg-layer-transparent-hover"
-                >
+                <Button variant="secondary" size="xl" className={REQUIREMENT_TOOLBAR_BUTTON_CLASS} onClick={onBulkAdd}>
                   批量新建
-                </button>
+                </Button>
               )}
             </div>
           </div>

@@ -13,10 +13,10 @@ import { RequirementDisplayProperties } from "./requirement-display-properties";
 
 /**
  * 产品需求页（含三个页签、弹窗、审批条）统一的按钮外观：配合 propel `size="xl"` 用，
- * 32px 高、8px 圆角、13px 字、只放文字（下拉按钮可带一个 ChevronDown）。
- * propel 的 xl 档是 14px 字，这里用 body-xs 盖回 13（同属一组 typography，后者生效）。
+ * 以项目工作项页工具条（propel `lg` 档）为准：28px 高、6px 圆角、13px 字、只放文字
+ * （下拉按钮可带一个 ChevronDown）。xl 档的高度和 14px 字在这里盖回 lg 的值。
  */
-export const REQUIREMENT_TOOLBAR_BUTTON_CLASS = "gap-1.5 rounded-lg px-3 text-body-xs-medium";
+export const REQUIREMENT_TOOLBAR_BUTTON_CLASS = "h-7 gap-1.5 rounded-md px-2 text-body-xs-medium";
 
 type TFilter = ReturnType<typeof useRequirementGridFilter>;
 
@@ -81,7 +81,7 @@ export const RequirementDataToolbar = observer(function RequirementDataToolbar(p
 
   return (
     <div className="flex min-w-0 items-center gap-2">
-      <label className="flex h-8 w-[220px] shrink-0 items-center gap-2 rounded-lg border border-subtle bg-surface-1 px-2.5 text-placeholder focus-within:border-accent-strong">
+      <label className="flex h-7 w-[220px] shrink-0 items-center gap-2 rounded-md border border-subtle bg-surface-1 px-2.5 text-placeholder focus-within:border-accent-strong">
         <SearchIcon className="size-[15px] shrink-0" />
         <input
           ref={searchInputRef}

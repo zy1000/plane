@@ -1,8 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ReactNode } from "react";
-import { FolderLock, FolderPlus, ListPlus, Lock, Pencil, Trash2 } from "lucide-react";
+import { FolderLock, FolderPlus, Layers, ListPlus, Lock, Pencil, Trash2 } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type {
@@ -93,9 +92,24 @@ type TProps = {
   allLabel?: string;
   /** 删除确认的正文，默认按需求的口径 */
   getDeleteConfirmContent?: (node: TModuleTreeNode) => string;
-  /** 树下面的附加内容（产品需求页的「产品集模块」分组） */
-  bottom?: ReactNode;
+  /**
+   * 产品属于产品集时，引用需求所在的产品集模块：作为同一棵树末尾的一个分组节点（名称 = 产品集名），
+   * 组内模块只读（不可拖、不能当落点、没有 ⋯ 菜单），点选照常按模块筛列表。
+   */
+  referencedGroup?: { label: string; count?: number; modules: TRequirementModule[] };
 };
+
+/** 产品集分组节点本身不对应模块：点它只展开 / 收起 */
+const REFERENCED_GROUP_KEY = "__product_set_group__";
+
+const toReadonlyTreeNodes = (list: TRequirementModule[]): TModuleTreeNode[] =>
+  list.map((item) => ({
+    key: item.id,
+    label: item.name,
+    count: item.count,
+    virtual: true,
+    children: toReadonlyTreeNodes(item.children ?? []),
+  }));
 
 /**
  * 库页 / 产品页左侧的可编辑模块树侧栏：建 / 重命名 / 删 / 拖动（换父级、排序）模块 + 点击过滤。
@@ -111,7 +125,7 @@ export const RequirementModuleSidebar = (props: TProps) => {
     onModuleMoved,
     allLabel: allLabelProp,
     getDeleteConfirmContent,
-    bottom,
+    referencedGroup,
   } = props;
   const isRootLocked = Boolean(lockedRootCategoryName);
   const { t } = useTranslation();
@@ -130,23 +144,42 @@ export const RequirementModuleSidebar = (props: TProps) => {
   );
   const isUnassignedSelected = selectedModuleId === UNASSIGNED_MODULE_KEY;
   // 末尾的「未归类」（一个模块都没有时不出，见 appendUnassignedNode）
-  const displayNodes = useMemo(
+  const referencedNode = useMemo<TModuleTreeNode | null>(
     () =>
-      appendUnassignedNode(treeNodes, store.unassigned, { keepWhenEmpty: isUnassignedSelected }).map((node) =>
-        node.key === UNASSIGNED_MODULE_KEY ? { ...node, label: t("requirement_modules.unassigned") } : node
-      ),
-    [treeNodes, store.unassigned, isUnassignedSelected, t]
+      referencedGroup && referencedGroup.modules.length > 0
+        ? {
+            key: REFERENCED_GROUP_KEY,
+            label: referencedGroup.label,
+            count: referencedGroup.count,
+            icon: <Layers className="size-3.5" strokeWidth={1.75} />,
+            virtual: true,
+            children: toReadonlyTreeNodes(referencedGroup.modules),
+          }
+        : null,
+    [referencedGroup]
   );
+  const displayNodes = useMemo(() => {
+    const own = appendUnassignedNode(treeNodes, store.unassigned, { keepWhenEmpty: isUnassignedSelected }).map(
+      (node) => (node.key === UNASSIGNED_MODULE_KEY ? { ...node, label: t("requirement_modules.unassigned") } : node)
+    );
+    return referencedNode ? [...own, referencedNode] : own;
+  }, [treeNodes, store.unassigned, isUnassignedSelected, referencedNode, t]);
   const { nodeByKey, parentByKey } = useMemo(() => indexModuleTree(displayNodes), [displayNodes]);
+
+  // 产品集分组默认展开：引用进来的模块一眼可见
+  useEffect(() => {
+    if (referencedNode)
+      setExpandedKeys((prev) => (prev.includes(REFERENCED_GROUP_KEY) ? prev : [...prev, REFERENCED_GROUP_KEY]));
+  }, [referencedNode]);
 
   // 选中项（通常来自 URL）藏在收起的分支里时，把它的祖先展开；只在第一次拿到树时做
   const initialExpandDone = useRef(false);
   useEffect(() => {
-    if (initialExpandDone.current || !selectedModuleId || treeNodes.length === 0) return;
+    if (initialExpandDone.current || !selectedModuleId || displayNodes.length === 0) return;
     initialExpandDone.current = true;
-    const ancestors = collectAncestorKeys(treeNodes, selectedModuleId);
+    const ancestors = collectAncestorKeys(displayNodes, selectedModuleId);
     if (ancestors?.length) setExpandedKeys((prev) => Array.from(new Set([...prev, ...ancestors])));
-  }, [selectedModuleId, treeNodes]);
+  }, [selectedModuleId, displayNodes]);
 
   const showError = useCallback(
     (error: unknown, fallbackKey: string) =>
@@ -293,7 +326,13 @@ export const RequirementModuleSidebar = (props: TProps) => {
         root={{ label: allLabel, count: store.total }}
         nodes={displayNodes}
         selectedKey={selectedModuleId ?? MODULE_TREE_ROOT_KEY}
-        onSelect={(key) => onSelect(key === MODULE_TREE_ROOT_KEY ? null : key)}
+        onSelect={(key) => {
+          if (key === REFERENCED_GROUP_KEY) {
+            setExpandedKeys((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
+            return;
+          }
+          onSelect(key === MODULE_TREE_ROOT_KEY ? null : key);
+        }}
         expandedKeys={expandedKeys}
         onExpandedKeysChange={setExpandedKeys}
         editing={editing}
@@ -306,13 +345,13 @@ export const RequirementModuleSidebar = (props: TProps) => {
         onBulkAdd={
           canBulk
             ? () =>
-                setBulkParent(selectedModuleId && selectedModuleId !== UNASSIGNED_MODULE_KEY ? selectedModuleId : null)
+                // 选中的是「未归类」或产品集分组里的模块（都是只读节点）时，批量新建落到一级
+                setBulkParent(selectedModuleId && !nodeByKey.get(selectedModuleId)?.virtual ? selectedModuleId : null)
             : undefined
         }
         railLabel={(selectedModuleId && nodeByKey.get(selectedModuleId)?.label) || allLabel}
         loading={store.isLoading}
         emptyText={t("requirement_modules.empty")}
-        bottom={bottom}
       />
       {store.bulkCreateModules && (
         <ModuleBulkCreateModal

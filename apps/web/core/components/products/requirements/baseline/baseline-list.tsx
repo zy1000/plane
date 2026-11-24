@@ -102,7 +102,12 @@ export function BaselineList(props: TProps) {
         description={t("workspace_products.requirements.baseline.empty.description")}
         customButton={
           canManage && onCreate ? (
-            <Button variant="primary" size="xl" className={REQUIREMENT_TOOLBAR_BUTTON_CLASS} onClick={onCreate}>
+            <Button
+              variant="primary"
+              size="xl"
+              className={cn(REQUIREMENT_TOOLBAR_BUTTON_CLASS, "self-start")}
+              onClick={onCreate}
+            >
               {t("workspace_products.requirements.baseline.empty.cta")}
             </Button>
           ) : undefined

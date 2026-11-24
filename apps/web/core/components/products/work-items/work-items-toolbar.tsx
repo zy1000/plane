@@ -64,7 +64,7 @@ export const ProductWorkItemsToolbar = observer(function ProductWorkItemsToolbar
 
   return (
     <div className="flex min-w-0 items-center gap-2">
-      <label className="flex h-8 w-[220px] shrink-0 items-center gap-2 rounded-lg border border-subtle bg-surface-1 px-2.5 text-placeholder focus-within:border-accent-strong">
+      <label className="flex h-7 w-[220px] shrink-0 items-center gap-2 rounded-md border border-subtle bg-surface-1 px-2.5 text-placeholder focus-within:border-accent-strong">
         <SearchIcon className="size-[15px] shrink-0" />
         <input
           ref={searchInputRef}

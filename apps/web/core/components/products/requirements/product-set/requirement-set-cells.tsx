@@ -1,6 +1,6 @@
 import { Layers } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
-import type { TProductSet, TRequirement, TRequirementModule, TRequirementSource } from "@plane/types";
+import type { TProductSet, TRequirement, TRequirementSource } from "@plane/types";
 import { cn } from "@plane/utils";
 
 const I18N = "workspace_product_sets.requirements";
@@ -121,45 +121,6 @@ export function RequirementSourceSwitcher(props: {
           </button>
         );
       })}
-    </div>
-  );
-}
-
-/**
- * 产品左栏模块树下面的「产品集模块」分组：引用进来的需求所在的产品集模块（只读，只列有引用需求的）。
- * 点一个模块，列表就按它筛（列表接口按模块 id 过滤，引用行一样筛得到）。
- */
-export function ReferencedModuleGroup(props: {
-  modules: TRequirementModule[];
-  selectedModuleId: string | null;
-  onSelect: (moduleId: string) => void;
-}) {
-  const { modules, selectedModuleId, onSelect } = props;
-  const { t } = useTranslation();
-  if (modules.length === 0) return null;
-
-  const renderNode = (node: TRequirementModule, depth: number) => (
-    <div key={node.id}>
-      <button
-        type="button"
-        onClick={() => onSelect(node.id)}
-        style={{ paddingLeft: 8 + depth * 16 }}
-        className={cn(
-          "flex h-[30px] w-full items-center gap-1.5 rounded-md pr-2 text-left text-13 text-primary",
-          selectedModuleId === node.id ? "bg-layer-1 font-medium" : "hover:bg-layer-transparent-hover"
-        )}
-      >
-        <span className="min-w-0 flex-1 truncate">{node.name}</span>
-        <span className="shrink-0 text-12 text-tertiary tabular-nums">{node.count}</span>
-      </button>
-      {node.children.map((child) => renderNode(child, depth + 1))}
-    </div>
-  );
-
-  return (
-    <div className="mt-2 border-t border-subtle pt-2">
-      <div className="flex h-[30px] items-center px-2 text-12 font-medium text-tertiary">{t(`${I18N}.set_modules`)}</div>
-      {modules.map((node) => renderNode(node, 0))}
     </div>
   );
 }

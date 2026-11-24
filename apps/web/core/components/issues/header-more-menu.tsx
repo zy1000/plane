@@ -22,7 +22,7 @@ export const HeaderMoreMenu = ({ items }: TProps) => {
       placement="bottom-end"
       closeOnSelect
       customButton={<Ellipsis className="size-4" aria-label="更多操作" />}
-      customButtonClassName="grid size-8 shrink-0 place-items-center rounded-md border border-strong bg-layer-2 text-secondary shadow-raised-100 hover:bg-layer-2-hover"
+      customButtonClassName="grid size-7 shrink-0 place-items-center rounded-md border border-strong bg-layer-2 text-secondary shadow-raised-100 hover:bg-layer-2-hover"
     >
       {visibleItems.map((item) => (
         <CustomMenu.MenuItem key={item.key} onClick={item.onClick}>

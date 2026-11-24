@@ -53,7 +53,6 @@ import { BulkScopeModal } from "./product-set/bulk-scope-modal";
 import { ConvertToOwnModal } from "./product-set/convert-to-own-modal";
 import { RequirementScopeModal } from "./product-set/requirement-scope-modal";
 import {
-  ReferencedModuleGroup,
   RequirementConvertCell,
   RequirementScopeCell,
   RequirementSourceCell,
@@ -549,14 +548,14 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
               onSelect={setSelectedModuleId}
               readonly={!canManageModules}
               onModuleMoved={() => void store.fetchRequirements().catch(() => undefined)}
-              bottom={
-                moduleStore.referenced ? (
-                  <ReferencedModuleGroup
-                    modules={moduleStore.referenced.modules}
-                    selectedModuleId={selectedModuleId}
-                    onSelect={setSelectedModuleId}
-                  />
-                ) : undefined
+              referencedGroup={
+                moduleStore.referenced
+                  ? {
+                      label: moduleStore.referenced.product_set.name,
+                      count: moduleStore.referenced.total,
+                      modules: moduleStore.referenced.modules,
+                    }
+                  : undefined
               }
             />
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
