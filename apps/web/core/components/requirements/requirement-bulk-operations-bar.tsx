@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, FolderInput, Layers, Trash2 } from "lucide-react";
+import { Check, Copy, FolderInput, Layers, Trash2 } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { BulkOperationsBar } from "@/components/common/bulk-operations-bar";
@@ -18,13 +18,16 @@ type TProps = {
   onMoveToModule?: () => void;
   /** 产品集的需求：批量设置使用范围 */
   onSetScope?: () => void;
+  /** 选中行里从产品集引用的条数；为 0 或不传则不显示「转为自有」 */
+  convertCount?: number;
+  onConvertReferences?: () => void;
   className?: string;
 };
 
 /**
  * 需求网格勾选后的批量操作浮条：沿用工作项 / 用例的浅色浮条（common/bulk-operations-bar）。
  *
- * 需求没有批量改属性，只挂提交评审 / 移动模块 / 设置使用范围 / 删除。
+ * 需求没有批量改属性，只挂提交评审 / 移动模块 / 设置使用范围 / 转为自有 / 删除。
  * 按钮用短名，完整说法放在悬停提示里。
  * 调用方须把本组件放进分页行的 relative 容器里（absolute bottom-full 贴在分页顶上）。
  */
@@ -39,6 +42,8 @@ export function RequirementBulkOperationsBar(props: TProps) {
     onDelete,
     onMoveToModule,
     onSetScope,
+    convertCount = 0,
+    onConvertReferences,
     className,
   } = props;
   const { t } = useTranslation();
@@ -85,6 +90,18 @@ export function RequirementBulkOperationsBar(props: TProps) {
         >
           <Layers className="size-3.5" />
           范围
+        </Button>
+      )}
+      {onConvertReferences && convertCount > 0 && (
+        <Button
+          variant="ghost"
+          size="lg"
+          disabled={disabled}
+          onClick={onConvertReferences}
+          title={`把选中的 ${convertCount} 条产品集引用需求转为本产品自有`}
+        >
+          <Copy className="size-3.5" />
+          转为自有
         </Button>
       )}
       {onDelete && (

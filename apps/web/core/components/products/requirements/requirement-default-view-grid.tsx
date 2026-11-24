@@ -143,10 +143,12 @@ type TProps = {
   onSetScope?: (requirementIds: string[]) => void;
   /** 产品的模块树：传了筛选里才有「模块」属性（基线快照页不传） */
   filterModules?: TRequirementModule[];
-  /** 页面追加的列（产品集页的「使用范围」、产品页的「来源」「操作」），内容由页面给 */
+  /** 页面追加的列（产品集页的「使用范围」、产品页的「来源」），内容由页面给 */
   extraColumns?: TRequirementExtraColumn[];
   /** 从产品集引用的行（is_reference）的行菜单只有这一项：转为自有。不传则这些行没有行菜单 */
   onConvertReference?: (requirement: TRequirement) => void;
+  /** 勾选行里有产品集引用的行时，批量条多一个「转为自有」 */
+  onConvertReferences?: (requirements: TRequirement[]) => void;
 };
 
 export type TRequirementExtraColumn = {
@@ -199,6 +201,7 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
     filterModules,
     extraColumns = NO_EXTRA_COLUMNS,
     onConvertReference,
+    onConvertReferences,
   } = props;
   const { t } = useTranslation();
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -420,6 +423,12 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
   /** 引用行的模块归产品集，后端整批拒绝：「移动到模块」只带本产品自己的行 */
   const movableSelectedIds = useMemo(
     () => selectedIds.filter((id) => !referenceByIdRef.current.get(id)),
+    [requirements, selectedIds]
+  );
+
+  /** 选中的产品集引用行（只认当前页，转换确认框要列出编号和标题） */
+  const referenceSelectedRows = useMemo(
+    () => requirements.filter((item) => item.is_reference && selectedIds.includes(item.id)),
     [requirements, selectedIds]
   );
 
@@ -989,6 +998,15 @@ export const RequirementDefaultViewGrid = observer(function RequirementDefaultVi
               onMoveToModule && movableSelectedIds.length > 0 ? () => onMoveToModule(movableSelectedIds) : undefined
             }
             onSetScope={onSetScope ? () => onSetScope(selectedIds) : undefined}
+            convertCount={referenceSelectedRows.length}
+            onConvertReferences={
+              onConvertReferences
+                ? () => {
+                    onConvertReferences(referenceSelectedRows);
+                    setSelectedIds([]);
+                  }
+                : undefined
+            }
             deleteCount={deletableSelectedIds.length}
             onDelete={() => setIdsToDelete(deletableSelectedIds)}
           />

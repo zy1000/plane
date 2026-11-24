@@ -49,14 +49,35 @@ export function RequirementScopeCell(props: {
   );
 }
 
-/** 产品需求的「来源」格：自有 / 产品集（引用）/ 转自 MP01-7（转为自有） */
-export function RequirementSourceCell({ requirement }: { requirement: TRequirement }) {
+/**
+ * 产品需求的「来源」格：自有 / 产品集（引用）/ 转自 MP01-7（转为自有）。
+ * 引用行在标记旁常显「转为自有」：这一列紧跟标题，不用横向滚到表格最右才找得到操作。
+ */
+export function RequirementSourceCell(props: {
+  requirement: TRequirement;
+  onConvert?: (requirement: TRequirement) => void;
+}) {
+  const { requirement, onConvert } = props;
   const { t } = useTranslation();
   if (requirement.is_reference)
     return (
-      <span className={cn(CHIP, "gap-1 bg-accent-subtle pl-1.5 font-medium text-accent-primary")}>
-        <Layers className="size-3" />
-        {t(`${I18N}.source_set`)}
+      <span className="flex items-center gap-2.5">
+        <span className={cn(CHIP, "gap-1 bg-accent-subtle pl-1.5 font-medium text-accent-primary")}>
+          <Layers className="size-3" />
+          {t(`${I18N}.source_set`)}
+        </span>
+        {onConvert && (
+          <button
+            type="button"
+            className="shrink-0 text-13 font-medium whitespace-nowrap text-accent-primary hover:underline"
+            onClick={(event) => {
+              event.stopPropagation();
+              onConvert(requirement);
+            }}
+          >
+            {t(`${I18N}.convert`)}
+          </button>
+        )}
       </span>
     );
   if (requirement.origin_display_id)
@@ -66,25 +87,6 @@ export function RequirementSourceCell({ requirement }: { requirement: TRequireme
       </span>
     );
   return <span className="text-13 text-secondary">{t(`${I18N}.source_own`)}</span>;
-}
-
-/** 产品需求的「操作」格：引用的行可以转为自有 */
-export function RequirementConvertCell(props: {
-  requirement: TRequirement;
-  onConvert?: (requirement: TRequirement) => void;
-}) {
-  const { requirement, onConvert } = props;
-  const { t } = useTranslation();
-  if (!requirement.is_reference || !onConvert) return <span className="text-placeholder">—</span>;
-  return (
-    <button
-      type="button"
-      className="text-13 font-medium text-accent-primary hover:underline"
-      onClick={() => onConvert(requirement)}
-    >
-      {t(`${I18N}.convert`)}
-    </button>
-  );
 }
 
 /** 产品需求页的「全部 / 自有 / 引用」分段（产品属于某个产品集时才出） */

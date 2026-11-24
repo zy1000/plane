@@ -210,9 +210,11 @@ type TProps = {
   onSetScope?: (requirementIds: string[]) => void;
   /** 从产品集引用的行（is_reference）的行菜单只有这一项：转为自有。不传则这些行没有行菜单 */
   onConvertReference?: (requirement: TRequirement) => void;
+  /** 勾选行里有产品集引用的行时，批量条多一个「转为自有」 */
+  onConvertReferences?: (requirements: TRequirement[]) => void;
   /** 库 / 产品的模块树：传了筛选里才有「模块」属性 */
   filterModules?: TRequirementModule[];
-  /** 页面追加的只读列（产品集页的「使用范围」、产品页的「来源」「操作」），紧跟标题列 */
+  /** 页面追加的只读列（产品集页的「使用范围」、产品页的「来源」），紧跟标题列 */
   extraColumns?: TRequirementGridExtraColumn[];
 };
 
@@ -274,6 +276,7 @@ export const RequirementGrid = observer(
       onMoveToModule,
       onSetScope,
       onConvertReference,
+      onConvertReferences,
       filterModules,
       extraColumns = NO_EXTRA_COLUMNS,
     } = props;
@@ -1384,6 +1387,11 @@ export const RequirementGrid = observer(
       () => selectedIds.filter((id) => !requirements.find((item) => item.id === id)?.is_reference),
       [requirements, selectedIds]
     );
+    /** 选中的产品集引用行（转换确认框要列出编号和标题） */
+    const referenceSelectedRows = useMemo(
+      () => requirements.filter((item) => item.is_reference && selectedIds.includes(item.id)),
+      [requirements, selectedIds]
+    );
     const useExternalToolbar = Boolean(toolbarPortalEl);
 
     const toolbarActions: ReactNode = (
@@ -1773,6 +1781,15 @@ export const RequirementGrid = observer(
                 onMoveToModule && movableSelectedIds.length > 0 ? () => onMoveToModule(movableSelectedIds) : undefined
               }
               onSetScope={onSetScope ? () => onSetScope(selectedIds) : undefined}
+              convertCount={referenceSelectedRows.length}
+              onConvertReferences={
+                onConvertReferences
+                  ? () => {
+                      onConvertReferences(referenceSelectedRows);
+                      setSelectedIds([]);
+                    }
+                  : undefined
+              }
             />
           )}
           <RequirementGridPagination

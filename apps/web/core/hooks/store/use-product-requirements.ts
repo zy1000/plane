@@ -280,15 +280,25 @@ export const useProductRequirements = ({
     }));
   }, []);
 
-  /** 转为自有：引用的那一行换成本产品新建的需求（编号 MP01-3-1），配置（类型视图）跟着重拉 */
-  const convertReference = useCallback(
-    async (requirementId: string) => {
+  /**
+   * 转为自有（单条 / 批量同一入口）：引用的行换成本产品新建的需求（编号 MP01-3-1）。逐条调转换接口（副编号是来源需求下的流水号，串行避免抢号），失败的不中断，
+   * 全部跑完再统一刷新一次列表与配置。
+   */
+  const convertReferences = useCallback(
+    async (requirementIds: string[]) => {
       if (!workspaceSlug || !productId) throw new Error("Product is required.");
+      const failed: { id: string; error?: string }[] = [];
       setIsMutating(true);
       try {
-        const created = await requirementService.convertReferencedRequirement(workspaceSlug, productId, requirementId);
+        for (const requirementId of requirementIds) {
+          try {
+            await requirementService.convertReferencedRequirement(workspaceSlug, productId, requirementId);
+          } catch (error) {
+            failed.push({ id: requirementId, error: (error as { error?: string } | null)?.error });
+          }
+        }
         await Promise.all([fetchRequirements(), fetchConfiguration()]);
-        return created;
+        return { converted: requirementIds.length - failed.length, failed };
       } finally {
         setIsMutating(false);
       }
@@ -412,7 +422,7 @@ export const useProductRequirements = ({
     createRequirement,
     updateRequirement,
     updateStatus,
-    convertReference,
+    convertReferences,
     setScopeProductIds,
     applyScopeProductIds,
     deleteRequirements,

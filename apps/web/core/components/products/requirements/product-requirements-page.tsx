@@ -53,7 +53,6 @@ import { BulkScopeModal } from "./product-set/bulk-scope-modal";
 import { ConvertToOwnModal } from "./product-set/convert-to-own-modal";
 import { RequirementScopeModal } from "./product-set/requirement-scope-modal";
 import {
-  RequirementConvertCell,
   RequirementScopeCell,
   RequirementSourceCell,
   RequirementSourceSwitcher,
@@ -97,7 +96,7 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
   /*
    * 产品集相关（后端 utils/requirement_scope.py）：
    * - 当前是产品集：需求多一列「使用范围」，点开勾选集内哪些产品用这条需求；
-   * - 当前产品属于某个产品集：列表并着从产品集引用的需求，多「来源」「操作」两列和「全部 / 自有 / 引用」分段。
+   * - 当前产品属于某个产品集：列表并着从产品集引用的需求，多「来源」列（引用行带「转为自有」）和「全部 / 自有 / 引用」分段。
    */
   const { products, sets } = useProductsContext();
   const product = products.find((item) => item.id === productId);
@@ -108,7 +107,9 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
     [isProductSet, productId, sets.productSets]
   );
   const [scopeTarget, setScopeTarget] = useState<TRequirement | null>(null);
-  const [convertTarget, setConvertTarget] = useState<TRequirement | null>(null);
+  /** 要转为自有的引用需求：行内点的一条或批量勾选的多条；空数组 = 关着 */
+  const [convertTargets, setConvertTargets] = useState<TRequirement[]>([]);
+  const openConvert = useCallback((requirement: TRequirement) => setConvertTargets([requirement]), []);
   /** 批量设置使用范围的需求；空数组 = 关着 */
   const [bulkScopeIds, setBulkScopeIds] = useState<string[]>([]);
 
@@ -382,16 +383,10 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
           {
             key: "source",
             label: t("workspace_product_sets.requirements.source"),
-            width: 148,
+            width: 172,
             position: "after-title",
-            render: (requirement) => <RequirementSourceCell requirement={requirement} />,
-          },
-          {
-            key: "convert",
-            label: t("workspace_product_sets.fields.actions"),
-            width: 104,
             render: (requirement) => (
-              <RequirementConvertCell requirement={requirement} onConvert={canCreate ? setConvertTarget : undefined} />
+              <RequirementSourceCell requirement={requirement} onConvert={canCreate ? openConvert : undefined} />
             ),
           },
         ]
@@ -618,7 +613,8 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
                   onMoveToModule={canEdit ? setMoveIds : undefined}
                   filterModules={moduleStore.modules}
                   extraColumns={extraColumns}
-                  onConvertReference={parentSet && canCreate ? setConvertTarget : undefined}
+                  onConvertReference={parentSet && canCreate ? openConvert : undefined}
+                  onConvertReferences={parentSet && canCreate ? setConvertTargets : undefined}
                   onSetScope={onSetScope}
                 />
               ) : (
@@ -676,7 +672,8 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
                   onMoveToModule={canEdit ? setMoveIds : undefined}
                   filterModules={moduleStore.modules}
                   extraColumns={extraColumns}
-                  onConvertReference={parentSet && canCreate ? setConvertTarget : undefined}
+                  onConvertReference={parentSet && canCreate ? openConvert : undefined}
+                  onConvertReferences={parentSet && canCreate ? setConvertTargets : undefined}
                   onSetScope={onSetScope}
                 />
               )}
@@ -820,12 +817,13 @@ export const ProductRequirementsPage = observer(function ProductRequirementsPage
           productId={productId ?? ""}
           productIdentifier={product.identifier}
           productSetName={parentSet.name}
-          requirement={convertTarget}
-          handleClose={() => setConvertTarget(null)}
-          onConvert={async (requirementId) => {
-            await store.convertReference(requirementId);
-            // 引用少一条、自有多一条：左栏的计数与「产品集模块」分组跟着变
+          requirements={convertTargets}
+          handleClose={() => setConvertTargets([])}
+          onConvert={async (requirementIds) => {
+            const result = await store.convertReferences(requirementIds);
+            // 引用少、自有多：左栏的计数与产品集分组跟着变
             void refreshModules().catch(() => undefined);
+            return result;
           }}
         />
       )}
