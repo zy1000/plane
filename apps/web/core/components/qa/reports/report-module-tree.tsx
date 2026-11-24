@@ -2,16 +2,19 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Modal } from "antd";
-import { FolderPlus, Pencil, Trash2 } from "lucide-react";
+import { FolderPlus, ListPlus, Pencil, Trash2 } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import {
   MODULE_TREE_ROOT_KEY,
+  ModuleBulkCreateModal,
   ModuleTreePanel,
   UNASSIGNED_MODULE_KEY,
   appendUnassignedNode,
   collectAncestorKeys,
   indexModuleTree,
   isInSubtree,
+  type TBulkModuleItem,
+  type TBulkModuleResult,
   type TModuleTreeDropEvent,
   type TModuleTreeEditing,
   type TModuleTreeMenuItem,
@@ -35,6 +38,7 @@ type Props = {
   canEdit: boolean;
   canDelete: boolean;
   createModule: (name: string, parentId: string | null) => Promise<void>;
+  bulkCreateModules: (parentId: string | null, items: TBulkModuleItem[]) => Promise<TBulkModuleResult>;
   renameModule: (moduleId: string, name: string) => Promise<void>;
   moveModule: (moduleId: string, parentId: string | null) => Promise<void>;
   deleteModule: (moduleId: string) => Promise<void>;
@@ -64,6 +68,7 @@ export const ReportModuleTree = ({
   canEdit,
   canDelete,
   createModule,
+  bulkCreateModules,
   renameModule,
   moveModule,
   deleteModule,
@@ -71,6 +76,8 @@ export const ReportModuleTree = ({
   const { t } = useTranslation();
   const [expandedKeys, setExpandedKeys] = useState<string[]>([]);
   const [editing, setEditing] = useState<TModuleTreeEditing>(null);
+  /** 批量新建弹窗：undefined = 关；null = 顶级；string = 上级模块 */
+  const [bulkParent, setBulkParent] = useState<string | null | undefined>(undefined);
 
   const treeNodes = useMemo(
     () =>
@@ -151,6 +158,13 @@ export const ReportModuleTree = ({
       onClick: () => startCreate(node.key),
     },
     {
+      key: "bulk-add",
+      label: "批量添加子模块",
+      icon: <ListPlus className="size-3.5" strokeWidth={1.75} />,
+      disabled: !canCreate,
+      onClick: () => setBulkParent(node.key),
+    },
+    {
       key: "rename",
       label: "重命名",
       icon: <Pencil className="size-3.5" strokeWidth={1.75} />,
@@ -185,22 +199,40 @@ export const ReportModuleTree = ({
   const selectedLabel = selectedModuleId ? nodeIndex.nodeByKey.get(selectedModuleId)?.label : undefined;
 
   return (
-    <ModuleTreePanel
-      root={{ label: "全部报告", count: total }}
-      nodes={treeNodes}
-      selectedKey={selectedModuleId ?? MODULE_TREE_ROOT_KEY}
-      onSelect={(key) => onSelectModule(key === MODULE_TREE_ROOT_KEY ? null : key)}
-      expandedKeys={expandedKeys}
-      onExpandedKeysChange={setExpandedKeys}
-      editing={editing}
-      onEditCommit={(value) => void handleEditCommit(value)}
-      onEditCancel={() => setEditing(null)}
-      getMenuItems={getMenuItems}
-      dragMode={canEdit ? "reparent" : "none"}
-      onDrop={handleDrop}
-      onAddRoot={canCreate ? () => startCreate(MODULE_TREE_ROOT_KEY) : undefined}
-      railLabel={selectedLabel || "全部报告"}
-      loading={loading}
-    />
+    <>
+      <ModuleTreePanel
+        root={{ label: "全部报告", count: total }}
+        nodes={treeNodes}
+        selectedKey={selectedModuleId ?? MODULE_TREE_ROOT_KEY}
+        onSelect={(key) => onSelectModule(key === MODULE_TREE_ROOT_KEY ? null : key)}
+        expandedKeys={expandedKeys}
+        onExpandedKeysChange={setExpandedKeys}
+        editing={editing}
+        onEditCommit={(value) => void handleEditCommit(value)}
+        onEditCancel={() => setEditing(null)}
+        getMenuItems={getMenuItems}
+        dragMode={canEdit ? "reparent" : "none"}
+        onDrop={handleDrop}
+        onAddRoot={canCreate ? () => startCreate(MODULE_TREE_ROOT_KEY) : undefined}
+        onBulkAdd={
+          canCreate
+            ? () =>
+                setBulkParent(selectedModuleId && selectedModuleId !== UNASSIGNED_MODULE_KEY ? selectedModuleId : null)
+            : undefined
+        }
+        railLabel={selectedLabel || "全部报告"}
+        loading={loading}
+      />
+      <ModuleBulkCreateModal
+        isOpen={bulkParent !== undefined}
+        onClose={() => setBulkParent(undefined)}
+        nodes={treeNodes}
+        defaultParentKey={bulkParent ?? null}
+        onSubmit={bulkCreateModules}
+        onCreated={(parentKey, result) =>
+          setExpandedKeys((prev) => Array.from(new Set([...prev, ...(parentKey ? [parentKey] : []), ...result.ids])))
+        }
+      />
+    </>
   );
 };

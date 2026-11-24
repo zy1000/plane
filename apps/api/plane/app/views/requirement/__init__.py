@@ -30,6 +30,7 @@ from .module import (
     RequirementModuleAPIView,
     RequirementModuleDetailAPIView,
     RequirementModuleMoveAPIView,
+    RequirementModuleBulkAPIView,
 )
 from .field_library import (
     RequirementFieldDefinitionViewSet,
@@ -61,6 +62,7 @@ __all__ = [
     "RequirementModuleAPIView",
     "RequirementModuleDetailAPIView",
     "RequirementModuleMoveAPIView",
+    "RequirementModuleBulkAPIView",
     "RequirementProjectsViewSet",
     "RequirementTestCaseViewSet",
     "RequirementFieldDefinitionViewSet",

@@ -7,6 +7,7 @@ import type {
   TUpdateRequirementModulePayload,
 } from "@plane/types";
 // services
+import type { TBulkModuleItem, TBulkModuleResult } from "@/services/qa/module-bulk.types";
 import { APIService } from "@/services/api.service";
 
 /** 用例库模块（产品下给用例库分组的树）：节点形状与需求模块一致，侧栏共用 */
@@ -31,6 +32,19 @@ export class RepositoryService extends APIService {
     return this.get(`/api/workspaces/${workspaceSlug}/test/repository/`, {
       params: queries,
     })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 批量新建用例库模块（缩进树），同级重名跳过 */
+  async bulkCreateRepositoryModules(
+    workspaceSlug: string,
+    productId: string,
+    data: { parent: string | null; items: TBulkModuleItem[] }
+  ): Promise<TBulkModuleResult> {
+    return this.post(`/api/workspaces/${workspaceSlug}/products/${productId}/test/repository-modules/bulk/`, data)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;

@@ -22,6 +22,7 @@ from plane.app.views.requirement import (
     RequirementModuleAPIView,
     RequirementModuleDetailAPIView,
     RequirementModuleMoveAPIView,
+    RequirementModuleBulkAPIView,
     RequirementProjectsViewSet,
     RequirementTestCaseViewSet,
     RequirementTypeConfigurationAPIView,
@@ -162,6 +163,12 @@ urlpatterns = [
         RequirementModuleMoveAPIView.as_view(),
         name="requirement-library-module-move",
     ),
+    # 批量新建模块（缩进树）
+    path(
+        "workspaces/<str:slug>/requirement-libraries/<uuid:library_id>/modules/bulk/",
+        RequirementModuleBulkAPIView.as_view(),
+        name="requirement-library-module-bulk",
+    ),
     # 批量挂靠 / 移动条目到模块（module_id 显式传 null = 移回「全部」）
     path(
         "workspaces/<str:slug>/requirement-libraries/<uuid:library_id>/items/set-module/",
@@ -239,6 +246,11 @@ urlpatterns = [
         "workspaces/<str:slug>/products/<uuid:product_id>/requirement-modules/move/",
         RequirementModuleMoveAPIView.as_view(),
         name="product-requirement-module-move",
+    ),
+    path(
+        "workspaces/<str:slug>/products/<uuid:product_id>/requirement-modules/bulk/",
+        RequirementModuleBulkAPIView.as_view(),
+        name="product-requirement-module-bulk",
     ),
     path(
         "workspaces/<str:slug>/products/<uuid:product_id>/requirements/set-module/",

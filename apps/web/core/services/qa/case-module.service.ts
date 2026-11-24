@@ -1,11 +1,24 @@
 // plane imports
 import { API_BASE_URL } from "@plane/constants";
 // services
+import type { TBulkModuleItem, TBulkModuleResult } from "@/services/qa/module-bulk.types";
 import { APIService } from "@/services/api.service";
 
 export class CaseModuleService extends APIService {
   constructor() {
     super(API_BASE_URL);
+  }
+
+  /** 批量新建模块（缩进树），同级重名跳过 */
+  async bulkCreateCaseModules(
+    workspaceSlug: string,
+    data: { repository: string; parent: string | null; items: TBulkModuleItem[] }
+  ): Promise<TBulkModuleResult> {
+    return this.post(`/api/workspaces/${workspaceSlug}/test/module/bulk/`, data)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
   }
 
   async getCaseModules(workspaceSlug: string, queries?: any): Promise<any> {

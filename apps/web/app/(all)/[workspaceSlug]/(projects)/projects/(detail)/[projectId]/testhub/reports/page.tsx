@@ -245,6 +245,7 @@ export default function TestReportsPage() {
             canEdit={canEditReport}
             canDelete={canDeleteReport}
             createModule={reportModules.createModule}
+            bulkCreateModules={reportModules.bulkCreateModules}
             renameModule={renameModule}
             moveModule={moveModule}
             deleteModule={deleteModule}

@@ -1,6 +1,7 @@
 // plane imports
 import { API_BASE_URL } from "@plane/constants";
 // services
+import type { TBulkModuleItem, TBulkModuleResult } from "@/services/qa/module-bulk.types";
 import { APIService } from "@/services/api.service";
 
 
@@ -42,6 +43,18 @@ export class CaseService extends APIService {
 
    async createReviewModule(workspaceSlug: string, data: any): Promise<any> {
     return this.post(`/api/workspaces/${workspaceSlug}/test/review/module/`, data)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 批量新建模块（缩进树），同级重名跳过 */
+  async bulkCreateReviewModules(
+    workspaceSlug: string,
+    data: { product: string; parent: string | null; items: TBulkModuleItem[] }
+  ): Promise<TBulkModuleResult> {
+    return this.post(`/api/workspaces/${workspaceSlug}/test/review/module/bulk/`, data)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;

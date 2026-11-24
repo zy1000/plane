@@ -37,6 +37,13 @@ from plane.app.views.qa.case_version import (
     CaseVersionCompareAPIView,
 )
 from plane.app.views.qa.module import CaseModuleCountAPIView, CaseModuleDetailAPIView, CaseModuleMoveAPIView
+from plane.app.views.qa.module_bulk import (
+    CaseModuleBulkAPIView,
+    CaseRepositoryModuleBulkAPIView,
+    PlanModuleBulkAPIView,
+    ReportModuleBulkAPIView,
+    ReviewModuleBulkAPIView,
+)
 from plane.app.views.qa.repository_module import (
     CaseRepositoryModuleAPIView,
     CaseRepositoryModuleDetailAPIView,
@@ -98,6 +105,11 @@ urlpatterns = [
         name="test-report-module",
     ),
     path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/test/report/module/bulk/",
+        ReportModuleBulkAPIView.as_view(),
+        name="test-report-module-bulk",
+    ),
+    path(
         "workspaces/<str:slug>/projects/<uuid:project_id>/test/report/module/count/",
         ReportModuleCountAPIView.as_view(),
         name="test-report-module-count",
@@ -123,6 +135,11 @@ urlpatterns = [
         name="test-plan",
     ),
     path(
+        "workspaces/<str:slug>/test/plan/module/bulk/",
+        PlanModuleBulkAPIView.as_view(),
+        name="test-plan-module-bulk",
+    ),
+    path(
         "workspaces/<str:slug>/test/plan/module/<uuid:module_id>/",
         PlanModuleDetailAPIView.as_view(),
         name="test-plan-module-detail",
@@ -141,6 +158,11 @@ urlpatterns = [
         "workspaces/<str:slug>/test/module/",
         CaseModuleAPIView.as_view(),
         name="test-case",
+    ),
+    path(
+        "workspaces/<str:slug>/test/module/bulk/",
+        CaseModuleBulkAPIView.as_view(),
+        name="test-case-module-bulk",
     ),
     path(
         "workspaces/<str:slug>/test/module/copy/",
@@ -235,6 +257,11 @@ urlpatterns = [
         name="test-repository-module-move",
     ),
     path(
+        "workspaces/<str:slug>/products/<uuid:product_id>/test/repository-modules/bulk/",
+        CaseRepositoryModuleBulkAPIView.as_view(),
+        name="test-repository-module-bulk",
+    ),
+    path(
         "workspaces/<str:slug>/products/<uuid:product_id>/test/repository-modules/<uuid:module_id>/",
         CaseRepositoryModuleDetailAPIView.as_view(),
         name="test-repository-module-detail",
@@ -268,6 +295,11 @@ urlpatterns = [
         "workspaces/<str:slug>/test/review/module/",
         ReviewModuleAPIView.as_view(),
         name="test-repository-enums",
+    ),
+    path(
+        "workspaces/<str:slug>/test/review/module/bulk/",
+        ReviewModuleBulkAPIView.as_view(),
+        name="test-review-module-bulk",
     ),
     path(
         "workspaces/<str:slug>/test/review/module/<uuid:module_id>/",

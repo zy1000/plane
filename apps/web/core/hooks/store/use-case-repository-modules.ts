@@ -4,6 +4,7 @@ import type {
   TMoveRequirementModulePayload,
   TUpdateRequirementModulePayload,
 } from "@plane/types";
+import type { TBulkModuleItem } from "@/services/qa/module-bulk.types";
 import { RepositoryService, type TCaseRepositoryModule } from "@/services/qa/repository.service";
 
 const repositoryService = new RepositoryService();
@@ -94,6 +95,20 @@ export const useCaseRepositoryModules = (workspaceSlug: string | undefined, prod
     [requireScope, refresh]
   );
 
+  /** 批量新建（缩进树）；parent 为 null = 一级 */
+  const bulkCreateModules = useCallback(
+    async (parent: string | null, items: TBulkModuleItem[]) => {
+      const scope = requireScope();
+      const response = await repositoryService.bulkCreateRepositoryModules(scope.workspaceSlug, scope.productId, {
+        parent,
+        items,
+      });
+      await refresh();
+      return response;
+    },
+    [requireScope, refresh]
+  );
+
   /** 删除模块连带删子模块；模块下的用例库不删，回到「未归类」 */
   const deleteModule = useCallback(
     async (moduleId: string) => {
@@ -115,6 +130,7 @@ export const useCaseRepositoryModules = (workspaceSlug: string | undefined, prod
     isLoading,
     refresh,
     createModule,
+    bulkCreateModules,
     updateModule,
     moveModule,
     deleteModule,

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import type { TBulkModuleItem } from "@/services/qa/module-bulk.types";
 import { ReportService, type TReportModule } from "@/services/qa/report.service";
 
 const reportService = new ReportService();
@@ -64,6 +65,16 @@ export const useReportModules = ({ workspaceSlug, projectId, enabled }: TArgs) =
     [workspaceSlug, projectId, refresh]
   );
 
+  /** 批量新建（缩进树）；parentId 为 null = 一级 */
+  const bulkCreateModules = useCallback(
+    async (parentId: string | null, items: TBulkModuleItem[]) => {
+      const result = await reportService.bulkCreateReportModules(workspaceSlug, projectId, { parent: parentId, items });
+      await refresh();
+      return result;
+    },
+    [workspaceSlug, projectId, refresh]
+  );
+
   const renameModule = useCallback(
     async (moduleId: string, name: string) => {
       await reportService.updateReportModule(workspaceSlug, projectId, moduleId, { name });
@@ -88,5 +99,17 @@ export const useReportModules = ({ workspaceSlug, projectId, enabled }: TArgs) =
     [workspaceSlug, projectId, refresh]
   );
 
-  return { modules, total, unassignedTotal, isLoading, loaded, refresh, createModule, renameModule, moveModule, deleteModule };
+  return {
+    modules,
+    total,
+    unassignedTotal,
+    isLoading,
+    loaded,
+    refresh,
+    createModule,
+    bulkCreateModules,
+    renameModule,
+    moveModule,
+    deleteModule,
+  };
 };

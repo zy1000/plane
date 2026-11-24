@@ -44,6 +44,7 @@ from plane.utils.product_category import (
     root_lock_message,
     root_lock_violation,
 )
+from plane.utils.module_bulk import bulk_create_response
 from plane.utils.requirement_module import build_module_tree_payload
 from plane.utils.requirement_scope import product_rows_queryset, referenced_requirement_ids
 from plane.utils.requirement_project import linked_requirement_ids
@@ -193,6 +194,33 @@ class RequirementModuleAPIView(_RequirementModuleScopeMixin, BaseAPIView):
         return Response(
             RequirementModuleSerializer(module).data,
             status=status.HTTP_201_CREATED,
+        )
+
+
+class RequirementModuleBulkAPIView(_RequirementModuleScopeMixin, BaseAPIView):
+    """批量新建：在 parent（空 = 一级）下按缩进树建一批模块，规则见 utils.module_bulk。"""
+
+    model = RequirementModule
+
+    def post(self, request, slug, **kwargs):
+        owner, scope_filter, error = self.resolve_scope(require_write=True)
+        if error is not None:
+            return error
+        parent_id = request.data.get("parent") or None
+        locked = _root_locked_response(owner, data={"parent": parent_id})
+        if locked is not None:
+            return locked
+        parent = None
+        if parent_id:
+            parent = RequirementModule.objects.filter(id=parent_id, **scope_filter).first()
+            if parent is None:
+                return Response({"error": "上级模块不存在。"}, status=status.HTTP_400_BAD_REQUEST)
+        return bulk_create_response(
+            model=RequirementModule,
+            scope=scope_filter,
+            parent=parent,
+            raw_items=request.data.get("items"),
+            extra={"workspace_id": owner.workspace_id},
         )
 
 

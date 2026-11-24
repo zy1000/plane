@@ -3,6 +3,7 @@ import { API_BASE_URL } from "@plane/constants";
 import { FileUploadService, generateFileUploadPayload, getFileMetaDataForUpload } from "@plane/services";
 import type { TFileSignedURLResponse } from "@plane/types";
 // services
+import type { TBulkModuleItem, TBulkModuleResult } from "@/services/qa/module-bulk.types";
 import { APIService } from "@/services/api.service";
 
 export type TPlanCaseNestedCase = {
@@ -325,6 +326,18 @@ export class PlanService extends APIService {
 
   async createPlanModule(workspaceSlug: string, data: any): Promise<any> {
     return this.post(`/api/workspaces/${workspaceSlug}/test/plan/module/`, data)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 批量新建模块（缩进树），同级重名跳过 */
+  async bulkCreatePlanModules(
+    workspaceSlug: string,
+    data: { project: string; parent: string | null; items: TBulkModuleItem[] }
+  ): Promise<TBulkModuleResult> {
+    return this.post(`/api/workspaces/${workspaceSlug}/test/plan/module/bulk/`, data)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;

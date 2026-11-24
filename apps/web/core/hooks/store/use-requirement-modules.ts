@@ -8,6 +8,7 @@ import type {
   TRequirementModuleTreeResponse,
   TUpdateRequirementModulePayload,
 } from "@plane/types";
+import type { TBulkModuleItem } from "@/services/qa/module-bulk.types";
 import { RequirementService } from "@/services/requirement.service";
 
 const requirementService = new RequirementService();
@@ -150,6 +151,25 @@ export const useRequirementModules = (
     [workspaceSlug, writeScope, refresh]
   );
 
+  /** 批量新建（缩进树）；parent 为 null = 一级 */
+  const bulkCreateModules = useCallback(
+    async (parent: string | null, items: TBulkModuleItem[]) => {
+      if (!workspaceSlug || !writeScope) throw new Error("Modules are read-only in this scope.");
+      setIsMutating(true);
+      try {
+        const response = await requirementService.bulkCreateRequirementModules(workspaceSlug, writeScope, {
+          parent,
+          items,
+        });
+        await refresh();
+        return response;
+      } finally {
+        setIsMutating(false);
+      }
+    },
+    [workspaceSlug, writeScope, refresh]
+  );
+
   /** 删除模块连带删子模块；模块下的需求不删，回到「全部」 */
   const deleteModule = useCallback(
     async (moduleId: string) => {
@@ -200,6 +220,7 @@ export const useRequirementModules = (
     isReadonly: writeScope === null,
     refresh,
     createModule,
+    bulkCreateModules,
     updateModule,
     moveModule,
     deleteModule,

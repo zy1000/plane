@@ -65,6 +65,7 @@ import type {
   TUpdateRequirementLibraryPayload,
   TUpdateRequirementModulePayload,
 } from "@plane/types";
+import type { TBulkModuleItem, TBulkModuleResult } from "@/services/qa/module-bulk.types";
 import { APIService } from "@/services/api.service";
 
 /**
@@ -539,6 +540,19 @@ export class RequirementService extends APIService {
     payload: TUpdateRequirementModulePayload
   ): Promise<TRequirementModule> {
     return this.patch(`${this.modulesRoot(workspaceSlug, scope)}/${moduleId}/`, payload)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 批量新建：在 parent（null = 一级）下按缩进树建一批模块，同级重名跳过 */
+  async bulkCreateRequirementModules(
+    workspaceSlug: string,
+    scope: TRequirementModuleScope,
+    payload: { parent: string | null; items: TBulkModuleItem[] }
+  ): Promise<TBulkModuleResult> {
+    return this.post(`${this.modulesRoot(workspaceSlug, scope)}/bulk/`, payload)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;

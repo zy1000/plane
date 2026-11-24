@@ -5,13 +5,15 @@ import { useEffect, useState, useRef, useMemo } from "react";
 import { PageHead } from "@/components/core/page-title";
 import { PlanService, type TPlanListRow } from "@/services/qa/plan.service";
 import { Modal, Pagination } from "antd";
-import { FolderPlus, Pencil, Trash2 } from "lucide-react";
+import { FolderPlus, ListPlus, Pencil, Trash2 } from "lucide-react";
 import {
   MODULE_TREE_ROOT_KEY,
+  ModuleBulkCreateModal,
   ModuleTreePanel,
   UNASSIGNED_MODULE_KEY,
   UNASSIGNED_MODULE_LABEL,
   appendUnassignedNode,
+  type TBulkModuleItem,
   type TModuleTreeDropEvent,
   type TModuleTreeEditing,
   type TModuleTreeMenuItem,
@@ -74,6 +76,8 @@ export default function TestPlanDetailPage() {
   const [modules, setModules] = useState<PlanModule[]>([]);
   // 树的行内编辑态（新建 / 重命名），同一时间只有一个
   const [editing, setEditing] = useState<TModuleTreeEditing>(null);
+  /** 批量新建弹窗：undefined = 关；null = 顶级；string = 上级模块 */
+  const [bulkParent, setBulkParent] = useState<string | null | undefined>(undefined);
   const [expandedKeys, setExpandedKeys] = useState<string[]>([]);
   const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null);
 
@@ -350,6 +354,17 @@ export default function TestPlanDetailPage() {
     });
   }, [modules, unassignedTotal, selectedModuleId]);
 
+  const handleBulkCreate = async (parent: string | null, items: TBulkModuleItem[]) => {
+    const pid = Array.isArray(projectId) ? projectId[0] : projectId;
+    const result = await planService.bulkCreatePlanModules(workspaceSlug as string, {
+      project: pid as string,
+      parent,
+      items,
+    });
+    await fetchModules();
+    return result;
+  };
+
   const getMenuItems = (node: TModuleTreeNode): TModuleTreeMenuItem[] => {
     const module = findModuleById(modules, node.key);
     if (!module) return [];
@@ -360,6 +375,13 @@ export default function TestPlanDetailPage() {
         icon: <FolderPlus className="size-3.5" strokeWidth={1.75} />,
         disabled: !canCreatePlan,
         onClick: () => handleAddUnderNode(node.key),
+      },
+      {
+        key: "bulk-add",
+        label: "批量添加子模块",
+        icon: <ListPlus className="size-3.5" strokeWidth={1.75} />,
+        disabled: !canCreatePlan,
+        onClick: () => setBulkParent(node.key),
       },
     ];
     if (!module.is_default) {
@@ -496,6 +518,14 @@ export default function TestPlanDetailPage() {
                   dragMode={canEditPlan ? "reparent" : "none"}
                   onDrop={handleTreeDrop}
                   onAddRoot={canCreatePlan ? () => handleAddUnderNode(MODULE_TREE_ROOT_KEY) : undefined}
+                  onBulkAdd={
+                    canCreatePlan
+                      ? () =>
+                          setBulkParent(
+                            selectedModuleId && selectedModuleId !== UNASSIGNED_MODULE_KEY ? selectedModuleId : null
+                          )
+                      : undefined
+                  }
                   railLabel={selectedModuleName || "全部计划"}
                 />
                 <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
@@ -628,6 +658,16 @@ export default function TestPlanDetailPage() {
           onSuccess={refreshAll}
         />
       )}
+      <ModuleBulkCreateModal
+        isOpen={bulkParent !== undefined}
+        onClose={() => setBulkParent(undefined)}
+        nodes={treeNodes}
+        defaultParentKey={bulkParent ?? null}
+        onSubmit={handleBulkCreate}
+        onCreated={(parentKey, result) =>
+          setExpandedKeys((prev) => Array.from(new Set([...prev, ...(parentKey ? [parentKey] : []), ...result.ids])))
+        }
+      />
     </>
   );
 }

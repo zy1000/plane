@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { FolderLock, FolderPlus, Lock, Pencil, Trash2 } from "lucide-react";
+import { FolderLock, FolderPlus, ListPlus, Lock, Pencil, Trash2 } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type {
@@ -14,6 +14,7 @@ import type {
 import { AlertModalCore } from "@plane/ui";
 import {
   MODULE_TREE_ROOT_KEY,
+  ModuleBulkCreateModal,
   ModuleTreePanel,
   UNASSIGNED_MODULE_KEY,
   appendUnassignedNode,
@@ -25,6 +26,7 @@ import {
   type TModuleTreeMenuItem,
   type TModuleTreeNode,
 } from "@/components/qa/module-tree";
+import type { TBulkModuleItem, TBulkModuleResult } from "@/services/qa/module-bulk.types";
 
 /**
  * 侧栏用到的模块树数据入口：需求模块（useRequirementModules）与用例库模块
@@ -36,6 +38,8 @@ export type TModuleSidebarStore = {
   unassigned: number;
   isLoading: boolean;
   createModule: (payload: TCreateRequirementModulePayload) => Promise<unknown>;
+  /** 有则出「批量新建」入口 */
+  bulkCreateModules?: (parent: string | null, items: TBulkModuleItem[]) => Promise<TBulkModuleResult>;
   updateModule: (moduleId: string, payload: TUpdateRequirementModulePayload) => Promise<unknown>;
   moveModule: (payload: TMoveRequirementModulePayload) => Promise<unknown>;
   deleteModule: (moduleId: string) => Promise<void>;
@@ -115,6 +119,9 @@ export const RequirementModuleSidebar = (props: TProps) => {
   const [editing, setEditing] = useState<TModuleTreeEditing>(null);
   const [deleteTarget, setDeleteTarget] = useState<TModuleTreeNode | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  /** 批量新建弹窗：undefined = 关；null = 顶级；string = 上级模块 */
+  const [bulkParent, setBulkParent] = useState<string | null | undefined>(undefined);
+  const canBulk = !readonly && Boolean(store.bulkCreateModules);
 
   const treeNodes = useMemo(() => toTreeNodes(store.modules, isRootLocked), [store.modules, isRootLocked]);
   const lockedKeys = useMemo(
@@ -228,16 +235,28 @@ export const RequirementModuleSidebar = (props: TProps) => {
 
   const getMenuItems = (node: TModuleTreeNode): TModuleTreeMenuItem[] => {
     if (readonly) return [];
-    const addChild: TModuleTreeMenuItem = {
-      key: "add",
-      label: t("requirement_modules.add_child"),
-      icon: <FolderPlus className="size-3.5" strokeWidth={1.75} />,
-      onClick: () => startCreate(node.key),
-    };
+    const addChildItems: TModuleTreeMenuItem[] = [
+      {
+        key: "add",
+        label: t("requirement_modules.add_child"),
+        icon: <FolderPlus className="size-3.5" strokeWidth={1.75} />,
+        onClick: () => startCreate(node.key),
+      },
+      ...(canBulk
+        ? [
+            {
+              key: "bulk-add",
+              label: "批量添加子模块",
+              icon: <ListPlus className="size-3.5" strokeWidth={1.75} />,
+              onClick: () => setBulkParent(node.key),
+            },
+          ]
+        : []),
+    ];
     // 来自产品分类的一级模块：只能往下建，改名 / 删除要去分类里做
     if (lockedKeys.has(node.key)) {
       return [
-        addChild,
+        ...addChildItems,
         {
           key: "locked-note",
           label: t("requirement_modules.locked_by_category", { name: lockedRootCategoryName ?? "" }),
@@ -248,7 +267,7 @@ export const RequirementModuleSidebar = (props: TProps) => {
       ];
     }
     return [
-      addChild,
+      ...addChildItems,
       {
         key: "rename",
         label: t("requirement_modules.rename"),
@@ -284,11 +303,31 @@ export const RequirementModuleSidebar = (props: TProps) => {
         dragMode={readonly ? "none" : "sort"}
         onDrop={(event) => void handleDrop(event)}
         onAddRoot={readonly || isRootLocked ? undefined : () => startCreate(MODULE_TREE_ROOT_KEY)}
+        onBulkAdd={
+          canBulk
+            ? () =>
+                setBulkParent(selectedModuleId && selectedModuleId !== UNASSIGNED_MODULE_KEY ? selectedModuleId : null)
+            : undefined
+        }
         railLabel={(selectedModuleId && nodeByKey.get(selectedModuleId)?.label) || allLabel}
         loading={store.isLoading}
         emptyText={t("requirement_modules.empty")}
         bottom={bottom}
       />
+      {store.bulkCreateModules && (
+        <ModuleBulkCreateModal
+          isOpen={bulkParent !== undefined}
+          onClose={() => setBulkParent(undefined)}
+          nodes={treeNodes}
+          defaultParentKey={bulkParent ?? null}
+          allowTopLevel={!isRootLocked}
+          onSubmit={store.bulkCreateModules}
+          onCreated={(parentKey, result) =>
+            // 展开上级和新建的模块，让新子树直接可见
+            setExpandedKeys((prev) => Array.from(new Set([...prev, ...(parentKey ? [parentKey] : []), ...result.ids])))
+          }
+        />
+      )}
       <AlertModalCore
         isOpen={deleteTarget !== null}
         handleClose={() => setDeleteTarget(null)}

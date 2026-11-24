@@ -7,12 +7,14 @@ import { createPortal } from "react-dom";
 import { PageHead } from "@/components/core/page-title";
 import { Col, Dropdown, Modal, Pagination, Row, Tag } from "antd";
 import { ShareAltOutlined } from "@ant-design/icons";
-import { Copy, FolderInput, FolderLock, FolderPlus, Lock, Pencil, Trash2 } from "lucide-react";
+import { Copy, FolderInput, FolderLock, FolderPlus, ListPlus, Lock, Pencil, Trash2 } from "lucide-react";
 import {
   appendUnassignedNode,
   MODULE_TREE_ROOT_KEY,
+  ModuleBulkCreateModal,
   ModuleTreePanel,
   UNASSIGNED_MODULE_KEY,
+  type TBulkModuleItem,
   type TModuleTreeEditing,
   type TModuleTreeMenuItem,
   type TModuleTreeNode,
@@ -232,6 +234,8 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
   });
   // 树的行内编辑态（新建 / 重命名），同一时间只有一个
   const [editing, setEditing] = useState<TModuleTreeEditing>(null);
+  /** 批量新建弹窗：undefined = 关；null = 顶级；string = 上级模块 */
+  const [bulkParent, setBulkParent] = useState<string | null | undefined>(undefined);
   const [copyingModule, setCopyingModule] = useState<{ id: string; name: string } | null>(null);
   const [movingModule, setMovingModule] = useState<{ id: string; name: string } | null>(null);
 
@@ -590,15 +594,34 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
     });
   }, [modules, unassignedTotal, selectedModuleId, lockedRootKeys]);
 
+  const handleBulkCreate = async (parent: string | null, items: TBulkModuleItem[]) => {
+    const result = await caseModuleService.bulkCreateCaseModules(workspaceSlug as string, {
+      repository: repositoryId as string,
+      parent,
+      items,
+    });
+    await fetchModules();
+    return result;
+  };
+
   const getMenuItems = (node: TModuleTreeNode): TModuleTreeMenuItem[] => {
     if (!repositoryId) return [];
-    const addItem: TModuleTreeMenuItem = {
-      key: "add",
-      label: "添加子模块",
-      icon: <FolderPlus className="size-3.5" strokeWidth={1.75} />,
-      disabled: !canCreateCase,
-      onClick: () => handleAddUnderNode(node.key),
-    };
+    const addItems: TModuleTreeMenuItem[] = [
+      {
+        key: "add",
+        label: "添加子模块",
+        icon: <FolderPlus className="size-3.5" strokeWidth={1.75} />,
+        disabled: !canCreateCase,
+        onClick: () => handleAddUnderNode(node.key),
+      },
+      {
+        key: "bulk-add",
+        label: "批量添加子模块",
+        icon: <ListPlus className="size-3.5" strokeWidth={1.75} />,
+        disabled: !canCreateCase,
+        onClick: () => setBulkParent(node.key),
+      },
+    ];
     const copyItem: TModuleTreeMenuItem = {
       key: "copy",
       label: "复制",
@@ -609,7 +632,7 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
     // 受控一级：只能在下面建子模块、复制，改名 / 移动 / 删除由产品模板统一维护
     if (lockedRootKeys.has(node.key)) {
       return [
-        addItem,
+        ...addItems,
         copyItem,
         {
           key: "locked-note",
@@ -621,7 +644,7 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
       ];
     }
     return [
-      addItem,
+      ...addItems,
       {
         key: "rename",
         label: "重命名",
@@ -986,6 +1009,14 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
                   ? () => handleAddUnderNode(MODULE_TREE_ROOT_KEY)
                   : undefined
               }
+              onBulkAdd={
+                repositoryId && canCreateCase
+                  ? () =>
+                      setBulkParent(
+                        selectedModuleId && selectedModuleId !== UNASSIGNED_MODULE_KEY ? selectedModuleId : null
+                      )
+                  : undefined
+              }
               railLabel={selectedModuleName || "全部用例"}
             />
             {/* 右侧表格 */}
@@ -1243,6 +1274,20 @@ export const RepositoryCasesView = (props: TRepositoryCasesViewProps) => {
             setCopyingModule(null);
             fetchModules();
           }}
+        />
+      )}
+
+      {repositoryId && (
+        <ModuleBulkCreateModal
+          isOpen={bulkParent !== undefined}
+          onClose={() => setBulkParent(undefined)}
+          nodes={treeNodes}
+          defaultParentKey={bulkParent ?? null}
+          allowTopLevel={!isRootLocked}
+          onSubmit={handleBulkCreate}
+          onCreated={(parentKey, result) =>
+            setExpandedKeys((prev) => Array.from(new Set([...prev, ...(parentKey ? [parentKey] : []), ...result.ids])))
+          }
         />
       )}
 

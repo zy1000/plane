@@ -1,4 +1,5 @@
 // services
+import type { TBulkModuleItem, TBulkModuleResult } from "@/services/qa/module-bulk.types";
 import { APIService } from "@/services/api.service";
 import { API_BASE_URL } from "@plane/constants";
 
@@ -161,6 +162,19 @@ export class ReportService extends APIService {
     data: { name: string; parent?: string | null }
   ): Promise<TReportModule> {
     return this.post(this.moduleUrl(workspaceSlug, projectId), data)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 批量新建模块（缩进树），同级重名跳过 */
+  async bulkCreateReportModules(
+    workspaceSlug: string,
+    projectId: string,
+    data: { parent: string | null; items: TBulkModuleItem[] }
+  ): Promise<TBulkModuleResult> {
+    return this.post(`${this.moduleUrl(workspaceSlug, projectId)}bulk/`, data)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;

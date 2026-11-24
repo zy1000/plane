@@ -7,15 +7,17 @@ import { ProjectProductSwitcher } from "@/components/qa/shared/testhub/case-scop
 import { tmProjectProductBasePath } from "@/components/qa/shared/testhub/route-helpers";
 import { PageHead } from "@/components/core/page-title";
 import { Modal, Pagination } from "antd";
-import { FolderPlus, Pencil, Trash2 } from "lucide-react";
+import { FolderPlus, ListPlus, Pencil, Trash2 } from "lucide-react";
 import styles from "./reviews.module.css";
 import { CaseService } from "@/services/qa/review.service";
 import {
   MODULE_TREE_ROOT_KEY,
+  ModuleBulkCreateModal,
   ModuleTreePanel,
   UNASSIGNED_MODULE_KEY,
   UNASSIGNED_MODULE_LABEL,
   appendUnassignedNode,
+  type TBulkModuleItem,
   type TModuleTreeDropEvent,
   type TModuleTreeEditing,
   type TModuleTreeMenuItem,
@@ -128,6 +130,8 @@ export default function ReviewsPage() {
   const [modules, setModules] = useState<ReviewModule[]>([]);
   // 树的行内编辑态（新建 / 重命名），同一时间只有一个
   const [editing, setEditing] = useState<TModuleTreeEditing>(null);
+  /** 批量新建弹窗：undefined = 关；null = 顶级；string = 上级模块 */
+  const [bulkParent, setBulkParent] = useState<string | null | undefined>(undefined);
   const [expandedKeys, setExpandedKeys] = useState<string[]>([]);
   const [reviews, setReviews] = useState<ReviewItem[]>(initialReviews);
   const [total, setTotal] = useState<number>(0);
@@ -272,6 +276,16 @@ export default function ReviewsPage() {
     }
   };
 
+  const handleBulkCreate = async (parent: string | null, items: TBulkModuleItem[]) => {
+    const result = await caseService.bulkCreateReviewModules(workspaceSlug as string, {
+      product: productId as string,
+      parent,
+      items,
+    });
+    await fetchModules();
+    return result;
+  };
+
   const startRenameNode = (moduleId: string, currentName: string) => {
     if (!canEditReview) return;
     setEditing({ kind: "rename", key: moduleId, initialValue: currentName });
@@ -364,6 +378,13 @@ export default function ReviewsPage() {
         icon: <FolderPlus className="size-3.5" strokeWidth={1.75} />,
         disabled: !canCreateReview,
         onClick: () => handleAddUnderNode(node.key),
+      },
+      {
+        key: "bulk-add",
+        label: "批量添加子模块",
+        icon: <ListPlus className="size-3.5" strokeWidth={1.75} />,
+        disabled: !canCreateReview,
+        onClick: () => setBulkParent(node.key),
       },
     ];
     if (!module.is_default) {
@@ -511,6 +532,14 @@ export default function ReviewsPage() {
           dragMode={canEditReview ? "reparent" : "none"}
           onDrop={handleTreeDrop}
           onAddRoot={canCreateReview ? () => handleAddUnderNode(MODULE_TREE_ROOT_KEY) : undefined}
+          onBulkAdd={
+            canCreateReview
+              ? () =>
+                  setBulkParent(
+                    selectedModuleId && selectedModuleId !== UNASSIGNED_MODULE_KEY ? selectedModuleId : null
+                  )
+              : undefined
+          }
           railLabel={selectedModuleName || "全部评审"}
         />
         <div className={`${styles.right} overflow-hidden !py-0`}>
@@ -600,6 +629,16 @@ export default function ReviewsPage() {
             }}
           />
         )}
+        <ModuleBulkCreateModal
+          isOpen={bulkParent !== undefined}
+          onClose={() => setBulkParent(undefined)}
+          nodes={treeNodes}
+          defaultParentKey={bulkParent ?? null}
+          onSubmit={handleBulkCreate}
+          onCreated={(parentKey, result) =>
+            setExpandedKeys((prev) => Array.from(new Set([...prev, ...(parentKey ? [parentKey] : []), ...result.ids])))
+          }
+        />
       </div>
     </div>
   );

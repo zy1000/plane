@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { PanelLeftClose, PanelLeftOpen, Plus, Search, X } from "lucide-react";
-import { Tooltip } from "@plane/ui";
+import { CustomMenu, Tooltip } from "@plane/ui";
 import { cn } from "@plane/utils";
 import useLocalStorage from "@/hooks/use-local-storage";
 import { ModuleTree, type TModuleTreeProps } from "./module-tree";
@@ -50,6 +50,8 @@ export type TModuleTreePanelProps = Omit<TModuleTreeProps, "query" | "className"
   bottom?: ReactNode;
   /** 传了才显示「新建一级模块」按钮 */
   onAddRoot?: () => void;
+  /** 传了则「+」展开为「新建模块 / 批量新建」两项 */
+  onBulkAdd?: () => void;
   searchable?: boolean;
   collapsible?: boolean;
   /** 收起成窄条时竖排显示的文字（通常是当前选中项） */
@@ -69,6 +71,7 @@ export const ModuleTreePanel = ({
   top,
   bottom,
   onAddRoot,
+  onBulkAdd,
   searchable = true,
   collapsible = true,
   railLabel,
@@ -186,11 +189,30 @@ export const ModuleTreePanel = ({
                 <Search className="size-[15px]" strokeWidth={2} />
               </IconButton>
             )}
-            {onAddRoot && (
-              <IconButton tip="新建模块" onClick={onAddRoot}>
+            {onAddRoot && onBulkAdd ? (
+              <CustomMenu
+                closeOnSelect
+                placement="bottom-end"
+                ariaLabel="新建模块"
+                customButton={
+                  <span className="flex size-[26px] shrink-0 items-center justify-center rounded-md text-tertiary hover:bg-layer-transparent-hover hover:text-primary">
+                    <Plus className="size-[15px]" strokeWidth={2} />
+                  </span>
+                }
+                optionsClassName="min-w-[140px]"
+              >
+                <CustomMenu.MenuItem onClick={onAddRoot} className="px-2 py-1.5 text-13 text-primary">
+                  新建模块
+                </CustomMenu.MenuItem>
+                <CustomMenu.MenuItem onClick={onBulkAdd} className="px-2 py-1.5 text-13 text-primary">
+                  批量新建
+                </CustomMenu.MenuItem>
+              </CustomMenu>
+            ) : onAddRoot || onBulkAdd ? (
+              <IconButton tip={onAddRoot ? "新建模块" : "批量新建"} onClick={(onAddRoot ?? onBulkAdd)!}>
                 <Plus className="size-[15px]" strokeWidth={2} />
               </IconButton>
-            )}
+            ) : null}
             {collapsible && (
               <IconButton tip="收起目录" onClick={() => setCollapsed(true)}>
                 <PanelLeftClose className="size-[15px]" strokeWidth={2} />
@@ -208,16 +230,27 @@ export const ModuleTreePanel = ({
         {isEmpty && (
           <div className="flex flex-col items-center gap-2.5 px-3 pt-12 text-13 text-tertiary">
             <span>{emptyText}</span>
-            {onAddRoot && (
-              <button
-                type="button"
-                onClick={onAddRoot}
-                className="flex h-[30px] items-center gap-1.5 rounded-md border border-strong bg-surface-1 px-3 text-13 font-medium text-primary hover:bg-layer-transparent-hover"
-              >
-                <Plus className="size-3.5" strokeWidth={2} />
-                新建模块
-              </button>
-            )}
+            <div className="flex items-center gap-2">
+              {onAddRoot && (
+                <button
+                  type="button"
+                  onClick={onAddRoot}
+                  className="flex h-[30px] items-center gap-1.5 rounded-md border border-strong bg-surface-1 px-3 text-13 font-medium text-primary hover:bg-layer-transparent-hover"
+                >
+                  <Plus className="size-3.5" strokeWidth={2} />
+                  新建模块
+                </button>
+              )}
+              {onBulkAdd && (
+                <button
+                  type="button"
+                  onClick={onBulkAdd}
+                  className="flex h-[30px] items-center rounded-md border border-strong bg-surface-1 px-3 text-13 font-medium text-primary hover:bg-layer-transparent-hover"
+                >
+                  批量新建
+                </button>
+              )}
+            </div>
           </div>
         )}
         {noMatch && <NoMatchHint nodes={treeProps.nodes} query={query} />}

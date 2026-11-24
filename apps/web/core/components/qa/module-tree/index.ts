@@ -5,3 +5,5 @@ export * from "./unassigned-node";
 export { ModuleTree, type TModuleTreeProps, type TModuleTreeRoot } from "./module-tree";
 export { ModuleTreePanel, type TModuleTreePanelProps } from "./module-tree-panel";
 export { MODULE_TREE_SKIN_CLASS, ModuleTreeSkinStyles, ModuleTreeTitle, moduleTreeSwitcherIcon } from "./antd-tree-skin";
+export * from "./module-bulk-utils";
+export { ModuleBulkCreateModal, type TModuleBulkCreateModalProps } from "./module-bulk-create-modal";
