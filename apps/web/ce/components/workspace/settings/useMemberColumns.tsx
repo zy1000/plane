@@ -13,6 +13,7 @@ import {
   WORKSPACE_MEMBER_REMOVE_PERMISSION_KEY,
 } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
+import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { renderFormattedDate } from "@plane/utils";
 import { MemberHeaderColumn } from "@/components/project/member-header-column";
 import type { RowData } from "@/components/workspace/settings/member-columns";
@@ -21,6 +22,9 @@ import {
   NetworkZoneColumn,
   PermissionGroupsColumn,
 } from "@/components/workspace/settings/member-columns";
+import { MemberInlineMultiSelect } from "@/components/workspace/settings/member-inline-select";
+import type { TInlineSelectOption } from "@/components/workspace/settings/member-inline-select";
+import type { TAssignablePermissionGroupKind } from "@/components/workspace/settings/permission-group-kind";
 import { PERMISSION_GROUP_KIND_LABELS } from "@/components/workspace/settings/permission-group-kind";
 import { JobRoleTags } from "@/components/workspace/settings/permission-groups/job-role-tags";
 import { MemberIdentityCell } from "@/components/workspace/settings/permission-groups/member-identity-cell";
@@ -46,11 +50,12 @@ export const useMemberColumns = () => {
   const slug = workspaceSlug?.toString() ?? "";
 
   const { data: currentUser } = useUser();
-  const { allowWorkspacePermissionKeys } = useUserPermissions();
+  const { allowWorkspacePermissionKeys, fetchWorkspacePermissionKeys } = useUserPermissions();
   const { currentWorkspace } = useWorkspace();
   const {
     workspace: {
       filtersStore: { filters, updateFilters },
+      updateMemberAccess,
     },
   } = useMember();
   const { t } = useTranslation();
@@ -69,6 +74,55 @@ export const useMemberColumns = () => {
   const groupMap = useMemo(() => new Map(roles.map((role) => [role.id, role])), [roles]);
 
   const isSuspended = (rowData: RowData) => rowData.is_active === false;
+  /** 表格里能直接改角色 / 权限组：有编辑成员权限、不是所有者、没停用（与「编辑」按钮同口径） */
+  const canInlineEdit = (rowData: RowData) =>
+    canEditMember && !isSuspended(rowData) && !(ownerId && rowData.member.id === ownerId);
+
+  const jobRoleOptions: TInlineSelectOption[] = useMemo(
+    () => jobRoles.map((item) => ({ id: item.id, label: item.label })),
+    [jobRoles]
+  );
+
+  const saveAccess = async (rowData: RowData, payload: { custom_role_ids?: string[]; job_role_ids?: string[] }) => {
+    try {
+      await updateMemberAccess(slug, rowData.member.id, payload);
+      // 改的是自己：权限可能变了，刷新自己的 key
+      if (rowData.member.id === currentUser?.id) await fetchWorkspacePermissionKeys(slug);
+      setToast({ type: TOAST_TYPE.SUCCESS, title: "已保存" });
+    } catch (error) {
+      const payloadError = error as { error?: string; custom_role_ids?: string[]; job_role_ids?: string[] } | undefined;
+      setToast({
+        type: TOAST_TYPE.ERROR,
+        title: "保存失败",
+        message: payloadError?.error ?? payloadError?.custom_role_ids?.[0] ?? payloadError?.job_role_ids?.[0],
+      });
+    }
+  };
+
+  /** 某一类权限组的单元格：只改这一类，另一类（及未识别的 id）原样带回；经团队拿到的组勾着不可取消 */
+  const renderGroupCell = (rowData: RowData, kind: TAssignablePermissionGroupKind) => {
+    const isKind = (id: string) => groupMap.get(id)?.kind === kind;
+    const direct = rowData.custom_role_ids ?? [];
+    const directOfKind = direct.filter(isKind);
+    const viaTeam = new Set((rowData.group_role_ids ?? []).filter((id) => !direct.includes(id)));
+    const options: TInlineSelectOption[] = roles
+      .filter((group) => group.kind === kind)
+      .map((group) =>
+        viaTeam.has(group.id)
+          ? { id: group.id, label: group.name, locked: true, hint: "经团队" }
+          : { id: group.id, label: group.name }
+      );
+    return (
+      <MemberInlineMultiSelect
+        value={directOfKind}
+        options={options}
+        disabled={!canInlineEdit(rowData)}
+        searchPlaceholder={`搜索${PERMISSION_GROUP_KIND_LABELS[kind]}`}
+        display={<PermissionGroupsColumn rowData={rowData} groupMap={groupMap} kind={kind} />}
+        onSave={(ids) => saveAccess(rowData, { custom_role_ids: [...direct.filter((id) => !isKind(id)), ...ids] })}
+      />
+    );
+  };
 
   // handlers
   const handleDisplayFilterUpdate = (filterUpdates: Partial<IMemberFilters>) => {
@@ -117,20 +171,27 @@ export const useMemberColumns = () => {
       content: "角色",
       width: 170,
       tdRender: (rowData: RowData) => (
-        <JobRoleTags jobRoleIds={rowData.job_role_ids} jobRoleMap={jobRoleMap} isColored={isColored} />
+        <MemberInlineMultiSelect
+          value={rowData.job_role_ids ?? []}
+          options={jobRoleOptions}
+          disabled={!canInlineEdit(rowData)}
+          searchPlaceholder="搜索角色"
+          display={<JobRoleTags jobRoleIds={rowData.job_role_ids} jobRoleMap={jobRoleMap} isColored={isColored} />}
+          onSave={(ids) => saveAccess(rowData, { job_role_ids: ids })}
+        />
       ),
     },
     {
       key: "Workspace permission groups",
       content: PERMISSION_GROUP_KIND_LABELS.workspace,
       width: 160,
-      tdRender: (rowData: RowData) => <PermissionGroupsColumn rowData={rowData} groupMap={groupMap} kind="workspace" />,
+      tdRender: (rowData: RowData) => renderGroupCell(rowData, "workspace"),
     },
     {
       key: "Data permission groups",
       content: PERMISSION_GROUP_KIND_LABELS.data,
       width: 130,
-      tdRender: (rowData: RowData) => <PermissionGroupsColumn rowData={rowData} groupMap={groupMap} kind="data" />,
+      tdRender: (rowData: RowData) => renderGroupCell(rowData, "data"),
     },
 
     // 大网 / 小网归属：隔离开关开着、且能编辑成员才有这一列（后端只给管理员视图返回归属）
