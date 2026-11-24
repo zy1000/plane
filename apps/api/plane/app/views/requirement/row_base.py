@@ -392,6 +392,14 @@ class BaseRequirementRowViewSet(RequirementExcelMixin, BaseViewSet):
             queryset, layer, prepare_rows=lambda rows: self.prepare_rows(owner, rows)
         )
 
+        # 只要命中的 id、不分页：导入弹窗「全选 N 条匹配结果」要跨页勾选，
+        # 分页拉整行再凑 id 太重
+        if request.query_params.get("ids_only") in ("true", "1"):
+            return Response(
+                {"ids": [str(row_id) for row_id in queryset.values_list("id", flat=True)]},
+                status=status.HTTP_200_OK,
+            )
+
         return self.paginate(
             request=request,
             queryset=self.annotate_extra(annotate_pending(queryset)),

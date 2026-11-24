@@ -122,19 +122,22 @@ export const collectModuleIds = (modules: TRequirementModule[], moduleId: string
   return new Set();
 };
 
-const indexModuleNames = (modules: TRequirementModule[], into: Map<string, string>) => {
-  modules.forEach((node) => {
-    into.set(node.id, node.name);
-    indexModuleNames(node.children ?? [], into);
-  });
-  return into;
+/** 已选条目的一个来源：某个库里挂在同一个模块（或未归类）下的那批 */
+export type TSelectionSource = {
+  key: string;
+  libraryId: string;
+  /** 模块名；该库的模块树还没拉回来时先用库名顶上 */
+  name: string;
+  /** 模块的上级路径（库名 / 上级模块）；没有模块层级可说时为空 */
+  caption: string;
+  itemIds: string[];
 };
 
 /**
- * 底栏「来自 X、Y 等 K 个模块」：已选条目按所属模块去重后的名称，按首次出现排序。
- * 模块树是按需拉的，没拉过树的库认不出模块名，退回用库名顶上。
+ * 已选条目按「库 → 所属模块」归堆，库按左树顺序、条目按库内顺序。
+ * 底栏「计量功能 18 · 费控功能 20」与「已选」核对页的分组都用它。
  */
-export const collectSelectionSourceNames = ({
+export const groupSelectionSources = ({
   selected,
   itemsByLibrary,
   treesByLibrary,
@@ -146,21 +149,40 @@ export const collectSelectionSourceNames = ({
   treesByLibrary: Map<string, TRequirementModule[]>;
   libraries: TRequirementLibrary[];
   unassignedLabel: string;
-}): string[] => {
-  const names = new Set<string>();
-  selected.forEach((picked, libraryId) => {
-    if (!picked.size) return;
-    const libraryName = libraries.find((library) => library.id === libraryId)?.name ?? "";
-    const tree = treesByLibrary.get(libraryId);
-    const moduleNames = tree ? indexModuleNames(tree, new Map()) : null;
-    const moduleOf = new Map((itemsByLibrary.get(libraryId) ?? []).map((item) => [item.id, item.module_id]));
+}): TSelectionSource[] => {
+  const sources: TSelectionSource[] = [];
+  for (const library of libraries) {
+    const picked = selected.get(library.id);
+    if (!picked?.size) continue;
+    const tree = treesByLibrary.get(library.id);
+    const byKey = new Map<string, TSelectionSource>();
+    const push = (moduleKey: string, itemId: string) => {
+      let source = byKey.get(moduleKey);
+      if (!source) {
+        const path = moduleKey === UNASSIGNED_MODULE_ID ? [unassignedLabel] : findModuleNamePath(tree ?? [], moduleKey);
+        source = {
+          key: `${library.id}:${moduleKey}`,
+          libraryId: library.id,
+          name: path.length ? path[path.length - 1] : library.name,
+          caption: path.length ? [library.name, ...path.slice(0, -1)].join(" / ") : "",
+          itemIds: [],
+        };
+        byKey.set(moduleKey, source);
+        sources.push(source);
+      }
+      source.itemIds.push(itemId);
+    };
+    const known = new Set<string>();
+    for (const item of itemsByLibrary.get(library.id) ?? []) {
+      known.add(item.id);
+      if (picked.has(item.id)) push(item.module_id ?? UNASSIGNED_MODULE_ID, item.id);
+    }
+    // 可导入集合是打开时的快照，不在里面的已选 id 不知道模块，挂到库名下
     picked.forEach((itemId) => {
-      const moduleId = moduleOf.get(itemId);
-      if (!moduleId) names.add(moduleOf.has(itemId) ? unassignedLabel : libraryName);
-      else names.add(moduleNames?.get(moduleId) ?? libraryName);
+      if (!known.has(itemId)) push(`library:${library.id}`, itemId);
     });
-  });
-  return [...names].filter(Boolean);
+  }
+  return sources;
 };
 
 type TProps = {
@@ -423,7 +445,7 @@ const TreeRow = ({
 }: TRowProps) => {
   const isDim = availableCount === 0;
   const nameTone = isActive
-    ? "font-semibold text-primary"
+    ? "font-semibold text-accent-primary"
     : isDim
       ? "text-placeholder"
       : isLibrary
@@ -433,7 +455,7 @@ const TreeRow = ({
     <div
       className={cn(
         "flex h-[34px] items-center gap-2 rounded-md pr-2 transition-colors",
-        isActive ? "bg-layer-transparent-active" : !isCheckDisabled && "hover:bg-layer-transparent-hover"
+        isActive ? "bg-accent-subtle" : !isCheckDisabled && "hover:bg-layer-transparent-hover"
       )}
       style={{ paddingLeft: `${depth * 22 + 4}px` }}
     >
@@ -467,7 +489,7 @@ const TreeRow = ({
         )}
       >
         {icon && (
-          <span className={`shrink-0 ${isActive ? "text-secondary" : "text-placeholder"}`}>{icon}</span>
+          <span className={`shrink-0 ${isActive ? "text-accent-primary" : "text-placeholder"}`}>{icon}</span>
         )}
         <span className={`min-w-0 flex-1 truncate text-14 ${nameTone}`}>{name}</span>
       </button>

@@ -416,6 +416,28 @@ export class RequirementService extends APIService {
       });
   }
 
+  /** 与 listLibraryItems 同样的筛选口径，只回命中的 id、不分页（导入弹窗「全选匹配结果」用） */
+  async listLibraryItemIds(
+    workspaceSlug: string,
+    libraryId: string,
+    params: { search?: string; moduleId?: string; excludeImportedIntoProduct?: string } = {}
+  ): Promise<string[]> {
+    return this.get(`/api/workspaces/${workspaceSlug}/requirement-libraries/${libraryId}/items/`, {
+      params: {
+        ids_only: "true",
+        ...(params.search ? { search: params.search } : {}),
+        ...(params.excludeImportedIntoProduct
+          ? { exclude_imported_into_product: params.excludeImportedIntoProduct }
+          : {}),
+        ...(params.moduleId ? { module_id: params.moduleId } : {}),
+      },
+    })
+      .then((response) => (response?.data?.ids ?? []) as string[])
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
   async createLibraryItem(
     workspaceSlug: string,
     libraryId: string,
