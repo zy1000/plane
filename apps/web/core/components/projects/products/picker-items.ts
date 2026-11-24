@@ -15,6 +15,8 @@ export type TProductPickItem = {
   isLinked: boolean;
   /** 本项目从该产品引了多少需求；大于 0 时后端拒绝解除，所以前端直接锁住 */
   requirementCount: number;
+  /** 所属产品集：表格把同一产品集的产品挂在它下面 */
+  productSet: { id: string; name: string; identifier: string } | null;
 };
 
 /**
@@ -45,6 +47,13 @@ export const buildProductPickItems = (products: TProduct[], links: TProductProje
       logoProps: product.logo_props ?? null,
       isLinked: Boolean(link),
       requirementCount: link?.requirement_count ?? 0,
+      productSet: product.product_set_detail
+        ? {
+            id: product.product_set_detail.id,
+            name: product.product_set_detail.name,
+            identifier: product.product_set_detail.identifier,
+          }
+        : null,
     };
   });
   return [...items.filter((item) => item.isLinked), ...items.filter((item) => !item.isLinked)];
@@ -63,5 +72,8 @@ export const buildLinkOnlyItems = (products: TProduct[], links: TProductProject[
       logoProps: link.product_logo_props,
       isLinked: true,
       requirementCount: link.requirement_count,
+      productSet: link.product_set_id
+        ? { id: link.product_set_id, name: link.product_set_name ?? "", identifier: "" }
+        : null,
     }));
 };

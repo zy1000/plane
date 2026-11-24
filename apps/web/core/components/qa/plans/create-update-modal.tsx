@@ -1,13 +1,15 @@
 import React, { useMemo, useRef, useState } from "react";
 import { differenceInCalendarDays } from "date-fns";
-import { ArrowRight, ChevronDown, ChevronUp, ClipboardCheck } from "lucide-react";
+import { ArrowRight, ChevronDown, ChevronUp, ClipboardCheck, Layers } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { ChevronDownIcon, CloseIcon } from "@plane/propel/icons";
 import { CustomSearchSelect, EModalPosition, EModalWidth, ModalCore, TextArea } from "@plane/ui";
+import type { TProductProject } from "@plane/types";
 import { cn, renderFormattedPayloadDate } from "@plane/utils";
 import { FORM_VARIANT_STYLES, FormFieldGroup, FormFieldShell, getFormGridClassName } from "@/components/common/form-section";
 import { DateDropdown } from "@/components/dropdowns/date";
+import { buildProductSetTree, flattenProductSetTree } from "@/components/products/sets/product-set-tree";
 import { PlanReviewRuleFields } from "./plan-review-rule-fields";
 import { usePlanReviewRule } from "./use-plan-review-rule";
 import type { TPlanReviewApprovalType } from "@/services/qa/plan.service";
@@ -50,6 +52,9 @@ type Props = {
 };
 
 type TSelectOption = { value: string; query: string; content: React.ReactNode };
+
+const productLinkLabel = (link: TProductProject) =>
+  link.product_identifier ? `${link.product_name}（${link.product_identifier}）` : link.product_name;
 
 const planService = new PlanService();
 const cycleService = new CycleService();
@@ -171,18 +176,34 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
     workspaceSlug: isOpen ? workspaceSlug : undefined,
     projectId: isOpen ? projectId : undefined,
   });
+  // 集内产品挂在本项目也关联了的产品集下面（产品集加粗 + 叠层图标，集内产品左边框缩进）
   const productOptions = useMemo<TSelectOption[]>(
     () =>
-      productLinks.map((link) => {
-        const label = link.product_identifier ? `${link.product_name}（${link.product_identifier}）` : link.product_name;
-        return {
-          value: String(link.product),
-          query: `${link.product_name} ${link.product_identifier ?? ""}`,
-          content: <span className="flex-grow truncate">{label}</span>,
-        };
-      }),
+      flattenProductSetTree(
+        buildProductSetTree(productLinks, {
+          getId: (link) => link.product,
+          isSet: (link) => link.product_is_set,
+          getSetId: (link) => link.product_set_id,
+        })
+      ).map(({ item: link, kind }) => ({
+        value: String(link.product),
+        query: `${link.product_name} ${link.product_identifier ?? ""}`,
+        content: (
+          <span
+            className={cn(
+              "flex min-w-0 flex-grow items-center gap-1.5",
+              kind === "child" && "ml-1.5 border-l border-subtle-1 pl-2.5",
+              kind === "set" && "font-medium"
+            )}
+          >
+            {kind === "set" && <Layers className="size-3 shrink-0 text-label-indigo-icon" />}
+            <span className="truncate">{productLinkLabel(link)}</span>
+          </span>
+        ),
+      })),
     [productLinks]
   );
+  const selectedProductLink = productLinks.find((link) => String(link.product) === productId);
   // 新建时项目只关联了一个产品就直接选上
   React.useEffect(() => {
     if (!isOpen || mode !== "create" || productId || productLinks.length !== 1) return;
@@ -454,7 +475,12 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
                   customButtonClassName={selectButtonClassName}
                   customButton={
                     <SelectButton
-                      label={productOptions.find((o) => o.value === productId)?.content}
+                      // 选中框只放名称，不带下拉里的缩进
+                      label={
+                        selectedProductLink ? (
+                          <span className="flex-grow truncate">{productLinkLabel(selectedProductLink)}</span>
+                        ) : undefined
+                      }
                       placeholder={
                         !productsLoading && productOptions.length === 0 ? "本项目还没有关联产品" : "请选择产品"
                       }

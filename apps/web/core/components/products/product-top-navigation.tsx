@@ -21,6 +21,7 @@ import {
   PRODUCT_SET_NAVIGATION_ITEMS,
 } from "./navigation";
 import { hasProductPermission } from "./permissions";
+import { buildProductSetTree, flattenProductSetTree } from "./sets/product-set-tree";
 import { buildProductSettingsPath } from "./settings/navigation";
 
 type TProductTopNavigationProps = {
@@ -44,7 +45,7 @@ function ProductSwitcherButton({ product }: { product: TProduct }) {
   return (
     <Tooltip tooltipContent={product.name} position="bottom">
       <div className="relative flex w-full max-w-48 items-center pr-1 text-left select-none">
-        <div className="flex size-7 flex-shrink-0 items-center justify-center rounded-md bg-layer-1 text-secondary">
+        <div className="flex size-7 flex-shrink-0 items-center justify-center rounded-md text-secondary">
           <ProductIcon product={product} size={16} />
         </div>
         <div className="relative min-w-0 flex-1 hover:rounded">
@@ -150,25 +151,42 @@ const ProductNavigationRoot = observer(function ProductNavigationRoot(props: TPr
       })),
     [canManage, isSet, productId, workspaceSlug]
   );
-  const switcherOptions = useMemo<ICustomSearchSelectOption[]>(
-    () =>
-      (isSet
-        ? sets.productSets.map((productSet) => ({ ...productSet, is_set: true }))
-        : products.filter((product) => !product.is_set)
-      ).map((product) => ({
-        value: product.id,
-        query: product.name,
-        content: (
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="flex size-6 shrink-0 items-center justify-center rounded bg-layer-1 text-secondary">
-              <ProductIcon product={product} size={14} />
-            </span>
-            <span className="truncate text-12 text-primary">{product.name}</span>
-          </div>
-        ),
-      })),
-    [isSet, products, sets.productSets]
-  );
+  /** 产品集与产品同一个切换器：产品集在前，集内产品缩进挂在它下面，其余产品在后 */
+  const switcherOptions = useMemo<ICustomSearchSelectOption[]>(() => {
+    const setNameById = new Map(sets.productSets.map((productSet) => [productSet.id, productSet.name]));
+    const rows = flattenProductSetTree(
+      buildProductSetTree(
+        [
+          ...sets.productSets.map((productSet) => ({ ...productSet, is_set: true, product_set: null })),
+          ...products.filter((product) => !product.is_set),
+        ],
+        {
+          getId: (product) => product.id,
+          isSet: (product) => Boolean(product.is_set),
+          getSetId: (product) => product.product_set,
+        }
+      )
+    );
+    return rows.map(({ item: product, kind }) => ({
+      value: product.id,
+      // 搜产品集名也能找到它的集内产品
+      query: `${product.name} ${product.identifier} ${product.product_set ? (setNameById.get(product.product_set) ?? "") : ""}`,
+      content: (
+        <div className={cn("flex min-w-0 items-center gap-2", kind === "child" && "ml-2.5 border-l border-subtle-1 pl-2.5")}>
+          <span
+            className={cn(
+              "flex size-6 shrink-0 items-center justify-center rounded",
+              kind === "set" ? "text-label-indigo-icon" : "text-secondary"
+            )}
+          >
+            <ProductIcon product={product} size={14} />
+          </span>
+          <span className={`truncate text-12 text-primary ${kind === "set" ? "font-medium" : ""}`}>{product.name}</span>
+          <span className="ml-auto shrink-0 font-mono text-11 text-tertiary">{product.identifier}</span>
+        </div>
+      ),
+    }));
+  }, [products, sets.productSets]);
   const isActive = useCallback(
     (item: TProductRouteNavigationItem) =>
       pathname === item.href ||

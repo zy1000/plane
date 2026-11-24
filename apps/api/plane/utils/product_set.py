@@ -40,7 +40,12 @@ def _count_by_product(queryset, field="product_id"):
 
 
 def product_set_stats(product_sets, user):
-    """列表页每个产品集的汇总：集内产品、需求数、用例数、未关闭缺陷数。返回 {产品集 id（字符串）: 数据}。"""
+    """列表页每个产品集的汇总：集内产品、需求数、用例数、未关闭缺陷数。返回 {产品集 id（字符串）: 数据}。
+
+    集内产品各自也带这三个数字和负责人 / 更新时间：列表把产品挂在产品集下面当子行显示。
+    """
+    from plane.app.serializers.user import UserLiteSerializer  # 避免 serializers ↔ utils 循环导入
+
     stats = {
         str(product_set.id): {"products": [], "requirement_count": 0, "case_count": 0, "open_defect_count": 0}
         for product_set in product_sets
@@ -50,41 +55,44 @@ def product_set_stats(product_sets, user):
     set_ids = [product_set.id for product_set in product_sets]
     workspace = product_sets[0].workspace
 
-    members = (
+    members = list(
         filter_visible_products(
             Product.objects.filter(workspace_id=workspace.id, product_set_id__in=set_ids), user, workspace
         )
+        .select_related("owner__avatar_asset")
         .order_by("product_set_joined_at", "created_at")
-        .values("id", "name", "identifier", "product_set_id")
     )
-    for member in members:
-        stats[str(member["product_set_id"])]["products"].append(
-            {"id": member["id"], "name": member["name"], "identifier": member["identifier"]}
-        )
+    # 产品集与集内产品一起统计，一类数字一次分组查询
+    product_ids = set_ids + [member.id for member in members]
+    counts = {
+        "requirement_count": _count_by_product(Requirement.objects.filter(product_id__in=product_ids)),
+        "case_count": _count_by_product(
+            TestCase.objects.filter(repository__product_id__in=product_ids, repository__is_template=False),
+            "repository__product_id",
+        ),
+        "open_defect_count": _count_by_product(
+            Issue.issue_objects.filter(
+                product_id__in=product_ids,
+                type__category__name=DEFECT_TYPE_CATEGORY_NAME,
+                project__archived_at__isnull=True,
+            ).exclude(state__group__in=CLOSED_STATE_GROUPS)
+        ),
+    }
 
-    counts = (
-        ("requirement_count", _count_by_product(Requirement.objects.filter(product_id__in=set_ids))),
-        (
-            "case_count",
-            _count_by_product(
-                TestCase.objects.filter(repository__product_id__in=set_ids, repository__is_template=False),
-                "repository__product_id",
-            ),
-        ),
-        (
-            "open_defect_count",
-            _count_by_product(
-                Issue.issue_objects.filter(
-                    product_id__in=set_ids,
-                    type__category__name=DEFECT_TYPE_CATEGORY_NAME,
-                    project__archived_at__isnull=True,
-                ).exclude(state__group__in=CLOSED_STATE_GROUPS)
-            ),
-        ),
-    )
-    for key, by_set in counts:
-        for set_id, count in by_set.items():
-            stats[str(set_id)][key] = count
+    for member in members:
+        stats[str(member.product_set_id)]["products"].append(
+            {
+                "id": member.id,
+                "name": member.name,
+                "identifier": member.identifier,
+                "owner_detail": UserLiteSerializer(member.owner).data if member.owner_id else None,
+                "updated_at": member.updated_at,
+                **{key: by_product.get(member.id, 0) for key, by_product in counts.items()},
+            }
+        )
+    for key, by_product in counts.items():
+        for set_id in set_ids:
+            stats[str(set_id)][key] = by_product.get(set_id, 0)
     return stats
 
 

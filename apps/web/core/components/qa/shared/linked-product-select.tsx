@@ -3,8 +3,10 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Select } from "antd";
-import { PackageOpen } from "lucide-react";
+import { Layers, Package, PackageOpen } from "lucide-react";
 import type { TProductProject } from "@plane/types";
+import { cn } from "@plane/utils";
+import { buildProductSetTree, flattenProductSetTree } from "@/components/products/sets/product-set-tree";
 import { useProjectProducts } from "@/hooks/store/use-project-products";
 
 /**
@@ -51,10 +53,34 @@ export function LinkedProductSelect({ links, value, onChange, className }: TLink
       onChange={(next: string) => onChange(next)}
       placeholder="选择产品"
       popupMatchSelectWidth={false}
-      options={links.map((link) => ({
+      // 集内产品挂在本项目也关联了的产品集下面；label 仍是纯文字，选中框里不带缩进
+      options={flattenProductSetTree(
+        buildProductSetTree(links, {
+          getId: (link) => link.product,
+          isSet: (link) => link.product_is_set,
+          getSetId: (link) => link.product_set_id,
+        })
+      ).map(({ item: link, kind }) => ({
         value: link.product,
         label: link.product_identifier ? `${link.product_name}（${link.product_identifier}）` : link.product_name,
+        kind,
       }))}
+      optionRender={(option) => (
+        <span
+          className={cn(
+            "flex min-w-0 items-center gap-1.5",
+            option.data.kind === "child" && "ml-1.5 border-l border-subtle-1 pl-2.5",
+            option.data.kind === "set" && "font-medium"
+          )}
+        >
+          {option.data.kind === "set" ? (
+            <Layers className="size-3 shrink-0 text-label-indigo-icon" />
+          ) : (
+            <Package className="size-3 shrink-0 text-tertiary" />
+          )}
+          <span className="truncate">{option.label}</span>
+        </span>
+      )}
     />
   );
 }

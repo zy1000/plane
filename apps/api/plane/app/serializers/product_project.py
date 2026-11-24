@@ -33,6 +33,10 @@ class ProductProjectSerializer(BaseSerializer):
     product_set_name = serializers.CharField(
         source="product.product_set.name", read_only=True, allow_null=True
     )
+    # 所属产品集 id：前端把产品挂到产品集下面显示父子结构，按名字挂会在重名时挂错
+    product_set_id = serializers.UUIDField(
+        source="product.product_set_id", read_only=True, allow_null=True
+    )
     # 项目概览「关联产品」卡要一眼看到产品处在哪个阶段、谁在负责；老产品这两项
     # 可能为空（迁移后未补齐），前端按空处理。视图 select_related 到
     # product__stage__dictionary / product__project_lead，否则每行两次查询
@@ -61,6 +65,7 @@ class ProductProjectSerializer(BaseSerializer):
             "product_logo_props",
             "product_is_set",
             "product_set_name",
+            "product_set_id",
             "product_stage_detail",
             "product_project_lead_detail",
             "project_detail",

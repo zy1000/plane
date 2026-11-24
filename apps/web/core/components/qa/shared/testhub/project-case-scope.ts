@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import useSWR from "swr";
 import type { TProductProject } from "@plane/types";
+import { buildProductSetTree, flattenProductSetTree } from "@/utils/product-set-tree";
 import { useProjectProducts } from "@/hooks/store/use-project-products";
 import { RepositoryService } from "@/services/qa";
 
@@ -19,6 +20,9 @@ export type TScopeProductGroup = {
   productId: string;
   productName: string;
   productIdentifier: string;
+  /** 产品集与所属产品集：切换器据此把集内产品画在产品集下面 */
+  productIsSet: boolean;
+  productSetId: string | null;
   repositories: TScopeRepository[];
   /** 这个产品的用例库没取到（通常是没有该产品的用例查看权限） */
   failed: boolean;
@@ -56,6 +60,16 @@ export const pickDefaultProduct = (projectId: string, links: TProductProject[]):
   return links[0]?.product ?? null;
 };
 
+/** 关联行按产品集父子排：产品集、它的集内产品、下一个产品集…、独立产品（只影响切换器里的顺序） */
+export const sortLinksByProductSetTree = (links: TProductProject[]): TProductProject[] =>
+  flattenProductSetTree(
+    buildProductSetTree(links, {
+      getId: (link) => link.product,
+      isSet: (link) => link.product_is_set,
+      getSetId: (link) => link.product_set_id,
+    })
+  ).map(({ item }) => item);
+
 const fetchProductRepositories = async (
   workspaceSlug: string,
   link: TProductProject
@@ -64,6 +78,8 @@ const fetchProductRepositories = async (
     productId: link.product,
     productName: link.product_name,
     productIdentifier: link.product_identifier ?? "",
+    productIsSet: link.product_is_set,
+    productSetId: link.product_set_id,
   };
   try {
     // 逐个产品取：其中一个没权限不影响其他产品
@@ -86,7 +102,8 @@ const fetchProductRepositories = async (
 /** 项目已关联产品及各自的用例库（切换器、项目用例页共用一份 SWR 数据） */
 export const useLinkedProductRepositories = (workspaceSlug: string | undefined, projectId: string | undefined) => {
   const { links, isLoading: linksLoading, error: linksError } = useProjectProducts({ workspaceSlug, projectId });
-  const productIds = useMemo(() => links.map((link) => link.product).join(","), [links]);
+  const orderedLinks = useMemo(() => sortLinksByProductSetTree(links), [links]);
+  const productIds = useMemo(() => orderedLinks.map((link) => link.product).join(","), [orderedLinks]);
 
   const {
     data,
@@ -96,21 +113,23 @@ export const useLinkedProductRepositories = (workspaceSlug: string | undefined, 
     workspaceSlug && projectId && links.length > 0
       ? `testhub-linked-repositories-${workspaceSlug}-${projectId}-${productIds}`
       : null,
-    workspaceSlug ? () => Promise.all(links.map((link) => fetchProductRepositories(workspaceSlug, link))) : null,
+    workspaceSlug ? () => Promise.all(orderedLinks.map((link) => fetchProductRepositories(workspaceSlug, link))) : null,
     { revalidateOnFocus: false }
   );
 
   const groups = useMemo<TScopeProductGroup[]>(
     () =>
       data ??
-      links.map((link) => ({
+      orderedLinks.map((link) => ({
         productId: link.product,
         productName: link.product_name,
         productIdentifier: link.product_identifier ?? "",
+        productIsSet: link.product_is_set,
+        productSetId: link.product_set_id,
         repositories: [],
         failed: false,
       })),
-    [data, links]
+    [data, orderedLinks]
   );
 
   return {

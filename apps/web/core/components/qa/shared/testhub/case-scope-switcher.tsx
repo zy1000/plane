@@ -2,11 +2,11 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Check, ChevronsUpDown, Library, Package, Search } from "lucide-react";
+import { Check, ChevronsUpDown, Layers, Library, Package, Search } from "lucide-react";
 import { Popover } from "@plane/propel/popover";
 import { cn } from "@plane/utils";
 import { useProjectProducts } from "@/hooks/store/use-project-products";
-import type { TScopeProductGroup } from "./project-case-scope";
+import { sortLinksByProductSetTree, type TScopeProductGroup } from "./project-case-scope";
 
 type TSelection = { productId: string; repositoryId?: string; repositoryName?: string };
 
@@ -64,6 +64,10 @@ export const CaseScopeSwitcher = ({
       .filter((group): group is TScopeProductGroup => group !== null);
   }, [groups, mode, query]);
 
+  // groups 已按产品集父子排好；产品集也在列表里时，它的集内产品缩进挂在下面
+  const shownSetIds = new Set(visibleGroups.filter((group) => group.productIsSet).map((group) => group.productId));
+  const isChildGroup = (group: TScopeProductGroup) => Boolean(group.productSetId && shownSetIds.has(group.productSetId));
+
   const pick = (next: TSelection) => {
     setIsOpen(false);
     setQuery("");
@@ -77,9 +81,15 @@ export const CaseScopeSwitcher = ({
 
   const triggerBody = (
     <>
-      <span className="flex size-[30px] shrink-0 items-center justify-center rounded-[7px] bg-accent-subtle text-accent-primary">
-        <Package className="size-[17px]" strokeWidth={1.75} />
-      </span>
+      {currentGroup?.productIsSet ? (
+        <span className="flex size-[30px] shrink-0 items-center justify-center rounded-[7px] text-label-indigo-icon">
+          <Layers className="size-[17px]" strokeWidth={1.75} />
+        </span>
+      ) : (
+        <span className="flex size-[30px] shrink-0 items-center justify-center rounded-[7px] text-accent-primary">
+          <Package className="size-[17px]" strokeWidth={1.75} />
+        </span>
+      )}
       <span className="flex min-w-0 flex-1 flex-col">
         <span className="truncate text-13 leading-[18px] font-semibold text-primary">
           {currentGroup?.productName ?? "选择产品"}
@@ -136,6 +146,7 @@ export const CaseScopeSwitcher = ({
           {mode === "product" &&
             visibleGroups.map((group) => {
               const selected = group.productId === productId;
+              const isChild = isChildGroup(group);
               return (
                 <button
                   key={group.productId}
@@ -146,11 +157,24 @@ export const CaseScopeSwitcher = ({
                     selected ? "bg-accent-subtle font-medium" : "hover:bg-layer-transparent-hover"
                   )}
                 >
-                  <Package
-                    className={cn("size-4 shrink-0", selected ? "text-accent-primary" : "text-tertiary")}
-                    strokeWidth={1.75}
-                  />
-                  <span className="min-w-0 flex-1 truncate">{group.productName}</span>
+                  <span
+                    className={cn(
+                      "flex min-w-0 flex-1 items-center gap-2.5 self-stretch",
+                      isChild && "ml-1.5 border-l border-subtle-1 pl-2.5"
+                    )}
+                  >
+                    {group.productIsSet ? (
+                      <Layers className="size-4 shrink-0 text-label-indigo-icon" strokeWidth={1.75} />
+                    ) : (
+                      <Package
+                        className={cn("size-4 shrink-0", selected ? "text-accent-primary" : "text-tertiary")}
+                        strokeWidth={1.75}
+                      />
+                    )}
+                    <span className={cn("min-w-0 flex-1 truncate", group.productIsSet && "font-medium")}>
+                      {group.productName}
+                    </span>
+                  </span>
                   <IdentifierChip value={group.productIdentifier} />
                   <Check className={cn("size-4 shrink-0 text-accent-primary", !selected && "invisible")} />
                 </button>
@@ -159,9 +183,13 @@ export const CaseScopeSwitcher = ({
 
           {mode === "repository" &&
             visibleGroups.map((group, index) => (
-              <div key={group.productId} className={index > 0 ? "mt-1.5" : undefined}>
+              <div
+                key={group.productId}
+                className={cn(index > 0 && "mt-1.5", isChildGroup(group) && "ml-4 border-l border-subtle-1")}
+              >
                 <div className="flex h-[30px] items-center gap-2 px-3 text-12 font-medium text-secondary">
-                  <span className="truncate">{group.productName}</span>
+                  {group.productIsSet && <Layers className="size-3.5 shrink-0 text-label-indigo-icon" />}
+                  <span className={cn("truncate", group.productIsSet && "font-semibold")}>{group.productName}</span>
                   <IdentifierChip value={group.productIdentifier} />
                 </div>
                 {group.repositories.length === 0 && (
@@ -230,10 +258,12 @@ export const ProjectProductSwitcher = ({ workspaceSlug, projectId, productId, on
   const { links } = useProjectProducts({ workspaceSlug, projectId });
   const groups = useMemo<TScopeProductGroup[]>(
     () =>
-      links.map((link) => ({
+      sortLinksByProductSetTree(links).map((link) => ({
         productId: link.product,
         productName: link.product_name,
         productIdentifier: link.product_identifier ?? "",
+        productIsSet: link.product_is_set,
+        productSetId: link.product_set_id,
         repositories: [],
         failed: false,
       })),

@@ -10,6 +10,7 @@ import { action, makeObservable, observable, runInAction } from "mobx";
 import { computedFn } from "mobx-utils";
 import type { TFlatProductModule, TProductOption, TRequirementModule } from "@plane/types";
 import { RequirementService } from "@/services/requirement.service";
+import { buildProductSetTree, flattenProductSetTree } from "@/utils/product-set-tree";
 import type { CoreRootStore } from "./root.store";
 
 export const flattenProductModules = (
@@ -88,13 +89,23 @@ export class ProjectProductStore implements IProjectProductStore {
     const request = this.requirementService
       .listProjectProducts(workspaceSlug, projectId)
       .then((links) => {
-        const options: TProductOption[] = links.map((link) => ({
+        const unordered: TProductOption[] = links.map((link) => ({
           id: link.product,
           name: link.product_name,
           identifier: link.product_identifier,
           code: link.product_code,
           logo_props: link.product_logo_props,
+          is_set: link.product_is_set,
+          product_set_id: link.product_set_id,
         }));
+        // 按父子排：产品集后面紧跟本项目也关联了的集内产品。下拉、分组列、筛选项都按这个顺序
+        const options = flattenProductSetTree(
+          buildProductSetTree(unordered, {
+            getId: (option) => option.id,
+            isSet: (option) => option.is_set,
+            getSetId: (option) => option.product_set_id,
+          })
+        ).map(({ item }) => item);
         runInAction(() => {
           options.forEach((option) => {
             this.productMap[option.id] = option;

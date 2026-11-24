@@ -58,3 +58,38 @@ export const useProductSetMembers = (workspaceSlug: string | undefined, productS
 
   return { members, isLoading, hasError, isMutating, fetchMembers, addMembers, removeMember };
 };
+
+/**
+ * 产品集列表页上的加入 / 移出：列表一次显示多个产品集，不为每个集各拉一份成员，
+ * 只调接口；调完由调用方重拉产品集列表和产品列表（两边的汇总、所属产品集都变了）。
+ */
+export const useProductSetMemberActions = (workspaceSlug: string | undefined) => {
+  const [isMutating, setIsMutating] = useState(false);
+
+  const run = useCallback(async (action: () => Promise<unknown>) => {
+    setIsMutating(true);
+    try {
+      await action();
+    } finally {
+      setIsMutating(false);
+    }
+  }, []);
+
+  const addMembers = useCallback(
+    async (productSetId: string, productIds: string[]) => {
+      if (!workspaceSlug) throw new Error("Workspace is required.");
+      await run(() => productSetService.addMembers(workspaceSlug, productSetId, productIds));
+    },
+    [run, workspaceSlug]
+  );
+
+  const removeMember = useCallback(
+    async (productSetId: string, productId: string) => {
+      if (!workspaceSlug) throw new Error("Workspace is required.");
+      await run(() => productSetService.removeMember(workspaceSlug, productSetId, productId));
+    },
+    [run, workspaceSlug]
+  );
+
+  return { isMutating, addMembers, removeMember };
+};

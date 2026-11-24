@@ -8,6 +8,7 @@ import type { TLogoProps, TRequirement } from "@plane/types";
 import { Checkbox, Loader } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { REQUIREMENT_APPROVAL_PILL } from "@/components/products/requirements/approval/requirement-approval-cell";
+import { ProductKindIcon } from "@/components/products/sets/product-set-tree";
 import { ProductPickTile } from "@/components/projects/products/project-products-table";
 import { RequirementStatusCell } from "@/components/requirements/requirement-status-cell";
 import type { TLinkableGroupState } from "./use-linkable-requirement-groups";
@@ -22,6 +23,8 @@ export type TLinkGroupProduct = {
   logoProps: TLogoProps | null;
   /** 这一组的来源是产品集 */
   isSet?: boolean;
+  /** 所属产品集：同一弹窗里也列出了这个产品集时，本组挂在它下面 */
+  setId?: string | null;
 };
 
 const LinkRequirementRow = ({
@@ -100,6 +103,8 @@ type TProps = {
   onToggleGroup: () => void;
   onToggleRow: (row: TRequirement) => void;
   onLoadMore: () => void;
+  /** 挂在产品集分组下面的集内产品分组：整组往右缩进，左侧一条竖线 */
+  isNested?: boolean;
 };
 
 export const LinkRequirementsGroup = (props: TProps) => {
@@ -116,6 +121,7 @@ export const LinkRequirementsGroup = (props: TProps) => {
     onToggleGroup,
     onToggleRow,
     onLoadMore,
+    isNested = false,
   } = props;
   const { t } = useTranslation();
   const isAllSelected = total > 0 && selectedCount >= total;
@@ -123,8 +129,13 @@ export const LinkRequirementsGroup = (props: TProps) => {
   const remaining = total - (state?.rows.length ?? 0);
 
   return (
-    <section>
-      <div className="sticky top-9.5 z-[1] flex h-11.5 items-center gap-2.5 border-b border-subtle bg-layer-1 pr-5 pl-5">
+    <section className={cn(isNested && "ml-[29px] border-l border-subtle-1")}>
+      <div
+        className={cn(
+          "sticky top-9.5 z-[1] flex h-11.5 items-center gap-2.5 border-b border-subtle pr-5 pl-5",
+          isNested ? "bg-surface-1" : "bg-layer-1"
+        )}
+      >
         <button
           type="button"
           role="checkbox"
@@ -149,18 +160,17 @@ export const LinkRequirementsGroup = (props: TProps) => {
           ) : (
             <ChevronRight className="size-3.75 shrink-0 text-tertiary" />
           )}
-          <ProductPickTile logoProps={product.logoProps} size="sm" />
+          {product.isSet ? (
+            <ProductKindIcon isSet className="size-7" iconClassName="size-4" />
+          ) : (
+            <ProductPickTile logoProps={product.logoProps} size="sm" />
+          )}
           <span className="truncate text-14 font-semibold text-primary" title={title}>
             {title}
           </span>
           <span className="shrink-0 font-mono text-12 font-semibold tracking-wide text-placeholder">
             {product.identifier}
           </span>
-          {product.isSet && (
-            <span className="inline-flex h-5 shrink-0 items-center rounded bg-accent-subtle px-1.5 text-11 font-medium text-accent-primary">
-              {t("workspace_product_sets.title")}
-            </span>
-          )}
           <span
             className={cn(
               "ml-auto shrink-0 text-12 tabular-nums",

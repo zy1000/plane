@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { Pagination } from "antd";
-import { Search } from "lucide-react";
+import { ChevronDown, ChevronRight, Search } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { CloseIcon } from "@plane/propel/icons";
 import type { TProduct } from "@plane/types";
 import { Checkbox, EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
 import { cn } from "@plane/utils";
+import { ProductKindIcon } from "./product-set-tree";
 
 const I18N = "workspace_product_sets.members";
-const ROW_GRID = "grid grid-cols-[20px_minmax(0,1fr)_128px_168px] items-center gap-3 px-6";
+const ROW_GRID = "grid grid-cols-[20px_minmax(0,1fr)_140px] items-center gap-3 px-6";
 /** 工作区的产品可能有几千个，候选分页列出，靠搜索缩小范围 */
 const PAGE_SIZE = 20;
 
@@ -24,9 +25,16 @@ type TProps = {
 };
 
 /**
- * 产品集「添加产品」：列出还不在本集里的产品。已属于其他产品集的照常列出但不能勾，
- * 「所属产品集」列说明原因（一个产品只能属于一个产品集，要先在那边移出）。
+ * 产品集「添加产品」：上段是没加入任何产品集的产品（可勾、分页）；下段「已属于其他产品集」
+ * 按产品集分组挂着（一个产品只能属于一个产品集，不能勾），组默认收起。
  */
+const SectionLabel = ({ label, count }: { label: string; count: number }) => (
+  <div className="flex h-8 items-center gap-1.5 px-6 pt-2 text-12 font-medium text-tertiary">
+    {label}
+    <span className="font-normal text-placeholder tabular-nums">· {count}</span>
+  </div>
+);
+
 export function AddProductsModal({ isOpen, productSetId, products, isSubmitting, handleClose, onSubmit }: TProps) {
   const { t } = useTranslation();
   const [searchQuery, setSearchQuery] = useState("");
@@ -44,18 +52,42 @@ export function AddProductsModal({ isOpen, productSetId, products, isSubmitting,
   }, [isOpen, searchQuery]);
 
   const query = searchQuery.trim().toLocaleLowerCase();
-  const candidates = useMemo(
+  const matched = useMemo(
     () =>
       products
         .filter((product) => product.product_set !== productSetId)
         .filter(
           (product) =>
             !query || [product.name, product.identifier].some((text) => text.toLocaleLowerCase().includes(query))
-        )
-        // 能加的排前面，已属于其他集的沉底
-        .sort((a, b) => Number(Boolean(a.product_set)) - Number(Boolean(b.product_set))),
+        ),
     [products, productSetId, query]
   );
+  const candidates = useMemo(() => matched.filter((product) => !product.product_set), [matched]);
+  /** 已属于其他产品集的，按产品集分组（组名取产品上带的 product_set_detail） */
+  const takenGroups = useMemo(() => {
+    const groups = new Map<string, { id: string; name: string; identifier: string; products: TProduct[] }>();
+    for (const product of matched) {
+      if (!product.product_set) continue;
+      const group = groups.get(product.product_set) ?? {
+        id: product.product_set,
+        name: product.product_set_detail?.name ?? "",
+        identifier: product.product_set_detail?.identifier ?? "",
+        products: [],
+      };
+      group.products.push(product);
+      groups.set(product.product_set, group);
+    }
+    return [...groups.values()];
+  }, [matched]);
+  const takenCount = takenGroups.reduce((sum, group) => sum + group.products.length, 0);
+  const [expandedSetIds, setExpandedSetIds] = useState<Set<string>>(() => new Set());
+  const toggleSet = (id: string) =>
+    setExpandedSetIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   const pageRows = candidates.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   const toggle = (productId: string) =>
@@ -98,35 +130,74 @@ export function AddProductsModal({ isOpen, productSetId, products, isSubmitting,
           <span />
           <span>{t(`${I18N}.product`)}</span>
           <span>{t(`${I18N}.identifier`)}</span>
-          <span>{t("workspace_product_sets.fields.product_set")}</span>
         </div>
         <div className="vertical-scrollbar scrollbar-sm min-h-40 flex-1 overflow-y-auto">
-          {candidates.length === 0 ? (
+          {candidates.length === 0 && takenCount === 0 ? (
             <p className="py-12 text-center text-13 text-tertiary">{t(`${I18N}.no_candidates`)}</p>
           ) : (
-            pageRows.map((product) => {
-              const takenBy = product.product_set_detail?.name ?? null;
-              const isTaken = Boolean(product.product_set);
-              return (
-                <label
-                  key={product.id}
-                  className={cn(
-                    ROW_GRID,
-                    "h-11 border-b border-subtle text-13 last:border-b-0",
-                    isTaken ? "cursor-not-allowed text-tertiary" : "cursor-pointer text-primary hover:bg-layer-1-hover"
-                  )}
-                >
-                  <Checkbox
-                    checked={selectedIds.includes(product.id)}
-                    disabled={isTaken}
-                    onChange={() => toggle(product.id)}
-                  />
-                  <span className="truncate font-medium">{product.name}</span>
-                  <span className="truncate tabular-nums">{product.identifier}</span>
-                  <span className="truncate">{takenBy ?? (isTaken ? "" : "-")}</span>
-                </label>
-              );
-            })
+            <>
+              {candidates.length > 0 && (
+                <>
+                  <SectionLabel label={t(`${I18N}.group_available`)} count={candidates.length} />
+                  {pageRows.map((product) => (
+                    <label
+                      key={product.id}
+                      className={cn(ROW_GRID, "h-11 cursor-pointer text-13 text-primary hover:bg-layer-1-hover")}
+                    >
+                      <Checkbox checked={selectedIds.includes(product.id)} onChange={() => toggle(product.id)} />
+                      <span className="flex min-w-0 items-center gap-2.5">
+                        <ProductKindIcon isSet={false} />
+                        <span className="truncate font-medium">{product.name}</span>
+                      </span>
+                      <span className="truncate font-mono text-12 text-secondary">{product.identifier}</span>
+                    </label>
+                  ))}
+                </>
+              )}
+              {takenGroups.length > 0 && (
+                <>
+                  <SectionLabel label={t(`${I18N}.group_taken`)} count={takenCount} />
+                  {takenGroups.map((group) => {
+                    const isExpanded = Boolean(query) || expandedSetIds.has(group.id);
+                    return (
+                      <div key={group.id}>
+                        <button
+                          type="button"
+                          onClick={() => toggleSet(group.id)}
+                          aria-expanded={isExpanded}
+                          className="flex h-11 w-full items-center gap-2 px-6 text-left text-13 hover:bg-layer-1-hover"
+                        >
+                          <span className="grid size-5 shrink-0 place-items-center text-tertiary">
+                            {isExpanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
+                          </span>
+                          <ProductKindIcon isSet />
+                          <span className="truncate font-medium text-primary">{group.name}</span>
+                          <span className="shrink-0 text-12 text-tertiary">
+                            {group.identifier} · {group.products.length}
+                          </span>
+                        </button>
+                        {isExpanded && (
+                          <div className="mb-1 ml-[33px] border-l border-subtle-1">
+                            {group.products.map((product) => (
+                              <div
+                                key={product.id}
+                                className="grid h-9 grid-cols-[minmax(0,1fr)_140px] items-center gap-3 pr-6 pl-3 text-13 text-tertiary"
+                              >
+                                <span className="flex min-w-0 items-center gap-2.5">
+                                  <ProductKindIcon isSet={false} muted />
+                                  <span className="truncate">{product.name}</span>
+                                </span>
+                                <span className="truncate font-mono text-12">{product.identifier}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </>
+              )}
+            </>
           )}
         </div>
         <div className="flex shrink-0 items-center gap-2 border-t border-subtle px-6 py-4">

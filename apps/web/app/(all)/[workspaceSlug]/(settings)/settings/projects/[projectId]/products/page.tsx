@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { observer } from "mobx-react";
 import useSWR from "swr";
 // plane imports
@@ -57,6 +57,8 @@ function ProjectProductsSettingsPage({ params }: Route.ComponentProps) {
     projectId,
   });
   const { products, isLoading: isProductsLoading } = useProducts(isLinkModalOpen ? workspaceSlug : undefined);
+  // 产品集在项目「产品」页的「关联产品集」里管理；混进来会被当成普通产品，取消勾选还会把它解除关联
+  const productLinks = useMemo(() => links.filter((link) => !link.product_is_set), [links]);
 
   if (workspaceUserInfo && !canView) {
     return <NotAuthorizedView section="settings" isProjectView className="h-auto" />;
@@ -75,7 +77,7 @@ function ProjectProductsSettingsPage({ params }: Route.ComponentProps) {
           isOpen={isLinkModalOpen}
           products={products}
           isProductsLoading={isProductsLoading}
-          links={links}
+          links={productLinks}
           projectCode={getProjectById(projectId)?.code?.trim() ?? ""}
           isSubmitting={isMutating}
           handleClose={() => setIsLinkModalOpen(false)}

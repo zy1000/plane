@@ -11,7 +11,6 @@ import {
 } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
-import { Logo } from "@plane/propel/emoji-icon-picker";
 import { Tooltip } from "@plane/propel/tooltip";
 import type { TProduct } from "@plane/types";
 import { ContentWrapper, ERowVariant, Loader } from "@plane/ui";
@@ -33,6 +32,7 @@ import { DeleteProductModal } from "./delete-modal";
 import { ProductModal } from "./modal";
 import { useProductsContext } from "./context";
 import { productMatchesConditions } from "./filters/match-product";
+import { ProductKindIcon } from "./sets/product-set-tree";
 import { useProductListFiltering } from "./filters/use-product-list-filter";
 import { hasProductPermission } from "./permissions";
 
@@ -200,15 +200,10 @@ export const ProductsRoot = observer(function ProductsRoot() {
                           >
                             <Link
                               to={`/${slug}/products/${product.id}/overview`}
-                              className="flex min-w-0 items-center gap-1.5 text-primary"
+                              className="flex min-w-0 items-center gap-2 text-primary"
                             >
-                              <span className="grid size-4 shrink-0 place-items-center">
-                                {product.logo_props?.in_use ? (
-                                  <Logo logo={product.logo_props} size={14} />
-                                ) : (
-                                  <PackageOpen className="size-3.5 text-secondary" />
-                                )}
-                              </span>
+                              {/* 与产品集页签同一套图标块 */}
+                              <ProductKindIcon isSet={false} logoProps={product.logo_props} />
                               <p className="min-w-0 truncate text-sm font-medium text-primary">{product.name}</p>
                             </Link>
                           </td>

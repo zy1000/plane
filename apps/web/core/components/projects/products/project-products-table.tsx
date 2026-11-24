@@ -9,6 +9,7 @@ import { Tooltip } from "@plane/propel/tooltip";
 import type { TLogoProps } from "@plane/types";
 import { Checkbox } from "@plane/ui";
 import { cn } from "@plane/utils";
+import { ProductKindIcon, ProductSetTreeGuide } from "@/components/products/sets/product-set-tree";
 import type { TProductPickItem, TProductPickState } from "./picker-items";
 import { getProductPickState } from "./picker-items";
 
@@ -28,7 +29,7 @@ export const ProductPickTile = ({
   size?: keyof typeof TILE_SIZE_CLASS;
 }) => (
   <span
-    className={cn("grid shrink-0 place-items-center bg-accent-subtle text-accent-primary", TILE_SIZE_CLASS[size])}
+    className={cn("grid shrink-0 place-items-center text-accent-primary", TILE_SIZE_CLASS[size])}
   >
     {logoProps?.in_use ? (
       <Logo logo={logoProps} size={size === "xs" ? 12 : 16} />
@@ -68,9 +69,11 @@ type TRowProps = {
   item: TProductPickItem;
   isSelected: boolean;
   onToggle: (productId: string) => void;
+  /** 挂在产品集下面的子行：左侧缩进并画连线 */
+  child?: { isLast: boolean };
 };
 
-const ProjectProductsTableRow = ({ item, isSelected, onToggle }: TRowProps) => {
+const ProjectProductsTableRow = ({ item, isSelected, onToggle, child }: TRowProps) => {
   const { t } = useTranslation();
   const state = getProductPickState(item, isSelected);
   const isLocked = state === "locked";
@@ -88,7 +91,8 @@ const ProjectProductsTableRow = ({ item, isSelected, onToggle }: TRowProps) => {
       }}
       className={cn(
         ROW_GRID,
-        "h-14 w-full border-b border-subtle text-left transition-colors",
+        "relative h-14 w-full border-b text-left transition-colors",
+        child && !child.isLast ? "border-transparent" : "border-subtle",
         isLocked && "cursor-default bg-accent-primary/5",
         (state === "linked" || state === "new") && "bg-accent-primary/5 hover:bg-accent-primary/10",
         state === "remove" && "bg-danger-subtle",
@@ -99,7 +103,8 @@ const ProjectProductsTableRow = ({ item, isSelected, onToggle }: TRowProps) => {
       <span className="pointer-events-none flex">
         <Checkbox checked={state !== "remove" && state !== "none"} disabled={isLocked} readOnly tabIndex={-1} />
       </span>
-      <span className="flex min-w-0 items-center gap-2.5">
+      <span className={cn("flex min-w-0 items-center gap-2.5", child && "pl-7")}>
+        {child && <ProductSetTreeGuide left={59} isLast={child.isLast} />}
         <ProductPickTile logoProps={item.logoProps} />
         <span className="truncate text-14 font-medium text-primary" title={title}>
           {title}
@@ -128,6 +133,34 @@ const ProjectProductsTableRow = ({ item, isSelected, onToggle }: TRowProps) => {
   );
 };
 
+type TPickBlock =
+  | { kind: "product"; item: TProductPickItem }
+  | { kind: "set"; set: NonNullable<TProductPickItem["productSet"]>; items: TProductPickItem[] };
+
+/**
+ * 同一产品集的产品收成一块，挂在产品集组头下面（产品集本身另有「关联产品集」弹窗，这里不能勾）。
+ * 块出现在组内第一个产品原本的位置，所以「已关联的排前面」的顺序大体不变
+ */
+const buildPickBlocks = (items: TProductPickItem[]): TPickBlock[] => {
+  const blocks: TPickBlock[] = [];
+  const setBlocks = new Map<string, Extract<TPickBlock, { kind: "set" }>>();
+  for (const item of items) {
+    if (!item.productSet) {
+      blocks.push({ kind: "product", item });
+      continue;
+    }
+    const existing = setBlocks.get(item.productSet.id);
+    if (existing) {
+      existing.items.push(item);
+      continue;
+    }
+    const block = { kind: "set" as const, set: item.productSet, items: [item] };
+    setBlocks.set(item.productSet.id, block);
+    blocks.push(block);
+  }
+  return blocks;
+};
+
 type TProps = {
   items: TProductPickItem[];
   selectedIds: Set<string>;
@@ -151,14 +184,38 @@ export const ProjectProductsTable = ({ items, selectedIds, onToggle }: TProps) =
         <span>{t("project_products.columns.identifier")}</span>
         <span>{t("project_products.columns.status")}</span>
       </div>
-      {items.map((item) => (
-        <ProjectProductsTableRow
-          key={item.id}
-          item={item}
-          isSelected={selectedIds.has(item.id)}
-          onToggle={onToggle}
-        />
-      ))}
+      {buildPickBlocks(items).map((block) =>
+        block.kind === "product" ? (
+          <ProjectProductsTableRow
+            key={block.item.id}
+            item={block.item}
+            isSelected={selectedIds.has(block.item.id)}
+            onToggle={onToggle}
+          />
+        ) : (
+          <div key={`set-${block.set.id}`}>
+            <div className={cn(ROW_GRID, "h-11 bg-layer-1/60 text-13")}>
+              <span />
+              <span className="flex min-w-0 items-center gap-2.5">
+                <ProductKindIcon isSet className="size-7.5 rounded-lg" iconClassName="size-4" />
+                <span className="truncate font-medium text-primary">{block.set.name}</span>
+                {block.set.identifier && (
+                  <span className="shrink-0 font-mono text-12 text-tertiary">{block.set.identifier}</span>
+                )}
+              </span>
+            </div>
+            {block.items.map((item, index) => (
+              <ProjectProductsTableRow
+                key={item.id}
+                item={item}
+                isSelected={selectedIds.has(item.id)}
+                onToggle={onToggle}
+                child={{ isLast: index === block.items.length - 1 }}
+              />
+            ))}
+          </div>
+        )
+      )}
     </div>
   );
 };

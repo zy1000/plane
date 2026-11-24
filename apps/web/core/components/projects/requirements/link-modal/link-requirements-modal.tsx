@@ -5,7 +5,7 @@
  * 已关联本项目的产品排在前面、默认展开；其他产品放在后面一组、默认折叠，勾了它们的需求，
  * 提交时服务端会把产品一并关联进本项目。
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CheckCircle2, Link2 } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
@@ -14,9 +14,18 @@ import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TProduct, TRequirement } from "@plane/types";
 
 /** 弹窗只读产品的名称 / 编号 / 图标；产品集（is_set）也按这个形状传进来 */
-export type TLinkModalProduct = Pick<TProduct, "id" | "name" | "identifier" | "logo_props"> & { is_set?: boolean };
+export type TLinkModalProduct = Pick<TProduct, "id" | "name" | "identifier" | "logo_props"> & {
+  is_set?: boolean;
+  /** 所属产品集 id：分组按父子排 */
+  product_set?: string | null;
+};
 import { Checkbox, EModalPosition, EModalWidth, Loader, ModalCore } from "@plane/ui";
 import { cn } from "@plane/utils";
+import {
+  buildProductSetTree,
+  flattenProductSetTree,
+  ProductKindIcon,
+} from "@/components/products/sets/product-set-tree";
 import { ProductPickTile } from "@/components/projects/products/project-products-table";
 import { useRequirementTypes } from "@/hooks/store/use-requirement-types";
 import { LINK_ROW_GRID, LinkRequirementsGroup } from "./link-requirements-group";
@@ -103,6 +112,7 @@ export const LinkRequirementsModal = (props: TProps) => {
         identifier: product?.identifier ?? "",
         logoProps: product?.logo_props ?? null,
         isSet: Boolean(product?.is_set),
+        setId: product?.product_set ?? null,
       };
     },
     [productById]
@@ -122,8 +132,19 @@ export const LinkRequirementsModal = (props: TProps) => {
     () => (productFilter ? allGroupIds.filter((id) => id === productFilter) : allGroupIds),
     [allGroupIds, productFilter]
   );
-  const linkedGroupIds = visibleGroupIds.filter((id) => linkedProductIds.has(id));
-  const otherGroupIds = visibleGroupIds.filter((id) => !linkedProductIds.has(id));
+  /** 一段分组按父子排：产品集后面紧跟同一段里它的集内产品，其余产品照原顺序 */
+  const toGroupTree = useCallback(
+    (ids: string[]) =>
+      buildProductSetTree(ids, {
+        getId: (id) => id,
+        isSet: (id) => Boolean(productById.get(id)?.is_set),
+        getSetId: (id) => productById.get(id)?.product_set,
+      }),
+    [productById]
+  );
+  const linkedGroupTree = toGroupTree(visibleGroupIds.filter((id) => linkedProductIds.has(id)));
+  const otherGroupTree = toGroupTree(visibleGroupIds.filter((id) => !linkedProductIds.has(id)));
+  const hasGroups = (tree: ReturnType<typeof toGroupTree>) => tree.groups.length + tree.standalone.length > 0;
 
   /**
    * 分组名单一换（打开、改搜索词或类型）就重算默认展开：有搜索 / 类型时把命中的组都打开，
@@ -277,13 +298,21 @@ export const LinkRequirementsModal = (props: TProps) => {
         count: facets?.by_product[id] ?? 0,
       };
     };
+    /** 下拉选项也按父子排，集内产品缩进 */
+    const toOptions = (ids: string[]) =>
+      flattenProductSetTree(toGroupTree(ids)).map(({ item, kind }) => {
+        const option = toOption(item);
+        if (kind === "set") return { ...option, leading: <ProductKindIcon isSet size="sm" /> };
+        if (kind === "child") return { ...option, leading: <span className="flex pl-4">{option.leading}</span> };
+        return option;
+      });
     const linked = allGroupIds.filter((id) => linkedProductIds.has(id));
     const others = allGroupIds.filter((id) => !linkedProductIds.has(id));
     return [
-      { key: "linked", title: t("project_requirements.linkable.group_linked"), options: linked.map(toOption) },
-      { key: "others", title: t("project_requirements.linkable.group_others"), options: others.map(toOption) },
+      { key: "linked", title: t("project_requirements.linkable.group_linked"), options: toOptions(linked) },
+      { key: "others", title: t("project_requirements.linkable.group_others"), options: toOptions(others) },
     ].filter((group) => group.options.length > 0);
-  }, [allGroupIds, facets, linkedProductIds, t, toGroupProduct]);
+  }, [allGroupIds, facets, linkedProductIds, t, toGroupProduct, toGroupTree]);
 
   const typeFilterGroups = useMemo(
     () => [
@@ -304,9 +333,22 @@ export const LinkRequirementsModal = (props: TProps) => {
   const hasQuery = Boolean(debouncedSearch || typeFilter || productFilter);
   const hasNoLinkedProducts = linkedProductIds.size === 0;
 
-  const renderGroup = (productId: string) => (
+  const renderTree = (tree: ReturnType<typeof toGroupTree>) => (
+    <>
+      {tree.groups.map(({ set, children }) => (
+        <Fragment key={set}>
+          {renderGroup(set)}
+          {children.map((child) => renderGroup(child, true))}
+        </Fragment>
+      ))}
+      {tree.standalone.map((id) => renderGroup(id))}
+    </>
+  );
+
+  const renderGroup = (productId: string, isNested = false) => (
     <LinkRequirementsGroup
       key={productId}
+      isNested={isNested}
       product={toGroupProduct(productId)}
       total={facets?.by_product[productId] ?? 0}
       selectedCount={selectedInGroup(productId)}
@@ -405,14 +447,14 @@ export const LinkRequirementsModal = (props: TProps) => {
           <span>{t("requirement_fields.builtin.status")}</span>
           <span>{t("requirement_approval.column")}</span>
         </div>
-        {linkedGroupIds.map(renderGroup)}
-        {linkedGroupIds.length > 0 && otherGroupIds.length > 0 && (
+        {renderTree(linkedGroupTree)}
+        {hasGroups(linkedGroupTree) && hasGroups(otherGroupTree) && (
           <div className="flex h-9.5 items-center gap-2.5 border-b border-subtle bg-surface-1 px-5 text-12">
             <span className="font-semibold text-secondary">{t("project_requirements.linkable.group_others")}</span>
             <span className="truncate text-placeholder">{t("project_requirements.linkable.others_divider_hint")}</span>
           </div>
         )}
-        {otherGroupIds.map(renderGroup)}
+        {renderTree(otherGroupTree)}
       </div>
     );
   };

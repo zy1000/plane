@@ -71,8 +71,15 @@ export type TProductSet = Pick<
   | "updated_by"
   | "my_permission_keys"
 > & {
-  /** 集内产品（按当前用户的产品可见范围） */
-  products: Pick<TProduct, "id" | "name" | "identifier">[];
+  /** 集内产品（按当前用户的产品可见范围），列表里挂在产品集下面当子行 */
+  products: TProductSetListMember[];
+  requirement_count: number;
+  case_count: number;
+  open_defect_count: number;
+};
+
+/** 产品集列表里的一个集内产品：GET /product-sets/ 的 products[] */
+export type TProductSetListMember = Pick<TProduct, "id" | "name" | "identifier" | "owner_detail" | "updated_at"> & {
   requirement_count: number;
   case_count: number;
   open_defect_count: number;

@@ -10,7 +10,7 @@
  */
 import { useState } from "react";
 import { observer } from "mobx-react";
-import { FolderKanban, Link2, Package } from "lucide-react";
+import { ChevronDown, ChevronRight, FolderKanban, Link2, Package } from "lucide-react";
 import { Link, useParams } from "react-router";
 import {
   PERMISSION_KEYS,
@@ -23,13 +23,13 @@ import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Tooltip } from "@plane/propel/tooltip";
 import type { TProduct, TProductProject } from "@plane/types";
 import { AlertModalCore, CustomMenu, Header, Loader } from "@plane/ui";
-import { renderFormattedDate } from "@plane/utils";
+import { cn, renderFormattedDate } from "@plane/utils";
 import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
 import { AppHeader } from "@/components/core/app-header";
 import { ContentWrapper } from "@/components/core/content-wrapper";
 import { PageHead } from "@/components/core/page-title";
 import { ProductModalCore } from "@/components/products/modal";
-import { ProductChip } from "@/components/products/product-chip";
+import { ProductKindIcon, ProductSetTreeGuide, buildProductSetTree } from "@/components/products/sets/product-set-tree";
 import {
   getCompletionRate,
   ProductProjectStatusBar,
@@ -77,15 +77,39 @@ export const ProjectProductsPage = observer(function ProjectProductsPage() {
 
   // 项目也可以关联产品集（后端是 is_set 的产品，走同一个关联接口）
   const { productSets } = useProductSets(canManage ? slug : undefined);
+  const [collapsedSetIds, setCollapsedSetIds] = useState<Set<string>>(() => new Set());
+  const toggleSet = (setId: string) =>
+    setCollapsedSetIds((current) => {
+      const next = new Set(current);
+      if (next.has(setId)) next.delete(setId);
+      else next.add(setId);
+      return next;
+    });
   const setLinks = links.filter((link) => link.product_is_set);
   const productLinks = links.filter((link) => !link.product_is_set);
-  /** 有产品集时一张表分两组，各带组头；没有就还是原来的一张平表 */
-  const linkGroups = setLinks.length
-    ? [
-        { key: "sets", label: t("project_products.sets.group_sets"), rows: setLinks },
-        { key: "products", label: t("project_products.sets.group_products"), rows: productLinks },
-      ]
-    : [{ key: "products", label: null, rows: productLinks }];
+  /**
+   * 父子结构：已关联的产品集在上，本项目也关联了的集内产品挂在它下面；
+   * 所属产品集没被本项目关联的产品，和不属于产品集的产品一样单独列出
+   */
+  const linkTree = buildProductSetTree(links, {
+    getId: (link) => link.product,
+    isSet: (link) => link.product_is_set,
+    getSetId: (link) => link.product_set_id,
+  });
+  const linkRows = [
+    ...linkTree.groups.flatMap(({ set, children }) => [
+      { link: set, kind: "set" as const, isLast: false, childCount: children.length },
+      ...(collapsedSetIds.has(set.product)
+        ? []
+        : children.map((child, index) => ({
+            link: child,
+            kind: "child" as const,
+            isLast: index === children.length - 1,
+            childCount: 0,
+          }))),
+    ]),
+    ...linkTree.standalone.map((link) => ({ link, kind: "product" as const, isLast: false, childCount: 0 })),
+  ];
   const [isSetModalOpen, setIsSetModalOpen] = useState(false);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -256,7 +280,6 @@ export const ProjectProductsPage = observer(function ProjectProductsPage() {
                 <tr className="border-b border-subtle text-11 font-medium text-secondary">
                   <th className="px-5 py-2.5">{t("project_products.columns.product")}</th>
                   <th className="w-44 px-4 py-2.5">{t("project_products.columns.code")}</th>
-                  <th className="w-40 px-4 py-2.5">{t("workspace_product_sets.fields.product_set")}</th>
                   <th className="w-24 px-4 py-2.5">{t("project_products.columns.requirement_count")}</th>
                   <th className="w-56 px-4 py-2.5">{t("project_products.columns.status_distribution")}</th>
                   <th className="w-24 px-4 py-2.5">{t("project_products.columns.completion")}</th>
@@ -269,76 +292,94 @@ export const ProjectProductsPage = observer(function ProjectProductsPage() {
                 </tr>
               </thead>
               <tbody>
-                {linkGroups.flatMap((group) => [
-                  group.label && (
-                    <tr key={`group-${group.key}`} className="border-b border-subtle bg-layer-1">
-                      <td colSpan={canManage ? 8 : 7} className="px-5 py-2 text-12 font-medium text-secondary">
-                        {group.label}
-                        <span className="ml-2 font-normal text-tertiary tabular-nums">{group.rows.length}</span>
-                      </td>
-                    </tr>
-                  ),
-                  ...group.rows.map((link) => (
-                  <tr key={link.id} className="group border-b border-subtle hover:bg-layer-transparent-hover">
-                    <td className="px-5 py-3">
-                      <ProductChip
-                        identifier={link.product_identifier}
-                        name={link.product_name}
-                        logoProps={link.product_logo_props}
-                        href={productHref(link.product)}
-                        className="font-medium text-primary group-hover:text-accent-primary"
-                      />
-                    </td>
-                    <td className="px-4 py-3 text-13 text-secondary">
-                      <span className="block truncate" title={link.product_code}>
-                        {/* 产品集没有项目代号（库里的 code 只是名称的副本） */}
-                        {(!link.product_is_set && link.product_code) || "—"}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-13 text-secondary">
-                      <span className="block truncate" title={link.product_set_name ?? undefined}>
-                        {link.product_set_name || "—"}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-13 tabular-nums text-primary">
-                      {link.requirement_count > 0 ? (
-                        <Link
-                          to={requirementsHref(link.product)}
-                          className="hover:text-accent-primary hover:underline"
-                        >
-                          {link.requirement_count}
-                        </Link>
-                      ) : (
-                        link.requirement_count
+                {linkRows.map(({ link, kind, isLast, childCount }) => {
+                  const isSetRow = kind === "set";
+                  const isCollapsed = isSetRow && collapsedSetIds.has(link.product);
+                  return (
+                    <tr
+                      key={link.id}
+                      className={cn(
+                        "group hover:bg-layer-transparent-hover",
+                        // 展开的产品集与它的子行之间、子行之间不画分隔线，整组读作一块
+                        // （不用透明边框：它仍占 1px，会在带底色的子行间露白缝）
+                        !((isSetRow && childCount > 0 && !isCollapsed) || (kind === "child" && !isLast)) &&
+                          "border-b border-subtle",
+                        kind === "child" && "bg-layer-1/40"
                       )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <ProductProjectStatusBar statusCounts={link.status_counts} total={link.requirement_count} />
-                    </td>
-                    <td className="px-4 py-3 text-13 tabular-nums text-secondary">
-                      <Tooltip tooltipContent={t("project_products.completion_hint")}>
-                        <span>{getCompletionRate(link.status_counts, link.requirement_count)}%</span>
-                      </Tooltip>
-                    </td>
-                    <td className="px-4 py-3 text-11 text-secondary">
-                      {renderFormattedDate(link.created_at, "yyyy-MM-dd") ?? "-"}
-                    </td>
-                    {canManage && (
-                      <td className="px-4 py-3">
-                        <CustomMenu placement="bottom-end" closeOnSelect ellipsis ariaLabel={t("project_products.unlink")}>
-                          <CustomMenu.MenuItem
-                            onClick={() => setPendingUnlink(link)}
-                            disabled={isMutating}
-                            className="text-danger-primary"
+                    >
+                      {/* 子行从产品集图标的正下方引线，图标比独立产品明显靠右一档：独立产品与产品集图标对齐，不能看着像子行 */}
+                      <td className={kind === "child" ? "relative py-2.5 pr-5 pl-[78px]" : "px-5 py-3"}>
+                        {kind === "child" && <ProductSetTreeGuide left={62} isLast={isLast} />}
+                        <div className="flex min-w-0 items-center gap-2">
+                          {isSetRow ? (
+                            <button
+                              type="button"
+                              onClick={() => toggleSet(link.product)}
+                              disabled={childCount === 0}
+                              aria-expanded={!isCollapsed}
+                              aria-label={t(
+                                isCollapsed ? "project_requirements.tree.expand" : "project_requirements.tree.collapse"
+                              )}
+                              className="grid size-[22px] shrink-0 place-items-center rounded-md text-tertiary hover:bg-layer-transparent-hover hover:text-primary disabled:invisible"
+                            >
+                              {isCollapsed ? <ChevronRight className="size-3.5" /> : <ChevronDown className="size-3.5" />}
+                            </button>
+                          ) : kind === "product" ? (
+                            <span className="size-[22px] shrink-0" />
+                          ) : null}
+                          <ProductKindIcon isSet={isSetRow} />
+                          <Link
+                            to={productHref(link.product)}
+                            title={link.product_name}
+                            className="truncate text-13 font-medium text-primary group-hover:text-accent-primary hover:underline"
                           >
-                            {t("project_products.unlink")}
-                          </CustomMenu.MenuItem>
-                        </CustomMenu>
+                            {link.product_name || link.product_identifier}
+                          </Link>
+                          <span className="shrink-0 font-mono text-12 text-tertiary">{link.product_identifier}</span>
+                        </div>
                       </td>
-                    )}
-                  </tr>
-                  )),
-                ])}
+                      <td className="px-4 py-3 text-13 text-secondary">
+                        <span className="block truncate" title={link.product_code}>
+                          {/* 产品集没有项目代号（库里的 code 只是名称的副本） */}
+                          {(!link.product_is_set && link.product_code) || "—"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-13 tabular-nums text-primary">
+                        {link.requirement_count > 0 ? (
+                          <Link to={requirementsHref(link.product)} className="hover:text-accent-primary hover:underline">
+                            {link.requirement_count}
+                          </Link>
+                        ) : (
+                          link.requirement_count
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <ProductProjectStatusBar statusCounts={link.status_counts} total={link.requirement_count} />
+                      </td>
+                      <td className="px-4 py-3 text-13 tabular-nums text-secondary">
+                        <Tooltip tooltipContent={t("project_products.completion_hint")}>
+                          <span>{getCompletionRate(link.status_counts, link.requirement_count)}%</span>
+                        </Tooltip>
+                      </td>
+                      <td className="px-4 py-3 text-11 text-secondary">
+                        {renderFormattedDate(link.created_at, "yyyy-MM-dd") ?? "-"}
+                      </td>
+                      {canManage && (
+                        <td className="px-4 py-3">
+                          <CustomMenu placement="bottom-end" closeOnSelect ellipsis ariaLabel={t("project_products.unlink")}>
+                            <CustomMenu.MenuItem
+                              onClick={() => setPendingUnlink(link)}
+                              disabled={isMutating}
+                              className="text-danger-primary"
+                            >
+                              {t("project_products.unlink")}
+                            </CustomMenu.MenuItem>
+                          </CustomMenu>
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}
@@ -378,6 +419,7 @@ export const ProjectProductsPage = observer(function ProjectProductsPage() {
           isOpen={isSetModalOpen}
           productSets={productSets}
           linkedIds={new Set(setLinks.map((link) => link.product))}
+          linkedProductIds={new Set(productLinks.map((link) => link.product))}
           isSubmitting={isMutating}
           handleClose={() => setIsSetModalOpen(false)}
           onSubmit={(productSetIds) => {

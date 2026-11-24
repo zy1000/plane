@@ -178,7 +178,9 @@ export const AddAxesModal = observer(function AddAxesModal({
     tailoringId,
     isOpen
   );
-  const { links, isLoading: isLoadingProducts } = useProjectProducts({ workspaceSlug, projectId });
+  const { links: allLinks, isLoading: isLoadingProducts } = useProjectProducts({ workspaceSlug, projectId });
+  // 产品集不能当产品轴：阶段评审评的是具体产品，后端勾了会报 REVIEW_TAILORING_PRODUCT_NOT_LINKED
+  const links = useMemo(() => allLinks.filter((link) => !link.product_is_set), [allLinks]);
 
   const [pane, setPane] = useState<TPane>("reviews");
   /** 勾中的模板节点 id：评审与活动平等，提交时原样发出去 */

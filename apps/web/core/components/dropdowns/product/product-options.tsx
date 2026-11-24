@@ -3,12 +3,12 @@ import type { Placement } from "@popperjs/core";
 import { observer } from "mobx-react";
 import { usePopper } from "react-popper";
 import { Combobox } from "@headlessui/react";
-import { Package } from "lucide-react";
+import { Layers, Package } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { CheckIcon, SearchIcon } from "@plane/propel/icons";
 import { Tooltip } from "@plane/propel/tooltip";
 import type { TProductOption } from "@plane/types";
-import { cn, sortBySelectedFirst } from "@plane/utils";
+import { cn } from "@plane/utils";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 
 type DropdownOptions =
@@ -58,16 +58,26 @@ export const ProductOptions = observer(function ProductOptions(props: Props) {
     }
   };
 
+  // productIds 已由 store 按父子排好（产品集后面紧跟集内产品）；这里只判断每项是父、子还是独立产品
+  const shownSetIds = new Set((productIds ?? []).filter((productId) => getProductById(productId)?.is_set));
   const options: DropdownOptions = productIds?.map((productId) => {
     const product = getProductById(productId);
+    const isSet = Boolean(product?.is_set);
+    const isChild = Boolean(product?.product_set_id && shownSetIds.has(product.product_set_id));
+    const parentName = isChild ? getProductById(product?.product_set_id ?? "")?.name : undefined;
     return {
       value: productId,
-      query: `${product?.name} ${product?.identifier ?? ""} ${product?.code ?? ""}`,
+      // 搜产品集名也能找到它的集内产品
+      query: `${product?.name} ${product?.identifier ?? ""} ${product?.code ?? ""} ${parentName ?? ""}`,
       content: (
-        <div className="flex min-w-0 items-center gap-2">
-          <Package className="h-3 w-3 flex-shrink-0" />
+        <div className={cn("flex min-w-0 items-center gap-2", isChild && "border-l border-subtle-1 pl-2.5 ml-1.5")}>
+          {isSet ? (
+            <Layers className="h-3 w-3 flex-shrink-0 text-label-indigo-icon" />
+          ) : (
+            <Package className="h-3 w-3 flex-shrink-0" />
+          )}
           <Tooltip tooltipContent={product?.name} isMobile={isMobile}>
-            <span className="flex-grow truncate">{product?.name}</span>
+            <span className={cn("flex-grow truncate", isSet && "font-medium text-primary")}>{product?.name}</span>
           </Tooltip>
         </div>
       ),
@@ -86,10 +96,9 @@ export const ProductOptions = observer(function ProductOptions(props: Props) {
     ),
   });
 
-  const filteredOptions = sortBySelectedFirst(
-    query === "" ? options : options?.filter((o) => o.query.toLowerCase().includes(query.toLowerCase())),
-    value
-  );
+  // 不把选中项提到最前：会把集内产品从它的产品集下面拆出来
+  const filteredOptions =
+    query === "" ? options : options?.filter((o) => o.query.toLowerCase().includes(query.toLowerCase()));
 
   return (
     <Combobox.Options className="fixed z-10" static>

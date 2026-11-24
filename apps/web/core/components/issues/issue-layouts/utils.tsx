@@ -256,7 +256,12 @@ const getProductColumns = (): IGroupByColumn[] | undefined => {
     products.push({
       id: product.id,
       name: product.name,
-      icon: <Package className="h-3.5 w-3.5" />,
+      // 顺序已按父子排（产品集后面紧跟集内产品），产品集换叠层图标区分
+      icon: product.is_set ? (
+        <Layers className="h-3.5 w-3.5 text-label-indigo-icon" />
+      ) : (
+        <Package className="h-3.5 w-3.5" />
+      ),
       payload: { product_id: product.id },
     });
   });

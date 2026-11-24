@@ -607,6 +607,10 @@ export type TProductOption = {
   identifier: string;
   code: string;
   logo_props: TLogoProps | null;
+  /** 产品集（项目可以关联产品集，工作项的产品也可以是产品集） */
+  is_set: boolean;
+  /** 所属产品集 id：下拉 / 分组 / 筛选里挂在产品集下面 */
+  product_set_id: string | null;
 };
 
 /** 拍平的产品模块树节点，path 形如「A / B」，工作项「产品模块」下拉与分组列共用 */
@@ -632,6 +636,8 @@ export type TProductProject = {
   product_is_set: boolean;
   /** 普通产品所属产品集的名称；不属于任何产品集、或这一行本身是产品集时为 null */
   product_set_name: string | null;
+  /** 普通产品所属产品集的 id；规则同 product_set_name */
+  product_set_id: string | null;
   /** 产品阶段字典值；老产品迁移后可能为空 */
   product_stage_detail: TDataDictionaryItemLite | null;
   /** 产品负责人（工作区成员，不要求是产品成员） */

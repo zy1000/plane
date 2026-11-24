@@ -326,6 +326,17 @@ export const useWorkItemFiltersConfig = (props: TUseWorkItemFiltersConfigProps):
         isEnabled: isFilterEnabled("product_id") && products !== undefined,
         filterIcon: Package,
         products: products ?? [],
+        // 产品集用叠层图标；本项目也关联了它的集内产品缩进挂在它下面（候选已按父子排好）
+        getOptionIcon: (product) =>
+          product.is_set ? (
+            <Layers className="h-3.5 w-3.5 flex-shrink-0 text-label-indigo-icon" />
+          ) : product.product_set_id && products?.some((item) => item.id === product.product_set_id) ? (
+            <span className="flex border-l border-subtle-1 pl-2">
+              <Package className="h-3.5 w-3.5 flex-shrink-0" />
+            </span>
+          ) : (
+            <Package className="h-3.5 w-3.5 flex-shrink-0" />
+          ),
         ...operatorConfigs,
       }),
     [isFilterEnabled, products, operatorConfigs]

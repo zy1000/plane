@@ -1,6 +1,6 @@
 import type { FC } from "react";
 import { observer } from "mobx-react";
-import { Package } from "lucide-react";
+import { Layers, Package } from "lucide-react";
 import { Link } from "react-router";
 import {
   PROJECT_PRODUCT_LINK_MANAGE_PERMISSION_KEY,
@@ -20,6 +20,7 @@ import {
   ProductProjectStatusBar,
   REQUIREMENT_STATUS_BAR_COLOR,
 } from "@/components/products/projects/product-project-status-bar";
+import { buildProductSetTree, flattenProductSetTree, ProductSetTreeGuide } from "@/components/products/sets/product-set-tree";
 import { useProjectProducts } from "@/hooks/store/use-project-products";
 import { useUserPermissions } from "@/hooks/store/user";
 import { useAppRouter } from "@/hooks/use-app-router";
@@ -32,17 +33,33 @@ type Props = {
 
 const ROW_GRID = "grid grid-cols-[minmax(0,1fr)_96px_48px_150px_60px_28px] items-center gap-3.5";
 
-const ProductRow: FC<{ link: TProductProject; href: string }> = ({ link, href }) => {
+const ProductRow: FC<{ link: TProductProject; href: string; kind: "set" | "child" | "product"; isLast: boolean }> = ({
+  link,
+  href,
+  kind,
+  isLast,
+}) => {
   const { t } = useTranslation();
   const stage = link.product_stage_detail;
   const lead = link.product_project_lead_detail;
 
   return (
-    <Link to={href} className={cn(ROW_GRID, "group border-t border-subtle py-3")}>
-      <div className="flex min-w-0 items-center gap-2.5">
-        <span className="grid size-8 flex-shrink-0 place-items-center rounded-lg bg-layer-1">
+    <Link
+      to={href}
+      className={cn(
+        ROW_GRID,
+        "group relative border-t py-3",
+        // 集内产品与它的产品集读作一组：组内不画分隔线
+        kind === "child" ? "border-transparent" : "border-subtle"
+      )}
+    >
+      {kind === "child" && <ProductSetTreeGuide left={16} isLast={isLast} />}
+      <div className={cn("flex min-w-0 items-center gap-2.5", kind === "child" && "pl-8")}>
+        <span className="grid size-8 flex-shrink-0 place-items-center rounded-lg">
           {link.product_logo_props?.in_use ? (
             <Logo logo={link.product_logo_props} size={16} />
+          ) : kind === "set" ? (
+            <Layers className="size-4 text-label-indigo-icon" />
           ) : (
             <Package className="size-4 text-tertiary" />
           )}
@@ -52,7 +69,8 @@ const ProductRow: FC<{ link: TProductProject; href: string }> = ({ link, href })
             {link.product_name}
           </p>
           <p className="mt-0.5 flex min-w-0 gap-2 text-11 text-tertiary">
-            {link.product_code && (
+            {/* 产品集没有项目代号（库里的 code 只是名称的副本） */}
+            {!link.product_is_set && link.product_code && (
               <span className="truncate">
                 {t("project_overview.products.code")}{" "}
                 <span className="rounded bg-layer-1 px-1 text-secondary">{link.product_code}</span>
@@ -181,8 +199,21 @@ export const OverviewProductsCard: FC<Props> = observer(({ workspaceSlug, projec
             <span className="text-right">{t("project_overview.products.columns.completion")}</span>
             <span />
           </div>
-          {links.map((link) => (
-            <ProductRow key={link.id} link={link} href={productHref(link.product)} />
+          {/* 集内产品挂在本项目也关联了的产品集下面；产品集没关联时按独立产品列 */}
+          {flattenProductSetTree(
+            buildProductSetTree(links, {
+              getId: (link) => link.product,
+              isSet: (link) => link.product_is_set,
+              getSetId: (link) => link.product_set_id,
+            })
+          ).map(({ item: link, kind, isLastChild }) => (
+            <ProductRow
+              key={link.id}
+              link={link}
+              href={productHref(link.product)}
+              kind={kind}
+              isLast={isLastChild}
+            />
           ))}
         </div>
         <ProductsLegend />
