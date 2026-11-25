@@ -63,16 +63,16 @@ export const ProductsHeader = observer(function ProductsHeader() {
         <div className="ml-1 flex items-center gap-1 border-l border-subtle pl-3">
           <ListTab
             to={`/${slug}/products`}
-            label={t("workspace_product_sets.tabs.products")}
-            count={productCount}
-            isActive={!isSetsTab}
-            onClick={clearSearch}
-          />
-          <ListTab
-            to={`/${slug}/products?tab=sets`}
             label={t("workspace_product_sets.tabs.product_sets")}
             count={sets.productSets.length}
             isActive={isSetsTab}
+            onClick={clearSearch}
+          />
+          <ListTab
+            to={`/${slug}/products?tab=products`}
+            label={t("workspace_product_sets.tabs.products")}
+            count={productCount}
+            isActive={!isSetsTab}
             onClick={clearSearch}
           />
         </div>

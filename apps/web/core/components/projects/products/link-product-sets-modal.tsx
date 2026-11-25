@@ -19,6 +19,8 @@ type TProps = {
   linkedIds: ReadonlySet<string>;
   /** 本项目已关联的产品 id：展开看成员时标出哪些已经关联 */
   linkedProductIds: ReadonlySet<string>;
+  /** 本项目的项目代号：只有代号相同的产品集能关联（后端同口径校验） */
+  projectCode: string;
   isSubmitting: boolean;
   handleClose: () => void;
   onSubmit: (productSetIds: string[]) => void;
@@ -31,6 +33,7 @@ export function LinkProductSetsModal({
   productSets,
   linkedIds,
   linkedProductIds,
+  projectCode,
   isSubmitting,
   handleClose,
   onSubmit,
@@ -48,7 +51,10 @@ export function LinkProductSetsModal({
   const toggleExpanded = (id: string) =>
     setExpandedIds((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
 
-  const candidates = productSets.filter((productSet) => !linkedIds.has(productSet.id));
+  const code = projectCode.trim();
+  const candidates = productSets.filter(
+    (productSet) => !linkedIds.has(productSet.id) && (productSet.code ?? "").trim() === code
+  );
   const toggle = (id: string) =>
     setSelectedIds((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
 
@@ -71,6 +77,7 @@ export function LinkProductSetsModal({
             <CloseIcon className="h-4 w-4" />
           </button>
         </div>
+        <p className="shrink-0 px-6 pb-3 text-12 text-tertiary">{t(`${I18N}.code_filter_hint`, { code: code || "-" })}</p>
         <div className={cn(ROW_GRID, "h-9 shrink-0 border-y border-subtle bg-layer-1 text-12 font-medium text-secondary")}>
           <span />
           <span />

@@ -85,6 +85,7 @@ def product_set_stats(product_sets, user):
                 "id": member.id,
                 "name": member.name,
                 "identifier": member.identifier,
+                "code": member.code,
                 "owner_detail": UserLiteSerializer(member.owner).data if member.owner_id else None,
                 "updated_at": member.updated_at,
                 **{key: by_product.get(member.id, 0) for key, by_product in counts.items()},
@@ -139,6 +140,16 @@ def add_products_to_set(product_set, product_ids, user):
             "有产品已属于其他产品集，一个产品只能属于一个产品集。",
             status=409,
             product_ids=[str(product.id) for product in taken],
+        )
+
+    # 集内产品的项目代号必须与产品集相同（只在加入这一刻校验，之后各自改代号不追究）
+    set_code = (product_set.code or "").strip()
+    mismatched = [product for product in products if (product.code or "").strip() != set_code]
+    if mismatched:
+        raise ProductSetError(
+            "PRODUCT_CODE_MISMATCH",
+            "只能加入项目代号与产品集相同的产品。",
+            product_ids=[str(product.id) for product in mismatched],
         )
 
     added = [product for product in products if product.product_set_id is None]

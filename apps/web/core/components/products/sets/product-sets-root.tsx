@@ -57,8 +57,8 @@ export const ProductSetsRoot = observer(function ProductSetsRoot() {
     const hit = (texts: string[]) => texts.some((text) => text.toLocaleLowerCase().includes(normalizedSearch));
     if (!normalizedSearch) return productSets;
     return productSets.flatMap((productSet) => {
-      if (hit([productSet.name, productSet.identifier])) return [productSet];
-      const members = productSet.products.filter((member) => hit([member.name, member.identifier]));
+      if (hit([productSet.name, productSet.identifier, productSet.code ?? ""])) return [productSet];
+      const members = productSet.products.filter((member) => hit([member.name, member.identifier, member.code ?? ""]));
       return members.length > 0 ? [{ ...productSet, products: members }] : [];
     });
   }, [normalizedSearch, productSets]);
@@ -94,7 +94,13 @@ export const ProductSetsRoot = observer(function ProductSetsRoot() {
         setToast({
           type: TOAST_TYPE.ERROR,
           title: t("error"),
-          message: t(code === "PRODUCT_ALREADY_IN_SET" ? `${I18N}.errors.product_already_in_set` : `${I18N}.toast.failed`),
+          message: t(
+            code === "PRODUCT_ALREADY_IN_SET"
+              ? `${I18N}.errors.product_already_in_set`
+              : code === "PRODUCT_CODE_MISMATCH"
+                ? `${I18N}.errors.product_code_mismatch`
+                : `${I18N}.toast.failed`
+          ),
         });
       } finally {
         refreshRelated();
@@ -195,10 +201,11 @@ export const ProductSetsRoot = observer(function ProductSetsRoot() {
           <ContentWrapper variant={ERowVariant.HUGGING} className="overflow-hidden">
             <div className="m-0 flex h-full w-full flex-col overflow-hidden rounded border border-subtle bg-surface-1">
               <div className="vertical-scrollbar scrollbar-lg min-h-0 flex-1 overflow-auto">
-                <table className="w-full min-w-[1120px] table-fixed text-sm">
+                <table className="w-full min-w-[1264px] table-fixed text-sm">
                   <thead className="border-b border-subtle bg-layer-1">
                     <tr>
                       <th className={TH}>{t(`${I18N}.fields.name`)}</th>
+                      <th className={`${TH} w-36`}>{t(`${I18N}.fields.code`)}</th>
                       <th className={`${TH} w-32`}>{t(`${I18N}.fields.identifier`)}</th>
                       <th className={`${TH} w-20 !text-right`}>{t(`${I18N}.fields.requirements`)}</th>
                       <th className={`${TH} w-20 !text-right`}>{t(`${I18N}.fields.cases`)}</th>
@@ -246,6 +253,9 @@ export const ProductSetsRoot = observer(function ProductSetsRoot() {
                                 </span>
                               </div>
                             </td>
+                            <td className="truncate px-4 py-3 text-13 text-secondary" title={productSet.code}>
+                              {productSet.code || "-"}
+                            </td>
                             <td className="px-4 py-3 text-13 text-secondary tabular-nums">{productSet.identifier}</td>
                             <td className="px-4 py-3 text-right text-13 text-primary tabular-nums">
                               {productSet.requirement_count}
@@ -289,7 +299,7 @@ export const ProductSetsRoot = observer(function ProductSetsRoot() {
                           </tr>
                           {isExpanded && members.length === 0 && (
                             <tr className="border-b border-subtle bg-layer-1/40">
-                              <td colSpan={8} className="relative py-2.5 pr-4 pl-[75px] text-13 text-tertiary">
+                              <td colSpan={9} className="relative py-2.5 pr-4 pl-[75px] text-13 text-tertiary">
                                 <ProductSetTreeGuide left={GUIDE_LEFT} isLast />
                                 {t(`${I18N}.members.empty_title`)}
                               </td>
@@ -314,6 +324,9 @@ export const ProductSetsRoot = observer(function ProductSetsRoot() {
                                         {member.name}
                                       </Link>
                                     </div>
+                                  </td>
+                                  <td className="truncate px-4 py-2.5 text-13 text-secondary" title={member.code}>
+                                    {member.code || "-"}
                                   </td>
                                   <td className="px-4 py-2.5 text-13 text-secondary tabular-nums">{member.identifier}</td>
                                   <td className="px-4 py-2.5 text-right text-13 text-primary tabular-nums">
@@ -379,6 +392,7 @@ export const ProductSetsRoot = observer(function ProductSetsRoot() {
       <AddProductsModal
         isOpen={Boolean(addTarget)}
         productSetId={addTarget?.id ?? ""}
+        productSetCode={addTarget?.code ?? ""}
         products={candidates}
         isSubmitting={memberActions.isMutating}
         handleClose={() => setAddTarget(null)}

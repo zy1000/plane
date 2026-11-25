@@ -17,6 +17,8 @@ const PAGE_SIZE = 20;
 type TProps = {
   isOpen: boolean;
   productSetId: string;
+  /** 产品集的项目代号：只有代号相同的产品能加入（后端同口径校验） */
+  productSetCode: string;
   /** 工作区里当前用户可见的全部产品（不含产品集） */
   products: TProduct[];
   isSubmitting: boolean;
@@ -35,7 +37,15 @@ const SectionLabel = ({ label, count }: { label: string; count: number }) => (
   </div>
 );
 
-export function AddProductsModal({ isOpen, productSetId, products, isSubmitting, handleClose, onSubmit }: TProps) {
+export function AddProductsModal({
+  isOpen,
+  productSetId,
+  productSetCode,
+  products,
+  isSubmitting,
+  handleClose,
+  onSubmit,
+}: TProps) {
   const { t } = useTranslation();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -52,15 +62,17 @@ export function AddProductsModal({ isOpen, productSetId, products, isSubmitting,
   }, [isOpen, searchQuery]);
 
   const query = searchQuery.trim().toLocaleLowerCase();
+  const setCode = productSetCode.trim();
   const matched = useMemo(
     () =>
       products
         .filter((product) => product.product_set !== productSetId)
+        .filter((product) => (product.code ?? "").trim() === setCode)
         .filter(
           (product) =>
             !query || [product.name, product.identifier].some((text) => text.toLocaleLowerCase().includes(query))
         ),
-    [products, productSetId, query]
+    [products, productSetId, query, setCode]
   );
   const candidates = useMemo(() => matched.filter((product) => !product.product_set), [matched]);
   /** 已属于其他产品集的，按产品集分组（组名取产品上带的 product_set_detail） */
@@ -125,6 +137,7 @@ export function AddProductsModal({ isOpen, productSetId, products, isSubmitting,
               className="min-w-0 flex-1 bg-transparent text-13 text-primary outline-none placeholder:text-placeholder"
             />
           </label>
+          <p className="mt-2 text-12 text-tertiary">{t(`${I18N}.code_filter_hint`, { code: setCode || "-" })}</p>
         </div>
         <div className={cn(ROW_GRID, "h-9 shrink-0 border-y border-subtle bg-layer-1 text-12 font-medium text-secondary")}>
           <span />

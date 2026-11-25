@@ -13,6 +13,7 @@ export type TProductProjectCandidate = {
   id: string;
   name: string;
   identifier: string;
+  code?: string | null;
   logo_props?: TLogoProps;
   created_at?: Date | string | null;
 };
@@ -22,13 +23,15 @@ type TProps = {
   projects: TProductProjectCandidate[];
   isProjectsLoading: boolean;
   links: TProductProject[];
+  /** 产品集传自己的项目代号：只列出代号相同的项目（后端同口径校验）；普通产品不传、不限 */
+  requiredCode?: string;
   isSubmitting: boolean;
   handleClose: () => void;
   onSubmit: (payload: { projects: string[]; removed_projects: string[] }) => Promise<void>;
 };
 
 export const ProductProjectsModal = (props: TProps) => {
-  const { isOpen, projects, isProjectsLoading, links, isSubmitting, handleClose, onSubmit } = props;
+  const { isOpen, projects, isProjectsLoading, links, requiredCode, isSubmitting, handleClose, onSubmit } = props;
   const { t } = useTranslation();
 
   const linkedIds = useMemo(() => links.map((link) => link.project), [links]);
@@ -43,8 +46,13 @@ export const ProductProjectsModal = (props: TProps) => {
   }, [isOpen, linkedIds]);
 
   const unlinkedProjects = useMemo(
-    () => projects.filter((project) => !linkedIds.includes(project.id)),
-    [linkedIds, projects]
+    () =>
+      projects.filter(
+        (project) =>
+          !linkedIds.includes(project.id) &&
+          (requiredCode === undefined || (project.code ?? "").trim() === requiredCode.trim())
+      ),
+    [linkedIds, projects, requiredCode]
   );
 
   const filteredProjects = useMemo(() => {
@@ -85,7 +93,9 @@ export const ProductProjectsModal = (props: TProps) => {
         message:
           payload?.code === "PRODUCT_HAS_LINKED_REQUIREMENTS"
             ? t("workspace_products.projects.has_linked_requirements")
-            : (payload?.error ?? t("error")),
+            : payload?.code === "PRODUCT_SET_CODE_MISMATCH"
+              ? t("project_products.sets.code_mismatch")
+              : (payload?.error ?? t("error")),
       });
     }
   };
@@ -94,6 +104,11 @@ export const ProductProjectsModal = (props: TProps) => {
     <ModalCore isOpen={isOpen} handleClose={handleClose} position={EModalPosition.CENTER} width={EModalWidth.XXXXL}>
       <div className="border-b border-subtle px-5 py-4">
         <h3 className="text-body-sm-semibold text-primary">{t("workspace_products.projects.link")}</h3>
+        {requiredCode !== undefined && (
+          <p className="mt-1 text-12 text-tertiary">
+            {t("workspace_products.projects.code_filter_hint", { code: requiredCode.trim() || "-" })}
+          </p>
+        )}
         <label className="relative mt-3 block">
           <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-placeholder" />
           <input

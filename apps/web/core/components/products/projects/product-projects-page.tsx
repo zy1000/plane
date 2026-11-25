@@ -81,6 +81,7 @@ export const ProductProjectsPage = observer(function ProductProjectsPage() {
         id: item.id,
         name: item.name,
         identifier: item.identifier,
+        code: item.code,
         logo_props: item.logo_props,
         created_at: item.created_at,
       });
@@ -283,6 +284,7 @@ export const ProductProjectsPage = observer(function ProductProjectsPage() {
           projects={candidateProjects}
           isProjectsLoading={loader === "init-loader"}
           links={links}
+          requiredCode={product?.is_set ? (product.code ?? "") : undefined}
           isSubmitting={isMutating}
           handleClose={() => setIsModalOpen(false)}
           onSubmit={updateProjects}

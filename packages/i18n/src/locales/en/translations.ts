@@ -4174,6 +4174,8 @@ export default {
       link: "Link product sets",
       link_action: "Link",
       no_candidates: "No product sets available to link",
+      code_filter_hint: "Only product sets with project code \"{code}\" are listed",
+      code_mismatch: "A product set can only be linked to projects with the same project code.",
       group_sets: "Product sets",
       group_products: "Products",
       result_count: "{sets} product sets and {products} products linked",
@@ -5331,6 +5333,7 @@ export default {
       toast_unlinked: "Project unlinked",
       has_linked_requirements:
         "Requirements from this product are still linked to the project. Unlink them first.",
+      code_filter_hint: "A product set can only link projects with the same project code. Only projects with code \"{code}\" are listed",
       empty: {
         title: "No project references this product yet",
         description: "Link a project to see how it references and delivers this product's requirements.",
@@ -5429,6 +5432,7 @@ export default {
       name: "Name",
       identifier: "ID",
       products: "Products",
+      code: "Project code",
       requirements: "Requirements",
       cases: "Test cases",
       open_defects: "Open defects",
@@ -5444,6 +5448,10 @@ export default {
       owner_placeholder: "Select owner",
       name_required: "Name is required",
       identifier_required: "ID is required",
+      code_placeholder: "Select a project code",
+      code_hint: "Only products and projects with the same project code can be added or linked",
+      code_locked_hint: "This product set already has products, so its project code can no longer change",
+      code_required: "Project code is required",
     },
     actions: {
       edit: "Edit",
@@ -5515,6 +5523,7 @@ export default {
       selected: "{count} selected",
       search_placeholder: "Search by name or development ID",
       no_candidates: "No products available to add",
+      code_filter_hint: "Only products with project code \"{code}\" are listed",
       group_available: "Not in a product set",
       group_taken: "In another product set",
       remove: "Remove",
@@ -5539,6 +5548,9 @@ export default {
       product_identifier_invalid: "The ID must start with a letter and contain only letters and digits, up to 12 characters",
       product_set_has_products: "This product set still has products. Remove them first.",
       product_already_in_set: "Some products already belong to another product set. A product can belong to only one.",
+      product_code_mismatch: "Only products with the same project code as the product set can be added.",
+      project_code_not_in_dictionary: "Select a value from the \"Project code\" dictionary",
+      product_set_code_locked: "This product set already has products or linked projects, so its project code can no longer change",
     },
     toast: {
       created: "Product set created.",

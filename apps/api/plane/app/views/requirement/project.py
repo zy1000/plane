@@ -71,6 +71,7 @@ from plane.utils.requirement_project import (
     RequirementLinkError,
     apply_project_requirement_list_filters,
     can_submit_change_from_project,
+    ensure_product_set_codes_match,
     link_products_to_project,
     linkable_facets,
     linkable_requirements_queryset,
@@ -431,6 +432,11 @@ class ProjectRequirementViewSet(BaseViewSet):
         except RequirementLinkError as exc:
             return _link_error_response(exc)
 
+        try:
+            ensure_product_set_codes_match(project=project, product_ids=[row.product_id for row in rows])
+        except RequirementLinkError as exc:
+            return _link_error_response(exc)
+
         with transaction.atomic():
             newly_linked_products = link_products_to_project(
                 project=project,
@@ -475,6 +481,10 @@ class ProjectRequirementViewSet(BaseViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         project = Project.objects.get(pk=project_id, workspace__slug=slug)
+        try:
+            ensure_product_set_codes_match(project=project, product_ids=[product_id])
+        except RequirementLinkError as exc:
+            return _link_error_response(exc)
 
         try:
             with transaction.atomic():

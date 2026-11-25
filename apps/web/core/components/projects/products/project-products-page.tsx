@@ -35,6 +35,13 @@ import {
   ProductProjectStatusBar,
 } from "@/components/products/projects/product-project-status-bar";
 import { ProjectContextChip } from "@/components/projects/project-context-chip";
+import {
+  REQUIREMENT_GRID_ROW_CLASS,
+  REQUIREMENT_LIST_BODY_CELL_CLASS,
+  REQUIREMENT_LIST_BODY_CELL_FLUSH_CLASS,
+  REQUIREMENT_LIST_HEADER_CELL_CLASS,
+} from "@/components/requirements/requirement-grid-shared";
+import { RequirementListHeaderLabel } from "@/components/requirements/requirement-list-cells";
 import { useProducts } from "@/hooks/store/use-products";
 import { useProject } from "@/hooks/store/use-project";
 import { useProductSets } from "@/hooks/store/use-product-sets";
@@ -130,7 +137,9 @@ export const ProjectProductsPage = observer(function ProjectProductsPage() {
       message:
         payload?.code === "PRODUCT_HAS_LINKED_REQUIREMENTS"
           ? t("project_products.has_linked_requirements")
-          : (payload?.error ?? t("error")),
+          : payload?.code === "PRODUCT_SET_CODE_MISMATCH"
+            ? t("project_products.sets.code_mismatch")
+            : (payload?.error ?? t("error")),
     });
   };
 
@@ -276,16 +285,29 @@ export const ProjectProductsPage = observer(function ProjectProductsPage() {
             </div>
           ) : (
             <table className="w-full border-collapse text-left">
-              <thead className="sticky top-0 z-[1] bg-layer-1">
-                <tr className="border-b border-subtle text-11 font-medium text-secondary">
-                  <th className="px-5 py-2.5">{t("project_products.columns.product")}</th>
-                  <th className="w-44 px-4 py-2.5">{t("project_products.columns.code")}</th>
-                  <th className="w-24 px-4 py-2.5">{t("project_products.columns.requirement_count")}</th>
-                  <th className="w-56 px-4 py-2.5">{t("project_products.columns.status_distribution")}</th>
-                  <th className="w-24 px-4 py-2.5">{t("project_products.columns.completion")}</th>
-                  <th className="w-40 px-4 py-2.5">{t("project_products.columns.linked_at")}</th>
+              {/* 与需求列表同一套只读表格样式：表头 40px / 13px 灰字，行 48px / 14px，只画横线 */}
+              <thead className="sticky top-0 z-[1]">
+                <tr>
+                  <th className={REQUIREMENT_LIST_HEADER_CELL_CLASS}>
+                    <RequirementListHeaderLabel label={t("project_products.columns.product")} />
+                  </th>
+                  <th className={cn("w-44", REQUIREMENT_LIST_HEADER_CELL_CLASS)}>
+                    <RequirementListHeaderLabel label={t("project_products.columns.code")} />
+                  </th>
+                  <th className={cn("w-28", REQUIREMENT_LIST_HEADER_CELL_CLASS)}>
+                    <RequirementListHeaderLabel label={t("project_products.columns.requirement_count")} />
+                  </th>
+                  <th className={cn("w-60", REQUIREMENT_LIST_HEADER_CELL_CLASS)}>
+                    <RequirementListHeaderLabel label={t("project_products.columns.status_distribution")} />
+                  </th>
+                  <th className={cn("w-28", REQUIREMENT_LIST_HEADER_CELL_CLASS)}>
+                    <RequirementListHeaderLabel label={t("project_products.columns.completion")} />
+                  </th>
+                  <th className={cn("w-36", REQUIREMENT_LIST_HEADER_CELL_CLASS)}>
+                    <RequirementListHeaderLabel label={t("project_products.columns.linked_at")} />
+                  </th>
                   {canManage && (
-                    <th className="w-12 px-4 py-2.5">
+                    <th className={cn("w-14", REQUIREMENT_LIST_HEADER_CELL_CLASS)}>
                       <span className="sr-only">{t("project_products.unlink")}</span>
                     </th>
                   )}
@@ -295,21 +317,23 @@ export const ProjectProductsPage = observer(function ProjectProductsPage() {
                 {linkRows.map(({ link, kind, isLast, childCount }) => {
                   const isSetRow = kind === "set";
                   const isCollapsed = isSetRow && collapsedSetIds.has(link.product);
+                  // 展开的产品集与它的子行之间、子行之间不画分隔线，整组读作一块
+                  const hideDivider = (isSetRow && childCount > 0 && !isCollapsed) || (kind === "child" && !isLast);
+                  const cellClass = cn(REQUIREMENT_LIST_BODY_CELL_CLASS, hideDivider && "border-b-0");
                   return (
                     <tr
                       key={link.id}
-                      className={cn(
-                        "group hover:bg-layer-transparent-hover",
-                        // 展开的产品集与它的子行之间、子行之间不画分隔线，整组读作一块
-                        // （不用透明边框：它仍占 1px，会在带底色的子行间露白缝）
-                        !((isSetRow && childCount > 0 && !isCollapsed) || (kind === "child" && !isLast)) &&
-                          "border-b border-subtle",
-                        kind === "child" && "bg-layer-1/40"
-                      )}
+                      className={cn("group", REQUIREMENT_GRID_ROW_CLASS, kind === "child" && "bg-layer-1/40")}
                     >
                       {/* 子行从产品集图标的正下方引线，图标比独立产品明显靠右一档：独立产品与产品集图标对齐，不能看着像子行 */}
-                      <td className={kind === "child" ? "relative py-2.5 pr-5 pl-[78px]" : "px-5 py-3"}>
-                        {kind === "child" && <ProductSetTreeGuide left={62} isLast={isLast} />}
+                      <td
+                        className={cn(
+                          REQUIREMENT_LIST_BODY_CELL_FLUSH_CLASS,
+                          hideDivider && "border-b-0",
+                          kind === "child" ? "relative pr-page-x pl-[80px]" : "px-page-x"
+                        )}
+                      >
+                        {kind === "child" && <ProductSetTreeGuide left={64} isLast={isLast} />}
                         <div className="flex min-w-0 items-center gap-2">
                           {isSetRow ? (
                             <button
@@ -331,41 +355,51 @@ export const ProjectProductsPage = observer(function ProjectProductsPage() {
                           <Link
                             to={productHref(link.product)}
                             title={link.product_name}
-                            className="truncate text-13 font-medium text-primary group-hover:text-accent-primary hover:underline"
+                            className="truncate font-medium hover:text-accent-primary hover:underline"
                           >
                             {link.product_name || link.product_identifier}
                           </Link>
-                          <span className="shrink-0 font-mono text-12 text-tertiary">{link.product_identifier}</span>
+                          <span className="shrink-0 font-mono text-[12.5px] font-medium text-tertiary">
+                            {link.product_identifier}
+                          </span>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-13 text-secondary">
-                        <span className="block truncate" title={link.product_code}>
-                          {/* 产品集没有项目代号（库里的 code 只是名称的副本） */}
-                          {(!link.product_is_set && link.product_code) || "—"}
+                      <td className={cellClass}>
+                        <span className="block truncate text-secondary" title={link.product_code}>
+                          {link.product_code || "—"}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-13 tabular-nums text-primary">
-                        {link.requirement_count > 0 ? (
-                          <Link to={requirementsHref(link.product)} className="hover:text-accent-primary hover:underline">
-                            {link.requirement_count}
-                          </Link>
-                        ) : (
-                          link.requirement_count
-                        )}
+                      <td className={cellClass}>
+                        <span className="tabular-nums">
+                          {link.requirement_count > 0 ? (
+                            <Link
+                              to={requirementsHref(link.product)}
+                              className="hover:text-accent-primary hover:underline"
+                            >
+                              {link.requirement_count}
+                            </Link>
+                          ) : (
+                            link.requirement_count
+                          )}
+                        </span>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className={cellClass}>
                         <ProductProjectStatusBar statusCounts={link.status_counts} total={link.requirement_count} />
                       </td>
-                      <td className="px-4 py-3 text-13 tabular-nums text-secondary">
+                      <td className={cellClass}>
                         <Tooltip tooltipContent={t("project_products.completion_hint")}>
-                          <span>{getCompletionRate(link.status_counts, link.requirement_count)}%</span>
+                          <span className="tabular-nums text-secondary">
+                            {getCompletionRate(link.status_counts, link.requirement_count)}%
+                          </span>
                         </Tooltip>
                       </td>
-                      <td className="px-4 py-3 text-11 text-secondary">
-                        {renderFormattedDate(link.created_at, "yyyy-MM-dd") ?? "-"}
+                      <td className={cellClass}>
+                        <span className="tabular-nums text-secondary">
+                          {renderFormattedDate(link.created_at, "yyyy-MM-dd") ?? "-"}
+                        </span>
                       </td>
                       {canManage && (
-                        <td className="px-4 py-3">
+                        <td className={cellClass}>
                           <CustomMenu placement="bottom-end" closeOnSelect ellipsis ariaLabel={t("project_products.unlink")}>
                             <CustomMenu.MenuItem
                               onClick={() => setPendingUnlink(link)}
@@ -420,6 +454,7 @@ export const ProjectProductsPage = observer(function ProjectProductsPage() {
           productSets={productSets}
           linkedIds={new Set(setLinks.map((link) => link.product))}
           linkedProductIds={new Set(productLinks.map((link) => link.product))}
+          projectCode={projectDetail?.code?.trim() ?? ""}
           isSubmitting={isMutating}
           handleClose={() => setIsSetModalOpen(false)}
           onSubmit={(productSetIds) => {

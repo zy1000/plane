@@ -147,7 +147,7 @@ export const ProductGeneralSettings = observer(function ProductGeneralSettings()
       // 白名单带来的可见性这里判不了，踢走后列表页会按后端结果重新展示
       const canStillView = isLinkedMember || canSeeAllProducts;
       if (!hasProductPermission(savedProduct, PRODUCT_SETTINGS_EDIT_PERMISSION_KEY) && !canStillView) {
-        navigate(`/${workspaceSlug}/products`, { replace: true });
+        navigate(`/${workspaceSlug}/products?tab=products`, { replace: true });
       }
     } catch (error) {
       const errorPayload =
@@ -377,7 +377,7 @@ export const ProductGeneralSettings = observer(function ProductGeneralSettings()
 
       <DeleteProductModal
         onDeleted={() => {
-          navigate(`/${workspaceSlug}/products`, { replace: true });
+          navigate(`/${workspaceSlug}/products?tab=products`, { replace: true });
         }}
       />
     </SettingsContentWrapper>

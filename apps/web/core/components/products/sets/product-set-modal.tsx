@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "@plane/i18n";
+import { EProjectDictionaryKey } from "@plane/types";
 import { Button } from "@plane/propel/button";
 import { CloseIcon } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { EModalPosition, EModalWidth, Input, ModalCore } from "@plane/ui";
 import { FORM_VARIANT_STYLES, FormFieldShell } from "@/components/common/form-section";
+import { DictionaryLabelSelect } from "@/components/dropdowns/dictionary-label-select";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
+import { useDataDictionaries } from "@/hooks/store/use-data-dictionaries";
 import type { TProductSetRequestError } from "@/hooks/store/use-product-sets";
 import { useUser } from "@/hooks/store/user";
 import { useProductsContext } from "../context";
@@ -13,7 +16,7 @@ import { useProductsContext } from "../context";
 const I18N = "workspace_product_sets";
 const styles = FORM_VARIANT_STYLES.modal;
 
-type TFieldErrors = { name?: string; identifier?: string };
+type TFieldErrors = { name?: string; identifier?: string; code?: string };
 
 /** 序列化器把错误码放在字段名下（{ name: ["PRODUCT_NAME_ALREADY_EXISTS"] }），取第一条 */
 const fieldErrorCode = (error: TProductSetRequestError | undefined, field: string) => {
@@ -22,17 +25,26 @@ const fieldErrorCode = (error: TProductSetRequestError | undefined, field: strin
 };
 
 /**
- * 产品集的创建 / 编辑弹窗：名称、编号、负责人。
+ * 产品集的创建 / 编辑弹窗：名称、编号、项目代号、负责人。
+ * 项目代号必填、取自 project_code 字典：加入产品、关联项目都要求对方代号相同。存量产品集的代号是名称的副本、
+ * 不在字典里，编辑时显示为空、要求补选；已有集内产品的产品集，代号补齐后就不能再改（后端也拦，关联项目只有后端知道）。
  * 打开状态放在 ProductsContext（列表页表头按钮、行内「编辑」、详情页签行的设置入口共用一个）。
  */
 export function ProductSetModal({ onCreated }: { onCreated?: (productSetId: string) => void } = {}) {
   const { t } = useTranslation();
   const { data: currentUser } = useUser();
-  const { sets, productSetModal, closeProductSetModal, fetchProduct } = useProductsContext();
+  const { workspaceSlug, sets, productSetModal, closeProductSetModal, fetchProduct } = useProductsContext();
   const { isOpen, productSet } = productSetModal;
+  const { isLoading: isDictionaryLoading, getDictionaryByKey } = useDataDictionaries(workspaceSlug || undefined, {
+    autoFetch: isOpen,
+  });
+  const codeDictionary = getDictionaryByKey(EProjectDictionaryKey.CODE);
+  const isInDictionary = (label: string) =>
+    Boolean(label) && Boolean(codeDictionary?.items.some((item) => item.label === label));
   const nameRef = useRef<HTMLInputElement>(null);
   const [name, setName] = useState("");
   const [identifier, setIdentifier] = useState("");
+  const [code, setCode] = useState("");
   const [ownerId, setOwnerId] = useState<string | null>(null);
   const [errors, setErrors] = useState<TFieldErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -41,6 +53,7 @@ export function ProductSetModal({ onCreated }: { onCreated?: (productSetId: stri
     if (!isOpen) return;
     setName(productSet?.name ?? "");
     setIdentifier(productSet?.identifier ?? "");
+    setCode(productSet?.code?.trim() ?? "");
     setOwnerId(productSet?.owner ?? currentUser?.id ?? null);
     setErrors({});
   }, [currentUser?.id, isOpen, productSet]);
@@ -52,15 +65,25 @@ export function ProductSetModal({ onCreated }: { onCreated?: (productSetId: stri
     return text === key ? t(`${I18N}.toast.failed`) : text;
   };
 
+  // 存量代号（不在字典里）当作没填：下拉显示为空，提交时要求补选
+  const codeValue = isInDictionary(code) ? code : "";
+  const isCodeLocked = Boolean(productSet && productSet.products.length > 0 && isInDictionary(productSet.code?.trim() ?? ""));
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-    const payload = { name: name.trim(), identifier: identifier.trim().toUpperCase(), owner: ownerId ?? undefined };
+    const payload = {
+      name: name.trim(),
+      identifier: identifier.trim().toUpperCase(),
+      code: codeValue,
+      owner: ownerId ?? undefined,
+    };
     const nextErrors: TFieldErrors = {
       name: payload.name ? undefined : t(`${I18N}.form.name_required`),
       identifier: payload.identifier ? undefined : t(`${I18N}.form.identifier_required`),
+      code: payload.code ? undefined : t(`${I18N}.form.code_required`),
     };
     setErrors(nextErrors);
-    if (nextErrors.name || nextErrors.identifier) return;
+    if (nextErrors.name || nextErrors.identifier || nextErrors.code) return;
 
     setIsSubmitting(true);
     try {
@@ -80,9 +103,10 @@ export function ProductSetModal({ onCreated }: { onCreated?: (productSetId: stri
       const fieldErrors: TFieldErrors = {
         name: errorText(fieldErrorCode(error, "name")),
         identifier: errorText(fieldErrorCode(error, "identifier")),
+        code: errorText(fieldErrorCode(error, "code")),
       };
       setErrors(fieldErrors);
-      if (!fieldErrors.name && !fieldErrors.identifier) {
+      if (!fieldErrors.name && !fieldErrors.identifier && !fieldErrors.code) {
         setToast({ type: TOAST_TYPE.ERROR, title: t("error"), message: t(`${I18N}.toast.failed`) });
       }
     } finally {
@@ -140,6 +164,27 @@ export function ProductSetModal({ onCreated }: { onCreated?: (productSetId: stri
               hasError={Boolean(errors.identifier)}
               className={styles.input}
             />
+          </FormFieldShell>
+          <FormFieldShell
+            label={t(`${I18N}.fields.code`)}
+            required
+            editable
+            styles={styles}
+            error={errors.code}
+            hint={errors.code ? undefined : t(isCodeLocked ? `${I18N}.form.code_locked_hint` : `${I18N}.form.code_hint`)}
+          >
+            <div className={styles.control}>
+              <DictionaryLabelSelect
+                dictionary={codeDictionary}
+                value={codeValue}
+                onChange={setCode}
+                disabled={isCodeLocked}
+                placeholder={t(`${I18N}.form.code_placeholder`)}
+                hasError={Boolean(errors.code)}
+                isLoading={isDictionaryLoading}
+                buttonClassName={styles.dropdownButton}
+              />
+            </div>
           </FormFieldShell>
           <FormFieldShell label={t(`${I18N}.fields.owner`)} required={false} editable styles={styles}>
             <div className={styles.control}>

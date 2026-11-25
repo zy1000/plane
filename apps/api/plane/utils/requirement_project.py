@@ -329,6 +329,34 @@ def linkable_facets(queryset):
     return {"by_product": by_product, "total": sum(by_product.values())}
 
 
+def ensure_product_set_codes_match(*, project, product_ids):
+    """产品集只能关联项目代号相同的项目。关联需求时会顺带把所属产品关联进来（link_products_to_project），
+    产品集也走这条路，所以写之前先查：还没关联本项目、且代号不同的产品集，整批拒绝。已关联的不再查。"""
+    wanted = list(dict.fromkeys(str(item) for item in product_ids))
+    if not wanted:
+        return
+    existing = {
+        str(product_id)
+        for product_id in ProductProject.objects.filter(project_id=project.id, product_id__in=wanted).values_list(
+            "product_id", flat=True
+        )
+    }
+    project_code = (project.code or "").strip()
+    mismatched = [
+        str(product_id)
+        for product_id, code in Product.objects.filter(
+            id__in=[item for item in wanted if item not in existing], is_set=True
+        ).values_list("id", "code")
+        if (code or "").strip() != project_code
+    ]
+    if mismatched:
+        raise RequirementLinkError(
+            "Product sets can only be linked to projects with the same project code.",
+            code="PRODUCT_SET_CODE_MISMATCH",
+            detail={"product_ids": mismatched},
+        )
+
+
 def link_products_to_project(*, project, product_ids, actor):
     """把产品关联进项目（幂等），返回本次新关联上的产品 id。
 
@@ -714,6 +742,8 @@ def resolve_linkable_products(*, user, slug, project, product_ids):
             code="PRODUCT_LINK_REJECTED",
             detail={"product_ids": missing},
         )
+    # 产品集只能关联项目代号相同的项目（只在关联这一刻校验）
+    ensure_product_set_codes_match(project=project, product_ids=requested)
     return requested
 
 
@@ -750,6 +780,26 @@ def resolve_linkable_projects(*, user, slug, product, project_ids):
             code="PROJECT_LINK_REJECTED",
             detail={"project_ids": missing},
         )
+    if product.is_set:
+        # 产品集只能关联项目代号相同的项目（只在关联这一刻校验；已关联的重复提交不再查）
+        already_linked = {
+            str(item)
+            for item in ProductProject.objects.filter(product_id=product.id, project_id__in=requested).values_list(
+                "project_id", flat=True
+            )
+        }
+        set_code = (product.code or "").strip()
+        mismatched = [
+            str(row.id)
+            for row in rows
+            if str(row.id) not in already_linked and (row.code or "").strip() != set_code
+        ]
+        if mismatched:
+            raise RequirementLinkError(
+                "Product sets can only be linked to projects with the same project code.",
+                code="PRODUCT_SET_CODE_MISMATCH",
+                detail={"project_ids": mismatched},
+            )
     return requested
 
 

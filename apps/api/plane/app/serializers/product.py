@@ -8,12 +8,13 @@ from plane.app.serializers.user import UserLiteSerializer
 from plane.db.models import (
     DataDictionaryItem,
     Product,
+    ProductProject,
     User,
     WorkspaceMember,
 )
 from plane.app.permissions.base import _get_user_product_permission_keys, bulk_product_permission_keys
 from plane.utils.content_validator import validate_html_content
-from plane.utils.data_dictionary import PRODUCT_DICTIONARY_FIELD_KEYS
+from plane.utils.data_dictionary import PRODUCT_DICTIONARY_FIELD_KEYS, is_project_code_in_dictionary
 
 from .base import BaseSerializer
 from .data_dictionary import DataDictionaryItemLiteSerializer
@@ -412,12 +413,39 @@ class ProductSetSerializer(BaseSerializer):
     validate_description_html = ProductSerializer.validate_description_html
     get_my_permission_keys = ProductSerializer.get_my_permission_keys
 
+    # 项目代号必填、取自 project_code 字典（存 label）：加入产品、关联项目都要求对方代号与之相同（utils/product_set.py、
+    # utils/requirement_project.py）。值没变就不查，免得存量产品集（code 是名称的副本）改不了别的字段；前端编辑弹窗会强制补选。
+    code = serializers.CharField(max_length=255, required=True)
+
+    def validate_code(self, value):
+        code = value.strip()
+        if self.instance is not None and self.instance.code == code:
+            return code
+        workspace = self.context.get("workspace")
+        if workspace is None:
+            raise serializers.ValidationError("Workspace is required.")
+        if not is_project_code_in_dictionary(workspace.id, code):
+            raise serializers.ValidationError("PROJECT_CODE_NOT_IN_DICTIONARY")
+        # 绑定只在那一刻校验代号：已有集内产品或关联项目时改代号会让既有绑定对不上，干脆不让改。
+        # 存量产品集的代号不在字典里（是名称的副本），允许补选一次，否则有成员的存量产品集永远补不上。
+        if (
+            self.instance is not None
+            and is_project_code_in_dictionary(workspace.id, (self.instance.code or "").strip())
+            and (
+                Product.objects.filter(product_set_id=self.instance.id).exists()
+                or ProductProject.objects.filter(product_id=self.instance.id).exists()
+            )
+        ):
+            raise serializers.ValidationError("PRODUCT_SET_CODE_LOCKED")
+        return code
+
     class Meta:
         model = Product
         fields = [
             "id",
             "name",
             "identifier",
+            "code",
             "description_html",
             "workspace",
             "owner",

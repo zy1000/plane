@@ -60,7 +60,9 @@ export const ProductSetMembersPage = observer(function ProductSetMembersPage() {
           message: t(
             code === "PRODUCT_ALREADY_IN_SET"
               ? "workspace_product_sets.errors.product_already_in_set"
-              : "workspace_product_sets.toast.failed"
+              : code === "PRODUCT_CODE_MISMATCH"
+                ? "workspace_product_sets.errors.product_code_mismatch"
+                : "workspace_product_sets.toast.failed"
           ),
         });
       } finally {
@@ -207,6 +209,7 @@ export const ProductSetMembersPage = observer(function ProductSetMembersPage() {
       <AddProductsModal
         isOpen={isAddOpen}
         productSetId={productId?.toString() ?? ""}
+        productSetCode={productSet?.code ?? ""}
         products={candidates}
         isSubmitting={isMutating}
         handleClose={() => setIsAddOpen(false)}

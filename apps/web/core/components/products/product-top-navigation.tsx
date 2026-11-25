@@ -211,7 +211,7 @@ const ProductNavigationRoot = observer(function ProductNavigationRoot(props: TPr
     <div className="flex size-full items-center gap-3 overflow-hidden">
       <div className="flex h-full shrink-0 items-center gap-2">
         <Link
-          to={`/${workspaceSlug}/products${isSet ? "?tab=sets" : ""}`}
+          to={`/${workspaceSlug}/products${isSet ? "" : "?tab=products"}`}
           className="cursor-pointer text-13 font-medium text-primary"
         >
           {t("workspace_products.title")}

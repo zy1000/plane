@@ -60,6 +60,7 @@ export type TProductSet = Pick<
   | "id"
   | "name"
   | "identifier"
+  | "code"
   | "description_html"
   | "workspace"
   | "owner"
@@ -79,7 +80,7 @@ export type TProductSet = Pick<
 };
 
 /** 产品集列表里的一个集内产品：GET /product-sets/ 的 products[] */
-export type TProductSetListMember = Pick<TProduct, "id" | "name" | "identifier" | "owner_detail" | "updated_at"> & {
+export type TProductSetListMember = Pick<TProduct, "id" | "name" | "identifier" | "code" | "owner_detail" | "updated_at"> & {
   requirement_count: number;
   case_count: number;
   open_defect_count: number;
@@ -88,6 +89,8 @@ export type TProductSetListMember = Pick<TProduct, "id" | "name" | "identifier" 
 export type TProductSetPayload = {
   name: string;
   identifier: string;
+  /** 项目代号：project_code 字典值的 label */
+  code: string;
   owner?: string;
   description_html?: string | null;
 };
