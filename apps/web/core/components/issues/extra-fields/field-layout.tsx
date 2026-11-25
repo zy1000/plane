@@ -118,7 +118,8 @@ export function IssueFieldLayout({
       const element = Array.from(rootRef.current?.querySelectorAll<HTMLElement>("[data-layout-field]") ?? []).find(
         (node) => node.dataset.layoutField === focusField
       );
-      element?.scrollIntoView({ block: "nearest", behavior: "auto" });
+      // 居中：nearest 会把屏幕下方的字段刚好贴到可视区底边，看着像没定位到
+      element?.scrollIntoView({ block: "center", behavior: "auto" });
       (
         element?.querySelector<HTMLElement>(
           "input:not(:disabled), textarea:not(:disabled), select:not(:disabled), button:not(:disabled), [tabindex='0']"

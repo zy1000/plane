@@ -103,11 +103,15 @@ export type TMyApprovalsResponse = {
   pending_count: number;
 };
 
-/** 当前用户在某工作项上能发起的一条流转（详情页流转按钮） */
+/** 某工作项从当前状态出发的一条流转（详情页流转按钮）；当前用户不能发起的也返回，按钮置灰 */
 export type TAvailableTransition = {
   id: string;
   /** 已回落为目标状态名，直接显示 */
   action_name: string;
+  /** 当前用户是否在发起人范围内 */
+  can_initiate: boolean;
+  /** 不能发起时，谁可以发起（角色名 / 成员名），用于置灰按钮的提示 */
+  initiator_labels: string[];
   from_state_id: string | null;
   to_state_id: string;
   to_state_name: string;

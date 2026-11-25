@@ -115,6 +115,7 @@ export const IssueTransitionBanner = observer(function IssueTransitionBanner(pro
                     key={field.id}
                     type="button"
                     onClick={() => focusField(field.id)}
+                    aria-label={filled ? `${field.name}（已填写）` : `${field.name}（未填写）`}
                     className={cn(
                       "inline-flex h-7 items-center rounded-md border px-2.5 text-13",
                       filled
@@ -122,7 +123,7 @@ export const IssueTransitionBanner = observer(function IssueTransitionBanner(pro
                         : "border-accent-strong bg-surface-1 text-accent-primary hover:bg-accent-subtle-hover"
                     )}
                   >
-                    {filled ? `${field.name} 已填写` : field.name}
+                    {field.name}
                   </button>
                 );
               })}

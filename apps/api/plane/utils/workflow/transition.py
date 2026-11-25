@@ -922,10 +922,26 @@ def approve_transition_record(record_id, approver, action: str, comment: str = "
     return True, None, record
 
 
+def _initiator_labels(principals) -> list:
+    """发起人配置的展示名（角色名 / 成员名 / 动态对象），给「仅 X 可发起」的提示用。"""
+    # 动态对象的中文名与流程图共用一份
+    from plane.app.serializers.workflow import DYNAMIC_TARGET_LABELS
+
+    labels = []
+    for principal in principals:
+        if principal.kind == WorkflowPrincipalKind.ROLE and principal.job_role_id:
+            labels.append(principal.job_role.label)
+        elif principal.kind == WorkflowPrincipalKind.MEMBER and principal.member_id:
+            labels.append(principal.member.display_name or principal.member.email)
+        elif principal.kind == WorkflowPrincipalKind.DYNAMIC and principal.dynamic_target:
+            labels.append(DYNAMIC_TARGET_LABELS.get(principal.dynamic_target, principal.dynamic_target))
+    return list(dict.fromkeys(label for label in labels if label))
+
+
 def list_available_transitions(issue: Issue, user) -> list:
     """
-    当前用户在这个工作项上能发起的流转（详情页的流转按钮）。
-    只看激活工作流里从当前状态出发的边，按目标状态顺序；发起人不命中的不返回。
+    这个工作项从当前状态出发的全部流转（详情页的流转按钮），按目标状态顺序。
+    当前用户不是发起人的也返回，can_initiate=False，前端置灰并提示谁可以发起。
     其余规则（必填字段 / 目标负责人 / 审批）只给前端提示，提交时仍由 check_update_state_permission 校验。
     """
     workflow = get_active_workflow(issue)
@@ -940,18 +956,34 @@ def list_available_transitions(issue: Issue, user) -> list:
     current_assignee_ids = set(get_issue_assignee_ids(issue))
     results = []
     for transition in transitions:
-        ok, _ = _check_transition_initiator(issue=issue, transition=transition, user=user)
-        if not ok:
-            continue
-        has_assignee_rule = get_transition_principals(transition, WorkflowPrincipalDimension.ASSIGNEE).exists()
-        allowed_assignee_ids = (
-            resolve_dimension_user_ids(issue, transition, WorkflowPrincipalDimension.ASSIGNEE)
-            if has_assignee_rule
-            else []
+        # 发起人维度为空时全员可发起，口径同 _check_transition_initiator
+        initiator_principals = list(
+            get_transition_principals(transition, WorkflowPrincipalDimension.INITIATOR).select_related(
+                "member", "job_role"
+            )
         )
-        required_fields = WorkflowTransitionRequiredField.objects.filter(
-            workflow=transition, deleted_at__isnull=True, extra_field__deleted_at__isnull=True
-        ).select_related("extra_field")
+        can_initiate = not initiator_principals or str(user.id) in set(
+            resolve_dimension_user_ids(issue, transition, WorkflowPrincipalDimension.INITIATOR)
+        )
+
+        # 发起不了的只用来置灰展示，不必解析负责人和必填字段
+        allowed_assignee_ids = []
+        assignee_required = False
+        required_fields = []
+        if can_initiate:
+            if get_transition_principals(transition, WorkflowPrincipalDimension.ASSIGNEE).exists():
+                allowed_assignee_ids = resolve_dimension_user_ids(
+                    issue, transition, WorkflowPrincipalDimension.ASSIGNEE
+                )
+                # 配了目标负责人且现负责人不全在允许范围里，就得在流转时重新指定
+                assignee_required = not current_assignee_ids.issubset(set(allowed_assignee_ids))
+            required_fields = [
+                {"id": str(item.extra_field_id), "name": item.extra_field.name}
+                for item in WorkflowTransitionRequiredField.objects.filter(
+                    workflow=transition, deleted_at__isnull=True, extra_field__deleted_at__isnull=True
+                ).select_related("extra_field")
+            ]
+
         to_state = transition.to_state
         results.append(
             {
@@ -962,14 +994,12 @@ def list_available_transitions(issue: Issue, user) -> list:
                 "to_state_name": to_state.name,
                 "to_state_color": to_state.color,
                 "to_state_group": to_state.group,
+                "can_initiate": can_initiate,
+                "initiator_labels": [] if can_initiate else _initiator_labels(initiator_principals),
                 # 「全部通过」在配置页表示没配审批人，后端同样直接放行
                 "requires_approval": transition.approval_type in (ApprovalType.ANY, ApprovalType.N_OF_M),
-                "required_fields": [
-                    {"id": str(item.extra_field_id), "name": item.extra_field.name} for item in required_fields
-                ],
-                # 配了目标负责人且现负责人不全在允许范围里，就得在流转时重新指定
-                "assignee_required": has_assignee_rule
-                and not current_assignee_ids.issubset(set(allowed_assignee_ids)),
+                "required_fields": required_fields,
+                "assignee_required": assignee_required,
                 "allowed_assignee_ids": allowed_assignee_ids,
             }
         )
