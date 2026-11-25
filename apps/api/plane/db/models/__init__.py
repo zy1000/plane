@@ -49,6 +49,7 @@ from .issue import (
     IssueLabel,
     IssueLink,
     IssueMention,
+    IssueProduct,
     IssueReaction,
     IssueRelation,
     IssueSequence,

@@ -199,6 +199,8 @@ class GroupedOffsetPaginator(OffsetPaginator):
         "assignees__id": "assignee_ids",
         "issue_module__module_id": "module_ids",
         "issue_release__release_id": "release_ids",
+        "issue_products__product_id": "product_ids",
+        "issue_products__product_module_id": "product_module_ids",
     }
 
     def __init__(
@@ -482,6 +484,8 @@ class SubGroupedOffsetPaginator(OffsetPaginator):
         "assignees__id": "assignee_ids",
         "issue_module__module_id": "module_ids",
         "issue_release__release_id": "release_ids",
+        "issue_products__product_id": "product_ids",
+        "issue_products__product_module_id": "product_module_ids",
     }
 
     def __init__(

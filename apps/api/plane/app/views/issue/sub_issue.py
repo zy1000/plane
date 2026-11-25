@@ -24,7 +24,7 @@ from plane.app.permissions import ProjectEntityPermission
 from plane.db.models import Issue, IssueLink, FileAsset, CycleIssue
 from plane.bgtasks.issue_activities_task import issue_activity
 from plane.utils.timezone_converter import user_timezone_converter
-from plane.utils.issue_id_arrays import issue_id_array_annotations
+from plane.utils.issue_id_arrays import issue_id_array_annotations, issue_product_array_annotations
 from collections import defaultdict
 from plane.utils.host import base_host
 from plane.utils.order_queryset import order_issue_queryset
@@ -116,6 +116,7 @@ class BulkSubIssuesEndpoint(BaseAPIView):
                 )
                 # 四个 id 数组走关联子查询，不 JOIN + GROUP BY（见 issue_id_arrays 模块说明）
                 .annotate(**issue_id_array_annotations())
+                .annotate(**issue_product_array_annotations())
                 .annotate(state_group=F("state__group"))
                 .order_by("-created_at")
             )
@@ -143,6 +144,8 @@ class BulkSubIssuesEndpoint(BaseAPIView):
                 "release_ids",
                 "product_id",
                 "product_module_id",
+                "product_ids",
+                "product_module_ids",
                 "stage_id",
                 "test_plan_id",
                 "label_ids",
@@ -220,6 +223,7 @@ class SubIssuesEndpoint(BaseAPIView):
             )
             # 四个 id 数组走关联子查询，不 JOIN + GROUP BY（见 issue_id_arrays 模块说明）
             .annotate(**issue_id_array_annotations())
+                .annotate(**issue_product_array_annotations())
             .annotate(state_group=F("state__group"))
             .order_by("-created_at")
         )
@@ -250,6 +254,8 @@ class SubIssuesEndpoint(BaseAPIView):
             "release_ids",
             "product_id",
             "product_module_id",
+            "product_ids",
+            "product_module_ids",
             "stage_id",
             "test_plan_id",
             "label_ids",

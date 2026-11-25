@@ -349,12 +349,39 @@ def _filter_plain_fk(key, params, issue_filter, method, prefix=""):
     return issue_filter
 
 
+def _filter_issue_product(key, link_field, params, issue_filter, method, prefix=""):
+    """产品 / 产品模块按关联行（IssueProduct，缺陷可多个）任一命中。「无产品」看镜像列
+    （镜像列为空 ⇔ 没有关联行）；「无产品模块」看是否没有任何一行关联填了模块。"""
+    raw = params.get(key)
+    if method == "GET":
+        ids = [item for item in (raw or "").split(",") if item != "null"]
+        if "None" in ids:
+            if link_field == "product_module_id":
+                # 「无产品模块」= 没有任何一行关联填了模块（缺陷可关联多个产品，不能只看第一个）
+                from plane.db.models import Issue, IssueProduct
+
+                issue_filter[f"{prefix}id__in"] = Issue.all_objects.exclude(
+                    id__in=IssueProduct.objects.filter(product_module_id__isnull=False).values("issue_id")
+                ).values("id")
+            else:
+                issue_filter[f"{prefix}{key}__isnull"] = True
+        ids = filter_valid_uuids(ids)
+        if len(ids) and "" not in ids:
+            issue_filter[f"{prefix}issue_products__{link_field}__in"] = ids
+            issue_filter[f"{prefix}issue_products__deleted_at__isnull"] = True
+    else:
+        if raw and len(raw) and raw != "null":
+            issue_filter[f"{prefix}issue_products__{link_field}__in"] = raw
+            issue_filter[f"{prefix}issue_products__deleted_at__isnull"] = True
+    return issue_filter
+
+
 def filter_product_id(params, issue_filter, method, prefix=""):
-    return _filter_plain_fk("product_id", params, issue_filter, method, prefix)
+    return _filter_issue_product("product_id", "product_id", params, issue_filter, method, prefix)
 
 
 def filter_product_module_id(params, issue_filter, method, prefix=""):
-    return _filter_plain_fk("product_module_id", params, issue_filter, method, prefix)
+    return _filter_issue_product("product_module_id", "product_module_id", params, issue_filter, method, prefix)
 
 
 def filter_stage_id(params, issue_filter, method, prefix=""):

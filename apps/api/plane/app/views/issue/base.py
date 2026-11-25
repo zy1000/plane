@@ -66,6 +66,7 @@ from plane.db.models import (
     Issue,
     IssueAssignee,
     IssueLabel,
+    IssueProduct,
     IssueLink,
     IssueReaction,
     IssueRelation,
@@ -94,7 +95,7 @@ from plane.utils.grouper import (
 )
 from plane.utils.host import base_host
 from plane.utils.issue_filters import issue_filters
-from plane.utils.issue_id_arrays import issue_id_array_annotations
+from plane.utils.issue_id_arrays import issue_id_array_annotations, issue_product_array_annotations
 from plane.utils.issue_product import module_path_label
 from plane.utils.order_queryset import order_issue_queryset
 from plane.utils.paginator import GroupedOffsetPaginator, SubGroupedOffsetPaginator
@@ -281,6 +282,8 @@ class IssueListEndpoint(BaseAPIView):
                 "release_ids",
                 "product_id",
                 "product_module_id",
+                "product_ids",
+                "product_module_ids",
                 "stage_id",
                 "test_plan_id",
                 "label_ids",
@@ -586,6 +589,8 @@ class IssueViewSet(BaseViewSet):
                     "release_ids",
                     "product_id",
                     "product_module_id",
+                    "product_ids",
+                    "product_module_ids",
                     "stage_id",
                     "test_plan_id",
                     "label_ids",
@@ -1188,6 +1193,7 @@ def _build_issue_export_row(issue, fields, tz=None):
     具体格式化（join、None -> 空字符串）由各 format 分支决定。
     """
     labels = [il.label.name for il in issue.label_issue.all() if il.label]
+    issue_product_links = list(issue.issue_products.all())
     assignees = [
         ia.assignee.display_name for ia in issue.issue_assignee.all() if ia.assignee
     ]
@@ -1234,9 +1240,18 @@ def _build_issue_export_row(issue, fields, tz=None):
         "labels": lambda: labels,
         "cycles": lambda: cycles,
         "modules": lambda: modules,
-        "product": lambda: issue.product.name if issue.product else None,
+        # 缺陷可关联多个产品：按关联顺序列出全部；模块写成「产品 / 模块路径」
+        "product": lambda: [link.product.name for link in issue_product_links] or (
+            issue.product.name if issue.product else None
+        ),
         "product_module": lambda: (
-            module_path_label(issue.product_module_id) if issue.product_module_id else None
+            [
+                f"{link.product.name} / {module_path_label(link.product_module_id)}"
+                for link in issue_product_links
+                if link.product_module_id
+            ]
+            if len(issue_product_links) > 1
+            else (module_path_label(issue.product_module_id) if issue.product_module_id else None)
         ),
         "stage": lambda: issue.stage.name if issue.stage else "",
         "parent_key": lambda: parent_key,
@@ -1362,6 +1377,11 @@ class BulkExportIssuesEndpoint(BaseAPIView):
                     queryset=IssueLabel.objects.filter(
                         deleted_at__isnull=True
                     ).select_related("label"),
+                ),
+                # 缺陷可关联多个产品：导出列出全部
+                Prefetch(
+                    "issue_products",
+                    queryset=IssueProduct.objects.select_related("product").order_by("sort_order", "created_at"),
                 ),
                 Prefetch(
                     "issue_assignee",
@@ -1576,6 +1596,8 @@ class IssuePaginatedViewSet(BaseViewSet):
             "release_ids",
             "product_id",
             "product_module_id",
+            "product_ids",
+            "product_module_ids",
             "stage_id",
             "test_plan_id",
             "label_ids",
@@ -1604,7 +1626,7 @@ class IssuePaginatedViewSet(BaseViewSet):
             base_queryset = base_queryset.filter(updated_at__gt=updated_at)
             queryset = queryset.filter(updated_at__gt=updated_at)
 
-        queryset = queryset.annotate(
+        queryset = queryset.annotate(**issue_product_array_annotations()).annotate(
             label_ids=Coalesce(
                 Subquery(
                     IssueLabel.objects.filter(issue_id=OuterRef("pk"))

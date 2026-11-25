@@ -18,6 +18,8 @@ import type {
   TIssueBulkSubIssues,
   TIssuesResponse,
   TIssueSubIssues,
+  TIssueProductLink,
+  TIssueProductsResponse,
 } from "@plane/types";
 // services
 import { APIService } from "@/services/api.service";
@@ -500,6 +502,74 @@ export class IssueService extends APIService {
     }
   ): Promise<any> {
     return this.post(`/api/workspaces/${workspaceSlug}/projects/${projectId}/bulk-subscribe-issues/`, data)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  // 关联产品（缺陷可多个、至少一个；其余至多一个），详情「产品」区块与列表多选下拉用
+  private issueProductsUrl(workspaceSlug: string, projectId: string, issueId: string) {
+    return `/api/workspaces/${workspaceSlug}/projects/${projectId}/issues/${issueId}/products/`;
+  }
+
+  async getIssueProducts(workspaceSlug: string, projectId: string, issueId: string): Promise<TIssueProductsResponse> {
+    return this.get(this.issueProductsUrl(workspaceSlug, projectId, issueId))
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async addIssueProducts(
+    workspaceSlug: string,
+    projectId: string,
+    issueId: string,
+    productIds: string[]
+  ): Promise<TIssueProductsResponse> {
+    return this.post(this.issueProductsUrl(workspaceSlug, projectId, issueId), { product_ids: productIds })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async setIssueProducts(
+    workspaceSlug: string,
+    projectId: string,
+    issueId: string,
+    products: Pick<TIssueProductLink, "product_id" | "product_module_id">[]
+  ): Promise<TIssueProductsResponse> {
+    return this.put(this.issueProductsUrl(workspaceSlug, projectId, issueId), { products })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async updateIssueProductModule(
+    workspaceSlug: string,
+    projectId: string,
+    issueId: string,
+    productId: string,
+    productModuleId: string | null
+  ): Promise<TIssueProductsResponse> {
+    return this.patch(`${this.issueProductsUrl(workspaceSlug, projectId, issueId)}${productId}/`, {
+      product_module_id: productModuleId,
+    })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async removeIssueProduct(
+    workspaceSlug: string,
+    projectId: string,
+    issueId: string,
+    productId: string
+  ): Promise<TIssueProductsResponse> {
+    return this.delete(`${this.issueProductsUrl(workspaceSlug, projectId, issueId)}${productId}/`)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;

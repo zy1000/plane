@@ -187,6 +187,7 @@ from .issue.comment import IssueCommentViewSet, CommentReactionViewSet
 from .issue.label import LabelViewSet, BulkCreateIssueLabelsEndpoint
 
 from .issue.link import IssueLinkViewSet
+from .issue.product import IssueProductEndpoint, IssueProductDetailEndpoint
 
 from .issue.relation import IssueRelationViewSet
 

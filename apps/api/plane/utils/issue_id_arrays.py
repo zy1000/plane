@@ -25,6 +25,7 @@ from plane.db.models import (
     DraftIssueModule,
     IssueAssignee,
     IssueLabel,
+    IssueProduct,
     ModuleIssue,
     ReleaseIssue,
 )
@@ -80,6 +81,30 @@ def issue_id_array_annotations(*names, issue_ref="id", active_assignees_only=Tru
         ),
     }
     return {name: annotations[name] for name in names} if names else annotations
+
+
+def issue_product_array_annotations(issue_ref="id"):
+    """关联产品（缺陷可多个）与各关联行上的模块，按关联顺序；按需单独加，不进默认四个。"""
+    issue = OuterRef(issue_ref)
+
+    def ordered(queryset, field):
+        return Coalesce(
+            Subquery(
+                queryset.order_by()
+                .values("issue_id")
+                .annotate(arr=ArrayAgg(field, ordering=("sort_order", "created_at")))
+                .values("arr")
+            ),
+            Value([], output_field=ArrayField(UUIDField())),
+        )
+
+    return {
+        "product_ids": ordered(IssueProduct.objects.filter(issue_id=issue), "product_id"),
+        "product_module_ids": ordered(
+            IssueProduct.objects.filter(issue_id=issue, product_module_id__isnull=False),
+            "product_module_id",
+        ),
+    }
 
 
 def draft_issue_id_array_annotations():

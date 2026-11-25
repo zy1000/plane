@@ -608,6 +608,44 @@ class IssueLabel(ProjectBaseModel):
         return f"{self.issue.name} {self.label.name}"
 
 
+class IssueProduct(ProjectBaseModel):
+    """工作项 ↔ 产品关联行（每行一个产品 + 该产品下可选的一个产品模块）。
+
+    缺陷（类型分类名为「缺陷」）可关联多个产品、至少一个；其余类型至多一个。
+    `Issue.product / product_module` 保留为「第一个关联产品」的镜像，供只认单值的
+    旧读路径（详情回显、导出、通知等）使用；规则与双写只在
+    utils/issue_product.py，不要在别处直接写本表或那两列。
+    关联行硬删（解除关联即删除），所以唯一约束也按软删条件写，与其他关联表一致。
+    """
+
+    issue = models.ForeignKey("db.Issue", on_delete=models.CASCADE, related_name="issue_products")
+    product = models.ForeignKey("db.Product", on_delete=models.CASCADE, related_name="product_issue_links")
+    product_module = models.ForeignKey(
+        "db.RequirementModule",
+        on_delete=models.SET_NULL,
+        related_name="product_issue_links",
+        null=True,
+        blank=True,
+    )
+    sort_order = models.FloatField(default=65535)
+
+    class Meta:
+        verbose_name = "Issue Product"
+        verbose_name_plural = "Issue Products"
+        db_table = "issue_products"
+        ordering = ("sort_order", "created_at")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["issue", "product"],
+                condition=Q(deleted_at__isnull=True),
+                name="issue_product_unique_when_deleted_at_null",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.issue_id} @ product {self.product_id}"
+
+
 class IssueSequence(ProjectBaseModel):
     issue = models.ForeignKey(
         Issue,

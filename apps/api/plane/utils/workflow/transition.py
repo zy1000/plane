@@ -127,7 +127,12 @@ def resolve_dimension_user_ids(
         # 按角色找人：研发矩阵里本项目 × 工作项所属产品填了人就用矩阵，否则项目里挂了这个角色的人
         from plane.utils.job_role import resolve_project_job_role_users
 
-        product_ids = [issue.product_id] if getattr(issue, "product_id", None) else None
+        # 缺陷可关联多个产品：每个关联产品的矩阵都算
+        from plane.db.models import IssueProduct
+
+        product_ids = list(
+            IssueProduct.objects.filter(issue_id=issue.id).values_list("product_id", flat=True)
+        ) or ([issue.product_id] if getattr(issue, "product_id", None) else None)
         user_ids.extend(resolve_project_job_role_users(issue.project_id, job_role_ids, product_ids))
     if want_assignees:
         user_ids.extend(get_issue_assignee_ids(issue))

@@ -128,8 +128,9 @@ export const ISSUE_GROUP_BY_KEY: Record<TIssueDisplayFilterOptions, keyof TIssue
   cycle: "cycle_id",
   module: "module_ids",
   release: "release_ids",
-  product: "product_id",
-  product_module: "product_module_id",
+  // 缺陷可关联多个产品：按数组归组（同 labels）
+  product: "product_ids",
+  product_module: "product_module_ids",
   stage: "stage_id",
   team_project: "project_id",
   // 与本人关系是派生分组，实际归属由 ProfileIssues.getArrayStringArray 计算；这里只给一个会随之变化的属性
@@ -141,8 +142,9 @@ export const ISSUE_FILTER_DEFAULT_DATA: Record<TIssueDisplayFilterOptions, keyof
   cycle: "cycle_id",
   module: "module_ids",
   release: "release_ids",
-  product: "product_id",
-  product_module: "product_module_id",
+  // 缺陷可关联多个产品：按数组归组（同 labels）
+  product: "product_ids",
+  product_module: "product_module_ids",
   stage: "stage_id",
   state: "state_id",
   "state_detail.group": "state__group", // state_detail.group is only being used for state_group display,

@@ -402,6 +402,16 @@ Project (原生)
   ├── Issue ──FK(SET_NULL)── Product / RequirementModule（2026-09-23：product / product_module 单选挂靠，
   │        规则集中在 utils/issue_product.py；产品须在 ProductProject 池内、模块须属于该产品、换产品清模块；
   │        首次挂需求时自动带出需求的产品 / 模块；候选池端点 projects/<pid>/products/<product_id>/requirement-modules/）
+  │        2026-11-25：真值改为 IssueProduct 关联行（每行一个产品 + 该产品下一个模块），Issue.product /
+  │        product_module 只是「第一个」的镜像。类型分类名为「缺陷」的可关联多个、至少一个（只拦新建与改产品，
+  │        存量没产品的照常改别的）；其余类型至多一个、选填。单值写入落到缺陷上 = 整组换成这一个；
+  │        products 里只给产品 id 的项沿用它现在的模块。筛选 / 按产品分组 / 产品工作项页签 / 缺陷计数 /
+  │        审批人按角色解析都按关联行算（一条缺陷出现在它关联的每个产品组里）。详情「产品」区块接口
+  │        issues/<id>/products/（GET / POST 追加 / PUT 整组）与 products/<product_id>/（PATCH 模块 / DELETE）。
+  │        同日起工作项类型建好后不能改（IssueCreateSerializer 拒 ISSUE_TYPE_IMMUTABLE，弹窗里类型选择置灰）。
+  │        关联的读改写都在事务里先锁工作项（_with_issue_lock）；列表拖拽换组发 product_move（from/to 产品或模块），
+  │        后端在库里的完整关联上算，不信前端可能被分页截断的 product_ids；产品软删后 deletion_task 调
+  │        resync_primary_mirror 把镜像换成剩下的第一个；关联接口的权限同工作项 PATCH（has_project_issue_permission）。
   ├── Release ──ReleaseIssue── Issue
   ├── ProjectStage ──FK── StageType / DevModeStage(source_stage)   （项目阶段，自引用 parent）
   │        └─FK(SET_NULL)◄── Issue.stage / Cycle.stage            （2026-10-29：两边各自单选挂阶段，互不派生）

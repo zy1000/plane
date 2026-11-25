@@ -37,6 +37,7 @@ import { renderFormattedDate, getFileURL } from "@plane/utils";
 import { PROFILE_USER_RELATION_GROUPS } from "@/constants/profile-user-relation";
 // store
 import { store } from "@/lib/store-context";
+import { getIssueProductIds } from "./properties/issue-product-dropdown";
 // plane web store
 import {
   getScopeMemberIds,
@@ -731,7 +732,11 @@ export const handleGroupDragDrop = async (
 
     // keep track of updates on what was added and what was removed
     issueUpdates[groupKey] = { ADD: getGroupId(destination.groupId), REMOVE: getGroupId(source.groupId) };
-    updatedIssue = { ...updatedIssue, [groupKey]: groupValue };
+    updatedIssue = {
+      ...updatedIssue,
+      [groupKey]: groupValue,
+      ...getProductDropPatch(sourceIssue, updatedIssue, groupKey, source.groupId, destination.groupId),
+    };
   }
 
   // do the same for subgroup
@@ -751,12 +756,50 @@ export const handleGroupDragDrop = async (
 
     // keep track of updates on what was added and what was removed
     issueUpdates[subGroupKey] = { ADD: getGroupId(destination.subGroupId), REMOVE: getGroupId(source.subGroupId) };
-    updatedIssue = { ...updatedIssue, [subGroupKey]: subGroupValue };
+    updatedIssue = {
+      ...updatedIssue,
+      [subGroupKey]: subGroupValue,
+      ...getProductDropPatch(sourceIssue, updatedIssue, subGroupKey, source.subGroupId, destination.subGroupId),
+    };
   }
 
   if (updatedIssue && sourceIssue?.project_id) {
     return await updateIssueOnDrop(sourceIssue?.project_id, sourceIssue.id, updatedIssue, issueUpdates);
   }
+};
+
+/**
+ * 按产品 / 产品模块分组时拖拽换组：分组键是数组（缺陷可关联多个产品），后端不认 product_ids。
+ * 这里只发「从哪组到哪组」（product_move），由后端在库里的完整关联上计算 —— 分组分页时前端手里的
+ * product_ids 可能不全，拿它拼整组会把没加载到的产品悄悄删掉。本地数组只是先行显示用的推测。
+ */
+const getProductDropPatch = (
+  sourceIssue: TIssue,
+  updatedIssue: Partial<TIssue>,
+  key: string,
+  fromId: string | undefined,
+  toId: string | undefined
+): Partial<TIssue> => {
+  if (key !== "product_ids" && key !== "product_module_ids") return {};
+  const from = fromId && fromId !== "None" ? fromId : null;
+  const to = toId && toId !== "None" ? toId : null;
+  const move = { ...(updatedIssue.product_move ?? {}) };
+
+  if (key === "product_ids") {
+    move.from_product = from;
+    move.to_product = to;
+    const current = updatedIssue.product_ids ?? getIssueProductIds(sourceIssue);
+    let next = current.filter((id) => id !== from);
+    if (to) next = current.length <= 1 ? [to] : uniq([...next, to]);
+    return { product_move: move, product_ids: next, product_id: next[0] ?? null };
+  }
+
+  move.from_module = from;
+  move.to_module = to;
+  const toProduct = to ? store.projectProduct.getProductModuleById(to)?.product_id : undefined;
+  const current = getIssueProductIds(sourceIssue);
+  const productIds = toProduct && !current.includes(toProduct) ? (current.length <= 1 ? [toProduct] : [...current, toProduct]) : current;
+  return { product_move: move, product_ids: productIds, product_id: productIds[0] ?? null };
 };
 
 /**

@@ -20,6 +20,7 @@ import { LinksCollapsible } from "./links";
 import { RelationsCollapsible } from "./relations";
 import { SubIssuesCollapsible } from "./sub-issues";
 import { QaCasesCollapsible } from "./qa-cases/root";
+import { IssueProductsCollapsible } from "./products/root";
 import { WorkItemRequirementsCollapsible } from "./work-item-requirements";
 import { WorkItemRisksCollapsible } from "./work-item-risks";
 
@@ -70,6 +71,16 @@ export const IssueDetailWidgetCollapsibles = observer(function IssueDetailWidget
       {shouldRenderRelations && (
         <RelationsCollapsible
           workspaceSlug={workspaceSlug}
+          issueId={issueId}
+          disabled={disabled}
+          issueServiceType={issueServiceType}
+        />
+      )}
+      {/* 只有缺陷才渲染，是否缺陷在组件内判定 */}
+      {!hideWidgets?.includes("products") && (
+        <IssueProductsCollapsible
+          workspaceSlug={workspaceSlug}
+          projectId={projectId}
           issueId={issueId}
           disabled={disabled}
           issueServiceType={issueServiceType}

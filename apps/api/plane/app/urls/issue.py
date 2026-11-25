@@ -12,6 +12,8 @@ from plane.app.views import (
     BulkSubIssuesEndpoint,
     SubIssuesEndpoint,
     IssueLinkViewSet,
+    IssueProductEndpoint,
+    IssueProductDetailEndpoint,
     IssueAttachmentEndpoint,
     CommentReactionViewSet,
     IssueActivityEndpoint,
@@ -130,6 +132,17 @@ urlpatterns = [
         "workspaces/<str:slug>/projects/<uuid:project_id>/issues/<uuid:issue_id>/sub-issues/",
         SubIssuesEndpoint.as_view(),
         name="sub-issues",
+    ),
+    # 工作项关联产品（缺陷可多个），详情页「产品」区块
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/issues/<uuid:issue_id>/products/",
+        IssueProductEndpoint.as_view(),
+        name="project-issue-products",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/issues/<uuid:issue_id>/products/<uuid:product_id>/",
+        IssueProductDetailEndpoint.as_view(),
+        name="project-issue-product-detail",
     ),
     path(
         "workspaces/<str:slug>/projects/<uuid:project_id>/issues/<uuid:issue_id>/issue-links/",

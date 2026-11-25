@@ -1,4 +1,4 @@
-"""产品「工作项」页签的取数：只认工作项自身的产品字段（Issue.product）。
+"""产品「工作项」页签的取数：只认工作项自身的产品关联（IssueProduct 行；缺陷可关联多个产品）。
 
 产品属于某个产品集时，挂在产品集上的工作项（在产品集里提的缺陷）集内每个产品都算有，
 一并列出，行上带 from_product_set。
@@ -11,7 +11,7 @@ import re
 
 from django.db.models import Count, Q
 
-from plane.db.models import Issue, IssueAssignee
+from plane.db.models import Issue, IssueAssignee, IssueProduct
 from plane.utils.visibility import visible_projects_q
 
 STATE_GROUPS = ("backlog", "unstarted", "started", "completed", "cancelled")
@@ -35,18 +35,18 @@ _ROW_FIELDS = (
     "type_id",
     "type__name",
     "type__logo_props",
-    "product_module_id",
-    "product_module__name",
-    "product_id",
     "created_at",
 )
 
 
+def _page_product_ids(product):
+    return [product.id, product.product_set_id] if product.product_set_id else [product.id]
+
+
 def product_work_item_queryset(user, product):
-    product_ids = [product.id, product.product_set_id] if product.product_set_id else [product.id]
     return Issue.issue_objects.filter(
         workspace_id=product.workspace_id,
-        product_id__in=product_ids,
+        id__in=IssueProduct.objects.filter(product_id__in=_page_product_ids(product)).values("issue_id"),
         project__archived_at__isnull=True,
     ).filter(visible_projects_q(user, product.workspace, "project"))
 
@@ -73,8 +73,9 @@ def state_group_counts(queryset):
     )
 
 
-def facets(queryset):
-    """筛选下拉的候选：只列本产品工作项里实际出现过的项目 / 类型 / 模块 / 负责人。"""
+def facets(queryset, product=None):
+    """筛选下拉的候选：只列本产品工作项里实际出现过的项目 / 类型 / 模块 / 负责人。
+    模块取本产品（及所属产品集）那几条关联行上的模块。"""
     base = queryset.order_by()
     projects = list(
         base.values("project_id", "project__identifier", "project__name")
@@ -87,8 +88,11 @@ def facets(queryset):
         .distinct()
         .order_by("type__name")
     )
+    links = IssueProduct.objects.filter(issue_id__in=base.values("id"), product_module_id__isnull=False)
+    if product is not None:
+        links = links.filter(product_id__in=_page_product_ids(product))
     modules = list(
-        base.filter(product_module_id__isnull=False)
+        links.order_by()
         .values("product_module_id", "product_module__name")
         .distinct()
         .order_by("product_module__name")
@@ -116,9 +120,18 @@ def facets(queryset):
     }
 
 
-def page_rows(queryset, *, offset, limit, product_id=None):
-    """product_id：当前页面的产品；行的产品不是它，就是从所属产品集带过来的。"""
+def page_rows(queryset, *, offset, limit, product=None):
+    """product：当前页面的产品；工作项没关联它本身，就是从所属产品集带过来的。
+    模块取工作项在本产品（没有就取产品集）那一行上的模块。"""
     rows = list(queryset.order_by("-created_at").values(*_ROW_FIELDS)[offset : offset + limit])
+    own_links = {}
+    set_links = {}
+    if product is not None:
+        for issue_id, product_id, module_id, module_name in IssueProduct.objects.filter(
+            issue_id__in=[row["id"] for row in rows], product_id__in=_page_product_ids(product)
+        ).values_list("issue_id", "product_id", "product_module_id", "product_module__name"):
+            target = own_links if product_id == product.id else set_links
+            target[issue_id] = (module_id, module_name)
     assignees = {}
     for issue_id, assignee_id in IssueAssignee.objects.filter(
         issue_id__in=[row["id"] for row in rows], deleted_at__isnull=True
@@ -149,13 +162,15 @@ def page_rows(queryset, *, offset, limit, product_id=None):
                 if row["type_id"]
                 else None
             ),
-            "product_module": (
-                {"id": row["product_module_id"], "name": row["product_module__name"]}
-                if row["product_module_id"]
-                else None
-            ),
+            "product_module": _module_payload(own_links.get(row["id"]) or set_links.get(row["id"])),
             "assignee_ids": assignees.get(row["id"], []),
-            "from_product_set": product_id is not None and row["product_id"] != product_id,
+            "from_product_set": product is not None and row["id"] not in own_links,
         }
         for row in rows
     ]
+
+
+def _module_payload(link):
+    if not link or not link[0]:
+        return None
+    return {"id": link[0], "name": link[1]}

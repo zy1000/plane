@@ -26,11 +26,12 @@ interface Props {
   onDropdownOpen?: () => void;
   placement: Placement | undefined;
   referenceElement: HTMLButtonElement | null;
-  value?: string | null;
+  /** 多选（缺陷）：没有「无产品」项，选中项打勾不关闭 */
+  multiple?: boolean;
 }
 
 export const ProductOptions = observer(function ProductOptions(props: Props) {
-  const { getProductById, isOpen, productIds, onDropdownOpen, placement, referenceElement, value } = props;
+  const { getProductById, isOpen, productIds, onDropdownOpen, placement, referenceElement, multiple } = props;
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [query, setQuery] = useState("");
   const [popperElement, setPopperElement] = useState<HTMLDivElement | null>(null);
@@ -85,7 +86,8 @@ export const ProductOptions = observer(function ProductOptions(props: Props) {
   });
 
   const noProductLabel = t("product_field.no_product");
-  options?.unshift({
+  if (!multiple)
+    options?.unshift({
     value: null,
     query: noProductLabel,
     content: (

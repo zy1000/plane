@@ -263,8 +263,19 @@ export const BulkOperationsActionBar = observer(function BulkOperationsActionBar
         blockedCount += blockedIssues.length;
 
         if (canApplyOptimisticIssuePatch(issues)) {
+          // 批量改产品：后端把关联整组换成这一个（缺陷也一样），本地的分组数组跟着换；
+          // products 明细清掉，详情「产品」区块下次打开会重新拉
+          const localPatch: Partial<TIssue> =
+            "product_id" in payload.properties
+              ? {
+                  ...payload.properties,
+                  product_ids: payload.properties.product_id ? [payload.properties.product_id] : [],
+                  product_module_ids: payload.properties.product_module_id ? [payload.properties.product_module_id] : [],
+                  products: undefined,
+                }
+              : payload.properties;
           updatedIssueIds.forEach((issueId) => {
-            issues.applyOptimisticIssuePatch(issueId, payload.properties);
+            issues.applyOptimisticIssuePatch(issueId, localPatch);
           });
         }
 

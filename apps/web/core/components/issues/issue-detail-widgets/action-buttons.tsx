@@ -8,7 +8,7 @@
 
 import React from "react";
 import { observer } from "mobx-react";
-import { Paperclip, FlaskConical, ShieldAlert } from "lucide-react";
+import { Paperclip, FlaskConical, Package, ShieldAlert } from "lucide-react";
 import { PROJECT_REQUIREMENT_LINK_MANAGE_PERMISSION_KEY } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { LinkIcon, ViewsIcon, RelationPropertyIcon, RequirementIcon } from "@plane/propel/icons";
@@ -26,6 +26,7 @@ import { IssueDetailWidgetButton } from "./widget-button";
 import IssueCaseSelectionModal from "./qa-cases/IssueCaseSelectionModal";
 import { WorkItemRequirementsActionButton } from "./work-item-requirements";
 import { WorkItemRisksActionButton, useIsDefectWorkItem } from "./work-item-risks";
+import { openIssueProductsModal } from "./products/root";
 import { useRiskPermissions } from "@/components/risks/permissions";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useUserPermissions } from "@/hooks/store/user";
@@ -178,6 +179,22 @@ export const IssueDetailWidgetActionButtons = observer(function IssueDetailWidge
                 }
                 disabled={disabled}
                 issueServiceType={issueServiceType}
+              />
+            </WidgetGroupTooltip>
+          </div>
+        )}
+        {/* 缺陷可关联多个产品：在「产品」区块里维护 */}
+        {!hideWidgets?.includes("products") && isDefect && !disabled && (
+          <div className={WIDGET_GROUP_SEGMENT}>
+            <WidgetGroupTooltip content="关联产品">
+              <IssueDetailWidgetButton
+                title="关联产品"
+                showLabel={false}
+                variant="ghost"
+                className="!h-7 min-w-7 !justify-center !rounded-none !border-0 !px-2 !shadow-none"
+                icon={<Package className="h-3.5 w-3.5 flex-shrink-0" strokeWidth={2} />}
+                disabled={disabled}
+                onClick={() => openIssueProductsModal(issueId)}
               />
             </WidgetGroupTooltip>
           </div>

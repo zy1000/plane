@@ -16,6 +16,17 @@ import { useProjectIssueTypes } from "@/hooks/store/use-project-issue-types";
  * 风险 ↔ 缺陷的关联区块与快捷操作按钮都要先过这一关，非缺陷调接口会 400。
  * 类型还没拉到时返回 false（区块先不渲染，拉到后自然补上）。
  */
+/** 按类型 id 判断是不是缺陷类型（新建弹窗里还没有工作项时用）。 */
+export const useIsDefectIssueType = (
+  workspaceSlug: string | undefined,
+  projectId: string | undefined | null,
+  typeId: string | undefined | null
+) => {
+  const { issueTypes } = useProjectIssueTypes(workspaceSlug ?? "", projectId ?? "");
+  if (!typeId || !issueTypes) return false;
+  return issueTypes.find((type) => type.id === typeId)?.category_name === DEFECT_CATEGORY_NAME;
+};
+
 export const useIsDefectWorkItem = (
   workspaceSlug: string,
   projectId: string,

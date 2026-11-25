@@ -7,7 +7,7 @@
 import { useState } from "react";
 import { observer } from "mobx-react";
 import type { Control, UseFormSetValue } from "react-hook-form";
-import { Controller, useFormState, useWatch } from "react-hook-form";
+import { Controller, useFormState } from "react-hook-form";
 import {
   ETabIndices,
   PERMISSION_KEYS,
@@ -29,8 +29,7 @@ import { EstimateDropdown } from "@/components/dropdowns/estimate";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { ModuleDropdown } from "@/components/dropdowns/module/dropdown";
 import { ReleaseDropdown } from "@/components/dropdowns/release/dropdown";
-import { ProductDropdown } from "@/components/dropdowns/product/dropdown";
-import { ProductModuleDropdown } from "@/components/dropdowns/product-module/dropdown";
+import { IssueProductFields } from "./product-fields";
 import { ProjectStageDropdown } from "@/components/dropdowns/project-stage/dropdown";
 import { TestPlanDropdown } from "@/components/dropdowns/test-plan/dropdown";
 import { PriorityDropdown } from "@/components/dropdowns/priority";
@@ -84,7 +83,6 @@ export const IssueDefaultProperties = observer(function IssueDefaultProperties(p
   } = props;
   // states
   const [parentIssueListModalOpen, setParentIssueListModalOpen] = useState(false);
-  const watchedProductId = useWatch({ control, name: "product_id" });
   // store hooks
   const { t } = useTranslation();
   const { areEstimateEnabledByProjectId } = useProjectEstimates();
@@ -335,48 +333,16 @@ export const IssueDefaultProperties = observer(function IssueDefaultProperties(p
         />
       )}
       {projectId && workspaceSlug && (
-        <Controller
+        <IssueProductFields
           control={control}
-          name="product_id"
-          render={({ field: { value, onChange } }) => (
-            <div className="h-7">
-              <ProductDropdown
-                projectId={projectId}
-                value={value ?? null}
-                onChange={(productId) => {
-                  onChange(productId);
-                  // 模块跟着产品走：换产品先清空，避免提交时被服务端拒
-                  setValue?.("product_module_id", null, { shouldDirty: true });
-                  handleFormChange();
-                }}
-                placeholder={t("product_field.label")}
-                buttonVariant="border-with-text"
-                tabIndex={getIndex("product_id")}
-              />
-            </div>
-          )}
-        />
-      )}
-      {projectId && workspaceSlug && (
-        <Controller
-          control={control}
-          name="product_module_id"
-          render={({ field: { value, onChange } }) => (
-            <div className="h-7">
-              <ProductModuleDropdown
-                projectId={projectId}
-                productId={watchedProductId ?? null}
-                value={value ?? null}
-                onChange={(moduleId) => {
-                  onChange(moduleId);
-                  handleFormChange();
-                }}
-                placeholder={t("product_module_field.label")}
-                buttonVariant="border-with-text"
-                tabIndex={getIndex("product_module_id")}
-              />
-            </div>
-          )}
+          setValue={setValue}
+          projectId={projectId}
+          workspaceSlug={workspaceSlug}
+          issueTypeId={issueTypeId}
+          // 草稿也有 id，但发布时要带产品，不能当成「编辑已有工作项」
+          isEdit={!!id && !isDraft}
+          getIndex={getIndex}
+          handleFormChange={handleFormChange}
         />
       )}
       {projectId && workspaceSlug && (

@@ -342,6 +342,8 @@ export const BugIssueFormRoot: FC<BugIssueFormProps> = observer((props) => {
                       projectId={projectId}
                       editorRef={editorRef}
                       categoryName="缺陷"
+                      // 工作项类型建好后不能再改
+                      disabled={!!data?.id}
                       handleFormChange={handleFormChange}
                       renderChevron
                     />

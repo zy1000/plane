@@ -30,7 +30,10 @@ export const IssueProductModuleSelect = observer(function IssueProductModuleSele
     if (!issue || moduleId === (issue.product_module_id ?? null)) return;
     setIsUpdating(true);
     try {
-      await issueOperations.update(workspaceSlug, projectId, issueId, { product_module_id: moduleId });
+      await issueOperations.update(workspaceSlug, projectId, issueId, {
+        product_module_id: moduleId,
+        product_module_ids: moduleId ? [moduleId] : [],
+      });
     } finally {
       setIsUpdating(false);
     }

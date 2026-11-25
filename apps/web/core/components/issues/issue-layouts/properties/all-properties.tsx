@@ -39,8 +39,11 @@ import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { ModuleDropdown } from "@/components/dropdowns/module/dropdown";
 import { PriorityDropdown } from "@/components/dropdowns/priority";
 import { ReleaseDropdown } from "@/components/dropdowns/release/dropdown";
-import { ProductDropdown } from "@/components/dropdowns/product/dropdown";
-import { ProductModuleDropdown } from "@/components/dropdowns/product-module/dropdown";
+import {
+  IssueProductModulePropertyDropdown,
+  IssueProductPropertyDropdown,
+  singleProductPatch,
+} from "./issue-product-dropdown";
 import { ProjectStageDropdown } from "@/components/dropdowns/project-stage/dropdown";
 import { StateDropdown } from "@/components/dropdowns/state/dropdown";
 // hooks
@@ -293,7 +296,7 @@ export const IssueProperties = observer(function IssueProperties(props: IIssuePr
     async (productId: string | null) => {
       if (!updateIssue || !issue || (issue.product_id ?? null) === productId) return;
       try {
-        await updateIssue(issue.project_id, issue.id, { product_id: productId, product_module_id: null });
+        await updateIssue(issue.project_id, issue.id, singleProductPatch(productId));
       } catch (error) {
         showIssueUpdateErrorToast(error);
       }
@@ -305,7 +308,10 @@ export const IssueProperties = observer(function IssueProperties(props: IIssuePr
     async (moduleId: string | null) => {
       if (!updateIssue || !issue || (issue.product_module_id ?? null) === moduleId) return;
       try {
-        await updateIssue(issue.project_id, issue.id, { product_module_id: moduleId });
+        await updateIssue(issue.project_id, issue.id, {
+          product_module_id: moduleId,
+          product_module_ids: moduleId ? [moduleId] : [],
+        });
       } catch (error) {
         showIssueUpdateErrorToast(error);
       }
@@ -574,12 +580,10 @@ export const IssueProperties = observer(function IssueProperties(props: IIssuePr
       {/* product */}
       <WithDisplayPropertiesHOC displayProperties={displayProperties} displayPropertyKey="product">
         <div className="h-5" onFocus={handleEventPropagation} onClick={handleEventPropagation}>
-          <ProductDropdown
+          <IssueProductPropertyDropdown
             buttonContainerClassName="truncate max-w-40"
-            projectId={issue?.project_id ?? undefined}
-            value={issue?.product_id ?? null}
-            valueName={issue?.product_name ?? null}
-            onChange={handleProduct}
+            issue={issue}
+            onSingleChange={handleProduct}
             disabled={isReadOnly}
             renderByDefault={isMobile}
             placeholder={t("product_field.label")}
@@ -592,12 +596,9 @@ export const IssueProperties = observer(function IssueProperties(props: IIssuePr
       {/* product module */}
       <WithDisplayPropertiesHOC displayProperties={displayProperties} displayPropertyKey="product_module">
         <div className="h-5" onFocus={handleEventPropagation} onClick={handleEventPropagation}>
-          <ProductModuleDropdown
+          <IssueProductModulePropertyDropdown
             buttonContainerClassName="truncate max-w-40"
-            projectId={issue?.project_id ?? undefined}
-            productId={issue?.product_id ?? null}
-            value={issue?.product_module_id ?? null}
-            valueName={issue?.product_module_name ?? null}
+            issue={issue}
             onChange={handleProductModule}
             disabled={isReadOnly}
             renderByDefault={isMobile}

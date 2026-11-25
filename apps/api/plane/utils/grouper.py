@@ -22,6 +22,7 @@ from plane.db.models import (
     IssueAssignee,
     ModuleIssue,
     IssueLabel,
+    IssueProduct,
     ReleaseIssue,
     Product,
     ProductProject,
@@ -55,6 +56,8 @@ def issue_queryset_grouper(
         "assignee_ids": "assignees__id",
         "module_ids": "issue_module__module_id",
         "release_ids": "issue_release__release_id",
+        "product_ids": "issue_products__product_id",
+        "product_module_ids": "issue_products__product_module_id",
     }
 
     GROUP_FILTER_MAPPER: Dict[str, Q] = {
@@ -62,6 +65,8 @@ def issue_queryset_grouper(
         "labels__id": Q(label_issue__deleted_at__isnull=True),
         "issue_module__module_id": Q(issue_module__deleted_at__isnull=True),
         "issue_release__release_id": Q(issue_release__deleted_at__isnull=True),
+        "issue_products__product_id": Q(issue_products__deleted_at__isnull=True),
+        "issue_products__product_module_id": Q(issue_products__deleted_at__isnull=True),
     }
 
     for group_key in [group_by, sub_group_by]:
@@ -107,11 +112,31 @@ def issue_queryset_grouper(
         .values("arr")
     )
 
+    # 关联产品（缺陷可多个）与各关联行上的模块，按关联顺序
+    issue_product_subquery = Subquery(
+        IssueProduct.objects.filter(issue_id=OuterRef("pk"), deleted_at__isnull=True)
+        .values("issue_id")
+        .annotate(arr=ArrayAgg("product_id", ordering=("sort_order", "created_at")))
+        .values("arr")
+    )
+    issue_product_module_subquery = Subquery(
+        IssueProduct.objects.filter(
+            issue_id=OuterRef("pk"), deleted_at__isnull=True, product_module_id__isnull=False
+        )
+        .values("issue_id")
+        .annotate(arr=ArrayAgg("product_module_id", ordering=("sort_order", "created_at")))
+        .values("arr")
+    )
+
     annotations_map: Dict[str, Tuple[str, Q]] = {
         "assignee_ids": Coalesce(issue_assignee_subquery, Value([], output_field=ArrayField(UUIDField()))),
         "label_ids": Coalesce(issue_label_subquery, Value([], output_field=ArrayField(UUIDField()))),
         "module_ids": Coalesce(issue_module_subquery, Value([], output_field=ArrayField(UUIDField()))),
         "release_ids": Coalesce(issue_release_subquery, Value([], output_field=ArrayField(UUIDField()))),
+        "product_ids": Coalesce(issue_product_subquery, Value([], output_field=ArrayField(UUIDField()))),
+        "product_module_ids": Coalesce(
+            issue_product_module_subquery, Value([], output_field=ArrayField(UUIDField()))
+        ),
     }
 
     default_annotations: Dict[str, Any] = {}
@@ -134,9 +159,18 @@ def issue_on_results(
         "assignees__id": "assignee_ids",
         "issue_module__module_id": "module_ids",
         "issue_release__release_id": "release_ids",
+        "issue_products__product_id": "product_ids",
+        "issue_products__product_module_id": "product_module_ids",
     }
 
-    original_list: List[str] = ["assignee_ids", "label_ids", "module_ids", "release_ids"]
+    original_list: List[str] = [
+        "assignee_ids",
+        "label_ids",
+        "module_ids",
+        "release_ids",
+        "product_ids",
+        "product_module_ids",
+    ]
 
     required_fields: List[str] = [
         "id",
@@ -249,10 +283,10 @@ def issue_group_values(
         return list(queryset)
 
     # 产品 / 产品模块：项目内按关联产品池，工作区级按全部产品；都带「无」组
-    if field == "product_id":
+    if field in ("product_id", "issue_products__product_id"):
         return list(_grouping_product_ids(slug, project_id)) + ["None"]
 
-    if field == "product_module_id":
+    if field in ("product_module_id", "issue_products__product_module_id"):
         return list(
             RequirementModule.objects.filter(
                 product_id__in=_grouping_product_ids(slug, project_id)

@@ -1117,6 +1117,11 @@ def _create_issue(
         issue.description_stripped = text
 
     issue.save()
+    if issue.product_id:
+        # 产品关联行与镜像列对齐（导入只有一个产品列，缺陷也按一个产品导入）
+        from plane.utils.issue_product import sync_links_from_primary
+
+        sync_links_from_primary([issue.id])
 
     # assignees
     assignees: Iterable = resolved.get(FIELD_ASSIGNEES) or []

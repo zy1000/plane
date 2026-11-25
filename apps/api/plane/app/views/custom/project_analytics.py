@@ -20,6 +20,7 @@ from plane.db.models import (
     ModuleIssue,
     IssueAssignee,
     IssueLabel,
+    IssueProduct,
     ReleaseIssue,
     TimeSheet,
     ProjectMember,
@@ -791,8 +792,6 @@ class ProjectDefectQuickCountsEndpoint(BaseAPIView):
         "state_detail.group": "state__group",
         "priority": "priority",
         "created_by": "created_by_id",
-        "product": "product_id",
-        "product_module": "product_module_id",
         "stage": "stage_id",
     }
     # 多对多：按关联表计数（一个缺陷可落在多组），「没有值」与 *_id__isnull 筛选口径一致
@@ -802,6 +801,9 @@ class ProjectDefectQuickCountsEndpoint(BaseAPIView):
         "module": (ModuleIssue, "module_id"),
         "release": (ReleaseIssue, "release_id"),
         "labels": (IssueLabel, "label_id"),
+        # 缺陷可关联多个产品，各产品组都算；模块只认关联行上填了的
+        "product": (IssueProduct, "product_id"),
+        "product_module": (IssueProduct, "product_module_id"),
     }
 
     def _group_counts(self, queryset: QuerySet, group_by: str) -> Dict[str, int]:
@@ -816,15 +818,16 @@ class ProjectDefectQuickCountsEndpoint(BaseAPIView):
 
         through_model, value_field = self.RELATION_GROUPS[group_by]
         issue_ids = queryset.values("id")
+        links = through_model.objects.filter(deleted_at__isnull=True, **{f"{value_field}__isnull": False})
         rows = (
-            through_model.objects.filter(issue_id__in=issue_ids, deleted_at__isnull=True)
+            links.filter(issue_id__in=issue_ids)
             .values(value_field)
             .annotate(count=Count("issue_id", distinct=True))
         )
         for row in rows:
             groups[str(row[value_field])] = row["count"]
         groups["None"] = (
-            queryset.exclude(id__in=through_model.objects.filter(deleted_at__isnull=True).values("issue_id"))
+            queryset.exclude(id__in=links.values("issue_id"))
             .distinct()
             .count()
         )

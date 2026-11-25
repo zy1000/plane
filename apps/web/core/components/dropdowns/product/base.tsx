@@ -12,22 +12,34 @@ import type { TDropdownProps } from "../types";
 import { ProductButtonContent } from "./button-content";
 import { ProductOptions } from "./product-options";
 
-export type TProductDropdownBaseProps = TDropdownProps & {
-  button?: ReactNode;
-  dropdownArrow?: boolean;
-  dropdownArrowClassName?: string;
-  getProductById: (productId: string) => TProductOption | null;
-  productIds?: string[];
-  onChange: (val: string | null) => void;
-  onClose?: () => void;
-  onDropdownOpen?: () => void;
-  renderByDefault?: boolean;
-  value: string | null;
-  /** 行上随行带出的名字：候选还没拉时也能回显 */
-  valueName?: string | null;
-};
+export type TProductDropdownValueProps =
+  | {
+      multiple?: false;
+      onChange: (val: string | null) => void;
+      value: string | null;
+    }
+  | {
+      /** 缺陷：可关联多个产品 */
+      multiple: true;
+      onChange: (val: string[]) => void;
+      value: string[];
+    };
 
-/** 工作项「产品」单选下拉，结构照 dropdowns/release/base.tsx。 */
+export type TProductDropdownBaseProps = TDropdownProps &
+  TProductDropdownValueProps & {
+    button?: ReactNode;
+    dropdownArrow?: boolean;
+    dropdownArrowClassName?: string;
+    getProductById: (productId: string) => TProductOption | null;
+    productIds?: string[];
+    onClose?: () => void;
+    onDropdownOpen?: () => void;
+    renderByDefault?: boolean;
+    /** 行上随行带出的名字（多选时是第一个的名字）：候选还没拉时也能回显 */
+    valueName?: string | null;
+  };
+
+/** 工作项「产品」下拉（缺陷多选、其余单选），结构照 dropdowns/release/base.tsx。 */
 export const ProductDropdownBase = observer(function ProductDropdownBase(props: TProductDropdownBaseProps) {
   const {
     button,
@@ -40,6 +52,7 @@ export const ProductDropdownBase = observer(function ProductDropdownBase(props: 
     dropdownArrowClassName = "",
     getProductById,
     hideIcon = false,
+    multiple,
     productIds,
     onChange,
     onClose,
@@ -67,8 +80,13 @@ export const ProductDropdownBase = observer(function ProductDropdownBase(props: 
     setIsOpen,
   });
 
-  const dropdownOnChange = (val: string | null) => {
-    onChange(val);
+  const dropdownOnChange = (val: string | null | string[]) => {
+    if (multiple) {
+      // 「无产品」项只在单选里有；多选下点到 null 忽略
+      (onChange as (v: string[]) => void)(((val as (string | null)[]) ?? []).filter((v): v is string => !!v));
+      return;
+    }
+    (onChange as (v: string | null) => void)(val as string | null);
     handleClose();
   };
 
@@ -78,7 +96,22 @@ export const ProductDropdownBase = observer(function ProductDropdownBase(props: 
     }
   }, [isOpen, isMobile]);
 
-  const selectedName = value ? (getProductById(value)?.name ?? valueName ?? null) : null;
+  const selectedIds = multiple ? ((value as string[] | null) ?? []) : value ? [value as string] : [];
+  const selectedNames = selectedIds.map(
+    (productId, index) => getProductById(productId)?.name ?? (index === 0 ? valueName : null) ?? ""
+  );
+  const selectedName = selectedNames[0] || null;
+  const extraCount = Math.max(selectedIds.length - 1, 0);
+  const tooltipContent =
+    selectedNames.length > 1 ? (
+      <span className="flex flex-col gap-0.5">
+        {selectedNames.map((name, index) => (
+          <span key={selectedIds[index]}>{name}</span>
+        ))}
+      </span>
+    ) : (
+      (selectedName ?? "")
+    );
 
   const comboButton = (
     <>
@@ -113,7 +146,7 @@ export const ProductDropdownBase = observer(function ProductDropdownBase(props: 
             className={buttonClassName}
             isActive={isOpen}
             tooltipHeading="产品"
-            tooltipContent={selectedName ?? ""}
+            tooltipContent={tooltipContent}
             showTooltip={showTooltip}
             variant={buttonVariant}
             renderToolTipByDefault={renderByDefault}
@@ -125,6 +158,7 @@ export const ProductDropdownBase = observer(function ProductDropdownBase(props: 
               hideText={BUTTON_VARIANTS_WITHOUT_TEXT.includes(buttonVariant)}
               placeholder={placeholder}
               label={selectedName}
+              extraCount={extraCount}
             />
           </DropdownButton>
         </button>
@@ -143,6 +177,7 @@ export const ProductDropdownBase = observer(function ProductDropdownBase(props: 
       value={value}
       onChange={dropdownOnChange}
       disabled={disabled}
+      multiple={multiple}
     >
       {isOpen && (
         <ProductOptions
@@ -152,7 +187,7 @@ export const ProductDropdownBase = observer(function ProductDropdownBase(props: 
           getProductById={getProductById}
           productIds={productIds}
           onDropdownOpen={onDropdownOpen}
-          value={value}
+          multiple={multiple}
         />
       )}
     </ComboDropDown>

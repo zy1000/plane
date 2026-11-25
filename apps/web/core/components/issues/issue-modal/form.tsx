@@ -435,7 +435,8 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
                       control={control}
                       projectId={projectId}
                       editorRef={editorRef}
-                      disabled={!!data?.sourceIssueId}
+                      // 工作项类型建好后不能再改（草稿发布前仍可改）
+                      disabled={(!!data?.id && !isDraft) || !!data?.sourceIssueId}
                       handleFormChange={handleFormChange}
                       renderChevron
                     />

@@ -60,9 +60,19 @@ from plane.utils.issue_scheme import is_type_visible_to_project, project_scheme_
 from plane.utils.issue_stage import validate_stage_in_project
 from plane.utils.issue_test_plan import validate_test_plan_in_project
 from plane.utils.issue_product import (
+    ERROR_DEFECT_PRODUCT_REQUIRED,
+    apply_product_move,
     apply_resolved_product_fields,
+    current_product_entries,
+    is_defect_type,
+    issue_products_payload,
+    move_issue_products,
+    normalize_product_entries,
     product_module_queryset,
     resolve_issue_product_fields,
+    sync_links_from_primary,
+    validate_product_entries,
+    write_product_entries,
 )
 from plane.utils.content_validator import (
     validate_html_content,
@@ -158,6 +168,11 @@ class IssueCreateSerializer(BaseSerializer):
         required=False,
         allow_null=True,
     )
+    # 整组产品关联 `[{product_id, product_module_id}]`：缺陷可多个、至少一个，其余至多一个。
+    # 传了它就忽略 product_id / product_module_id；规则在 utils/issue_product.py
+    products = serializers.ListField(child=serializers.JSONField(), write_only=True, required=False)
+    # 列表按产品 / 模块分组拖拽换组：{from_product,to_product} 或 {from_module,to_module}，在库里的完整关联上计算
+    product_move = serializers.JSONField(write_only=True, required=False)
     stage_id = serializers.PrimaryKeyRelatedField(
         source="stage", queryset=ProjectStage.objects.all(), required=False, allow_null=True
     )
@@ -328,11 +343,57 @@ class IssueCreateSerializer(BaseSerializer):
                 raise serializers.ValidationError({"extra_field_values": errors})
             attrs["extra_field_values"] = items
 
+        # 工作项类型建好后不能再改（新建时随便选）
+        if self.instance is not None and "type" in attrs and self.instance.type_id:
+            new_type = attrs.get("type")
+            if (str(new_type.id) if new_type else None) != str(self.instance.type_id):
+                raise serializers.ValidationError({"type_id": ["ISSUE_TYPE_IMMUTABLE"]})
+
         # 产品 / 产品模块：规则在 utils/issue_product.py，这里只是接线
-        if "product" in attrs or "product_module" in attrs:
-            product_project_id = self.context.get("project_id") or (
-                self.instance.project_id if self.instance else None
+        product_project_id = self.context.get("project_id") or (
+            self.instance.project_id if self.instance else None
+        )
+        issue_type = attrs.get("type") if "type" in attrs else (self.instance.type if self.instance else None)
+        is_defect = is_defect_type(issue_type.id if issue_type else None)
+        raw_products = attrs.pop("products", None)
+        product_move = attrs.pop("product_move", None)
+        self._product_entries = None
+        self._product_move = None
+        self._product_single_touched = False
+        if isinstance(product_move, dict) and self.instance is not None:
+            # 先按当前关联算一遍做校验，落库时在锁里再算一次
+            current_entries = current_product_entries(self.instance.id)
+            validate_product_entries(
+                project_id=product_project_id,
+                is_defect=is_defect,
+                entries=apply_product_move(current_entries, is_defect, product_move),
+                current_entries=current_entries,
             )
+            self._product_move = (product_move, is_defect)
+            attrs.pop("product", None)
+            attrs.pop("product_module", None)
+        elif raw_products is not None:
+            current_entries = current_product_entries(self.instance.id) if self.instance else []
+            entries = normalize_product_entries(raw_products, current_entries)
+            validate_product_entries(
+                project_id=product_project_id,
+                is_defect=is_defect,
+                entries=entries,
+                current_entries=current_entries,
+            )
+            self._product_entries = entries
+            attrs.pop("product", None)
+            attrs.pop("product_module", None)
+        elif is_defect and (
+            (self.instance is None and not attrs.get("product"))
+            or (self.instance is not None and "product" in attrs and attrs.get("product") is None
+                and self.instance.product_id)
+        ):
+            # 新建缺陷必须带产品；已有产品的缺陷不能清空（存量没产品的改别的照常保存）
+            raise serializers.ValidationError({"products": [ERROR_DEFECT_PRODUCT_REQUIRED]})
+
+        if "product" in attrs or "product_module" in attrs:
+            self._product_single_touched = True
             current_product_id = self.instance.product_id if self.instance else None
             current_module_id = self.instance.product_module_id if self.instance else None
             resolved = resolve_issue_product_fields(
@@ -374,6 +435,11 @@ class IssueCreateSerializer(BaseSerializer):
 
         # Create Issue
         issue = Issue.objects.create(**validated_data, project_id=project_id)
+        # 产品关联行：整组写入或按单值镜像对齐（新建不单独记产品活动，「创建」一条即可）
+        if getattr(self, "_product_entries", None) is not None:
+            write_product_entries(issue, self._product_entries, activity=False)
+        elif issue.product_id:
+            sync_links_from_primary([issue.id])
         save_extra_field_values(
             issue=issue,
             items=extra_field_items or [],
@@ -510,7 +576,26 @@ class IssueCreateSerializer(BaseSerializer):
 
         # Time updation occues even when other related models are updated
         instance.updated_at = timezone.now()
-        return super().update(instance, validated_data)
+        instance = super().update(instance, validated_data)
+        if getattr(self, "_product_move", None) is not None:
+            request = self.context.get("request")
+            move, move_is_defect = self._product_move
+            move_issue_products(
+                instance,
+                move,
+                actor_id=getattr(getattr(request, "user", None), "id", None) or instance.updated_by_id,
+                is_defect=move_is_defect,
+            )
+        elif getattr(self, "_product_entries", None) is not None:
+            request = self.context.get("request")
+            write_product_entries(
+                instance,
+                self._product_entries,
+                actor_id=getattr(getattr(request, "user", None), "id", None) or instance.updated_by_id,
+            )
+        elif getattr(self, "_product_single_touched", False):
+            sync_links_from_primary([instance.id])
+        return instance
 
 
 class IssueActivitySerializer(BaseSerializer):
@@ -1133,6 +1218,18 @@ class IssueDetailSerializer(IssueSerializer):
     is_intake = serializers.BooleanField(read_only=True)
     extra_field_values = serializers.SerializerMethodField()
     type_extra_fields = serializers.SerializerMethodField()
+    # 关联产品（缺陷可多个），详情页「产品」区块用；product_id 仍是第一个的镜像
+    products = serializers.SerializerMethodField()
+    product_ids = serializers.SerializerMethodField()
+
+    def get_products(self, obj):
+        cache = getattr(self, "_products_cache", None)
+        if cache is None or cache[0] != obj.id:
+            self._products_cache = (obj.id, issue_products_payload([obj.id]).get(str(obj.id), []))
+        return self._products_cache[1]
+
+    def get_product_ids(self, obj):
+        return [item["product_id"] for item in self.get_products(obj)]
 
     def get_extra_field_values(self, obj):
         return serialize_extra_field_values(obj)
@@ -1154,6 +1251,8 @@ class IssueDetailSerializer(IssueSerializer):
             "is_intake",
             "extra_field_values",
             "type_extra_fields",
+            "products",
+            "product_ids",
         ]
         read_only_fields = fields
 
@@ -1342,6 +1441,14 @@ class IssueBatchUpdateSerializer(BaseSerializer):
             validate_stage_in_project(attrs.get("stage"), self.instance.project_id)
 
         if ("product" in attrs or "product_module" in attrs) and self.instance is not None:
+            # 单值写到缺陷上 = 整组换成这一个；已有产品的缺陷不能清空
+            if (
+                "product" in attrs
+                and attrs.get("product") is None
+                and self.instance.product_id
+                and is_defect_type(self.instance.type_id)
+            ):
+                raise serializers.ValidationError({"product_id": "缺陷至少关联一个产品"})
             resolved = resolve_issue_product_fields(
                 project_id=self.instance.project_id,
                 current_product_id=self.instance.product_id,
@@ -1493,4 +1600,8 @@ class IssueBatchUpdateSerializer(BaseSerializer):
                 pass
 
         instance.updated_at = timezone.now()
-        return super().update(instance, validated_data)
+        product_touched = "product" in validated_data or "product_module" in validated_data
+        instance = super().update(instance, validated_data)
+        if product_touched:
+            sync_links_from_primary([instance.id])
+        return instance

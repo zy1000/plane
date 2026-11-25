@@ -6,6 +6,7 @@
 
 import { observer } from "mobx-react";
 // i18n
+import { DEFECT_CATEGORY_NAME } from "@/components/risks/constants";
 import { useTranslation } from "@plane/i18n";
 // ui
 import {
@@ -49,6 +50,7 @@ import { IssueLabel } from "./label";
 import { IssueModuleSelect } from "./module-select";
 import { IssueReleaseSelect } from "./release-select";
 import { IssueProductSelect } from "./product-select";
+import { DefectProductModulesSelect } from "./defect-product-modules-select";
 import { IssueProductModuleSelect } from "./product-module-select";
 import { StateTransitionAssigneeModal } from "../state-transition-assignee-modal";
 import type { TIssueOperations } from "./root";
@@ -77,6 +79,10 @@ export const IssueDetailsSidebar = observer(function IssueDetailsSidebar(props: 
   const { issueTypes } = useProjectIssueTypes(workspaceSlug, projectId);
   const stateTransitionGuard = useStateTransitionAssigneeGuard(workspaceSlug, projectId);
   const issue = getIssueById(issueId);
+  // 缺陷的产品可多个，在正文「产品」区块里维护；侧栏只给非缺陷放单选
+  const isDefectType =
+    !!issue?.type_id &&
+    issueTypes?.find((issueType) => issueType.id === issue.type_id)?.category_name === DEFECT_CATEGORY_NAME;
   if (!issue) return <></>;
 
   const createdByDetails = getUserDetails(issue.created_by);
@@ -327,6 +333,8 @@ export const IssueDetailsSidebar = observer(function IssueDetailsSidebar(props: 
               />
             </div>
 
+            {!isDefectType && (
+              <>
             <div className="flex h-8 items-center gap-1">
               <div className="flex w-1/3 flex-shrink-0 items-center gap-1 text-sm text-secondary">
                 <Package className="h-4 w-4 flex-shrink-0" />
@@ -356,6 +364,25 @@ export const IssueDetailsSidebar = observer(function IssueDetailsSidebar(props: 
                 disabled={!isEditable}
               />
             </div>
+              </>
+            )}
+            {/* 缺陷：产品在正文「产品」区块里维护，这里只给每个关联产品选模块 */}
+            {isDefectType && (
+              <div className="flex h-8 items-center gap-1">
+                <div className="flex w-1/3 flex-shrink-0 items-center gap-1 text-sm text-secondary">
+                  <Boxes className="h-4 w-4 flex-shrink-0" />
+                  <span>{t("product_module_field.label")}</span>
+                </div>
+                <DefectProductModulesSelect
+                  className="w-2/3 flex-grow"
+                  workspaceSlug={workspaceSlug}
+                  projectId={projectId}
+                  issueId={issueId}
+                  issueOperations={issueOperations}
+                  disabled={!isEditable}
+                />
+              </div>
+            )}
 
             <div className="flex h-8 items-center gap-1">
               <div className="flex w-1/3 flex-shrink-0 items-center gap-1 text-sm text-secondary">

@@ -104,6 +104,15 @@ def soft_delete_related_objects(app_label, model_name, instance_pk, using=None):
         instance.deleted_at = timezone.now()
         instance.save()
 
+    # 产品删掉后，关联过它的工作项「第一个产品」镜像列已被置空，要换成剩下的第一个关联产品
+    if app_label == "db" and model_name == "product":
+        from plane.db.models import IssueProduct
+        from plane.utils.issue_product import resync_primary_mirror
+
+        resync_primary_mirror(
+            IssueProduct.all_objects.filter(product_id=instance_pk).values_list("issue_id", flat=True)
+        )
+
 
 # @shared_task
 def restore_related_objects(app_label, model_name, instance_pk, using=None):

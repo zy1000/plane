@@ -7,7 +7,7 @@
 from django.db.models import Count
 from django.utils import timezone
 
-from plane.db.models import Issue, Product, Requirement, RequirementProductScope, TestCase
+from plane.db.models import Issue, IssueProduct, Product, Requirement, RequirementProductScope, TestCase
 from plane.utils.product import filter_visible_products
 from plane.utils.profile_metrics import DEFECT_TYPE_CATEGORY_NAME
 
@@ -71,11 +71,13 @@ def product_set_stats(product_sets, user):
             "repository__product_id",
         ),
         "open_defect_count": _count_by_product(
-            Issue.issue_objects.filter(
+            IssueProduct.objects.filter(
                 product_id__in=product_ids,
-                type__category__name=DEFECT_TYPE_CATEGORY_NAME,
-                project__archived_at__isnull=True,
-            ).exclude(state__group__in=CLOSED_STATE_GROUPS)
+                issue__in=Issue.issue_objects.filter(
+                    type__category__name=DEFECT_TYPE_CATEGORY_NAME,
+                    project__archived_at__isnull=True,
+                ).exclude(state__group__in=CLOSED_STATE_GROUPS),
+            )
         ),
     }
 

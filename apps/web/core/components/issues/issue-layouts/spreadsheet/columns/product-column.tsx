@@ -3,7 +3,10 @@ import { useTranslation } from "@plane/i18n";
 // types
 import type { TIssue } from "@plane/types";
 // components
-import { ProductDropdown } from "@/components/dropdowns/product/dropdown";
+import {
+  IssueProductPropertyDropdown,
+  singleProductPatch,
+} from "@/components/issues/issue-layouts/properties/issue-product-dropdown";
 
 type Props = {
   issue: TIssue;
@@ -12,25 +15,21 @@ type Props = {
   disabled: boolean;
 };
 
-/** 产品是单值字段，走表格的 onChange（普通 PATCH）；换产品同发清空模块。 */
+/** 非缺陷单值，走表格的 onChange（普通 PATCH），换产品同发清空模块；缺陷多选走关联接口。 */
 export const SpreadsheetProductColumn = observer(function SpreadsheetProductColumn(props: Props) {
   const { issue, onChange, disabled, onClose } = props;
   const { t } = useTranslation();
 
   return (
     <div className="h-11 border-b-[0.5px] border-subtle">
-      <ProductDropdown
-        projectId={issue.project_id ?? undefined}
-        value={issue.product_id ?? null}
-        valueName={issue.product_name ?? null}
-        onChange={(productId) => {
-          if ((issue.product_id ?? null) === productId) return;
-          onChange(
-            issue,
-            { product_id: productId, product_module_id: null },
-            { changed_property: "product_id", change_details: productId }
-          );
-        }}
+      <IssueProductPropertyDropdown
+        issue={issue}
+        onSingleChange={(productId) =>
+          onChange(issue, singleProductPatch(productId), {
+            changed_property: "product_id",
+            change_details: productId,
+          })
+        }
         disabled={disabled}
         placeholder={t("product_field.no_product")}
         buttonVariant="transparent-with-text"

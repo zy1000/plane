@@ -3,7 +3,7 @@ import { useTranslation } from "@plane/i18n";
 // types
 import type { TIssue } from "@plane/types";
 // components
-import { ProductModuleDropdown } from "@/components/dropdowns/product-module/dropdown";
+import { IssueProductModulePropertyDropdown } from "@/components/issues/issue-layouts/properties/issue-product-dropdown";
 
 type Props = {
   issue: TIssue;
@@ -19,19 +19,15 @@ export const SpreadsheetProductModuleColumn = observer(function SpreadsheetProdu
 
   return (
     <div className="h-11 border-b-[0.5px] border-subtle">
-      <ProductModuleDropdown
-        projectId={issue.project_id ?? undefined}
-        productId={issue.product_id ?? null}
-        value={issue.product_module_id ?? null}
-        valueName={issue.product_module_name ?? null}
-        onChange={(moduleId) => {
-          if ((issue.product_module_id ?? null) === moduleId) return;
+      <IssueProductModulePropertyDropdown
+        issue={issue}
+        onChange={(moduleId) =>
           onChange(
             issue,
-            { product_module_id: moduleId },
+            { product_module_id: moduleId, product_module_ids: moduleId ? [moduleId] : [] },
             { changed_property: "product_module_id", change_details: moduleId }
-          );
-        }}
+          )
+        }
         disabled={disabled}
         placeholder={t("product_module_field.no_module")}
         buttonVariant="transparent-with-text"

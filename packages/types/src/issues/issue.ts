@@ -106,11 +106,24 @@ export type TBaseIssue = {
   release_ids: string[] | null;
   type_id: string | null;
   type_name?: string | null;
-  /** 产品 / 产品模块（需求模块）单选挂靠；*_name 由列表接口随行带出，只读 */
+  /** 产品 / 产品模块（需求模块）：第一个关联产品的镜像；*_name 由列表接口随行带出，只读 */
   product_id: string | null;
   product_name?: string | null;
   product_module_id: string | null;
   product_module_name?: string | null;
+  /** 全部关联产品（缺陷可多个、至少一个；其余类型至多一个），按关联顺序 */
+  product_ids?: string[];
+  /** 各关联行上的产品模块（只含填了的） */
+  product_module_ids?: string[];
+  /** 详情接口带出的关联明细；新建 / 编辑时作为整组写入（传了就忽略 product_id） */
+  products?: TIssueProductLink[];
+  /** 只写：列表按产品 / 模块分组拖拽换组，后端在库里的完整关联上计算新的一组 */
+  product_move?: {
+    from_product?: string | null;
+    to_product?: string | null;
+    from_module?: string | null;
+    to_module?: string | null;
+  };
   /** 项目阶段（ProjectStage）；与迭代上的阶段互不派生 */
   stage_id: string | null;
   stage_name?: string | null;
@@ -208,6 +221,25 @@ export type TBulkIssueProperties = Pick<
   | "estimate_point"
 >;
 
+/** 工作项 ↔ 产品关联行（每行一个产品 + 该产品下可选的一个产品模块） */
+export type TIssueProductLink = {
+  product_id: string;
+  product_module_id: string | null;
+  product_name?: string;
+  /** 开发编号 */
+  product_identifier?: string;
+  product_code?: string;
+  product_is_set?: boolean;
+  product_module_name?: string | null;
+};
+
+export type TIssueProductsResponse = {
+  product_id: string | null;
+  product_module_id: string | null;
+  product_ids: string[];
+  products: TIssueProductLink[];
+};
+
 export type TBulkOperationsPayload = {
   issue_ids: string[];
   properties: Partial<TBulkIssueProperties>;
@@ -220,7 +252,8 @@ export type TWorkItemWidgets =
   | "attachments"
   | "qa-cases"
   | "requirements"
-  | "risks";
+  | "risks"
+  | "products";
 
 export type TIssueServiceType = EIssueServiceType.ISSUES | EIssueServiceType.EPICS | EIssueServiceType.WORK_ITEMS;
 

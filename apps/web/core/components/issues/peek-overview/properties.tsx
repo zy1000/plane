@@ -28,6 +28,7 @@ import { IssueLabel } from "../issue-detail/label";
 import { IssueModuleSelect } from "../issue-detail/module-select";
 import { IssueReleaseSelect } from "../issue-detail/release-select";
 import { IssueProductSelect } from "../issue-detail/product-select";
+import { DefectProductModulesSelect } from "../issue-detail/defect-product-modules-select";
 import { IssueProductModuleSelect } from "../issue-detail/product-module-select";
 import { IssueStageSelect } from "../issue-detail/stage-select";
 import { IssueTestPlanSelect } from "../issue-detail/test-plan-select";
@@ -214,6 +215,9 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
               />
             </StructureFieldValue>
 
+            {/* 非缺陷：产品单选 + 模块 */}
+            {!isDefect && (
+              <>
             <StructureFieldLabel icon={Package} label={t("product_field.label")} />
             <StructureFieldValue>
               <IssueProductSelect
@@ -237,6 +241,24 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
                 disabled={disabled}
               />
             </StructureFieldValue>
+              </>
+            )}
+            {/* 缺陷：产品在正文「产品」区块里维护，这里只给每个关联产品选模块 */}
+            {isDefect && (
+              <>
+                <StructureFieldLabel icon={Boxes} label={t("product_module_field.label")} />
+                <StructureFieldValue>
+                  <DefectProductModulesSelect
+                    className="h-7.5 w-full grow"
+                    workspaceSlug={workspaceSlug}
+                    projectId={projectId}
+                    issueId={issueId}
+                    issueOperations={issueOperations}
+                    disabled={disabled}
+                  />
+                </StructureFieldValue>
+              </>
+            )}
 
             <StructureFieldLabel icon={Layers} label={t("stage_field.label")} />
             <StructureFieldValue>

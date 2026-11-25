@@ -162,6 +162,9 @@ export class IssueStore implements IIssueStore {
       release_ids: issue?.release_ids,
       product_id: issue?.product_id,
       product_module_id: issue?.product_module_id,
+      // 缺陷可关联多个产品：详情「产品」区块与列表分组都读这两项
+      product_ids: issue?.product_ids,
+      products: issue?.products,
       stage_id: issue?.stage_id,
       type_id: issue?.type_id,
       type_name: issue?.type_name,

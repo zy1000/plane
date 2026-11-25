@@ -247,6 +247,11 @@ class IssueSerializer(BaseSerializer):
             except IntegrityError:
                 pass
 
+        # 产品关联行与镜像列对齐（规则在 utils/issue_product.py）
+        if issue.product_id:
+            from plane.utils.issue_product import sync_links_from_primary
+
+            sync_links_from_primary([issue.id])
         return issue
 
     def update(self, instance, validated_data):
@@ -308,7 +313,13 @@ class IssueSerializer(BaseSerializer):
 
         # Time updation occues even when other related models are updated
         instance.updated_at = timezone.now()
-        return super().update(instance, validated_data)
+        product_touched = "product" in validated_data or "product_module" in validated_data
+        instance = super().update(instance, validated_data)
+        if product_touched:
+            from plane.utils.issue_product import sync_links_from_primary
+
+            sync_links_from_primary([instance.id])
+        return instance
 
     def to_representation(self, instance):
         data = super().to_representation(instance)

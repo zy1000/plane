@@ -60,9 +60,9 @@ class ProductWorkItemsEndpoint(BaseAPIView):
                 "page": page,
                 "per_page": per_page,
                 "state_group_counts": counts,
-                "facets": facets(base),
+                "facets": facets(base, product),
                 "results": page_rows(
-                    queryset, offset=(page - 1) * per_page, limit=per_page, product_id=product.id
+                    queryset, offset=(page - 1) * per_page, limit=per_page, product=product
                 ),
             },
             status=status.HTTP_200_OK,

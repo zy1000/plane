@@ -8,7 +8,7 @@ from django.db import models
 from django.db.models import Q
 from django_filters import FilterSet, filters
 
-from plane.db.models import CycleIssue, Issue, IssueAssignee, IssueLabel, ModuleIssue, ReleaseIssue
+from plane.db.models import CycleIssue, Issue, IssueAssignee, IssueLabel, IssueProduct, ModuleIssue, ReleaseIssue
 
 
 class UUIDInFilter(filters.BaseInFilter, filters.UUIDFilter):
@@ -164,11 +164,11 @@ class IssueFilterSet(BaseFilterSet):
     type_id = filters.UUIDFilter(field_name="type_id")
     type_id__in = UUIDInFilter(field_name="type_id", lookup_expr="in")
 
-    # 产品 / 产品模块：Issue 上的两个单选外键列，模块按精确 id 不展开子树
-    product_id = filters.UUIDFilter(field_name="product_id")
-    product_id__in = UUIDInFilter(field_name="product_id", lookup_expr="in")
-    product_module_id = filters.UUIDFilter(field_name="product_module_id")
-    product_module_id__in = UUIDInFilter(field_name="product_module_id", lookup_expr="in")
+    # 产品 / 产品模块：按关联行（IssueProduct，缺陷可多个）任一命中，模块按精确 id 不展开子树
+    product_id = filters.UUIDFilter(method="filter_product_id")
+    product_id__in = UUIDInFilter(method="filter_product_id_in", lookup_expr="in")
+    product_module_id = filters.UUIDFilter(method="filter_product_module_id")
+    product_module_id__in = UUIDInFilter(method="filter_product_module_id_in", lookup_expr="in")
 
     # 项目阶段：Issue 上的单选外键列，父 / 子阶段按精确 id 不展开子树
     stage_id = filters.UUIDFilter(field_name="stage_id")
@@ -188,8 +188,8 @@ class IssueFilterSet(BaseFilterSet):
     module_id__isnull = filters.BooleanFilter(method="filter_module_id_isnull")
     release_id__isnull = filters.BooleanFilter(method="filter_release_id_isnull")
     label_id__isnull = filters.BooleanFilter(method="filter_label_id_isnull")
-    product_id__isnull = filters.BooleanFilter(field_name="product_id", lookup_expr="isnull")
-    product_module_id__isnull = filters.BooleanFilter(field_name="product_module_id", lookup_expr="isnull")
+    product_id__isnull = filters.BooleanFilter(method="filter_product_id_isnull")
+    product_module_id__isnull = filters.BooleanFilter(method="filter_product_module_id_isnull")
     stage_id__isnull = filters.BooleanFilter(field_name="stage_id", lookup_expr="isnull")
 
     class Meta:
@@ -332,6 +332,30 @@ class IssueFilterSet(BaseFilterSet):
 
     def filter_release_id_isnull(self, queryset, name, value):
         return self._relation_isnull_q(ReleaseIssue, value)
+
+    @staticmethod
+    def _issue_product_q(**lookup):
+        return Q(pk__in=IssueProduct.objects.filter(**lookup).values("issue_id"))
+
+    def filter_product_id(self, queryset, name, value):
+        return self._issue_product_q(product_id=value)
+
+    def filter_product_id_in(self, queryset, name, value):
+        return self._issue_product_q(product_id__in=value)
+
+    def filter_product_module_id(self, queryset, name, value):
+        return self._issue_product_q(product_module_id=value)
+
+    def filter_product_module_id_in(self, queryset, name, value):
+        return self._issue_product_q(product_module_id__in=value)
+
+    def filter_product_id_isnull(self, queryset, name, value):
+        has = self._issue_product_q()
+        return ~has if value else has
+
+    def filter_product_module_id_isnull(self, queryset, name, value):
+        has = self._issue_product_q(product_module_id__isnull=False)
+        return ~has if value else has
 
     def filter_label_id_isnull(self, queryset, name, value):
         return self._relation_isnull_q(IssueLabel, value)
