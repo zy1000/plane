@@ -115,6 +115,7 @@ export const WorkflowTransitionsRoot: FC<TWorkflowTransitionsRootProps> = ({
       approval_type: TApprovalType;
       required_count?: number;
       extra_field_ids: string[];
+      action_name: string;
     }
   ) => {
     if (!canConfigWorkflow) {
@@ -130,6 +131,7 @@ export const WorkflowTransitionsRoot: FC<TWorkflowTransitionsRootProps> = ({
         await updateTransition({
           id: data.id,
           to_state_id: data.to_state_id,
+          action_name: data.action_name,
           initiator_ids: data.initiator_ids,
           assignee_ids: data.assignee_ids,
           approver_ids: data.approver_ids,
@@ -142,6 +144,7 @@ export const WorkflowTransitionsRoot: FC<TWorkflowTransitionsRootProps> = ({
           workflow_id: workflow.id,
           from_state_id: stateId,
           to_state_id: data.to_state_id,
+          action_name: data.action_name,
           initiator_ids: data.initiator_ids,
           assignee_ids: data.assignee_ids,
           approver_ids: data.approver_ids,

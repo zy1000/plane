@@ -195,7 +195,16 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
                 isSubmitting={session.isEditing ? "saved" : isSubmitting}
                 disabled={disabled}
                 embedIssue={embedIssue}
-                editActions={<IssueEditModeActions session={session} canEdit={canEdit} />}
+                editActions={
+                  <IssueEditModeActions
+                    workspaceSlug={workspaceSlug}
+                    projectId={projectId}
+                    issueId={issueId}
+                    session={session}
+                    canEdit={canEdit}
+                    isArchived={is_archived}
+                  />
+                }
                 onRequestClose={() => void requestClose()}
               />
               {/* content */}

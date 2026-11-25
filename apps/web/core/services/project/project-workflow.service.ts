@@ -26,6 +26,8 @@ export type TWorkflowTransition = {
   workflow_id: string;
   from_state_id: string | null;
   to_state_id: string;
+  /** 详情页流转按钮上的文字，空串时界面用目标状态名 */
+  action_name: string;
   initiator_ids: string[];
   assignee_ids: string[];
   approval_type: TApprovalType;
@@ -38,6 +40,7 @@ export type TWorkflowTransitionCreatePayload = {
   workflow_id: string;
   from_state_id: string | null;
   to_state_id: string;
+  action_name?: string;
   initiator_ids?: string[];
   assignee_ids?: string[];
   approval_type: TApprovalType;
@@ -49,6 +52,7 @@ export type TWorkflowTransitionCreatePayload = {
 export type TWorkflowTransitionUpdatePayload = {
   id: string;
   to_state_id?: string;
+  action_name?: string;
   initiator_ids?: string[];
   assignee_ids?: string[];
   approval_type?: TApprovalType;
@@ -83,9 +87,13 @@ export type TTransitionRecord = {
   to_state_group: string | null;
   status: "pending" | "approved" | "rejected" | "cancelled";
   required_count: number | null;
+  /** 流转的操作名称，没配时是目标状态名 */
+  action_name: string;
   target_assignee_ids: string[] | null;
   approval_reason: string;
   approval_records: TApprovalRecord[];
+  /** 发起人 */
+  created_by: string | null;
   created_at: string;
   completed_at: string | null;
 };
@@ -93,6 +101,23 @@ export type TTransitionRecord = {
 export type TMyApprovalsResponse = {
   results: TTransitionRecord[];
   pending_count: number;
+};
+
+/** 当前用户在某工作项上能发起的一条流转（详情页流转按钮） */
+export type TAvailableTransition = {
+  id: string;
+  /** 已回落为目标状态名，直接显示 */
+  action_name: string;
+  from_state_id: string | null;
+  to_state_id: string;
+  to_state_name: string;
+  to_state_color: string;
+  to_state_group: string;
+  requires_approval: boolean;
+  required_fields: { id: string; name: string }[];
+  /** 现负责人不在允许范围内，流转时要重新指定 */
+  assignee_required: boolean;
+  allowed_assignee_ids: string[];
 };
 
 export type TApprovalActionPayload = {
@@ -128,6 +153,7 @@ export type TFlowchartTransition = {
   id: string;
   from_state_id: string | null;
   to_state_id: string | null;
+  action_name: string;
   approval_type: TApprovalType;
   required_count: number | null;
   approval_rule_label: string;
@@ -376,6 +402,31 @@ export class ProjectWorkflowService extends APIService {
       data
     )
       .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async fetchIssueAvailableTransitions(
+    workspaceSlug: string,
+    projectId: string,
+    issueId: string
+  ): Promise<TAvailableTransition[]> {
+    return this.get(
+      `/api/workspaces/${workspaceSlug}/projects/${projectId}/issues/${issueId}/available-transitions/`
+    )
+      .then((response) => response?.data ?? [])
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 发起人撤回自己的待审批流转 */
+  async withdrawTransitionRecord(workspaceSlug: string, projectId: string, recordId: string): Promise<void> {
+    return this.post(
+      `/api/workspaces/${workspaceSlug}/projects/${projectId}/transition-records/${recordId}/withdraw/`
+    )
+      .then(() => undefined)
       .catch((error) => {
         throw error?.response?.data;
       });

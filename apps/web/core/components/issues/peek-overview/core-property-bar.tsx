@@ -16,6 +16,7 @@ import { PriorityDropdown } from "@/components/dropdowns/priority";
 import { StateDropdown } from "@/components/dropdowns/state/dropdown";
 import { WorkItemTypeIcon } from "@/components/issues/work-item-type-icon";
 // hooks
+import { issueTransitionDraft } from "@/hooks/store/use-issue-transition-draft";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useProjectIssueTypes } from "@/hooks/store/use-project-issue-types";
 import { useProjectState } from "@/hooks/store/use-project-state";
@@ -95,7 +96,7 @@ export const PeekOverviewCorePropertyBar = observer(function PeekOverviewCorePro
             onChange={handleStateChange}
             projectId={projectId}
             issueTypeId={issue?.type_id}
-            disabled={disabled}
+            disabled={disabled || !!issueTransitionDraft.get(issueId)}
             buttonVariant="transparent-with-text"
             className="group w-full min-w-0"
             buttonContainerClassName="h-7 w-full min-w-0 text-left"

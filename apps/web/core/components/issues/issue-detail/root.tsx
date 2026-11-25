@@ -340,7 +340,14 @@ export const IssueDetailRoot = observer(function IssueDetailRoot(props: TIssueDe
           <div className="vertical-scrollbar flex h-full w-full overflow-auto">
             <div className="relative h-full w-full min-w-0 space-y-6 overflow-auto px-5 py-6 lg:px-8">
               {/* 编辑 / 保存按钮放在路由 header「订阅」旁边 */}
-              <IssueEditModeActionsPortal session={session} canEdit={canEdit} />
+              <IssueEditModeActionsPortal
+                workspaceSlug={workspaceSlug}
+                projectId={projectId}
+                issueId={issueId}
+                session={session}
+                canEdit={canEdit}
+                isArchived={is_archived}
+              />
               <IssueMainContent
                 workspaceSlug={workspaceSlug}
                 projectId={projectId}

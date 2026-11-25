@@ -100,9 +100,13 @@ class WorkflowTransitionSerializer(BaseSerializer):
             "workflow_id",
             "from_state_id",
             "to_state_id",
+            "action_name",
             "approval_type",
             "required_count",
         ]
+
+    def validate_action_name(self, value):
+        return (value or "").strip()
 
     def validate(self, attrs):
         # 工作流与两端状态都必须在当前方案里
@@ -117,6 +121,17 @@ class WorkflowTransitionSerializer(BaseSerializer):
             raise serializers.ValidationError("From state is not valid for this project")
         if to_state and str(to_state.scheme_id) != scheme_id:
             raise serializers.ValidationError("To state is not valid for this project")
+
+        # 同一起始状态下的流转是详情页上并排的按钮，操作名称不能重名
+        action_name = attrs.get("action_name", self.instance.action_name if self.instance else "")
+        if action_name and workflow:
+            duplicated = WorkflowTransition.objects.filter(
+                workflow=workflow, from_state=from_state, action_name=action_name
+            )
+            if self.instance:
+                duplicated = duplicated.exclude(pk=self.instance.pk)
+            if duplicated.exists():
+                raise serializers.ValidationError({"action_name": f"同一起始状态下已有名为「{action_name}」的流转"})
         return attrs
 
 
@@ -153,6 +168,7 @@ class IssueTransitionRecordListSerializer(BaseSerializer):
     to_state_color = serializers.CharField(source="to_state.color", read_only=True, allow_null=True)
     to_state_group = serializers.CharField(source="to_state.group", read_only=True, allow_null=True)
     required_count = serializers.IntegerField(source="transition.required_count", read_only=True, allow_null=True)
+    action_name = serializers.SerializerMethodField()
     target_assignee_ids = serializers.JSONField(read_only=True)
     approval_records = IssueTransitionApprovalRecordSerializer(many=True, read_only=True)
 
@@ -173,13 +189,22 @@ class IssueTransitionRecordListSerializer(BaseSerializer):
             "to_state_group",
             "status",
             "required_count",
+            "action_name",
             "target_assignee_ids",
             "approval_reason",
             "approval_records",
+            "created_by",
             "created_at",
             "completed_at",
         ]
         read_only_fields = fields
+
+    def get_action_name(self, obj):
+        """流转按钮的文字：配了操作名称用操作名称，否则用目标状态名"""
+        transition = obj.transition if obj.transition_id else None
+        if transition and transition.action_name:
+            return transition.action_name
+        return obj.to_state.name if obj.to_state_id else ""
 
 
 class IssueTransitionActionSerializer(serializers.Serializer):
@@ -217,6 +242,7 @@ class WorkflowFlowchartTransitionSerializer(BaseSerializer):
             "id",
             "from_state_id",
             "to_state_id",
+            "action_name",
             "approval_type",
             "required_count",
             "approval_rule_label",

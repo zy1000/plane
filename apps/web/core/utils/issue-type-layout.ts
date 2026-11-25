@@ -313,6 +313,8 @@ export function moveLayoutField(
 /** 保存失败时，详情会话和字段布局之间只传递错误定位信息。 */
 export const ISSUE_LAYOUT_VALIDATE_EVENT = "plane:issue-layout:validate";
 export const ISSUE_LAYOUT_ERROR_EVENT = "plane:issue-layout:error";
+/** 让字段布局定位到某个字段（切页面、展开分组、滚动并聚焦），detail: { issueId, fieldId } */
+export const ISSUE_LAYOUT_FOCUS_EVENT = "plane:issue-layout:focus";
 
 export function getIssueLayoutErrors(error: unknown): Record<string, string> {
   if (!error || typeof error !== "object") return {};

@@ -342,7 +342,9 @@ export function IssueApprovalTag({ workspaceSlug, projectId, issueId, variant = 
           className="hover:opacity-80"
           style={tagStyle(STATUS_COLOR.pending)}
         >
-          <span className="hidden sm:block">待审批</span>
+          <span className="hidden sm:block">
+            {record?.action_name ? `审批中 · ${record.action_name}` : "审批中"}
+          </span>
         </Button>
       ) : hasPendingApproval ? (
         <button

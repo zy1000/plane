@@ -5,6 +5,8 @@ from plane.app.views.workflow.base import (
     IssueTransitionRecordsAPIView,
     MyApprovalsAPIView,
     TransitionRecordActionAPIView,
+    TransitionRecordWithdrawAPIView,
+    IssueAvailableTransitionsAPIView,
     WorkflowAPIView,
     WorkflowFlowchartAPIView,
     WorkflowTransitionAPIView,
@@ -46,6 +48,16 @@ urlpatterns = [
         "workspaces/<str:slug>/projects/<uuid:project_id>/transition-records/<uuid:record_id>/action/",
         TransitionRecordActionAPIView.as_view(),
         name="transition-record-action",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/transition-records/<uuid:record_id>/withdraw/",
+        TransitionRecordWithdrawAPIView.as_view(),
+        name="transition-record-withdraw",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/issues/<uuid:issue_id>/available-transitions/",
+        IssueAvailableTransitionsAPIView.as_view(),
+        name="issue-available-transitions",
     ),
     path(
         "workspaces/<str:slug>/batch-transition-records/",

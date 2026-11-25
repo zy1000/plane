@@ -922,29 +922,72 @@ def approve_transition_record(record_id, approver, action: str, comment: str = "
     return True, None, record
 
 
-def cancel_issue_pending_transitions(issue: Issue, cancelled_by, project_id: str) -> int:
+def list_available_transitions(issue: Issue, user) -> list:
     """
-    取消该工作项下所有 PENDING 状态的审批流程（直接更改状态时调用）。
-    同时写入活动日志。返回取消的记录数量。
+    当前用户在这个工作项上能发起的流转（详情页的流转按钮）。
+    只看激活工作流里从当前状态出发的边，按目标状态顺序；发起人不命中的不返回。
+    其余规则（必填字段 / 目标负责人 / 审批）只给前端提示，提交时仍由 check_update_state_permission 校验。
     """
-    pending_records = list(
-        IssueTransitionRecord.objects.filter(
-            issue=issue,
-            status=TransitionRecordStatus.PENDING,
-        ).select_related("from_state", "to_state")
-    )
+    workflow = get_active_workflow(issue)
+    if not workflow:
+        return []
 
-    if not pending_records:
+    transitions = (
+        WorkflowTransition.objects.filter(workflow=workflow, from_state_id=issue.state_id)
+        .select_related("to_state")
+        .order_by("to_state__sequence", "created_at")
+    )
+    current_assignee_ids = set(get_issue_assignee_ids(issue))
+    results = []
+    for transition in transitions:
+        ok, _ = _check_transition_initiator(issue=issue, transition=transition, user=user)
+        if not ok:
+            continue
+        has_assignee_rule = get_transition_principals(transition, WorkflowPrincipalDimension.ASSIGNEE).exists()
+        allowed_assignee_ids = (
+            resolve_dimension_user_ids(issue, transition, WorkflowPrincipalDimension.ASSIGNEE)
+            if has_assignee_rule
+            else []
+        )
+        required_fields = WorkflowTransitionRequiredField.objects.filter(
+            workflow=transition, deleted_at__isnull=True, extra_field__deleted_at__isnull=True
+        ).select_related("extra_field")
+        to_state = transition.to_state
+        results.append(
+            {
+                "id": str(transition.id),
+                "action_name": transition.action_name or to_state.name,
+                "from_state_id": str(issue.state_id) if issue.state_id else None,
+                "to_state_id": str(to_state.id),
+                "to_state_name": to_state.name,
+                "to_state_color": to_state.color,
+                "to_state_group": to_state.group,
+                # 「全部通过」在配置页表示没配审批人，后端同样直接放行
+                "requires_approval": transition.approval_type in (ApprovalType.ANY, ApprovalType.N_OF_M),
+                "required_fields": [
+                    {"id": str(item.extra_field_id), "name": item.extra_field.name} for item in required_fields
+                ],
+                # 配了目标负责人且现负责人不全在允许范围里，就得在流转时重新指定
+                "assignee_required": has_assignee_rule
+                and not current_assignee_ids.issubset(set(allowed_assignee_ids)),
+                "allowed_assignee_ids": allowed_assignee_ids,
+            }
+        )
+    return results
+
+
+def _cancel_transition_records(records, issue: Issue, cancelled_by, project_id, comment, reason) -> int:
+    """把给定的待审批记录置为已取消，写活动日志并发通知。"""
+    if not records:
         return 0
 
-    record_ids = [r.id for r in pending_records]
-    IssueTransitionRecord.objects.filter(id__in=record_ids).update(
+    IssueTransitionRecord.objects.filter(id__in=[r.id for r in records]).update(
         status=TransitionRecordStatus.CANCELLED,
         completed_at=timezone.now(),
     )
 
     activities = []
-    for record in pending_records:
+    for record in records:
         from_name = record.from_state.name if record.from_state_id else "（初始）"
         to_name = record.to_state.name if record.to_state_id else ""
         activities.append(
@@ -957,17 +1000,66 @@ def cancel_issue_pending_transitions(issue: Issue, cancelled_by, project_id: str
                 new_value="cancelled",
                 old_identifier=record.from_state_id,
                 new_identifier=record.to_state_id,
-                comment=f"直接更改状态，已取消待审批流程（{from_name} → {to_name}）",
+                comment=f"{comment}（{from_name} → {to_name}）",
                 project_id=project_id,
                 workspace_id=issue.workspace_id,
                 epoch=int(timezone.now().timestamp()),
             )
         )
     IssueActivity.objects.bulk_create(activities, batch_size=100)
-    for record in pending_records:
-        _emit_approval_result("workflow.cancelled", record, cancelled_by, reason="工作项状态被直接更改")
+    for record in records:
+        _emit_approval_result("workflow.cancelled", record, cancelled_by, reason=reason)
+    return len(records)
 
-    return len(pending_records)
+
+def withdraw_transition_record(record_id, user, project_id):
+    """
+    发起人撤回自己的待审批流转。
+    与 approve_transition_record 同样在事务里锁住记录再判状态，避免和最后一票「通过」同时提交时
+    把已通过（状态已落库）的记录又改成已取消。
+    返回: (ok: bool, error: str | None, status_code: int)
+    """
+    with transaction.atomic():
+        locked = (
+            IssueTransitionRecord.objects.select_for_update(of=("self",))
+            .filter(pk=record_id, issue__project_id=project_id, issue__deleted_at__isnull=True)
+            .first()
+        )
+        if not locked:
+            return False, "审批记录不存在", 404
+        if locked.status != TransitionRecordStatus.PENDING:
+            return False, "该审批已处理，无法撤回", 400
+        if str(locked.created_by_id) != str(user.id):
+            return False, "只有发起人可以撤回审批", 403
+        record = IssueTransitionRecord.objects.select_related("issue", "from_state", "to_state", "transition").get(
+            pk=locked.pk
+        )
+        _cancel_transition_records(
+            [record], record.issue, user, project_id, comment="发起人撤回了状态流转申请", reason="发起人撤回"
+        )
+    return True, None, 200
+
+
+def cancel_issue_pending_transitions(issue: Issue, cancelled_by, project_id: str) -> int:
+    """
+    取消该工作项下所有 PENDING 状态的审批流程（直接更改状态时调用）。
+    同时写入活动日志。返回取消的记录数量。
+    """
+    pending_records = list(
+        IssueTransitionRecord.objects.filter(
+            issue=issue,
+            status=TransitionRecordStatus.PENDING,
+        ).select_related("from_state", "to_state")
+    )
+
+    return _cancel_transition_records(
+        pending_records,
+        issue,
+        cancelled_by,
+        project_id,
+        comment="直接更改状态，已取消待审批流程",
+        reason="工作项状态被直接更改",
+    )
 
 
 def _replace_issue_assignees(issue: Issue, assignee_ids):

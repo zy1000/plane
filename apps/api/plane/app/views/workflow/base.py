@@ -20,6 +20,7 @@ from plane.app.serializers.workflow import (
 from plane.app.views import BaseAPIView
 from plane.app.views.issue_scheme.scope import IssueSchemeScopeMixin
 from plane.db.models import (
+    Issue,
     IssueTransitionApprovalRecord,
     IssueTransitionRecord,
     ProjectMember,
@@ -35,7 +36,11 @@ from plane.db.models import (
     WorkflowTransitionPrincipal,
 )
 from plane.db.models.workflow import WorkflowTransitionRequiredField
-from plane.utils.workflow.transition import approve_transition_record
+from plane.utils.workflow.transition import (
+    approve_transition_record,
+    list_available_transitions,
+    withdraw_transition_record,
+)
 from plane.utils.issue_scheme import project_visible_type_q
 
 SPECIAL_APPROVER_PREFIX = "special:"
@@ -637,3 +642,33 @@ class TransitionRecordActionAPIView(BaseAPIView):
             IssueTransitionRecordListSerializer(record).data,
             status=status.HTTP_200_OK,
         )
+
+
+class IssueAvailableTransitionsAPIView(BaseAPIView):
+    """
+    GET /workspaces/<slug>/projects/<project_id>/issues/<issue_id>/available-transitions/
+    当前用户在该工作项上能发起的流转，详情页据此渲染流转按钮。
+    """
+
+    @allow_project_member
+    def get(self, request, slug, project_id, issue_id):
+        issue = Issue.issue_objects.filter(
+            pk=issue_id, project_id=project_id, workspace__slug=slug
+        ).first()
+        if not issue:
+            return Response({"error": "工作项不存在"}, status=status.HTTP_404_NOT_FOUND)
+        return Response(list_available_transitions(issue, request.user), status=status.HTTP_200_OK)
+
+
+class TransitionRecordWithdrawAPIView(BaseAPIView):
+    """
+    POST /workspaces/<slug>/projects/<project_id>/transition-records/<record_id>/withdraw/
+    发起人撤回自己的待审批流转。
+    """
+
+    @allow_project_member
+    def post(self, request, slug, project_id, record_id):
+        ok, error, status_code = withdraw_transition_record(record_id, request.user, project_id)
+        if not ok:
+            return Response({"error": error}, status=status_code)
+        return Response(status=status.HTTP_204_NO_CONTENT)

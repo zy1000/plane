@@ -25,6 +25,7 @@ import { PeekOverviewProperties } from "../peek-overview/properties";
 import { IssueTitleInput } from "../title-input";
 import { IssueDescriptionSection } from "./description-section";
 import { IssueExtraFieldsSection } from "./extra-fields-section";
+import { IssueTransitionBanner } from "./transition-banner";
 import { IssueActivity } from "./issue-activity";
 import { IssueParentDetail } from "./parent";
 import type { TIssueOperations } from "./root";
@@ -135,6 +136,14 @@ export const IssueMainContent = observer(function IssueMainContent(props: Props)
           disabled={fieldsDisabled}
           value={issue.name}
           onChange={onTitleChange}
+        />
+
+        <IssueTransitionBanner
+          workspaceSlug={workspaceSlug}
+          projectId={projectId}
+          issueId={issueId}
+          issueOperations={issueOperations}
+          disabled={!isEditing}
         />
 
         <div>

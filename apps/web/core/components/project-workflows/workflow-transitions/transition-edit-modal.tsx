@@ -9,7 +9,7 @@ import { useEffect, useMemo, useState } from "react";
 import { EIconSize } from "@plane/constants";
 import { StateGroupIcon } from "@plane/propel/icons";
 import type { IState } from "@plane/types";
-import { Button, EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
+import { Button, EModalPosition, EModalWidth, Input, ModalCore } from "@plane/ui";
 import { cn } from "@plane/utils";
 import type { TApprovalType, TWorkflowTransition } from "@/services/project/project-workflow.service";
 import { ApprovalRuleSelect } from "./approval-rule-select";
@@ -37,6 +37,7 @@ type TTransitionEditModalProps = {
     approval_type: TApprovalType;
     required_count?: number;
     extra_field_ids: string[];
+    action_name: string;
   }) => Promise<void>;
 };
 
@@ -76,6 +77,7 @@ export const TransitionEditModal: FC<TTransitionEditModalProps> = ({
   onSave,
 }) => {
   const [toStateId, setToStateId] = useState<string | null>(transition?.to_state_id ?? null);
+  const [actionName, setActionName] = useState(transition?.action_name ?? "");
   const [initiatorIds, setInitiatorIds] = useState<string[]>(transition?.initiator_ids ?? []);
   const [assigneeIds, setAssigneeIds] = useState<string[]>(transition?.assignee_ids ?? []);
   const [approverIds, setApproverIds] = useState<string[]>(transition?.approver_ids ?? []);
@@ -87,6 +89,7 @@ export const TransitionEditModal: FC<TTransitionEditModalProps> = ({
   useEffect(() => {
     if (!isOpen) return;
     setToStateId(transition?.to_state_id ?? null);
+    setActionName(transition?.action_name ?? "");
     setInitiatorIds(transition?.initiator_ids ?? []);
     setAssigneeIds(transition?.assignee_ids ?? []);
     setApproverIds(transition?.approver_ids ?? []);
@@ -102,6 +105,7 @@ export const TransitionEditModal: FC<TTransitionEditModalProps> = ({
 
   const isDirty =
     toStateId !== (transition?.to_state_id ?? null) ||
+    actionName.trim() !== (transition?.action_name ?? "") ||
     !isSameTokenSet(initiatorIds, transition?.initiator_ids ?? []) ||
     !isSameTokenSet(assigneeIds, transition?.assignee_ids ?? []) ||
     !isSameTokenSet(approverIds, transition?.approver_ids ?? []) ||
@@ -119,6 +123,7 @@ export const TransitionEditModal: FC<TTransitionEditModalProps> = ({
       await onSave({
         id: transition?.id,
         to_state_id: toStateId,
+        action_name: actionName.trim(),
         initiator_ids: initiatorIds,
         assignee_ids: assigneeIds,
         approver_ids: approverIds,
@@ -160,6 +165,17 @@ export const TransitionEditModal: FC<TTransitionEditModalProps> = ({
                 onChange={setToStateId}
                 excludeStateIds={excludeStateIds}
                 placeholder="选择目标状态"
+                disabled={isSubmitDisabled}
+              />
+            </TimelineItem>
+
+            <TimelineItem title="操作名称">
+              <Input
+                value={actionName}
+                onChange={(event) => setActionName(event.target.value)}
+                maxLength={64}
+                placeholder={allStates.find((state) => state.id === toStateId)?.name ?? "默认使用目标状态名"}
+                className="h-9 w-full"
                 disabled={isSubmitDisabled}
               />
             </TimelineItem>

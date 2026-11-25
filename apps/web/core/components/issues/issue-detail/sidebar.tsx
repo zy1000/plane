@@ -30,6 +30,7 @@ import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { PriorityDropdown } from "@/components/dropdowns/priority";
 import { StateDropdown } from "@/components/dropdowns/state/dropdown";
 // hooks
+import { issueTransitionDraft } from "@/hooks/store/use-issue-transition-draft";
 import { useProjectEstimates } from "@/hooks/store/estimates";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useMember } from "@/hooks/store/use-member";
@@ -118,7 +119,7 @@ export const IssueDetailsSidebar = observer(function IssueDetailsSidebar(props: 
                 onChange={handleStateChange}
                 projectId={projectId?.toString() ?? ""}
                 issueTypeId={issue?.type_id}
-                disabled={!isEditable}
+                disabled={!isEditable || !!issueTransitionDraft.get(issueId)}
                 buttonVariant="transparent-with-text"
                 className="group w-2/3 flex-grow"
                 buttonContainerClassName="w-full text-left"

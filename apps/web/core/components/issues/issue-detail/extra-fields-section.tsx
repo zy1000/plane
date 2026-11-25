@@ -21,6 +21,7 @@ import {
 } from "@/components/issues/extra-fields";
 // hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
+import { issueTransitionDraft } from "@/hooks/store/use-issue-transition-draft";
 import { useIssueTypeExtraFields } from "@/hooks/store/use-issue-type-extra-fields";
 import { useMember } from "@/hooks/store/use-member";
 import { useIssueTypeLayout } from "@/hooks/store/use-issue-type-layout";
@@ -215,8 +216,17 @@ export const IssueExtraFieldsSection = observer(function IssueExtraFieldsSection
     [fields, issue?.extra_field_values, issueOperations, workspaceSlug, projectId, issueId]
   );
   if (!issue || !fields?.length) return null;
-  const effective = evaluateFieldLinkage(fields, issue.extra_field_values ?? []);
   const isEditing = !disabled;
+  // 点流转按钮进来的编辑态：这次流转要求的字段也按必填处理（红星、保存前校验、分组「N 项必填待补充」）
+  const transitionRequiredIds = new Set(
+    isEditing ? (issueTransitionDraft.get(issueId)?.required_fields ?? []).map((item) => item.id) : []
+  );
+  const effective = evaluateFieldLinkage(
+    transitionRequiredIds.size > 0
+      ? fields.map((field) => (transitionRequiredIds.has(field.id) ? { ...field, is_required: true } : field))
+      : fields,
+    issue.extra_field_values ?? []
+  );
   return (
     <div className={cn(dimmed && "opacity-60")}>
       <IssueFieldLayout

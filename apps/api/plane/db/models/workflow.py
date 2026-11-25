@@ -124,6 +124,8 @@ class WorkflowTransition(SchemeBaseModel):
         related_name="incoming_transitions",
         verbose_name="目标状态",
     )
+    # 详情页流转按钮上的文字（如「修复完成」）；为空时界面用目标状态名
+    action_name = models.CharField(max_length=64, blank=True, default="", verbose_name="操作名称")
     # 审批策略：无审批人时这几个字段不生效
     # - any：任意一人通过即可
     # - all：所有配置的审批人全部通过

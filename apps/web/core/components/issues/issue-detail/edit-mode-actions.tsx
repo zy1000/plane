@@ -11,35 +11,48 @@ import { EditIcon } from "@plane/propel/icons";
 import { cn } from "@plane/utils";
 // hooks
 import type { TIssueEditSession } from "@/hooks/use-issue-edit-session";
+import { IssueTransitionActions } from "./transition-actions";
 
 type Props = {
+  workspaceSlug: string;
+  projectId: string;
+  issueId: string;
   session: TIssueEditSession;
   /** 有编辑权限且未归档才给「编辑」入口 */
   canEdit: boolean;
+  isArchived?: boolean;
   className?: string;
 };
 
 /** 详情页路由 header 里「订阅」左边的空挂点，页面主体把编辑按钮 portal 进去 */
 export const ISSUE_DETAIL_HEADER_EDIT_ACTIONS_ID = "issue-detail-header-edit-actions";
 
-/** 详情页 / 抽屉共用的「编辑」与「保存 / 取消」按钮 */
+/** 详情页 / 抽屉共用的流转按钮、「编辑」与「保存 / 取消」按钮 */
 export function IssueEditModeActions(props: Props) {
-  const { session, canEdit, className } = props;
-  if (!canEdit) return null;
+  const { workspaceSlug, projectId, issueId, session, canEdit, isArchived, className } = props;
 
-  if (!session.isEditing) {
+  if (!canEdit || !session.isEditing) {
     return (
-      <Button
-        variant="secondary"
-        size="lg"
-        prependIcon={<EditIcon />}
-        onClick={session.startEditing}
-        className={className}
-      >
-        编辑
-      </Button>
+      <div className={cn("flex items-center gap-2", className)}>
+        <IssueTransitionActions
+          workspaceSlug={workspaceSlug}
+          projectId={projectId}
+          issueId={issueId}
+          session={session}
+          canEdit={canEdit}
+          isArchived={isArchived}
+        />
+        {canEdit && (
+          <Button variant="secondary" size="lg" prependIcon={<EditIcon />} onClick={session.startEditing}>
+            编辑
+          </Button>
+        )}
+      </div>
     );
   }
+
+  // 由流转按钮进来的编辑态：保存即流转，需审批的是提交审批
+  const saveLabel = session.transition ? (session.transition.requires_approval ? "提交审批" : "确认流转") : "保存";
 
   return (
     <div className={cn("flex items-center gap-2", className)}>
@@ -47,7 +60,7 @@ export function IssueEditModeActions(props: Props) {
         取消
       </Button>
       <Button variant="primary" size="lg" onClick={() => void session.save()} loading={session.isSaving}>
-        {session.isSaving ? "保存中…" : "保存"}
+        {session.isSaving ? (session.transition ? "提交中…" : "保存中…") : saveLabel}
       </Button>
     </div>
   );

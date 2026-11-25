@@ -8,14 +8,18 @@ import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "r
 import { cloneDeep, isEqual, omit } from "lodash-es";
 // plane imports
 import type { EditorRefApi } from "@plane/editor";
+import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TIssue, TNameDescriptionLoader } from "@plane/types";
 // components
 import type { TIssueOperations } from "@/components/issues/issue-detail/root";
 import { mergeIds } from "@/components/issues/issue-detail/release-operations";
 // hooks
+import { issueTransitionDraft } from "@/hooks/store/use-issue-transition-draft";
 import useReloadConfirmations from "@/hooks/use-reload-confirmation";
 // store
 import { StoreContext } from "@/lib/store-context";
+import { invalidateIssueApprovalStatus } from "@/services/project/issue-approval-status-cache";
+import type { TAvailableTransition } from "@/services/project/project-workflow.service";
 import { ISSUE_LAYOUT_VALIDATE_EVENT } from "@/utils/issue-type-layout";
 
 /** 只会由标题 / 描述的自动保存回调带出来的键：会话结束后迟到的这类调用一律丢弃，否则取消掉的内容会被写回 */
@@ -62,6 +66,10 @@ export type TIssueEditSession = {
   /** 传给详情各控件的操作集：编辑态暂存在本地，保存时一次提交 */
   operations: TIssueOperations;
   startEditing: () => void;
+  /** 点了详情页的流转按钮：进入编辑态，状态预设为目标状态，保存即流转 */
+  startTransition: (transition: TAvailableTransition) => void;
+  /** 当前编辑态是由哪条流转发起的（普通「编辑」为 null） */
+  transition: TAvailableTransition | null;
   save: () => Promise<boolean>;
   cancel: () => void;
   /** 标题框每次输入都调，保存时据此把还在防抖里的标题收进来 */
@@ -72,6 +80,17 @@ const getDirtyKeys = (state: TSessionState) =>
   Object.keys(state.draft).filter(
     (key) => !PAYLOAD_ONLY_KEYS.has(key) && !isEqual(state.draft[key], state.snapshot[key])
   );
+
+/** 流转保存前的前端校验：需要重新指定的处理人、需要审批时的理由 */
+const getTransitionDraftError = (transition: TAvailableTransition, draft: Record<string, unknown>) => {
+  if (transition.assignee_required) {
+    const assigneeIds = Array.isArray(draft.assignee_ids) ? (draft.assignee_ids as string[]) : [];
+    if (assigneeIds.length === 0) return "请选择处理人";
+    if (assigneeIds.some((id) => !transition.allowed_assignee_ids.includes(id))) return "处理人不符合工作流规则";
+  }
+  if (transition.requires_approval && !String(draft.approval_reason ?? "").trim()) return "请填写审批理由";
+  return null;
+};
 
 const diffIds = (before: unknown, after: unknown) => {
   const prev = Array.isArray(before) ? (before as string[]) : [];
@@ -99,6 +118,8 @@ export const useIssueEditSession = (args: TUseIssueEditSessionArgs): TIssueEditS
   const [sessionKey, setSessionKey] = useState(0);
   // 草稿存在 ref 里，这个计数器只负责让 hasChanges 重新计算
   const [draftVersion, setDraftVersion] = useState(0);
+  const [transition, setTransition] = useState<TAvailableTransition | null>(null);
+  const transitionRef = useRef<TAvailableTransition | null>(null);
 
   const stateRef = useRef<TSessionState>({
     active: false,
@@ -155,6 +176,9 @@ export const useIssueEditSession = (args: TUseIssueEditSessionArgs): TIssueEditS
     state.snapshot = {};
     state.descriptionBaseline = null;
     state.pendingTitle = null;
+    if (transitionRef.current) issueTransitionDraft.clear(state.issueId);
+    transitionRef.current = null;
+    setTransition(null);
     setIsEditing(false);
     setIsSaving(false);
     setDraftVersion(0);
@@ -242,6 +266,27 @@ export const useIssueEditSession = (args: TUseIssueEditSessionArgs): TIssueEditS
     setIsEditing(true);
   }, [editorRef, issueId, issueStore]);
 
+  const startTransition = useCallback(
+    (next: TAvailableTransition) => {
+      if (stateRef.current.active) return;
+      startEditing();
+      if (!stateRef.current.active) return;
+      transitionRef.current = next;
+      setTransition(next);
+      issueTransitionDraft.set(stateRef.current.issueId, next);
+      const patch: Record<string, unknown> = { state_id: next.to_state_id };
+      // 要重新指定处理人时，现负责人里本来就在允许范围内的先带上（提示条里显示为已选）
+      if (next.assignee_required) {
+        const kept = (issueStore.getIssueById(stateRef.current.issueId)?.assignee_ids ?? []).filter((id) =>
+          next.allowed_assignee_ids.includes(id)
+        );
+        if (kept.length > 0) patch.assignee_ids = kept;
+      }
+      stage(patch);
+    },
+    [issueStore, stage, startEditing]
+  );
+
   const onTitleChange = useCallback((value: string) => {
     if (stateRef.current.active) stateRef.current.pendingTitle = value;
   }, []);
@@ -268,9 +313,21 @@ export const useIssueEditSession = (args: TUseIssueEditSessionArgs): TIssueEditS
       stage({ description_html: html });
     }
 
-    // 2. 只提交真的变了的字段
+    // 2. 流转：必填字段、处理人、审批理由先在前端拦一遍（后端仍会复核）
+    const activeTransition = transitionRef.current;
+    if (activeTransition) {
+      const validation = new CustomEvent(ISSUE_LAYOUT_VALIDATE_EVENT, { cancelable: true, detail: { issueId: iid } });
+      if (!window.dispatchEvent(validation)) return false;
+      const transitionError = getTransitionDraftError(activeTransition, state.draft);
+      if (transitionError) {
+        setToast({ type: TOAST_TYPE.ERROR, title: "无法流转", message: transitionError });
+        return false;
+      }
+    }
+
+    // 3. 只提交真的变了的字段
     const dirtyKeys = getDirtyKeys(state);
-    if (dirtyKeys.includes("extra_field_values")) {
+    if (!activeTransition && dirtyKeys.includes("extra_field_values")) {
       const validation = new CustomEvent(ISSUE_LAYOUT_VALIDATE_EVENT, { cancelable: true, detail: { issueId: iid } });
       if (!window.dispatchEvent(validation)) return false;
     }
@@ -283,7 +340,7 @@ export const useIssueEditSession = (args: TUseIssueEditSessionArgs): TIssueEditS
     if ("state_id" in patch && "approval_reason" in state.draft) patch.approval_reason = state.draft.approval_reason;
 
     setIsSaving(true);
-    // 3. 本地先回到修改前：真实操作自己做乐观更新，列表分组 / 迭代归属都以它读到的「修改前」为准
+    // 4. 本地先回到修改前：真实操作自己做乐观更新，列表分组 / 迭代归属都以它读到的「修改前」为准
     revertLocal();
     const real = realOpsRef.current;
     let approvalInitiated = false;
@@ -312,7 +369,9 @@ export const useIssueEditSession = (args: TUseIssueEditSessionArgs): TIssueEditS
       await real.changeReleasesInIssue?.(ws, pid, iid, add, remove);
     }
 
-    // 4. 真实操作内部吞错并回滚本地，这里按「本地是否等于草稿」判断有没有没落下去的
+    if (activeTransition) invalidateIssueApprovalStatus(pid, iid);
+
+    // 5. 真实操作内部吞错并回滚本地，这里按「本地是否等于草稿」判断有没有没落下去的
     const after = issueStore.getIssueById(iid) as unknown as Record<string, unknown> | undefined;
     // 状态变更转成了审批申请：状态 / 负责人已经交给审批，从草稿里拿掉，免得再点保存重复发起
     const settledKeys = new Set<string>(approvalInitiated ? APPROVAL_KEYS : []);
@@ -322,7 +381,7 @@ export const useIssueEditSession = (args: TUseIssueEditSessionArgs): TIssueEditS
       return true;
     }
 
-    // 5. 有没保存上的：留在编辑态，已落库 / 已转审批的字段移出草稿，没落下去的改动重新铺回本地，
+    // 6. 有没保存上的：留在编辑态，已落库 / 已转审批的字段移出草稿，没落下去的改动重新铺回本地，
     //    标题 / 描述编辑器不重挂，用户改的内容原样留着，修正后可以再点保存
     for (const key of dirtyKeys) {
       if (failedKeys.includes(key)) continue;
@@ -330,6 +389,12 @@ export const useIssueEditSession = (args: TUseIssueEditSessionArgs): TIssueEditS
       delete state.snapshot[key];
     }
     if (!failedKeys.includes("state_id")) delete state.draft.approval_reason;
+    // 审批单已经建好：这次流转结束了，剩下没保存上的字段按普通编辑重试，不再要求审批理由 / 处理人
+    if (approvalInitiated && transitionRef.current) {
+      issueTransitionDraft.clear(iid);
+      transitionRef.current = null;
+      setTransition(null);
+    }
     state.snapshot.updated_at = after?.updated_at;
     const retained: Record<string, unknown> = {};
     for (const key of failedKeys) retained[key] = state.draft[key];
@@ -352,6 +417,8 @@ export const useIssueEditSession = (args: TUseIssueEditSessionArgs): TIssueEditS
   useEffect(
     () => () => {
       const state = stateRef.current;
+      if (transitionRef.current) issueTransitionDraft.clear(state.issueId);
+      transitionRef.current = null;
       if (!state.active) return;
       revertLocal();
       state.active = false;
@@ -370,5 +437,17 @@ export const useIssueEditSession = (args: TUseIssueEditSessionArgs): TIssueEditS
     setShowAlert(hasChanges);
   }, [hasChanges, setShowAlert]);
 
-  return { isEditing, isSaving, hasChanges, sessionKey, operations, startEditing, save, cancel, onTitleChange };
+  return {
+    isEditing,
+    isSaving,
+    hasChanges,
+    sessionKey,
+    operations,
+    startEditing,
+    startTransition,
+    transition,
+    save,
+    cancel,
+    onTitleChange,
+  };
 };

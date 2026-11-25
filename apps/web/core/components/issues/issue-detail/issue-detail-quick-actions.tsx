@@ -23,7 +23,6 @@ import { useUser } from "@/hooks/store/user";
 import { useAppRouter } from "@/hooks/use-app-router";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 // local imports
-import { IssueApprovalTag } from "../issue-approval-tag";
 import { WorkItemDetailQuickActions } from "../issue-layouts/quick-action-dropdowns";
 import { ISSUE_DETAIL_HEADER_EDIT_ACTIONS_ID } from "./edit-mode-actions";
 import { IssueSubscription } from "./subscription";
@@ -161,10 +160,7 @@ export const IssueDetailQuickActions = observer(function IssueDetailQuickActions
           {/* 详情页主体把「编辑 / 保存 取消」portal 进来；contents 让空挂点不占 gap */}
           <div id={ISSUE_DETAIL_HEADER_EDIT_ACTIONS_ID} className="contents" />
           {currentUser && !issue?.archived_at && (
-            <>
-              <IssueSubscription workspaceSlug={workspaceSlug} projectId={projectId} issueId={issueId} />
-              <IssueApprovalTag workspaceSlug={workspaceSlug} projectId={projectId} issueId={issueId} variant="button" />
-            </>
+            <IssueSubscription workspaceSlug={workspaceSlug} projectId={projectId} issueId={issueId} />
           )}
           <div className="flex flex-wrap items-center gap-2 text-tertiary">
             <Tooltip tooltipContent={t("common.actions.copy_link")} isMobile={isMobile}>

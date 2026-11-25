@@ -14,6 +14,7 @@ import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 // local components
 import type { TIssueOperations } from "../issue-detail";
 import { IssueExtraFieldsSection } from "../issue-detail/extra-fields-section";
+import { IssueTransitionBanner } from "../issue-detail/transition-banner";
 import { IssueParentDetail } from "../issue-detail/parent";
 import { IssueTitleInput } from "../title-input";
 import { IssueDescriptionSection } from "../issue-detail/description-section";
@@ -94,6 +95,14 @@ export const PeekOverviewIssueDetails = observer(function PeekOverviewIssueDetai
         disabled={fieldsDisabled}
         value={issue.name}
         onChange={onTitleChange}
+      />
+
+      <IssueTransitionBanner
+        workspaceSlug={workspaceSlug}
+        projectId={projectId}
+        issueId={issueId}
+        issueOperations={issueOperations}
+        disabled={!isEditing}
       />
 
       <div>

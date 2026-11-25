@@ -14,6 +14,7 @@ import type {
 } from "@/services/project/issue-type-layout.types";
 import {
   ISSUE_LAYOUT_ERROR_EVENT,
+  ISSUE_LAYOUT_FOCUS_EVENT,
   ISSUE_LAYOUT_VALIDATE_EVENT,
   layoutFieldClass,
   layoutForContext,
@@ -151,11 +152,17 @@ export function IssueFieldLayout({
       const target = Object.keys(next).find((key) => fieldMap.has(key));
       if (target) openField(target);
     };
+    const focus = (event: Event) => {
+      const detail = (event as CustomEvent).detail;
+      if (detail?.issueId === issueId && fieldMap.has(detail.fieldId)) openField(detail.fieldId);
+    };
     window.addEventListener(ISSUE_LAYOUT_VALIDATE_EVENT, validate);
     window.addEventListener(ISSUE_LAYOUT_ERROR_EVENT, receiveError);
+    window.addEventListener(ISSUE_LAYOUT_FOCUS_EVENT, focus);
     return () => {
       window.removeEventListener(ISSUE_LAYOUT_VALIDATE_EVENT, validate);
       window.removeEventListener(ISSUE_LAYOUT_ERROR_EVENT, receiveError);
+      window.removeEventListener(ISSUE_LAYOUT_FOCUS_EVENT, focus);
     };
   });
 
