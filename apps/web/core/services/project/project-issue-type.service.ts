@@ -48,6 +48,18 @@ export type TIssueType = {
   updated_at?: string;
 };
 
+/** 复制类型时可选带过去的内容：布局依赖属性、工作流依赖状态 */
+export type TIssueTypeCopyPart = "fields" | "layout" | "states" | "workflow";
+
+export type TIssueTypeCopyPayload = {
+  source_type_id: string;
+  name: string;
+  parts: TIssueTypeCopyPart[];
+  logo_props?: TIssueType["logo_props"];
+  category_id?: number | string | null;
+  description?: string;
+};
+
 export type TTypeExtraField = {
   id: string;
   project?: string;
@@ -229,6 +241,24 @@ export class ProjectIssueTypeService extends APIService {
     return this.post(`${issueConfigBasePath(workspaceSlug, projectId)}/issue-types/`, data)
       .then((response) => {
         this.upsertCache(projectId, response?.data);
+        return response?.data;
+      })
+      .catch((error) => {
+        throw getErrorPayload(error);
+      });
+  }
+
+  /** 从已有类型（可在别的作用域）深复制出当前作用域里的新类型 */
+  async copyProjectIssueType(
+    workspaceSlug: string,
+    projectId: string,
+    data: TIssueTypeCopyPayload
+  ): Promise<TIssueType> {
+    return this.post(`${issueConfigBasePath(workspaceSlug, projectId)}/issue-types/copy/`, data)
+      .then((response) => {
+        this.upsertCache(projectId, response?.data);
+        // 新类型带着复制来的字段，本作用域的字段缓存要重取
+        clearExtraFieldsCacheForProject(workspaceSlug, projectId);
         return response?.data;
       })
       .catch((error) => {

@@ -426,6 +426,128 @@ def copy_scheme(source, target, actor_id=None, type_ids=None):
     return id_map
 
 
+# ---------------------------------------------------------------------------
+# 复制单个类型成新类型（类型库 / 项目自定义，可跨范围）
+# ---------------------------------------------------------------------------
+
+#: 复制内容：属性（含布局）、状态（含工作流）
+COPY_TYPE_PARTS = ("fields", "layout", "states", "workflow")
+
+
+class CopyIssueTypeError(Exception):
+    pass
+
+
+def copy_issue_type(source_type, target_scheme, *, name, parts, actor, overrides=None):
+    """把 source_type 深复制成 target_scheme 里的一个新类型，返回新类型。
+
+    ``parts`` 是 COPY_TYPE_PARTS 的子集：layout 依赖 fields，workflow 依赖 states；没勾 states 时
+    跟新建空白类型一样生成预置状态。只拷未删除的行。新类型是独立类型：不挂 library_type、不带
+    system_key / is_default / 研发模式关联。字段行的 library_field 原样带过去（仍绑定同一个库字段）。
+    指定成员审批人跨范围时目标项目可能没有这个人：bulk_create 绕过 clean，运行时按在职成员收口（同脱离）。
+    """
+    from plane.utils.field_linkage import remap_linkage, resolve_for_type
+    from plane.utils.issue_type_layout import remap_field_layout
+    from plane.utils.project.defaults import bulk_create_issue_state
+
+    parts = set(parts)
+    if "layout" in parts and "fields" not in parts:
+        raise CopyIssueTypeError("复制布局需要同时复制属性")
+    if "workflow" in parts and "states" not in parts:
+        raise CopyIssueTypeError("复制工作流需要同时复制状态")
+    name = (name or "").strip()
+    if not name:
+        raise CopyIssueTypeError("请填写类型名称")
+    if len(name) > IssueType._meta.get_field("name").max_length:
+        raise CopyIssueTypeError("类型名称不能超过 255 个字符")
+    if IssueType.objects.filter(scheme=target_scheme, name=name).exists():
+        raise CopyIssueTypeError(f"已存在名为「{name}」的类型")
+
+    overrides = overrides or {}
+    actor_id = actor.id
+    stamp = {"created_by_id": actor_id, "updated_by_id": actor_id}
+    with transaction.atomic():
+        max_level = IssueType.objects.filter(scheme=target_scheme).aggregate(m=Max("level"))["m"] or 0
+        new_type = IssueType.objects.create(
+            scheme_id=target_scheme.id,
+            workspace_id=target_scheme.workspace_id,
+            name=name,
+            description=overrides.get("description", source_type.description),
+            logo_props=overrides.get("logo_props", source_type.logo_props),
+            category_id=overrides.get("category_id", source_type.category_id),
+            is_epic=source_type.is_epic,
+            level=max_level + 1,
+            **stamp,
+        )
+        id_map = {source_type.id: new_type.id}
+
+        if "fields" in parts:
+            field_pairs = _clone_rows(
+                TypeExtraField, TypeExtraField.objects.filter(issue_type=source_type), target_scheme, id_map,
+                fk_fields=("issue_type",), actor_id=actor_id,
+            )
+            field_id_map = {str(old.id): str(new.id) for old, new in field_pairs}
+            # 库字段的规则按新类型重新求值（来源行存的是按来源类型求值的结果，带着来源专属的类型条件），
+            # 与 bind_library_dependencies 一致；新类型的适用规则只会更少，引用的字段都已复制过来
+            library_ids = {new.library_field_id for _, new in field_pairs if new.library_field_id}
+            library_linkage = dict(
+                IssueFieldDefinition.objects.filter(pk__in=library_ids).values_list("id", "linkage")
+            )
+            library_field_map = {
+                str(old.library_field_id): str(new.id) for old, new in field_pairs if old.library_field_id
+            }
+            for _, new in field_pairs:
+                if new.library_field_id in library_linkage:
+                    new.linkage = remap_linkage(
+                        resolve_for_type(library_linkage[new.library_field_id], new_type.id), library_field_map
+                    )
+                else:
+                    new.linkage = remap_linkage(new.linkage, field_id_map)
+            if field_pairs:
+                TypeExtraField.objects.bulk_update([new for _, new in field_pairs], ["linkage"])
+            if "layout" in parts and source_type.field_layout:
+                new_type.field_layout = remap_field_layout(source_type.field_layout, field_id_map)
+                IssueType.objects.filter(pk=new_type.pk).update(field_layout=new_type.field_layout)
+
+        if "states" not in parts:
+            bulk_create_issue_state(issue_types=[new_type], created_by=actor)
+            return new_type
+
+        _clone_rows(
+            State, State.objects.filter(issue_type=source_type), target_scheme, id_map,
+            fk_fields=("issue_type",), actor_id=actor_id,
+        )
+        # triage 是方案级状态（不挂类型），目标方案本来就有，不拷
+
+        if "workflow" not in parts:
+            return new_type
+        workflows = list(Workflow.objects.filter(issue_type=source_type))
+        _clone_rows(Workflow, workflows, target_scheme, id_map, fk_fields=("issue_type",), actor_id=actor_id)
+        # 两端状态都在本类型里才拷（triage 等方案级状态跨方案对不上）
+        transitions = [
+            t for t in WorkflowTransition.objects.filter(workflow__in=workflows)
+            if t.to_state_id in id_map and (t.from_state_id is None or t.from_state_id in id_map)
+        ]
+        _clone_rows(WorkflowTransition, transitions, target_scheme, id_map,
+                    fk_fields=("workflow", "from_state", "to_state"), actor_id=actor_id)
+        WorkflowTransitionPrincipal.objects.bulk_create([
+            WorkflowTransitionPrincipal(
+                transition_id=id_map[p.transition_id], dimension=p.dimension, kind=p.kind, member_id=p.member_id,
+                job_role_id=p.job_role_id, dynamic_target=p.dynamic_target, **stamp,
+            )
+            for p in WorkflowTransitionPrincipal.objects.filter(transition_id__in=[t.id for t in transitions])
+        ], batch_size=500)
+        # 流转必填字段（RequiredField.workflow 指向流转）：只有字段也拷了才对得上
+        WorkflowTransitionRequiredField.objects.bulk_create([
+            WorkflowTransitionRequiredField(
+                workflow_id=id_map[r.workflow_id], extra_field_id=id_map[r.extra_field_id], **stamp,
+            )
+            for r in WorkflowTransitionRequiredField.objects.filter(workflow_id__in=[t.id for t in transitions])
+            if r.extra_field_id in id_map
+        ], batch_size=500)
+    return new_type
+
+
 def _replace_ids_in_json(value, str_map):
     """JSON 里出现的旧 uuid 字符串整体替换成新的。项目级对象里的旧 id 只可能指本方案，不按条件语义处理。"""
     if not value:

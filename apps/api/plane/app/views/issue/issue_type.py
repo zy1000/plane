@@ -12,12 +12,16 @@ from plane.app.permissions import IssueSchemeConfigPermission, WorkspaceIssueSch
 from plane.app.serializers.issue_type import IssueTypeCategorySerializer, IssueTypeSerializer
 from plane.db.models import (
     DevModeIssueType,
+    IssueScheme,
     IssueType,
     State,
     Workspace,
 )
 from plane.db.models.issue_type import IssueTypeCategory
 from plane.utils.issue_scheme import (
+    COPY_TYPE_PARTS,
+    CopyIssueTypeError,
+    copy_issue_type,
     in_use_response_data,
     is_referenced,
     issue_type_references,
@@ -98,6 +102,81 @@ class ProjectIssueTypeListCreateAPIEndpoint(IssueSchemeScopeMixin, BaseAPIView):
                 data = with_linked_dev_modes(dict(data), [issue_type])
             return Response(data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class IssueTypeCopyEndpoint(IssueSchemeScopeMixin, BaseAPIView):
+    """POST .../issue-types/copy/：把一个已有类型深复制成当前方案里的新类型。
+
+    来源可以在别的范围（类型库，或某个项目自定义的项目方案），新类型永远建在当前路由的方案里。
+    body: source_type_id、name、parts（fields / layout / states / workflow 的子集）、
+    可选 logo_props / category_id / description（不传就从来源带出）。
+    """
+
+    permission_classes = [IssueSchemeConfigPermission]
+
+    def _readable_source(self, request, slug, source_type_id):
+        """当前用户读得到的来源类型：类型库要工作项方案查看 / 维护权限，项目方案要是该项目成员。"""
+        from plane.app.permissions import PermissionKey
+        from plane.app.permissions.base import is_project_member, workspace_context
+
+        source = (
+            IssueType.objects.filter(pk=source_type_id, workspace__slug=slug)
+            .select_related("scheme")
+            .first()
+        )
+        if source is None:
+            return None
+        if source.scheme.project_id is None:
+            keys = workspace_context(request.user, slug).keys
+            allowed = {PermissionKey.WORKSPACE_ISSUE_SCHEME_VIEW.value, PermissionKey.WORKSPACE_ISSUE_SCHEME_MANAGE.value}
+            return source if keys & allowed else None
+        return source if is_project_member(request.user, slug, str(source.scheme.project_id)) else None
+
+    def post(self, request, slug, project_id=None, issue_scheme_id=None):
+        scheme_id = self.get_scheme_id()
+        if scheme_id is None:
+            return Response({"error": "Project not found"}, status=status.HTTP_404_NOT_FOUND)
+        source = self._readable_source(request, slug, request.data.get("source_type_id"))
+        if source is None:
+            return Response({"error": "来源类型不存在或无权查看"}, status=status.HTTP_404_NOT_FOUND)
+        parts = request.data.get("parts") or []
+        if not isinstance(parts, list) or not set(parts) <= set(COPY_TYPE_PARTS):
+            return Response({"error": "复制内容不正确"}, status=status.HTTP_400_BAD_REQUEST)
+        if not self.is_scheme_route:
+            # 带进自定义状态 / 工作流等同于在项目里新建它们，要各自的管理权限（同 StateViewSet / WorkflowAPIView）
+            from plane.app.permissions import PermissionKey
+            from plane.app.permissions.base import resolve_project_grant
+
+            keys = resolve_project_grant(request.user, slug, str(project_id)).keys
+            if "states" in parts and PermissionKey.PROJECT_STATE_MANAGE.value not in keys:
+                return Response({"error": "没有管理状态的权限，不能复制状态"}, status=status.HTTP_403_FORBIDDEN)
+            if "workflow" in parts and PermissionKey.PROJECT_WORKFLOW_MANAGE.value not in keys:
+                return Response({"error": "没有管理工作流的权限，不能复制工作流"}, status=status.HTTP_403_FORBIDDEN)
+        overrides = {}
+        for key in ("logo_props", "description"):
+            if key in request.data:
+                overrides[key] = request.data[key]
+        if "category_id" in request.data:
+            category_id = request.data["category_id"]
+            if category_id and not IssueTypeCategory.objects.filter(pk=category_id, workspace__slug=slug).exists():
+                return Response({"error": "类型分类不存在"}, status=status.HTTP_400_BAD_REQUEST)
+            overrides["category_id"] = category_id or None
+        try:
+            issue_type = copy_issue_type(
+                source,
+                IssueScheme.objects.get(pk=scheme_id),
+                name=request.data.get("name"),
+                parts=parts,
+                actor=request.user,
+                overrides=overrides,
+            )
+        except CopyIssueTypeError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        issue_type = IssueType.objects.select_related("scheme").get(pk=issue_type.pk)
+        data = IssueTypeSerializer(issue_type).data
+        if self.is_scheme_route:
+            data = with_linked_dev_modes(dict(data), [issue_type])
+        return Response(data, status=status.HTTP_201_CREATED)
 
 
 class WorkspaceIssueTypeApiView(BaseAPIView):

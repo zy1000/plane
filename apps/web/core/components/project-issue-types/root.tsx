@@ -10,7 +10,7 @@ import { createPortal } from "react-dom";
 import { observer } from "mobx-react";
 import { usePopper } from "react-popper";
 import { useParams } from "react-router";
-import { ChevronDown, GripVertical, Layers, Library, MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, Copy, GripVertical, Layers, Library, MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
 // plane imports
 import { PROJECT_SETTINGS } from "@plane/constants";
 import { useOutsideClickDetector } from "@plane/hooks";
@@ -51,10 +51,13 @@ import { useIssueConfigPermission } from "@/hooks/use-issue-config-permission";
 import { projectIssueTypesCache } from "@/services/project/project-issue-type.service";
 import type {
   TIssueType,
+  TIssueTypeCopyPart,
+  TIssueTypeCopyPayload,
   TTypeExtraField,
   TTypeExtraFieldPayload,
 } from "@/services/project/project-issue-type.service";
 // local imports
+import { ALL_COPY_PARTS, IssueTypeCopySourceFields } from "./copy-source-fields";
 import { buildFieldPayload, DEFAULT_FIELD_FORM, fieldToFormState, getFieldRowLabel, InlineFieldForm } from "./field-form";
 import type { TFieldFormState, TFieldPayloadBase } from "./field-form";
 import { FieldLinkageModal } from "./field-linkage-modal";
@@ -480,13 +483,22 @@ export const IssueTypeFieldList = observer(function IssueTypeFieldList({
   );
 });
 
-export function WorkItemTypeModal({
+/**
+ * 新建 / 编辑 / 复制工作项类型共用的弹窗。
+ * - 传了 `scopeKey` + `onCopy`：新建时多一行「创建方式」（空白类型 / 从已有类型复制）
+ * - 传了 `copySource`（类型「更多」菜单进来）：直接是复制，来源已带出
+ * 复制时名称默认「原名 副本」，图标 / 类别 / 描述从来源带出可改。
+ */
+export const WorkItemTypeModal = observer(function WorkItemTypeModal({
   isOpen,
   isSubmitting,
   onClose,
   onSubmit,
   editingIssueType,
   workspaceSlug,
+  scopeKey,
+  copySource,
+  onCopy,
 }: {
   isOpen: boolean;
   isSubmitting: boolean;
@@ -494,6 +506,10 @@ export function WorkItemTypeModal({
   onSubmit: (data: Partial<TIssueType>) => Promise<void>;
   editingIssueType?: TIssueType | null;
   workspaceSlug: string;
+  /** 当前所在作用域（项目 id 或 `scheme:<id>`），复制来源范围默认选它 */
+  scopeKey?: string;
+  copySource?: TIssueType | null;
+  onCopy?: (data: TIssueTypeCopyPayload) => Promise<void>;
 }) {
   const { t } = useTranslation();
   const [name, setName] = useState("");
@@ -501,7 +517,29 @@ export function WorkItemTypeModal({
   const [isIconPickerOpen, setIsIconPickerOpen] = useState(false);
   const [iconOption, setIconOption] = useState<TTypeIconOption>(getRandomTypeIconOption);
   const [categoryId, setCategoryId] = useState<number | string | null>(null);
+  const [mode, setMode] = useState<"blank" | "copy">("blank");
+  const [sourceScopeKey, setSourceScopeKey] = useState<string | undefined>();
+  const [sourceTypeId, setSourceTypeId] = useState<string | undefined>();
+  const [copyParts, setCopyParts] = useState<TIssueTypeCopyPart[]>(ALL_COPY_PARTS);
   const { categories, isLoading: isCategoriesLoading, fetchCategories } = useIssueTypeCategories(workspaceSlug);
+  const canCopy = !editingIssueType && !!onCopy && !!scopeKey;
+  // 带进自定义状态 / 工作流要目标范围对应的管理权限（后端同样拦）
+  const { canEdit: canEditConfig } = useIssueConfigPermission(workspaceSlug, scopeKey ?? "");
+  const lockedCopyParts = ALL_COPY_PARTS.filter(
+    (part) =>
+      (part === "states" && !canEditConfig(["project.state.manage"])) ||
+      (part === "workflow" && !canEditConfig(["project.workflow.manage"]))
+  );
+  const isCopy = canCopy && mode === "copy";
+
+  const fillFromSource = (source: TIssueType) => {
+    setSourceTypeId(source.id);
+    // 名称上限 255，给「 副本」后缀留位
+    setName(`${source.name.slice(0, 255 - " 副本".length)} 副本`);
+    setDescription(source.description ?? "");
+    setIconOption(getTypeIconOption(source.logo_props?.icon));
+    setCategoryId(source.category_id ?? null);
+  };
 
   useEffect(() => {
     if (!isOpen) return;
@@ -516,9 +554,14 @@ export function WorkItemTypeModal({
       setIconOption(getRandomTypeIconOption());
       setCategoryId(null);
     }
+    setMode(copySource ? "copy" : "blank");
+    setSourceScopeKey(scopeKey);
+    setSourceTypeId(undefined);
+    setCopyParts(ALL_COPY_PARTS);
+    if (copySource && !editingIssueType) fillFromSource(copySource);
     setIsIconPickerOpen(false);
     fetchCategories();
-  }, [isOpen, editingIssueType?.id, fetchCategories]);
+  }, [isOpen, editingIssueType?.id, copySource?.id, fetchCategories]);
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -532,12 +575,18 @@ export function WorkItemTypeModal({
       return;
     }
 
-    await onSubmit({
+    const data: Partial<TIssueType> & { name: string } = {
       name: name.trim(),
       description: description.trim(),
       logo_props: { icon: toTypeIconProps(iconOption) },
       category_id: categoryId,
-    });
+    };
+    if (isCopy) {
+      if (!sourceTypeId || !onCopy) return;
+      await onCopy({ ...data, source_type_id: sourceTypeId, parts: copyParts.filter((part) => !lockedCopyParts.includes(part)) });
+      return;
+    }
+    await onSubmit(data);
   };
 
   return (
@@ -550,8 +599,51 @@ export function WorkItemTypeModal({
     >
       <form onSubmit={handleSubmit} className="p-5">
         <h3 className="text-lg font-semibold text-primary">
-          {editingIssueType ? t("project_settings.issue_types.edit_title") : "创建工作项类型"}
+          {editingIssueType
+            ? t("project_settings.issue_types.edit_title")
+            : copySource
+              ? "复制工作项类型"
+              : "创建工作项类型"}
         </h3>
+        {canCopy && !copySource && (
+          <div className="mt-4 flex items-center gap-3">
+            <span className="text-xs font-medium text-secondary">创建方式</span>
+            <div className="inline-flex rounded-lg bg-layer-1 p-0.5">
+              {(
+                [
+                  ["blank", "空白类型"],
+                  ["copy", "从已有类型复制"],
+                ] as const
+              ).map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setMode(key)}
+                  className={`h-7 rounded-md px-3 text-13 transition-colors ${
+                    mode === key ? "bg-surface-1 font-medium text-primary shadow-raised-100" : "text-secondary hover:text-primary"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {isCopy && (
+          <IssueTypeCopySourceFields
+            workspaceSlug={workspaceSlug}
+            scopeKey={sourceScopeKey}
+            onScopeChange={(next) => {
+              setSourceScopeKey(next);
+              setSourceTypeId(undefined);
+            }}
+            sourceTypeId={sourceTypeId}
+            onSourceTypeChange={fillFromSource}
+            parts={copyParts.filter((part) => !lockedCopyParts.includes(part))}
+            lockedParts={lockedCopyParts}
+            onPartsChange={setCopyParts}
+          />
+        )}
         <div className="relative mt-4 flex items-end gap-2">
           <TypeIconPicker
             value={iconOption}
@@ -602,16 +694,21 @@ export function WorkItemTypeModal({
             type="submit"
             loading={isSubmitting}
             disabled={
-              isSubmitting || !name.trim() || categoryId === null || categoryId === undefined || categoryId === ""
+              isSubmitting ||
+              !name.trim() ||
+              categoryId === null ||
+              categoryId === undefined ||
+              categoryId === "" ||
+              (isCopy && !sourceTypeId)
             }
           >
-            {editingIssueType ? t("update") : t("project_settings.issue_types.add")}
+            {editingIssueType ? t("update") : isCopy ? "复制" : t("project_settings.issue_types.add")}
           </Button>
         </div>
       </form>
     </ModalCore>
   );
-}
+});
 
 type TIssueTypesSettingsContentProps = {
   workspaceSlug: string;
@@ -630,12 +727,14 @@ function IssueTypesSettingsContentInner({ workspaceSlug, projectId }: TIssueType
     issueTypes,
     isLoading: issueTypesLoading,
     createIssueType,
+    copyIssueType,
     updateIssueType,
     deleteIssueType,
   } = useProjectIssueTypes(workspaceSlug, projectId);
   const {
     fields,
     isLoading: fieldsLoading,
+    refetch: refetchFields,
     createField,
     updateField,
     deleteField,
@@ -651,6 +750,7 @@ function IssueTypesSettingsContentInner({ workspaceSlug, projectId }: TIssueType
   const confirmLayoutLeave = () => !layoutDirty.current || window.confirm("布局有未保存的修改，确定离开吗？");
   const [isTypeModalOpen, setIsTypeModalOpen] = useState(false);
   const [editingIssueType, setEditingIssueType] = useState<TIssueType | undefined>();
+  const [copySource, setCopySource] = useState<TIssueType | undefined>();
   const [isTypeSubmitting, setIsTypeSubmitting] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<TDeleteTarget | undefined>();
   const [isDeleting, setIsDeleting] = useState(false);
@@ -676,6 +776,7 @@ function IssueTypesSettingsContentInner({ workspaceSlug, projectId }: TIssueType
     }
     const timer = window.setTimeout(() => {
       setEditingIssueType(undefined);
+      setCopySource(undefined);
     }, WORK_ITEM_TYPE_MODAL_LEAVE_MS);
     return () => window.clearTimeout(timer);
   }, [isTypeModalOpen]);
@@ -727,6 +828,28 @@ function IssueTypesSettingsContentInner({ workspaceSlug, projectId }: TIssueType
         type: TOAST_TYPE.ERROR,
         title: "创建失败",
         message: getApiErrorMessage(error, "无法创建工作项类型，请稍后重试。"),
+      });
+    } finally {
+      setIsTypeSubmitting(false);
+    }
+  };
+
+  const handleCopyIssueType = async (data: TIssueTypeCopyPayload) => {
+    if (!canEdit) return;
+    setIsTypeSubmitting(true);
+    try {
+      const createdIssueType = await copyIssueType(data);
+      if (createdIssueType) {
+        // 新类型带着复制来的字段，字段列表重取（service 已清缓存）
+        void refetchFields();
+        setExpandedId(createdIssueType.id);
+        setIsTypeModalOpen(false);
+      }
+    } catch (error) {
+      setToast({
+        type: TOAST_TYPE.ERROR,
+        title: "复制失败",
+        message: getApiErrorMessage(error, "无法复制工作项类型，请稍后重试。"),
       });
     } finally {
       setIsTypeSubmitting(false);
@@ -816,6 +939,7 @@ function IssueTypesSettingsContentInner({ workspaceSlug, projectId }: TIssueType
               prependIcon={<Plus className="size-3.5" />}
               onClick={() => {
                 setEditingIssueType(undefined);
+                setCopySource(undefined);
                 setIsTypeModalOpen(true);
               }}
               disabled={!canEdit}
@@ -839,6 +963,7 @@ function IssueTypesSettingsContentInner({ workspaceSlug, projectId }: TIssueType
                 className="mx-auto mt-4"
                 onClick={() => {
                   setEditingIssueType(undefined);
+                  setCopySource(undefined);
                   setIsTypeModalOpen(true);
                 }}
                 disabled={!canEdit}
@@ -908,7 +1033,18 @@ function IssueTypesSettingsContentInner({ workspaceSlug, projectId }: TIssueType
                                 icon: <Pencil className="size-3.5 shrink-0 text-tertiary" strokeWidth={2} />,
                                 disabled: !canEdit,
                                 onClick: () => {
+                                  setCopySource(undefined);
                                   setEditingIssueType(issueType);
+                                  setIsTypeModalOpen(true);
+                                },
+                              },
+                              {
+                                label: "复制",
+                                icon: <Copy className="size-3.5 shrink-0 text-tertiary" strokeWidth={2} />,
+                                disabled: !canEdit,
+                                onClick: () => {
+                                  setEditingIssueType(undefined);
+                                  setCopySource(issueType);
                                   setIsTypeModalOpen(true);
                                 },
                               },
@@ -985,6 +1121,9 @@ function IssueTypesSettingsContentInner({ workspaceSlug, projectId }: TIssueType
           isSubmitting={isTypeSubmitting}
           editingIssueType={editingIssueType}
           workspaceSlug={workspaceSlug}
+          scopeKey={projectId}
+          copySource={copySource}
+          onCopy={handleCopyIssueType}
           onClose={() => setIsTypeModalOpen(false)}
           onSubmit={async (data) => {
             if (editingIssueType) {

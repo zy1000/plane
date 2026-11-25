@@ -9,7 +9,7 @@ import { PageHead } from "@/components/core/page-title";
 import { getApiErrorMessage, WorkItemTypeModal } from "@/components/project-issue-types/root";
 import { useIssueTypeLibrary } from "@/hooks/store/use-issue-type-library";
 import { useProjectIssueTypes } from "@/hooks/store/use-project-issue-types";
-import type { TIssueType } from "@/services/project/project-issue-type.service";
+import type { TIssueType, TIssueTypeCopyPayload } from "@/services/project/project-issue-type.service";
 import { useTemplatePermissions } from "../permissions";
 import { TemplatePageHeader, TemplatePageSearch } from "../template-page-header";
 import { ISSUE_TYPE_LIBRARY_SEGMENTS, IssueTypeLibraryDetail } from "./issue-type-library-detail";
@@ -33,6 +33,8 @@ export const IssueTypeLibraryPage = observer(function IssueTypeLibraryPage({
   const issueTypesStore = useProjectIssueTypes(workspaceSlug, scopeKey);
   const [searchParams, setSearchParams] = useSearchParams();
   const [isCreating, setIsCreating] = useState(false);
+  /** 类型「更多 › 复制类型」进来时的来源 */
+  const [copySource, setCopySource] = useState<TIssueType | undefined>();
   const [isCreateSubmitting, setIsCreateSubmitting] = useState(false);
   const [query, setQuery] = useState("");
 
@@ -67,6 +69,23 @@ export const IssueTypeLibraryPage = observer(function IssueTypeLibraryPage({
     }
   };
 
+  const handleCopy = async (data: TIssueTypeCopyPayload) => {
+    setIsCreateSubmitting(true);
+    try {
+      const created = await issueTypesStore.copyIssueType(data);
+      setIsCreating(false);
+      if (created) updateParams({ type: created.id });
+    } catch (error) {
+      setToast({
+        type: TOAST_TYPE.ERROR,
+        title: "复制失败",
+        message: getApiErrorMessage(error, "无法复制工作项类型，请稍后重试。"),
+      });
+    } finally {
+      setIsCreateSubmitting(false);
+    }
+  };
+
   const renderDetail = () => {
     if (!scopeKey || issueTypes === undefined) {
       return (
@@ -89,6 +108,10 @@ export const IssueTypeLibraryPage = observer(function IssueTypeLibraryPage({
         segment={segment}
         onSegmentChange={(next) => updateParams({ tab: next === "props" ? null : next })}
         onDeleted={() => updateParams({ type: null })}
+        onCopy={() => {
+          setCopySource(selected);
+          setIsCreating(true);
+        }}
       />
     );
   };
@@ -100,7 +123,15 @@ export const IssueTypeLibraryPage = observer(function IssueTypeLibraryPage({
         <TemplatePageHeader title="工作项类型" count={issueTypes?.length}>
           <TemplatePageSearch value={query} onChange={setQuery} placeholder="搜索类型" />
           {canEdit && scopeKey && (
-            <Button variant="primary" size="xl" className="px-3" onClick={() => setIsCreating(true)}>
+            <Button
+              variant="primary"
+              size="xl"
+              className="px-3"
+              onClick={() => {
+                setCopySource(undefined);
+                setIsCreating(true);
+              }}
+            >
               新建类型
             </Button>
           )}
@@ -134,6 +165,9 @@ export const IssueTypeLibraryPage = observer(function IssueTypeLibraryPage({
         onClose={() => setIsCreating(false)}
         onSubmit={handleCreate}
         workspaceSlug={workspaceSlug}
+        scopeKey={scopeKey}
+        copySource={copySource}
+        onCopy={handleCopy}
       />
     </>
   );

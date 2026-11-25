@@ -7,7 +7,11 @@ issue_scheme_id（模板中心维护类型库，鉴权走研发模式权限，�
 from django.urls import path
 
 from plane.app.views import StateViewSet
-from plane.app.views.issue.issue_type import IssueTypeViewSet, ProjectIssueTypeListCreateAPIEndpoint
+from plane.app.views.issue.issue_type import (
+    IssueTypeCopyEndpoint,
+    IssueTypeViewSet,
+    ProjectIssueTypeListCreateAPIEndpoint,
+)
 from plane.app.views.issue.issue_type_field import IssueExtraViewSet
 from plane.app.views.issue_scheme.base import (
     IssueSchemeDetailEndpoint,
@@ -48,6 +52,7 @@ urlpatterns = [
     ),
     # ---- 方案级：与项目级同名接口共用视图 ----
     path(f"{SCHEME}/issue-types/", ProjectIssueTypeListCreateAPIEndpoint.as_view(), name="scheme-issue-types"),
+    path(f"{SCHEME}/issue-types/copy/", IssueTypeCopyEndpoint.as_view(), name="scheme-issue-type-copy"),
     path(f"{SCHEME}/issue-types/<uuid:issue_type_id>/", IssueTypeViewSet.as_view(), name="scheme-issue-type"),
     path(
         f"{SCHEME}/type-extra-fields/",

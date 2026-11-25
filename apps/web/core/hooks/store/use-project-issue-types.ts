@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 // services
-import { ProjectIssueTypeService, type TIssueType, projectIssueTypesCache } from "@/services/project/project-issue-type.service";
+import {
+  ProjectIssueTypeService,
+  type TIssueType,
+  type TIssueTypeCopyPayload,
+  projectIssueTypesCache,
+} from "@/services/project/project-issue-type.service";
 
 const getErrorMessage = (error: unknown, fallback: string) => {
   if (error instanceof Error) return error.message;
@@ -105,6 +110,17 @@ export const useProjectIssueTypes = (workspaceSlug: string | undefined, projectI
     [workspaceSlug, projectId]
   );
 
+  const copyIssueType = useCallback(
+    async (data: TIssueTypeCopyPayload) => {
+      if (!workspaceSlug || !projectId) return;
+
+      const createdIssueType = await projectIssueTypeService.copyProjectIssueType(workspaceSlug, projectId, data);
+      setIssueTypes((prev) => [...(prev ?? []), createdIssueType]);
+      return createdIssueType;
+    },
+    [workspaceSlug, projectId]
+  );
+
   const updateIssueType = useCallback(
     async (issueTypeId: string, data: Partial<TIssueType>) => {
       if (!workspaceSlug || !projectId) return;
@@ -144,6 +160,7 @@ export const useProjectIssueTypes = (workspaceSlug: string | undefined, projectI
     forceRefetch: forceFetchIssueTypes,
     fetchIssueType,
     createIssueType,
+    copyIssueType,
     updateIssueType,
     deleteIssueType,
   };

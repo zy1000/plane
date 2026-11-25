@@ -47,6 +47,7 @@ export const IssueTypeLibraryDetail = observer(function IssueTypeLibraryDetail({
   segment,
   onSegmentChange,
   onDeleted,
+  onCopy,
 }: {
   workspaceSlug: string;
   /** 类型库的作用域键 `scheme:<库 id>` */
@@ -57,6 +58,8 @@ export const IssueTypeLibraryDetail = observer(function IssueTypeLibraryDetail({
   segment: TIssueTypeLibrarySegment;
   onSegmentChange: (segment: TIssueTypeLibrarySegment) => void;
   onDeleted: () => void;
+  /** 「更多 › 复制类型」：由页面打开复制弹窗 */
+  onCopy: () => void;
 }) {
   const fieldsStore = useProjectIssueTypeFields(workspaceSlug, scopeKey);
   const workflowsStore = useProjectWorkflows(workspaceSlug, scopeKey);
@@ -190,6 +193,7 @@ export const IssueTypeLibraryDetail = observer(function IssueTypeLibraryDetail({
             <MoreMenu
               items={[
                 // 默认类型必须开着，不给停用
+                { label: "复制类型", onClick: onCopy },
                 ...(issueType.is_default
                   ? []
                   : [{ label: isActive ? "停用类型" : "启用类型", onClick: () => void handleToggleActive() }]),
