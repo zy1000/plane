@@ -5,7 +5,7 @@ import { Button } from "@plane/propel/button";
 import type { TRequirementFieldDefinition, TRequirementFieldType } from "@plane/types";
 import { CustomMenu, Loader } from "@plane/ui";
 import { cn } from "@plane/utils";
-import { ROOT_FIELD_TYPES } from "@/components/requirements/requirement-field-builder";
+import { LIBRARY_ROOT_FIELD_TYPES } from "@/components/requirements/requirement-field-builder";
 import { FieldLibrarySwitch } from "../field-library-header";
 import type { TFieldLibrarySwitchItem } from "../field-library-header";
 import { TemplatePageHeader, TemplatePageSearch, TemplatePageTabs } from "../template-page-header";
@@ -62,7 +62,7 @@ export function RequirementFieldLibraryContent({
   }, [fields, filter, kind, search]);
   const kindOptions: { value: Kind; label: string }[] = [
     { value: "all", label: "全部类型" },
-    ...ROOT_FIELD_TYPES.map((type) => ({ value: type, label: t(`requirement_fields.field_types.${type}`) })),
+    ...LIBRARY_ROOT_FIELD_TYPES.map((type) => ({ value: type, label: t(`requirement_fields.field_types.${type}`) })),
   ];
   const kindLabel = kindOptions.find((item) => item.value === kind)?.label ?? "全部类型";
   const resetFilters = () => {

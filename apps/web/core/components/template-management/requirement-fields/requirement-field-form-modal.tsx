@@ -14,7 +14,10 @@ import { EModalPosition, EModalWidth, ModalCore, Sortable, ToggleSwitch } from "
 import { cn } from "@plane/utils";
 import { IssueTypeTag } from "@/components/project-issue-types/field-display";
 import { LockedSelectBox } from "@/components/requirements/requirement-common-fields";
-import { CHILD_FIELD_TYPES, ROOT_FIELD_TYPES } from "@/components/requirements/requirement-field-builder";
+import {
+  LIBRARY_CHILD_FIELD_TYPES,
+  LIBRARY_ROOT_FIELD_TYPES,
+} from "@/components/requirements/requirement-field-builder";
 import {
   getRequirementSelectMode,
   getRequirementSelectOptions,
@@ -294,7 +297,7 @@ export function RequirementFieldFormModal({ isOpen, field, onClose, onSubmit }: 
                       if (next !== "form") setChildren([]);
                     }}
                   >
-                    {ROOT_FIELD_TYPES.map((type) => (
+                    {LIBRARY_ROOT_FIELD_TYPES.map((type) => (
                       <option key={type} value={type}>
                         {typeLabel(type)}
                       </option>
@@ -318,7 +321,7 @@ export function RequirementFieldFormModal({ isOpen, field, onClose, onSubmit }: 
               <>
                 <div className="flex flex-col gap-1.5">
                   <span className={LABEL}>选择模式</span>
-                  <div className="grid w-60 grid-cols-2 rounded-lg border border-subtle bg-surface-1 p-0.5">
+                  <div className="grid w-60 grid-cols-2 rounded-lg bg-layer-3 p-0.5">
                     {(["single", "multiple"] as const).map((mode) => (
                       <button
                         key={mode}
@@ -328,7 +331,7 @@ export function RequirementFieldFormModal({ isOpen, field, onClose, onSubmit }: 
                         className={cn(
                           "h-8 rounded-md text-13 font-medium transition-colors",
                           getRequirementSelectMode(root) === mode
-                            ? "bg-layer-2 text-primary shadow-sm"
+                            ? "bg-surface-1 font-semibold text-accent-primary shadow-raised-100 ring-1 ring-accent-subtle"
                             : "text-secondary hover:bg-layer-transparent-hover hover:text-primary"
                         )}
                       >
@@ -460,7 +463,7 @@ export function RequirementFieldFormModal({ isOpen, field, onClose, onSubmit }: 
                             )
                           }
                         >
-                          {CHILD_FIELD_TYPES.map((type) => (
+                          {LIBRARY_CHILD_FIELD_TYPES.map((type) => (
                             <option key={type} value={type}>
                               {typeLabel(type)}
                             </option>

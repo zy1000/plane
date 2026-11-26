@@ -1,4 +1,15 @@
-import { AlignLeft, FileImage, FormInput, ListChecks, Paperclip, ToggleLeft, Type, UserRound } from "lucide-react";
+import {
+  AlignLeft,
+  Braces,
+  FileImage,
+  FormInput,
+  ListChecks,
+  Paperclip,
+  TextCursorInput,
+  ToggleLeft,
+  Type,
+  UserRound,
+} from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { TRequirementFieldDraft, TRequirementFieldType } from "@plane/types";
 import type { TRequirementBuilderItem } from "@/components/requirements/use-requirement-type-editor-state";
@@ -13,6 +24,8 @@ export const FIELD_ICONS = {
   attachment: Paperclip,
   image: FileImage,
   boolean: ToggleLeft,
+  rule: Braces,
+  rule_value: TextCursorInput,
 } satisfies Record<TRequirementFieldType, LucideIcon>;
 
 /**
@@ -24,6 +37,51 @@ export const FIELD_ICONS = {
  */
 
 export const requirementFieldKey = (field: TRequirementFieldDraft) => field.id ?? field.client_id ?? "";
+
+/**
+ * 「取值规则」与「动态取值」靠同级字段互相引用（config.rule_field_id），脱离具体的
+ * 需求类型没有意义，所以不进通用字段库，也不能「转为通用字段」。
+ */
+export const isRuleFieldType = (type: TRequirementFieldType) => type === "rule" || type === "rule_value";
+
+export type TRuleSourceOption = { key: string; name: string };
+
+/** 一组同级字段里可当规则来源的：启用中的「取值规则」字段。key 没落库时是 client_id，保存时后端换成真实 id */
+export const ruleSourceOptions = (siblings: TRequirementFieldDraft[]): TRuleSourceOption[] =>
+  siblings
+    .filter((field) => field.is_active && field.field_type === "rule")
+    .map((field) => ({ key: requirementFieldKey(field), name: field.name }));
+
+export type TRuleValueConfigIssue =
+  | { kind: "source"; name: string }
+  | { kind: "library"; name: string; source: string };
+
+/**
+ * 「动态取值」字段的配置问题：没选规则来源（或来源已不在同级），或者自己纳入了标准库而来源没纳入
+ * —— 标准库里没有规则，这个取值就没法填。根字段一层、每个表单的子字段各一层，逐层检查。
+ */
+export const findRuleValueConfigIssue = (roots: TRequirementFieldDraft[]): TRuleValueConfigIssue | null => {
+  const checkLevel = (fields: TRequirementFieldDraft[]): TRuleValueConfigIssue | null => {
+    const active = fields.filter((field) => field.is_active);
+    for (const field of active) {
+      if (field.field_type !== "rule_value") continue;
+      const source = active.find(
+        (candidate) => candidate.field_type === "rule" && requirementFieldKey(candidate) === field.config.rule_field_id
+      );
+      if (!source) return { kind: "source", name: field.name };
+      if (field.show_in_library && !source.show_in_library) {
+        return { kind: "library", name: field.name, source: source.name };
+      }
+    }
+    return null;
+  };
+  const activeRoots = roots.filter((field) => field.is_active);
+  return (
+    checkLevel(roots) ??
+    activeRoots.map((field) => (field.field_type === "form" ? checkLevel(field.children) : null)).find(Boolean) ??
+    null
+  );
+};
 
 export type TRequirementFieldTarget = { rootKey: string; childKey?: string };
 

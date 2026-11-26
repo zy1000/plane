@@ -8,6 +8,7 @@ import type {
   TRequirementData,
 } from "@plane/types";
 import { pickBuiltinValues } from "./requirement-builtin-fields";
+import { firstValidationMessage } from "./requirement-error";
 
 /**
  * 已有需求行的「改一格存一格」。
@@ -195,7 +196,7 @@ export const useRequirementRowAutosave = ({
          */
         setSaveState(requirementId, {
           isSaving: false,
-          error: reason ?? payload?.error ?? "Unable to save this requirement.",
+          error: reason ?? payload?.error ?? firstValidationMessage(error) ?? "Unable to save this requirement.",
         });
       }
     },

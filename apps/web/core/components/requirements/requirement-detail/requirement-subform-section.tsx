@@ -330,12 +330,14 @@ export const RequirementSubformSection = (props: TProps) => {
                                 <LeafValue
                                   field={child}
                                   value={row.values?.[child.id]}
+                                  siblings={row.values}
                                   workspaceSlug={workspaceSlug}
                                 />
                               ) : (
                                 <LeafEditor
                                   field={child}
                                   value={row.values?.[child.id]}
+                                  siblings={row.values}
                                   workspaceSlug={workspaceSlug}
                                   entityId={assetEntityId}
                                   onChange={(value) => setCell(form, row.id, child.id, value)}

@@ -25,7 +25,7 @@ import {
 } from "@/components/requirements/requirement-builtin-fields";
 import { resolveBuiltinLayout } from "@/components/requirements/requirement-builtin-layout";
 import { RequirementModuleDropdown } from "@/components/requirements/module-tree/requirement-module-dropdown";
-import { LeafEditor, LeafValue } from "@/components/requirements/requirement-grid-shared";
+import { LeafEditor, LeafValue, isRichRuleValueField } from "@/components/requirements/requirement-grid-shared";
 import { RequirementCodeInput } from "@/components/requirements/requirement-code-input";
 import { RequirementIdentifier } from "@/components/requirements/requirement-identifier";
 import { RequirementStatusCell } from "@/components/requirements/requirement-status-cell";
@@ -161,11 +161,18 @@ const FieldRows = ({
   // 版面够宽，富文本字段直接内联完整编辑器、只读时也渲染真实排版（variant="detail"）
   const renderValue = (field: TRequirementField) =>
     readOnly ? (
-      <LeafValue field={field} value={requirement.data[field.id]} workspaceSlug={workspaceSlug} variant="detail" />
+      <LeafValue
+        field={field}
+        value={requirement.data[field.id]}
+        siblings={requirement.data}
+        workspaceSlug={workspaceSlug}
+        variant="detail"
+      />
     ) : (
       <LeafEditor
         field={field}
         value={requirement.data[field.id]}
+        siblings={requirement.data}
         workspaceSlug={workspaceSlug}
         entityId={entityId}
         onChange={(value) => onChange({ ...requirement.data, [field.id]: value })}
@@ -187,7 +194,8 @@ const FieldRows = ({
           key={field.id}
           className={cn(
             "flex min-w-0 flex-col gap-1",
-            WIDE_FIELD_TYPES.has(field.field_type) && "md:col-span-2 xl:col-span-3"
+            (WIDE_FIELD_TYPES.has(field.field_type) || isRichRuleValueField(field, requirement.data)) &&
+              "md:col-span-2 xl:col-span-3"
           )}
         >
           {renderLabel(field, "text-caption-md-regular text-tertiary")}

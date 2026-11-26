@@ -30,6 +30,11 @@ class RequirementFieldType(models.TextChoices):
     ATTACHMENT = "attachment", "附件"
     IMAGE = "image", "图片"
     BOOLEAN = "boolean", "布尔值"
+    # 成对使用（utils/requirement_rule.py）：取值规则是每条需求各填各的一段表达式
+    # （{A,B}、[1,30]、富文本…），值是 {expr, multiple, allow_custom}；动态取值在
+    # config.rule_field_id 里指向同级的一个取值规则字段，按那条规则决定怎么填、是否合法。
+    RULE = "rule", "取值规则"
+    RULE_VALUE = "rule_value", "动态取值"
 
 
 class RequirementItemStatus(models.TextChoices):

@@ -25,6 +25,7 @@ import { FileService } from "@/services/file.service";
 import { createEmptyBuiltinValues } from "./requirement-builtin-fields";
 import { resolveBuiltinColumns } from "./requirement-builtin-layout";
 import { RequirementCreateFooter } from "./requirement-create-footer";
+import { firstValidationMessage } from "./requirement-error";
 import {
   RequirementCreatePropertyRail,
   type TCreateRequiredEntry,
@@ -32,7 +33,7 @@ import {
 import { RequirementSubformSection } from "./requirement-detail/requirement-subform-section";
 import { isRequirementValueEmpty } from "./requirement-required";
 import { createEmptyRequirementData } from "./requirement-row-data";
-import { LeafEditor } from "./requirement-grid-shared";
+import { LeafEditor, isRichRuleValueField } from "./requirement-grid-shared";
 import { RequirementRichTextField } from "./requirement-rich-text";
 import { RequirementTypeSelect } from "./requirement-type-select";
 
@@ -416,7 +417,13 @@ export const RequirementCreateModal = ({
       const codeError = raw.includes("REQUIREMENT_CODE_ALREADY_EXISTS")
         ? t("requirements.identifier.code_duplicate")
         : null;
-      setError(codeError ?? payload?.error ?? payload?.detail ?? t("workspace_products.requirements.toast.failed"));
+      setError(
+        codeError ??
+          payload?.error ??
+          payload?.detail ??
+          firstValidationMessage(submitError) ??
+          t("workspace_products.requirements.toast.failed")
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -607,7 +614,11 @@ export const RequirementCreateModal = ({
                       label={field.name}
                       required={field.is_required}
                       error={invalid ? leafErrorMessage(field) : undefined}
-                      className={FULL_WIDTH_FIELD_TYPES.has(field.field_type) ? "sm:col-span-2" : undefined}
+                      className={
+                        FULL_WIDTH_FIELD_TYPES.has(field.field_type) || isRichRuleValueField(field, data)
+                          ? "sm:col-span-2"
+                          : undefined
+                      }
                       onBlur={field.is_required ? () => touch(field.id) : undefined}
                     >
                       <div className={cn("min-w-0", invalid && "rounded-lg ring-1 ring-danger-strong")}>
@@ -615,6 +626,7 @@ export const RequirementCreateModal = ({
                           variant="modal"
                           field={field}
                           value={data[field.id]}
+                          siblings={data}
                           workspaceSlug={workspaceSlug}
                           entityId={entityId}
                           onChange={(value) => setData((current) => ({ ...current, [field.id]: value }))}

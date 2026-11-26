@@ -73,6 +73,9 @@ const CUSTOM_FIELD_ICONS: Record<TRequirementFieldType, LucideIcon> = {
   attachment: Paperclip,
   image: FileImage,
   form: ListChecks,
+  // 取值规则 / 动态取值暂不支持筛选，下面不会为它们生成筛选项；这里只为凑齐类型
+  rule: Type,
+  rule_value: Type,
 };
 
 /** 表单本身不能筛，只收启用中的叶子字段（含子表单 child） */

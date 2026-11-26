@@ -13,7 +13,7 @@ import type {
   TRequirementValue,
 } from "@plane/types";
 import { cn } from "@plane/utils";
-import { LeafEditor, LeafValue } from "@/components/requirements/requirement-grid-shared";
+import { LeafEditor, LeafValue, isRichRuleValueField } from "@/components/requirements/requirement-grid-shared";
 import { DetailSectionHeader, SECTION_ACTION_BUTTON } from "./requirement-detail-section";
 import { RequirementSubformSection } from "./requirement-subform-section";
 
@@ -94,10 +94,11 @@ export const RequirementFieldsSection = ({
               key={field.id}
               field={field}
               value={requirement.data[field.id]}
+              siblings={requirement.data}
               workspaceSlug={workspaceSlug}
               entityId={entityId}
               readOnly={readOnly}
-              wide={WIDE_FIELD_TYPES.has(field.field_type)}
+              wide={WIDE_FIELD_TYPES.has(field.field_type) || isRichRuleValueField(field, requirement.data)}
               onChange={(value) => onChange({ ...requirement.data, [field.id]: value })}
               onUpload={onUpload}
             />
@@ -131,6 +132,7 @@ export const RequirementFieldsSection = ({
 const RequirementFieldRow = ({
   field,
   value,
+  siblings,
   workspaceSlug,
   entityId,
   readOnly,
@@ -140,6 +142,8 @@ const RequirementFieldRow = ({
 }: {
   field: TRequirementField;
   value: TRequirementValue | undefined;
+  /** 整行的自定义字段值：动态取值字段要照同级的取值规则渲染 */
+  siblings: TRequirementData;
   workspaceSlug: string;
   entityId: string;
   readOnly: boolean;
@@ -169,12 +173,19 @@ const RequirementFieldRow = ({
       <div className={cn("min-w-0", wide ? "lg:col-span-3" : "max-w-sm")}>
         {readOnly ? (
           <div className="pt-1.5">
-            <LeafValue field={field} value={value} workspaceSlug={workspaceSlug} variant="detail" />
+            <LeafValue
+              field={field}
+              value={value}
+              siblings={siblings}
+              workspaceSlug={workspaceSlug}
+              variant="detail"
+            />
           </div>
         ) : (
           <LeafEditor
             field={field}
             value={value}
+            siblings={siblings}
             workspaceSlug={workspaceSlug}
             entityId={entityId}
             onChange={onChange}

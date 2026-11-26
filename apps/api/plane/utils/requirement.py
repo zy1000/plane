@@ -115,6 +115,10 @@ ORDERABLE_BUILTIN_COLUMNS = tuple(
 
 TITLE_MAX_LENGTH = 255
 
+#: 成对使用的两种字段类型：取值规则（每条需求各填一段表达式）与动态取值（按同级规则填）。
+#: 解析与校验在 utils/requirement_rule.py。
+RULE_FIELD_TYPES = (RequirementFieldType.RULE, RequirementFieldType.RULE_VALUE)
+
 
 def field_attr(field, name, default=None):
     """统一读取字段属性，兼容三种来源。
@@ -842,6 +846,43 @@ def apply_field_change_cleanup(
     return changed_rows
 
 
+def resolve_rule_value_sources(saved_fields, created_field_ids):
+    """动态取值字段的规则来源（config.rule_field_id）落库后的第二遍处理。
+
+    载荷里的 rule_field_id 可能是已有字段的 id，也可能是同一次保存里新建字段的
+    client_id —— 新字段落库前没有真实 id。这里把 client_id 换成真实 id 写回 config，
+    并校验它指向**同级、启用中**的取值规则字段（根对根，子字段对同一表单下的子字段）。
+
+    回收站里的动态取值字段不拦：它不参与录入，恢复（重新启用）时会再过一遍这里。
+    """
+    by_id = {str(field.id): field for field in saved_fields}
+    for field in saved_fields:
+        if field.field_type != RequirementFieldType.RULE_VALUE:
+            continue
+        config = field.config or {}
+        reference = str(config.get("rule_field_id") or "")
+        source_id = created_field_ids.get(reference, reference)
+        source = by_id.get(source_id)
+        if (
+            source is None
+            or source.field_type != RequirementFieldType.RULE
+            or not source.is_active
+            or source.parent_field_id != field.parent_field_id
+        ):
+            if field.is_active:
+                raise ValueError(f"动态取值字段「{field.name}」需要选择规则来源")
+            continue
+        # 标准库只带纳入库的字段：取值进了库而规则没进，库里那一格就永远没有规则可依
+        if field.is_active and field.show_in_library and not source.show_in_library:
+            raise ValueError(
+                f"动态取值字段「{field.name}」纳入标准库时，"
+                f"规则来源「{source.name}」也必须纳入标准库"
+            )
+        if config.get("rule_field_id") != source_id:
+            field.config = {**config, "rule_field_id": source_id}
+            field.save(update_fields=["config", "updated_at"])
+
+
 def sync_requirement_type_fields(
     *,
     requirement_type,
@@ -870,6 +911,7 @@ def sync_requirement_type_fields(
     }
     submitted_ids = set()
     created_field_ids = {}
+    saved_fields = []
     data_loss_fields = []
     reset_select_fields = {}
 
@@ -913,6 +955,7 @@ def sync_requirement_type_fields(
         if field._state.adding and actor is not None:
             field.created_by = actor
         field.save()
+        saved_fields.append(field)
 
         client_id = payload.get("client_id")
         if client_id:
@@ -931,6 +974,9 @@ def sync_requirement_type_fields(
 
     for root_index, root_payload in enumerate(field_payloads):
         save_field(root_payload, index=custom_slots[root_index])
+
+    # 必须排在写字段结构修订之前：修订快照里要的是真实 id，不是 client_id
+    resolve_rule_value_sources(saved_fields, created_field_ids)
 
     deleted_fields = [
         field for field_id, field in existing_fields.items() if field_id not in submitted_ids
@@ -1839,6 +1885,9 @@ def _is_empty_requirement_value(value):
         return True
     if isinstance(value, str):
         return not strip_tags(value).strip()
+    if isinstance(value, dict) and "expr" in value:
+        # 取值规则字段的值：{expr, multiple, allow_custom}，表达式为空就是没填
+        return not str(value.get("expr") or "").strip()
     if isinstance(value, (list, dict)):
         return not value
     return False
@@ -1983,6 +2032,12 @@ def filter_requirement_row_ids(
             )
         if field_type == RequirementFieldType.RICH_TEXT:
             return strip_tags(str(value or ""))
+        if field_type == RequirementFieldType.RULE:
+            return str(value.get("expr") or "") if isinstance(value, dict) else ""
+        if field_type == RequirementFieldType.RULE_VALUE:
+            # 可能是富文本（规则写的是「富文本」），统一剥标签；多选是数组
+            items = value if isinstance(value, list) else [value]
+            return " ".join(strip_tags(str(item)) for item in items if item)
         return str(value or "")
 
     normalized_search = search.strip().casefold()
@@ -2010,7 +2065,10 @@ def filter_requirement_row_ids(
             field = fields_by_id.get(str(item.get("field_id")))
             if (
                 field is None
-                or field_attr(field, "field_type") == RequirementFieldType.FORM
+                # 表单、取值规则、动态取值不可筛选（写序列化器同口径，见
+                # RequirementFilterSerializer._resolve_field）
+                or field_attr(field, "field_type")
+                in (RequirementFieldType.FORM, *RULE_FIELD_TYPES)
                 # 这一行的需求类型没有这个字段 —— 跨类型的筛选条件不命中它
                 or str(field_attr(field, "id")) not in own_field_ids
             ):

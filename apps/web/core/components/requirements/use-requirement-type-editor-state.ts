@@ -10,6 +10,7 @@ import type {
   TRequirementTypeConfiguration,
 } from "@plane/types";
 import { useRequirementTypeDetails } from "@/hooks/store/use-requirement-type-details";
+import { findRuleValueConfigIssue } from "./requirement-builder-items";
 import { mergeBuiltinAndFields } from "./requirement-builtin-layout";
 import { countRequirementColumns } from "./requirement-fields-preview";
 import { hasValidRequirementSelectOptions } from "./requirement-select";
@@ -222,6 +223,21 @@ export const useRequirementTypeEditorState = ({
           type: TOAST_TYPE.ERROR,
           title: t("error"),
           message: t("requirement_fields.validation.selector_options"),
+        });
+        return false;
+      }
+      const ruleValueIssue = findRuleValueConfigIssue(customFields);
+      if (ruleValueIssue) {
+        setToast({
+          type: TOAST_TYPE.ERROR,
+          title: t("error"),
+          message:
+            ruleValueIssue.kind === "source"
+              ? t("requirement_fields.validation.rule_source", { name: ruleValueIssue.name })
+              : t("requirement_fields.validation.rule_source_library", {
+                  name: ruleValueIssue.name,
+                  source: ruleValueIssue.source,
+                }),
         });
         return false;
       }

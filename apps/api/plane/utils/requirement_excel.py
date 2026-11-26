@@ -58,6 +58,14 @@ from plane.utils.requirement import (
     get_requirement_select_options,
     resolve_builtin_field_layout,
 )
+from plane.utils.requirement_rule import (
+    check_rule_value,
+    describe_rule_error,
+    describe_value_error,
+    parse_rule,
+    rule_has_options,
+    rule_is_usable,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -103,6 +111,11 @@ UNSUPPORTED_FIELD_TYPES = frozenset(
 #: 多选值在单元格里的分隔符。导出用第一个，导入全收。
 MULTI_VALUE_JOINER = "、"
 _MULTI_VALUE_SPLIT_RE = re.compile(r"[、,，;；\n\r]+")
+
+#: 取值规则字段的两个标志在单元格里写成表达式后面的后缀：`{A,B} [多选] [可自定义]`。
+RULE_MULTIPLE_SUFFIX = "[多选]"
+RULE_ALLOW_CUSTOM_SUFFIX = "[可自定义]"
+_RULE_FLAG_SUFFIX_RE = re.compile(r"\s*[\[［【]\s*(多选|可自定义)\s*[\]］】]\s*$")
 
 #: 同批引用：父项列填 `#12` 表示「本 Sheet 第 12 行那条需求」。沿用 issue_import 的约定。
 _IN_BATCH_PARENT_RE = re.compile(r"^#\s*(\d+)$")
@@ -571,9 +584,48 @@ def _max_form_rows(data, sheet_spec):
     )
 
 
-def format_leaf_value(spec, value, ctx):
-    """一个自定义字段（或表单子字段）的值 → 单元格内容。"""
+def sibling_rule(spec, siblings):
+    """动态取值字段的规则来源在同级值（根字段是整行 data，子字段是这条子记录的
+    values）里的值。来源没配或没填时返回 None。"""
+    rule_field_id = (field_attr(spec, "config") or {}).get("rule_field_id")
+    rule = (siblings or {}).get(str(rule_field_id)) if rule_field_id else None
+    return rule if isinstance(rule, dict) else None
+
+
+def format_rule_cell(value):
+    """取值规则 `{expr, multiple, allow_custom}` → `表达式 [多选] [可自定义]`。"""
+    if not isinstance(value, dict):
+        return ""
+    text = str(value.get("expr") or "").strip()
+    if not text:
+        return ""
+    if value.get("multiple"):
+        text += f" {RULE_MULTIPLE_SUFFIX}"
+    if value.get("allow_custom"):
+        text += f" {RULE_ALLOW_CUSTOM_SUFFIX}"
+    return text
+
+
+def format_leaf_value(spec, value, ctx, siblings=None):
+    """一个自定义字段（或表单子字段）的值 → 单元格内容。
+
+    siblings 是同级的值，只有动态取值字段用：规则写的是「富文本」时值是 HTML，要按
+    富文本的方式导出。
+    """
     field_type = field_attr(spec, "field_type")
+
+    if field_type == RequirementFieldType.RULE:
+        return format_rule_cell(value)
+
+    if field_type == RequirementFieldType.RULE_VALUE:
+        if isinstance(value, list):
+            return MULTI_VALUE_JOINER.join(str(item) for item in value if item)
+        if value in (None, ""):
+            return ""
+        rule = sibling_rule(spec, siblings)
+        if rule and parse_rule(rule.get("expr") or "").get("rich"):
+            return html_to_text(value)
+        return str(value)
 
     if field_type == RequirementFieldType.BOOLEAN:
         if value is None:
@@ -679,7 +731,9 @@ def _write_requirement(worksheet, sheet_spec, requirement, ctx, start_row):
         elif column.kind == "builtin":
             value = format_builtin_value(column.key, requirement, ctx)
         else:
-            value = format_leaf_value(column.spec, data.get(column.key), ctx)
+            value = format_leaf_value(
+                column.spec, data.get(column.key), ctx, siblings=data
+            )
 
         cell = _put(worksheet, start_row, index, value)
         cell.alignment = _BODY_ALIGNMENT
@@ -702,7 +756,9 @@ def _write_requirement(worksheet, sheet_spec, requirement, ctx, start_row):
             for column in group.columns:
                 index = sheet_spec.index_by_key[column.key]
                 value = (
-                    format_leaf_value(column.spec, values.get(column.key), ctx)
+                    format_leaf_value(
+                        column.spec, values.get(column.key), ctx, siblings=values
+                    )
                     if row is not None
                     else ""
                 )
@@ -1157,6 +1213,72 @@ def parse_select_value(spec, raw):
     return resolved, None
 
 
+def parse_rule_cell(raw):
+    """单元格 → 取值规则的值。末尾的 [多选] / [可自定义] 是标志，其余是表达式。"""
+    if _is_blank(raw):
+        return None, None
+    text = str(raw).strip()
+    flags = {"多选": False, "可自定义": False}
+    while True:
+        match = _RULE_FLAG_SUFFIX_RE.search(text)
+        if match is None:
+            break
+        flags[match.group(1)] = True
+        text = text[: match.start()].rstrip()
+    if not text:
+        return None, None
+    parsed = parse_rule(text)
+    if not parsed["ok"]:
+        return None, f"取值规则无法识别（{describe_rule_error(parsed['error'])}）。"
+    has_options = rule_has_options(parsed)
+    return {
+        "expr": text,
+        "multiple": flags["多选"] and has_options,
+        "allow_custom": flags["可自定义"] and has_options,
+    }, None
+
+
+def parse_rule_value_cell(spec, raw, rule):
+    """单元格 → 动态取值的值。rule 是同一行（同一条子记录）里规则来源字段的值。
+
+    规则有选项且勾了多选时按多选分隔符切成数组，其余整格当一个值；合法性与写序列化器
+    同一套判定（utils/requirement_rule.check_rule_value）。字段配成「仅提示」时不拦。
+    """
+    if _is_blank(raw):
+        return None, None
+    text = _cell_text(raw)
+    blocking = (field_attr(spec, "config") or {}).get("on_violation") != "warn"
+    rule = rule if isinstance(rule, dict) else {}
+    parsed = parse_rule(rule.get("expr") or "")
+    if not rule_is_usable(parsed):
+        if blocking:
+            return None, "未设置取值规则，无法填写。"
+        return text, None
+    if parsed.get("rich"):
+        return text_to_html(raw), None
+
+    multiple = bool(rule.get("multiple")) and rule_has_options(parsed)
+    if not multiple:
+        value = text
+    elif text in parsed["options"]:
+        # 选项本身带分隔符（如「A、B」）时整格就是一个选项，别切开
+        value = [text]
+    else:
+        value = list(
+            dict.fromkeys(
+                token.strip()
+                for token in _MULTI_VALUE_SPLIT_RE.split(text)
+                if token.strip()
+            )
+        )
+    result = check_rule_value(parsed, multiple, bool(rule.get("allow_custom")), value)
+    if result["ok"]:
+        return result["value"], None
+    if not blocking:
+        return value, None
+    return None, f"{describe_value_error(parsed, result['error'])}。"
+
+
 # ---------------------------------------------------------------------------
 # 逐行解析结果
 # ---------------------------------------------------------------------------
@@ -1388,23 +1510,46 @@ class RequirementImportResolver:
             return f"「{label}」不能为空。"
         return None
 
-    def _same_as_export(self, spec, raw, existing_value):
+    def _same_as_export(self, spec, raw, existing_value, existing_siblings=None):
         """这一格是不是「导出时长这样、现在还长这样」。"""
         return _cell_text(raw) == _cell_text(
-            format_leaf_value(spec, existing_value, self.export_ctx)
+            format_leaf_value(
+                spec, existing_value, self.export_ctx, siblings=existing_siblings
+            )
         )
 
-    def resolve_leaf(self, spec, raw, existing_value=None, *, has_existing=False):
-        """一个叶子字段的值。has_existing 时先做「没动就沿用」判定。"""
+    def resolve_leaf(
+        self,
+        spec,
+        raw,
+        existing_value=None,
+        *,
+        has_existing=False,
+        siblings=None,
+        existing_siblings=None,
+    ):
+        """一个叶子字段的值。has_existing 时先做「没动就沿用」判定。
+
+        siblings / existing_siblings 只有动态取值字段用：同级的值（本次解析后的 / 库里
+        现有的），规则来源从里面取。调用方要保证规则来源那一格先解析完。
+        """
         field_type = field_attr(spec, "field_type")
         # 富文本与成员是有损的两类：富文本导出成纯文本，成员按名字导出（离开工作区的
-        # 人名字都拿不到）。格子没动就原样保留，别把已有的东西冲掉
+        # 人名字都拿不到）。格子没动就原样保留，别把已有的东西冲掉。
+        # 取值规则 / 动态取值同理：动态取值可能是富文本，而且「值没动就不重新按规则
+        # 校验」是这对字段的保存规则（规则后来改了，旧值不拦）
         if has_existing and field_type in (
             RequirementFieldType.RICH_TEXT,
             RequirementFieldType.MEMBER,
+            RequirementFieldType.RULE,
+            RequirementFieldType.RULE_VALUE,
         ):
-            if self._same_as_export(spec, raw, existing_value):
+            if self._same_as_export(spec, raw, existing_value, existing_siblings):
                 return existing_value, None
+        if field_type == RequirementFieldType.RULE:
+            return parse_rule_cell(raw)
+        if field_type == RequirementFieldType.RULE_VALUE:
+            return parse_rule_value_cell(spec, raw, sibling_rule(spec, siblings))
         if field_type == RequirementFieldType.RICH_TEXT:
             return text_to_html(raw), None
         if field_type == RequirementFieldType.MEMBER:
@@ -1757,16 +1902,22 @@ class RequirementImportResolver:
         has_existing = existing is not None
         values = {}
 
-        for column in sheet_spec.columns:
-            if column.kind != "field" or column.form_id is not None:
-                continue
-            if column.key not in layout.present_field_ids:
-                continue
+        root_columns = [
+            column
+            for column in sheet_spec.columns
+            if column.kind == "field"
+            and column.form_id is None
+            and column.key in layout.present_field_ids
+        ]
+        # 动态取值排到最后：它要看同级取值规则这一次解析出来的值
+        for column in sorted(root_columns, key=self._is_rule_value_column):
             value, error = self.resolve_leaf(
                 column.spec,
                 group.field_raw.get(column.key),
                 existing_data.get(column.key),
                 has_existing=has_existing,
+                siblings={**existing_data, **values},
+                existing_siblings=existing_data,
             )
             if error:
                 result.errors.append(f"「{column.label}」{error}")
@@ -1784,8 +1935,9 @@ class RequirementImportResolver:
             for index, raw_row in enumerate(group.form_raw.get(form_group.field_id, [])):
                 # 按位置对上现有子记录：id 沿用、表里没有的子字段（附件等）沿用
                 base = existing_rows[index] if index < len(existing_rows) else None
-                row_values = dict((base or {}).get("values") or {})
-                for child in form_group.columns:
+                base_values = dict((base or {}).get("values") or {})
+                row_values = dict(base_values)
+                for child in sorted(form_group.columns, key=self._is_rule_value_column):
                     if child.key not in raw_row:
                         continue
                     label = f"{form_group.label} / {child.label}"
@@ -1794,6 +1946,8 @@ class RequirementImportResolver:
                         raw_row.get(child.key),
                         row_values.get(child.key),
                         has_existing=base is not None,
+                        siblings=row_values,
+                        existing_siblings=base_values,
                     )
                     if error:
                         result.errors.append(f"「{label}」{error}")
@@ -1817,6 +1971,11 @@ class RequirementImportResolver:
                     result.errors.append(required_error)
 
         result.data = {**existing_data, **values}
+
+    @staticmethod
+    def _is_rule_value_column(column):
+        """排序键：动态取值列排在同级其它列之后（sorted 稳定，其余顺序不变）。"""
+        return field_attr(column.spec, "field_type") == RequirementFieldType.RULE_VALUE
 
     def _check_create_requirements(self, group, result):
         """新增行：必填字段必须在表里有对应的列，且能通过 Excel 填。"""

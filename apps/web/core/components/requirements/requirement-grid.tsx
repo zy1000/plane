@@ -1189,6 +1189,7 @@ export const RequirementGrid = observer(
                           <LeafEditor
                             field={field}
                             value={data[field.id]}
+                            siblings={data}
                             workspaceSlug={workspaceSlug}
                             entityId={entityId}
                             onChange={(value) => setRootValue(key, field.id, value)}
@@ -1197,7 +1198,12 @@ export const RequirementGrid = observer(
                           />
                         ) : (
                           <div className={REQUIREMENT_GRID_CELL_PAD_CLASS}>
-                            <LeafValue field={field} value={data[field.id]} workspaceSlug={workspaceSlug} />
+                            <LeafValue
+                              field={field}
+                              value={data[field.id]}
+                              siblings={data}
+                              workspaceSlug={workspaceSlug}
+                            />
                           </div>
                         )}
                       </td>,
@@ -1247,6 +1253,7 @@ export const RequirementGrid = observer(
                             <LeafEditor
                               field={child}
                               value={currentValue}
+                              siblings={row.values}
                               workspaceSlug={workspaceSlug}
                               entityId={entityId}
                               onChange={(value) => setChildValue(key, form.id, row.id, child.id, value)}
@@ -1255,7 +1262,12 @@ export const RequirementGrid = observer(
                             />
                           ) : (
                             <div className={REQUIREMENT_GRID_CELL_PAD_CLASS}>
-                              <LeafValue field={child} value={currentValue} workspaceSlug={workspaceSlug} />
+                              <LeafValue
+                                field={child}
+                                value={currentValue}
+                                siblings={row.values}
+                                workspaceSlug={workspaceSlug}
+                              />
                             </div>
                           )
                         ) : null}

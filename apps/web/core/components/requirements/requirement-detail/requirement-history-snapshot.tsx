@@ -83,7 +83,12 @@ export const RequirementHistorySnapshot = ({
           <Fragment key={field.id}>
             <dt className="text-tertiary">{field.name}</dt>
             <dd className="m-0 min-w-0 text-primary">
-              <LeafValue field={field} value={version.snapshot.data?.[field.id]} workspaceSlug={workspaceSlug} />
+              <LeafValue
+                field={field}
+                value={version.snapshot.data?.[field.id]}
+                siblings={version.snapshot.data}
+                workspaceSlug={workspaceSlug}
+              />
             </dd>
           </Fragment>
         ))}

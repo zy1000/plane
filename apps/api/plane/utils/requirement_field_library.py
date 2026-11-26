@@ -23,6 +23,7 @@ from plane.db.models import (
     RequirementType,
 )
 from plane.utils.requirement import (
+    RULE_FIELD_TYPES,
     SORT_ORDER_STEP,
     RequirementDataLossError,
     serialize_requirement_type_field_tree,
@@ -380,6 +381,12 @@ def promote_field_to_definition(field):
     if any(not child.is_active for child in children):
         raise RequirementFieldLibraryError(
             "该表单有子字段在回收站里，请先恢复或永久删除后再转为通用字段。"
+        )
+    # 这对类型靠同级字段 id 互相指向，库定义里存不了（写入口同样拒收，见
+    # RequirementFieldDefinitionWriteSerializer）
+    if any(node.field_type in RULE_FIELD_TYPES for node in [field, *children]):
+        raise RequirementFieldLibraryError(
+            "「取值规则」和「动态取值」字段不能转为通用字段。"
         )
 
     workspace_id = field.requirement_type.workspace_id

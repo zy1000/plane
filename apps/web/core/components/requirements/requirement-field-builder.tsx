@@ -31,12 +31,15 @@ import {
   FIELD_ICONS,
   binEntryTarget,
   collectRecycleBinEntries,
+  isRuleFieldType,
   moveFieldToBin,
   requirementFieldKey,
   restoreFieldFromBin,
+  ruleSourceOptions,
   splitBuilderItems,
   splitFieldsByActive,
   type TRequirementBinEntry,
+  type TRuleSourceOption,
 } from "@/components/requirements/requirement-builder-items";
 import { RequirementBuiltinFieldRow } from "@/components/requirements/requirement-builtin-field-row";
 import {
@@ -141,12 +144,16 @@ type TFieldRowProps = {
   onPromote?: () => void;
   /** 绑定字段「编辑通用字段」（去字段库）；不传不出菜单项 */
   onOpenLibrary?: () => void;
+  /** 动态取值字段所跟随的取值规则字段名，显示在行尾的类型摘要里 */
+  ruleSourceName?: string;
   children?: React.ReactNode;
 };
 
 type TFieldInlineFormProps = {
   field: TRequirementFieldDraft;
   isChild: boolean;
+  /** 同级可选的规则来源（启用中的「取值规则」字段），动态取值字段的配置区用 */
+  ruleSources: TRuleSourceOption[];
   onChange: (field: TRequirementFieldDraft) => void;
   /** 还原成展开时的样子 */
   onCancel: () => void;
@@ -161,11 +168,16 @@ export const ROOT_FIELD_TYPES: TRequirementFieldType[] = [
   "member",
   "select",
   "boolean",
+  "rule",
+  "rule_value",
   "attachment",
   "image",
   "form",
 ];
 export const CHILD_FIELD_TYPES = ROOT_FIELD_TYPES.filter((type) => type !== "form");
+/** 通用字段库能建的类型：取值规则 / 动态取值不进字段库（见 isRuleFieldType） */
+export const LIBRARY_ROOT_FIELD_TYPES = ROOT_FIELD_TYPES.filter((type) => !isRuleFieldType(type));
+export const LIBRARY_CHILD_FIELD_TYPES = CHILD_FIELD_TYPES.filter((type) => !isRuleFieldType(type));
 const isChildFieldType = (type: TRequirementFieldType) => type !== "form";
 const FIELD_LIBRARY_GROUPS: Array<{
   labelKey: string;
@@ -174,6 +186,10 @@ const FIELD_LIBRARY_GROUPS: Array<{
   {
     labelKey: "requirement_fields.builder.basic_fields",
     types: ["text", "rich_text", "member", "select", "boolean"],
+  },
+  {
+    labelKey: "requirement_fields.builder.rule_fields",
+    types: ["rule", "rule_value"],
   },
   {
     labelKey: "requirement_fields.builder.media_fields",
@@ -196,7 +212,9 @@ const createSelectOptions = (labels: string[]): TRequirementSelectOption[] =>
 const createField = (
   type: TRequirementFieldType,
   name: string,
-  selectOptionLabels: string[]
+  selectOptionLabels: string[],
+  /** 新字段所在那一级可选的规则来源；只有一个时动态取值直接跟它，省一次选择 */
+  ruleSources: TRuleSourceOption[] = []
 ): TRequirementFieldDraft => ({
   client_id: uuidv4(),
   name,
@@ -210,7 +228,9 @@ const createField = (
           selection_mode: "single",
           options: createSelectOptions(selectOptionLabels),
         }
-      : {},
+      : type === "rule_value"
+        ? { on_violation: "block", ...(ruleSources.length === 1 ? { rule_field_id: ruleSources[0].key } : {}) }
+        : {},
   default_value: null,
   children: [],
 });
@@ -405,6 +425,7 @@ function RequirementFieldRow(props: TFieldRowProps) {
     isCommon = false,
     onPromote,
     onOpenLibrary,
+    ruleSourceName,
     children,
   } = props;
   const { t } = useTranslation();
@@ -421,7 +442,9 @@ function RequirementFieldRow(props: TFieldRowProps) {
           ),
           count: getRequirementSelectOptions(field).length,
         })
-      : t(`requirement_fields.field_types.${field.field_type}`);
+      : field.field_type === "rule_value" && ruleSourceName
+        ? t("requirement_fields.builder.rule_value_summary", { source: ruleSourceName })
+        : t(`requirement_fields.field_types.${field.field_type}`);
 
   useEffect(() => {
     if (hasSelectedChild || isDropTarget || isInvalidDropTarget) setIsCollapsed(false);
@@ -553,7 +576,7 @@ function RequirementFieldRow(props: TFieldRowProps) {
  * 「取消」还原到展开时的样子，「完成」只是收起。
  */
 function FieldInlineForm(props: TFieldInlineFormProps) {
-  const { field, isChild, onChange, onCancel, onDone } = props;
+  const { field, isChild, ruleSources, onChange, onCancel, onDone } = props;
   const { t } = useTranslation();
   const availableTypes = isChild ? CHILD_FIELD_TYPES : ROOT_FIELD_TYPES;
   const [isBulkOptionsModalOpen, setIsBulkOptionsModalOpen] = useState(false);
@@ -596,7 +619,14 @@ function FieldInlineForm(props: TFieldInlineFormProps) {
               selection_mode: "single",
               options: createSelectOptions(defaultSelectOptionLabels),
             }
-          : commonConfig,
+          : fieldType === "rule_value"
+            ? {
+                ...commonConfig,
+                on_violation: "block",
+                // 同级只有一个取值规则字段时直接跟它，省一次选择
+                ...(ruleSources.length === 1 ? { rule_field_id: ruleSources[0].key } : {}),
+              }
+            : commonConfig,
       children: fieldType === "form" ? field.children : [],
     });
   };
@@ -695,7 +725,7 @@ function FieldInlineForm(props: TFieldInlineFormProps) {
                 <p className="text-12 font-medium text-primary">
                   {t("requirement_fields.builder.selection_mode")}
                 </p>
-                <div className="mt-2 grid grid-cols-2 rounded-md border border-subtle bg-surface-1 p-0.5">
+                <div className="mt-2 grid grid-cols-2 rounded-md bg-layer-3 p-0.5">
                   {(["single", "multiple"] as const).map((mode) => {
                     const isActive = getRequirementSelectMode(field) === mode;
                     return (
@@ -712,7 +742,7 @@ function FieldInlineForm(props: TFieldInlineFormProps) {
                         className={cn(
                           "h-7 rounded text-11 font-medium transition-colors",
                           isActive
-                            ? "bg-layer-2 text-primary shadow-sm"
+                            ? "bg-surface-1 font-semibold text-accent-primary shadow-raised-100 ring-1 ring-accent-subtle"
                             : "text-secondary hover:bg-layer-transparent-hover hover:text-primary"
                         )}
                       >
@@ -811,6 +841,65 @@ function FieldInlineForm(props: TFieldInlineFormProps) {
               </div>
             </section>
           )}
+          {field.field_type === "rule_value" && (
+            <section className="flex flex-col gap-3 rounded-lg border border-subtle bg-layer-1/40 px-3 py-3">
+              <label className="relative block">
+                <span className="mb-1.5 block text-12 font-medium text-primary">
+                  {t("requirement_fields.builder.rule_source")}
+                </span>
+                <select
+                  // 来源被删或挪进回收站后，旧 id 已不在候选里：回到「请选择」，保存时会拦
+                  value={
+                    ruleSources.some((source) => source.key === field.config.rule_field_id)
+                      ? String(field.config.rule_field_id)
+                      : ""
+                  }
+                  onChange={(event) =>
+                    onChange({ ...field, config: { ...field.config, rule_field_id: event.target.value } })
+                  }
+                  disabled={ruleSources.length === 0}
+                  className="focus:border-accent-primary h-9 w-full appearance-none rounded-md border border-subtle bg-surface-1 pr-8 pl-3 text-12 text-primary outline-none disabled:cursor-not-allowed disabled:bg-layer-1 disabled:text-tertiary"
+                >
+                  <option value="" disabled>
+                    {t(
+                      ruleSources.length
+                        ? "requirement_fields.builder.rule_source_placeholder"
+                        : "requirement_fields.builder.rule_source_empty"
+                    )}
+                  </option>
+                  {ruleSources.map((source) => (
+                    <option key={source.key} value={source.key}>
+                      {source.name || t("requirement_fields.fields.untitled")}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-2.5 bottom-3 size-3 -translate-y-px text-placeholder" />
+              </label>
+              <div>
+                <p className="text-12 font-medium text-primary">{t("requirement_fields.builder.on_violation")}</p>
+                <div className="mt-2 grid grid-cols-2 rounded-md bg-layer-3 p-0.5">
+                  {(["block", "warn"] as const).map((mode) => {
+                    const isActive = (field.config.on_violation === "warn" ? "warn" : "block") === mode;
+                    return (
+                      <button
+                        key={mode}
+                        type="button"
+                        onClick={() => onChange({ ...field, config: { ...field.config, on_violation: mode } })}
+                        className={cn(
+                          "h-7 rounded text-11 font-medium transition-colors",
+                          isActive
+                            ? "bg-surface-1 font-semibold text-accent-primary shadow-raised-100 ring-1 ring-accent-subtle"
+                            : "text-secondary hover:bg-layer-transparent-hover hover:text-primary"
+                        )}
+                      >
+                        {t(`requirement_fields.builder.on_violation_${mode}`)}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </section>
+          )}
           <label className="block">
             <span className="mb-1.5 block text-12 font-medium text-secondary">
               {t("requirement_fields.fields.placeholder")}
@@ -820,7 +909,7 @@ function FieldInlineForm(props: TFieldInlineFormProps) {
               onChange={(event) =>
                 onChange({ ...field, config: { ...field.config, placeholder: event.target.value } })
               }
-              disabled={field.field_type === "form"}
+              disabled={field.field_type === "form" || field.field_type === "rule"}
               className="focus:border-accent-primary h-9 w-full rounded-md border border-subtle bg-surface-1 px-3 text-12 text-primary outline-none disabled:cursor-not-allowed disabled:bg-layer-1 disabled:text-tertiary"
               placeholder={t("requirement_fields.builder.placeholder_example")}
             />
@@ -940,10 +1029,22 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
     closeEditor();
   };
 
+  /** 与目标字段同级的那一组字段：根字段是全部自定义根字段，子字段是所在表单的子字段 */
+  const siblingsOf = (target: TFieldSelection): TRequirementFieldDraft[] =>
+    target.childKey
+      ? (findCustomField(target.rootKey)?.children ?? [])
+      : items.flatMap((item) => (item.kind === "custom" ? [item.field] : []));
+  const ruleSourceNameOf = (target: TFieldSelection, field: TRequirementFieldDraft) =>
+    field.field_type === "rule_value"
+      ? ruleSourceOptions(siblingsOf(target)).find((source) => source.key === field.config.rule_field_id)?.name
+      : undefined;
+
   const renderFieldEditor = (target: TFieldSelection, field: TRequirementFieldDraft) => (
     <FieldInlineForm
       field={field}
       isChild={Boolean(target.childKey)}
+      // 自己不会是「取值规则」类型的候选（类型不同），不必排除
+      ruleSources={ruleSourceOptions(siblingsOf(target))}
       onChange={updateSelectedField}
       onCancel={cancelEditing}
       onDone={closeEditor}
@@ -967,7 +1068,8 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
     const nextField = createField(
       type,
       t(`requirement_fields.field_types.${type}`),
-      defaultSelectOptionLabels
+      defaultSelectOptionLabels,
+      ruleSourceOptions(items.flatMap((item) => (item.kind === "custom" ? [item.field] : [])))
     );
     const nextItems = [...activeItems];
     nextItems.splice(index, 0, { kind: "custom", field: nextField });
@@ -998,7 +1100,8 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
     const nextField = createField(
       type,
       t(`requirement_fields.field_types.${type}`),
-      defaultSelectOptionLabels
+      defaultSelectOptionLabels,
+      ruleSourceOptions(findCustomField(rootKey)?.children ?? [])
     );
     onChange(
       mapCustomItem(rootKey, (field) => {
@@ -1168,8 +1271,11 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
           onDuplicate={() => duplicateSelection({ rootKey })}
           onRemove={() => discardSelection({ rootKey })}
           isCommon={isCommon}
+          ruleSourceName={ruleSourceNameOf({ rootKey }, field)}
           onPromote={
-            !isCommon && field.id && commonFields?.onPromote ? () => commonFields.onPromote?.(field) : undefined
+            !isCommon && field.id && commonFields?.onPromote && !isRuleFieldType(field.field_type)
+              ? () => commonFields.onPromote?.(field)
+              : undefined
           }
           onOpenLibrary={
             isCommon && commonFields
@@ -1216,6 +1322,7 @@ export function RequirementFieldBuilder(props: TRequirementFieldBuilderProps) {
                         isChild
                         isEditing={isChildEditing}
                         editor={isChildEditing ? renderFieldEditor({ rootKey, childKey }, child) : undefined}
+                        ruleSourceName={ruleSourceNameOf({ rootKey, childKey }, child)}
                         onSelect={() => openEditor({ rootKey, childKey }, child)}
                         onInsert={(position) =>
                           insertChildField(rootKey, childIndex + (position === "below" ? 1 : 0), "text")

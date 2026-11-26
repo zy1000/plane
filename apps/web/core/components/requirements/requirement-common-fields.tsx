@@ -269,13 +269,15 @@ export function RequirementCommonFieldCard(props: TCommonFieldCardProps) {
             <section className="overflow-hidden rounded-lg border border-subtle bg-layer-1/40">
               <div className="border-b border-subtle px-3 py-3">
                 <p className="text-12 font-medium text-primary">{t("requirement_fields.builder.selection_mode")}</p>
-                <div className="mt-2 grid grid-cols-2 rounded-md border border-subtle bg-surface-1 p-0.5">
+                <div className="mt-2 grid grid-cols-2 rounded-md bg-layer-3 p-0.5">
                   {(["single", "multiple"] as const).map((mode) => (
                     <span
                       key={mode}
                       className={cn(
                         "grid h-7 place-items-center rounded text-11 font-medium",
-                        getRequirementSelectMode(field) === mode ? "bg-layer-2 text-primary" : "text-tertiary"
+                        getRequirementSelectMode(field) === mode
+                          ? "bg-surface-1 font-semibold text-accent-primary shadow-raised-100 ring-1 ring-accent-subtle"
+                          : "text-tertiary"
                       )}
                     >
                       {t(`requirement_fields.builder.${mode === "multiple" ? "multiple_select" : "single_select"}`)}
@@ -330,7 +332,7 @@ export function RequirementFieldSourceTabs({
 }) {
   return (
     <div
-      className="mt-3 grid grid-cols-2 rounded-md border border-subtle bg-surface-1 p-0.5"
+      className="mt-3 grid grid-cols-2 rounded-md bg-layer-3 p-0.5"
       role="tablist"
       aria-label="字段来源"
     >
@@ -349,7 +351,7 @@ export function RequirementFieldSourceTabs({
           className={cn(
             "h-7 rounded text-12 font-medium transition-colors",
             value === key
-              ? "bg-layer-2 text-primary shadow-sm"
+              ? "bg-surface-1 font-semibold text-accent-primary shadow-raised-100 ring-1 ring-accent-subtle"
               : "text-secondary hover:bg-layer-transparent-hover hover:text-primary"
           )}
         >

@@ -31,6 +31,10 @@ import {
 } from "./requirement-rich-text";
 import { getRequirementSelectLabel, getRequirementSelectMode, getRequirementSelectOptions } from "./requirement-select";
 import { RequirementTextCell } from "./requirement-text-cell";
+import { asRuleValue, isRuleValue, resolveRule } from "./rule/requirement-rule";
+import type { TResolvedRule } from "./rule/requirement-rule";
+import { RequirementRuleDisplay, RequirementRuleEditor } from "./rule/requirement-rule-editor";
+import { RequirementRuleValueDisplay, RequirementRuleValueEditor } from "./rule/requirement-rule-value-editor";
 
 export const getFormRows = (data: TRequirementData, fieldId: string): TRequirementFormRow[] => {
   const value = data[fieldId];
@@ -61,7 +65,38 @@ export const getRequirementRowKey = (
   }`;
 
 export const isEmptyRequirementValue = (value: TRequirementValue | undefined) =>
-  value === null || value === undefined || value === "" || (Array.isArray(value) && value.length === 0);
+  value === null ||
+  value === undefined ||
+  value === "" ||
+  (Array.isArray(value) && value.length === 0) ||
+  // 取值规则的值是对象：规则原文为空就算没填
+  (isRuleValue(value) && !asRuleValue(value));
+
+/**
+ * 「动态取值」字段要照同级「取值规则」字段的值来渲染。siblings 是与它同级的那份值：
+ * 根字段传整行的 data，子字段传所在表单行的 values。没传（diff、历史快照里有的地方
+ * 拿不到同级值）就按「规则未知」处理，只显示原值。
+ */
+const resolveSiblingRule = (field: TRequirementField, siblings: TRequirementData | undefined): TResolvedRule | null => {
+  if (field.field_type !== "rule_value") return null;
+  const ruleFieldId = typeof field.config.rule_field_id === "string" ? field.config.rule_field_id : "";
+  return resolveRule(ruleFieldId ? siblings?.[ruleFieldId] : undefined);
+};
+
+/** 动态取值当前是不是富文本形态：详情页、建行弹窗据此让它像富文本字段一样通栏 */
+export const isRichRuleValueField = (field: TRequirementField, siblings: TRequirementData | undefined) => {
+  const rule = resolveSiblingRule(field, siblings);
+  return rule?.state === "ready" && rule.rule.rich;
+};
+
+/** 规则写成「富文本」的动态取值，展示与编辑都复用富文本字段那一套 */
+const isRichTextLeaf = (field: TRequirementField, rule: TResolvedRule | null, value: TRequirementValue | undefined) => {
+  if (field.field_type === "rich_text") return true;
+  if (field.field_type !== "rule_value") return false;
+  if (rule?.state === "ready") return rule.rule.rich;
+  // 拿不到规则时凭值本身判断：富文本存的是 HTML，别把标签原样印出来
+  return typeof value === "string" && /^\s*<[a-z][^>]*>/i.test(value);
+};
 
 /** 子表一行是否全空：没填，或富文本只剩空标签。详情页展示时把这种行藏掉，避免预置空格子。 */
 export const isBlankFormRow = (row: TRequirementFormRow): boolean => {
@@ -287,10 +322,13 @@ export const LeafValue = ({
   workspaceSlug,
   className,
   variant = "grid",
+  siblings,
 }: {
   field: TRequirementField;
   value: TRequirementValue | undefined;
   workspaceSlug: string;
+  /** 与本字段同级的值，动态取值字段据此找到它的取值规则（见 resolveSiblingRule） */
+  siblings?: TRequirementData;
   /** diff 网格用它给旧值套删除线、给新值套绿色 */
   className?: string;
   /**
@@ -303,7 +341,9 @@ export const LeafValue = ({
   const isDetail = variant === "detail";
   const shortValueClass = isDetail ? "text-body-xs-medium" : "text-13";
   const longValueClass = isDetail ? "text-body-sm-regular leading-6" : "text-13 leading-5";
-  if (value === null || value === undefined || value === "" || (Array.isArray(value) && !value.length)) {
+  const rule = resolveSiblingRule(field, siblings);
+  const isRichText = isRichTextLeaf(field, rule, value);
+  if (isEmptyRequirementValue(value)) {
     // 详情抽屉没有格子线，空值直接不画等于这一行只有标签；网格里空格子保持干净
     return isDetail ? <span className={cn("text-body-xs-medium text-placeholder", className)}>—</span> : null;
   }
@@ -370,7 +410,13 @@ export const LeafValue = ({
       />
     );
   }
-  if (field.field_type === "rich_text" && variant === "detail") {
+  if (field.field_type === "rule") {
+    return <RequirementRuleDisplay value={value} variant={variant} className={className} />;
+  }
+  if (rule && !isRichText) {
+    return <RequirementRuleValueDisplay value={value} rule={rule} variant={variant} className={className} />;
+  }
+  if (isRichText && variant === "detail") {
     return (
       <RequirementRichTextValue
         workspaceSlug={workspaceSlug}
@@ -380,7 +426,7 @@ export const LeafValue = ({
       />
     );
   }
-  const text = field.field_type === "rich_text" ? stripAndTruncateHTML(String(value), 180) : String(value);
+  const text = isRichText ? stripAndTruncateHTML(String(value), 180) : String(value);
   // 网格列宽只有 144px：必须截断。detail 才允许折行看全。
   return (
     <span
@@ -1047,10 +1093,13 @@ export const LeafEditor = ({
   onAssetUpload,
   variant = "grid",
   deferTextCommit,
+  siblings,
 }: {
   field: TRequirementField;
   value: TRequirementValue | undefined;
   workspaceSlug: string;
+  /** 与本字段同级的值，动态取值字段据此找到它的取值规则（见 resolveSiblingRule） */
+  siblings?: TRequirementData;
   /** 富文本内联资源的归属实体：产品或标准库 id（后端只认这两种，详情页也不能传需求 id） */
   entityId: string;
   onChange: (value: TRequirementValue) => void;
@@ -1075,6 +1124,15 @@ export const LeafEditor = ({
   // 表格形态（grid / compact）头上就有列名，空值不必再写「请选择」这类占位提示
   const isTableCell = variant === "grid" || variant === "compact";
   const valueTextClass = variant === "detail" ? "text-body-xs-medium" : "text-13";
+  const rule = resolveSiblingRule(field, siblings);
+  // 编辑态不靠值去猜：规则没写 / 写错时动态取值不可填，不能因为旧值是 HTML 就放出富文本编辑器
+  const isRichText = field.field_type === "rich_text" || (rule?.state === "ready" && rule.rule.rich);
+  if (field.field_type === "rule") {
+    return <RequirementRuleEditor value={value} onChange={onChange} variant={variant} />;
+  }
+  if (rule && !isRichText) {
+    return <RequirementRuleValueEditor field={field} value={value} rule={rule} onChange={onChange} variant={variant} />;
+  }
   if (field.field_type === "boolean") {
     // 撑到和其它编辑器一样的行高：裸开关只有 16px 高，夹在一排控件里会矮一截。
     // 开关不是输入框，铺满整格没有意义，grid 下自己补回格子的 px-page-x
@@ -1285,7 +1343,7 @@ export const LeafEditor = ({
       </div>
     );
   }
-  if (field.field_type === "rich_text") {
+  if (isRichText) {
     const richTextProps = {
       workspaceSlug,
       entityId,

@@ -14,8 +14,12 @@ export type TRequirementFieldType =
   | "rich_text"
   | "attachment"
   | "image"
-  | "boolean";
+  | "boolean"
+  | "rule"
+  | "rule_value";
 export type TRequirementSelectMode = "single" | "multiple";
+/** 动态取值超出规则时：block = 禁止保存；warn = 仅提示 */
+export type TRequirementRuleViolationMode = "block" | "warn";
 /**
  * 需求级的**交付状态**，跨项目共享一份，人工维护。不表达评审进度 —— 那是另一根轴，
  * 见 TRequirementApprovalState；两根轴正交，评审中的行也能改状态。
@@ -81,13 +85,25 @@ export type TRequirementFormRow = {
   values: TRequirementData;
 };
 
+/**
+ * 「取值规则」字段的值：每条需求（或表单的每一行）各写各的规则。
+ * expr 是规则原文（如 `{西欧,中东欧,其他}`、`[1,30]`、`富文本`）；两个开关只在规则含选项时有意义。
+ * 同级的「动态取值」字段按它决定控件形态与校验。
+ */
+export type TRequirementRuleValue = {
+  expr: string;
+  multiple: boolean;
+  allow_custom: boolean;
+};
+
 export type TRequirementValue =
   | string
   | string[]
   | boolean
   | null
   | TRequirementAssetRef[]
-  | TRequirementFormRow[];
+  | TRequirementFormRow[]
+  | TRequirementRuleValue;
 
 /** 一行需求的自定义字段值，key 是字段 UUID。内置字段不在这里，它们平铺在行上 */
 export type TRequirementData = Record<string, TRequirementValue>;
@@ -245,6 +261,10 @@ export type TRequirementField = {
     placeholder?: string;
     selection_mode?: TRequirementSelectMode;
     options?: TRequirementSelectOption[];
+    /** 动态取值：同级「取值规则」字段的 id（没落库的新字段用 client_id，保存时后端换成真实 id） */
+    rule_field_id?: string;
+    /** 动态取值：超出规则时禁止保存还是仅提示，缺省 block */
+    on_violation?: TRequirementRuleViolationMode;
   } & Record<string, unknown>;
   default_value: TRequirementValue;
   children: TRequirementField[];

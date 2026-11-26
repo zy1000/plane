@@ -9,6 +9,7 @@ from plane.db.models import (
 )
 
 from .requirement import (
+    RULE_FIELD_TYPES,
     RequirementFieldNodeWriteSerializer,
     validate_requirement_leaf_value,
 )
@@ -30,6 +31,13 @@ class RequirementFieldDefinitionWriteSerializer(RequirementFieldNodeWriteSeriali
         workspace = self.context["workspace"]
         definition = self.context.get("definition")
         children = attrs.get("children") or []
+
+        # 取值规则与动态取值靠「同级字段互相指向」成对工作，指向的是某个类型里的字段 id，
+        # 库定义里没有这层关系可存
+        if any(node["field_type"] in RULE_FIELD_TYPES for node in [attrs, *children]):
+            raise serializers.ValidationError(
+                {"field_type": "通用字段不支持「取值规则」和「动态取值」类型。"}
+            )
 
         # 大小写不敏感：两个只差大小写的库字段绑进同一个类型会撞上类型内的重名校验
         duplicates = RequirementFieldDefinition.objects.filter(

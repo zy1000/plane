@@ -14,6 +14,7 @@ from plane.utils.content_validator import validate_html_content
 from plane.utils.requirement import (
     BUILTIN_COLUMN_DEFAULTS,
     BUILTIN_COLUMNS,
+    RULE_FIELD_TYPES,
     TITLE_MAX_LENGTH,
     builtin_filter_specs,
     builtin_values_from_payload,
@@ -24,6 +25,14 @@ from plane.utils.requirement import (
     library_hidden_builtin_columns,
 )
 from plane.utils.requirement_module import module_scope_filter
+from plane.utils.requirement_rule import (
+    check_rule_value,
+    describe_rule_error,
+    describe_value_error,
+    parse_rule,
+    rule_has_options,
+    rule_is_usable,
+)
 from plane.utils.requirement_scope import (
     converted_display_id,
     origin_display_id,
@@ -31,6 +40,9 @@ from plane.utils.requirement_scope import (
 )
 
 from .base import BaseSerializer
+
+#: 动态取值不符合规则时：block 拒绝保存，warn 放行（前端只标红）
+RULE_VIOLATION_MODES = ("block", "warn")
 
 
 class RequirementFieldWriteSerializer(serializers.Serializer):
@@ -54,6 +66,26 @@ class RequirementFieldWriteSerializer(serializers.Serializer):
         return value
 
     def validate(self, attrs):
+        if attrs["field_type"] in RULE_FIELD_TYPES:
+            # 规则每条需求各填各的，取值要有规则才谈得上合法 —— 字段级默认值对这两类没有意义
+            attrs["default_value"] = None
+            if attrs["field_type"] == RequirementFieldType.RULE_VALUE:
+                config = attrs.get("config") or {}
+                on_violation = config.get("on_violation") or "block"
+                if on_violation not in RULE_VIOLATION_MODES:
+                    raise serializers.ValidationError(
+                        {"config": {"on_violation": "Use block or warn."}}
+                    )
+                # rule_field_id 可能是已有字段的 id，也可能是同一次载荷里新建字段的
+                # client_id；指向是否有效要等全部字段落库后才能判（见
+                # utils/requirement.py 的 resolve_rule_value_sources）
+                rule_field_id = config.get("rule_field_id")
+                attrs["config"] = {
+                    **config,
+                    "rule_field_id": str(rule_field_id) if rule_field_id else None,
+                    "on_violation": on_violation,
+                }
+            return attrs
         if attrs["field_type"] != RequirementFieldType.SELECT:
             return attrs
 
@@ -226,13 +258,120 @@ def _canonical_asset_values(owner, value, *, image_only=False, with_meta=False):
     return result
 
 
+def _canonical_rule(field, value):
+    """取值规则字段的值 -> `{expr, multiple, allow_custom}` 或 None。
+
+    expr 原样保留（只去首尾空白），解析不过就拒绝保存；规则里没有选项时两个标志没有
+    意义，一律存成 False，免得「没改内容」被比成「改了」。
+    """
+    name = field_attr(field, "name") or ""
+    if value in (None, ""):
+        return None
+    if isinstance(value, str):
+        value = {"expr": value}
+    if not isinstance(value, dict) or not isinstance(value.get("expr") or "", str):
+        raise serializers.ValidationError(f"{name}：取值规则格式不正确")
+    expr = (value.get("expr") or "").strip()
+    if not expr:
+        return None
+    parsed = parse_rule(expr)
+    if not parsed["ok"]:
+        raise serializers.ValidationError(
+            f"{name}：取值规则无法识别（{describe_rule_error(parsed['error'])}）"
+        )
+    has_options = rule_has_options(parsed)
+    return {
+        "expr": expr,
+        "multiple": bool(value.get("multiple")) and has_options,
+        "allow_custom": bool(value.get("allow_custom")) and has_options,
+    }
+
+
+def _comparable_rule_value(value):
+    """动态取值比较「动没动」用的形状：去空白，空串 / 空数组归 None。"""
+    if isinstance(value, str):
+        return value.strip() or None
+    if isinstance(value, list):
+        items = [item.strip() if isinstance(item, str) else item for item in value]
+        return [item for item in items if item not in ("", None)] or None
+    return value
+
+
+def _reshape_rule_value(value, *, as_list):
+    """不校验内容，只把取值收成规则要求的形状（warn 模式、规则缺失时用）。"""
+    items = value if isinstance(value, list) else [value]
+    items = list(dict.fromkeys(item.strip() for item in items if item.strip()))
+    if not items:
+        return None
+    return items if as_list else "、".join(items)
+
+
+def _canonical_rule_value(field, value, *, rule, current_value):
+    """动态取值字段的值 -> (规范值, 规则是否为富文本)。
+
+    **只在值相对库里已存的那一份变了时才按规则校验。** 规则后来改了导致旧值不再合法
+    不拦（前端标红）—— 否则逐格保存会死锁：先改规则被旧值拦，先改值又被旧规则拦。
+    rule 是同一次保存后的同级取值规则（已规范化）；缺失或为空且填了新值时，block
+    模式报「未设置取值规则」。on_violation == "warn" 不拦取值，只规范形状。
+    """
+    name = field_attr(field, "name") or ""
+    if value is not None and not isinstance(value, (str, list)):
+        raise serializers.ValidationError(f"{name}：取值格式不正确")
+    if isinstance(value, list) and any(not isinstance(item, str) for item in value):
+        raise serializers.ValidationError(f"{name}：取值格式不正确")
+
+    rule = rule if isinstance(rule, dict) else {}
+    parsed = parse_rule(rule.get("expr") or "")
+    is_rich = bool(parsed.get("rich"))
+    comparable = _comparable_rule_value(value)
+    if comparable is None:
+        return None, is_rich
+    if comparable == _comparable_rule_value(current_value):
+        return current_value, is_rich
+
+    blocking = (field_attr(field, "config") or {}).get("on_violation") != "warn"
+    if not rule_is_usable(parsed):
+        if blocking:
+            raise serializers.ValidationError(f"{name}：未设置取值规则")
+        return _reshape_rule_value(value, as_list=False), is_rich
+
+    if is_rich:
+        if isinstance(value, list):
+            if blocking:
+                raise serializers.ValidationError(f"{name}：取值格式不正确")
+            value = _reshape_rule_value(value, as_list=False)
+        # 清洗与 rich_text 叶子同一条路径，warn 模式也不放过 —— 这是安全校验不是业务规则
+        is_valid, error_message, sanitized_html = validate_html_content(value)
+        if not is_valid:
+            raise serializers.ValidationError(
+                error_message or "HTML content is not valid."
+            )
+        return (sanitized_html if sanitized_html is not None else value), is_rich
+
+    multiple = bool(rule.get("multiple")) and rule_has_options(parsed)
+    result = check_rule_value(
+        parsed, multiple, bool(rule.get("allow_custom")), value
+    )
+    if result["ok"]:
+        return result["value"], is_rich
+    if not blocking:
+        return _reshape_rule_value(value, as_list=multiple), is_rich
+    raise serializers.ValidationError(
+        f"{name}：{describe_value_error(parsed, result['error'])}"
+    )
+
+
 def validate_requirement_leaf_value(
-    *, owner, field, value, enforce_required=True, current_value=None
+    *, owner, field, value, enforce_required=True, current_value=None, rule=None
 ):
     """current_value 是这一格更新前的值。成员字段只在**换人**时校验成员资格 —— 已离开
-    工作区的人挂在旧行上不该让整行写不动，与内置列负责人 / 父项的「只拦新指派」一致。"""
+    工作区的人挂在旧行上不该让整行写不动，与内置列负责人 / 父项的「只拦新指派」一致。
+    动态取值同理，只在值变了时按规则校验（见 _canonical_rule_value）。
+
+    rule 只对动态取值字段有意义：同级那个取值规则字段在同一次保存后的值。"""
     field_type = field_attr(field, "field_type")
     is_required = bool(field_attr(field, "is_required", False))
+    rule_value_is_rich = False
 
     if field_type in (RequirementFieldType.TEXT, RequirementFieldType.RICH_TEXT):
         if value is not None and not isinstance(value, str):
@@ -308,11 +447,19 @@ def validate_requirement_leaf_value(
         value = _canonical_asset_values(owner, value)
     elif field_type == RequirementFieldType.IMAGE:
         value = _canonical_asset_values(owner, value, image_only=True)
+    elif field_type == RequirementFieldType.RULE:
+        value = _canonical_rule(field, value)
+    elif field_type == RequirementFieldType.RULE_VALUE:
+        value, rule_value_is_rich = _canonical_rule_value(
+            field, value, rule=rule, current_value=current_value
+        )
     else:
         raise serializers.ValidationError("This value is not valid for a form field.")
 
     is_empty = value is None or value == "" or value == []
-    if isinstance(value, str) and field_type == RequirementFieldType.RICH_TEXT:
+    if isinstance(value, str) and (
+        field_type == RequirementFieldType.RICH_TEXT or rule_value_is_rich
+    ):
         is_empty = not strip_tags(value).strip()
     if enforce_required and is_required and is_empty:
         raise serializers.ValidationError("This field is required.")
@@ -350,9 +497,39 @@ def validate_requirement_data(*, owner, data, fields, current_data=None):
     current_data = current_data or {}
     canonical = {}
     used_child_row_ids = set()
+
+    def validate_rule_values(siblings, values, current_values, canonical_values, *, active):
+        """第二遍：动态取值要看同级取值规则**这一次保存后**的值，所以排在其它叶子之后。
+        canonical_values 里已按字段顺序占好了位（值为 None），这里只回填。"""
+        rule_ids = {
+            str(sibling.id)
+            for sibling in siblings
+            if sibling.field_type == RequirementFieldType.RULE
+        }
+        for sibling in siblings:
+            if sibling.field_type != RequirementFieldType.RULE_VALUE:
+                continue
+            sibling_key = str(sibling.id)
+            rule_field_id = str((sibling.config or {}).get("rule_field_id") or "")
+            canonical_values[sibling_key] = validate_requirement_leaf_value(
+                owner=owner,
+                field=sibling,
+                value=values.get(sibling_key, sibling.default_value),
+                enforce_required=active and sibling.is_active,
+                current_value=current_values.get(sibling_key),
+                rule=(
+                    canonical_values.get(rule_field_id)
+                    if rule_field_id in rule_ids
+                    else None
+                ),
+            )
+
     for field in roots:
         field_key = str(field.id)
         raw_value = data.get(field_key, field.default_value)
+        if field.field_type == RequirementFieldType.RULE_VALUE:
+            canonical[field_key] = None
+            continue
         if field.field_type != RequirementFieldType.FORM:
             canonical[field_key] = validate_requirement_leaf_value(
                 owner=owner,
@@ -416,6 +593,9 @@ def validate_requirement_data(*, owner, data, fields, current_data=None):
             current_values = current_rows_by_id.get(row_id, {})
             for child in child_fields:
                 child_key = str(child.id)
+                if child.field_type == RequirementFieldType.RULE_VALUE:
+                    canonical_values[child_key] = None
+                    continue
                 canonical_values[child_key] = validate_requirement_leaf_value(
                     owner=owner,
                     field=child,
@@ -423,8 +603,16 @@ def validate_requirement_data(*, owner, data, fields, current_data=None):
                     enforce_required=field.is_active and child.is_active,
                     current_value=current_values.get(child_key),
                 )
+            validate_rule_values(
+                child_fields,
+                values,
+                current_values,
+                canonical_values,
+                active=field.is_active,
+            )
             canonical_rows.append({"id": row_id, "values": canonical_values})
         canonical[field_key] = canonical_rows
+    validate_rule_values(roots, data, current_data, canonical, active=True)
     return canonical
 
 
@@ -1154,7 +1342,9 @@ class RequirementFilterSerializer(serializers.Serializer):
                 field
                 for field in [*builtin_filter_specs(), *self.context["fields"]]
                 if str(field_attr(field, "id")) == str(field_id)
-                and field_attr(field, "field_type") != RequirementFieldType.FORM
+                # 表单、取值规则、动态取值不可筛选
+                and field_attr(field, "field_type")
+                not in (RequirementFieldType.FORM, *RULE_FIELD_TYPES)
             ),
             None,
         )

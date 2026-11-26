@@ -10,6 +10,7 @@ import type {
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { pickBuiltinValues } from "@/components/requirements/requirement-builtin-fields";
+import { firstValidationMessage } from "@/components/requirements/requirement-error";
 import { RequirementService } from "@/services/requirement.service";
 
 const requirementService = new RequirementService();
@@ -247,7 +248,11 @@ export const useRequirementDetail = ({ workspaceSlug, productId, libraryId, requ
         setToast({
           type: TOAST_TYPE.ERROR,
           title: t("error"),
-          message: codeError ?? payload?.error ?? t("workspace_products.requirements.toast.failed"),
+          message:
+            codeError ??
+            payload?.error ??
+            firstValidationMessage(error) ??
+            t("workspace_products.requirements.toast.failed"),
         });
       });
       return queueRef.current;
