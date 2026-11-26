@@ -12,6 +12,7 @@ import type {
   TRequirementBuiltinFieldConfig,
   TRequirementBuiltinKey,
   TRequirementChangeSnapshot,
+  TRequirementData,
   TRequirementField,
   TRequirementValue,
 } from "@plane/types";
@@ -20,6 +21,7 @@ import {
   REQUIREMENT_BUILTIN_TITLE_COLUMN,
   type TBuiltinColumnMeta,
 } from "@/components/requirements/requirement-builtin-layout";
+import { resolveRule } from "@/components/requirements/rule/requirement-rule";
 
 export type TSnapshotDiffRow = {
   /** 内置列 key / 字段 id / "attachments" */
@@ -33,6 +35,9 @@ export type TSnapshotDiffRow = {
   field?: TRequirementField;
   /** 描述与富文本字段：面板走行内文字 diff，不是整值替换 */
   isRichText: boolean;
+  /** 两侧的同级值（整行 data）：动态取值要靠它找到自己的规则 */
+  beforeSiblings?: TRequirementData;
+  afterSiblings?: TRequirementData;
 };
 
 export type TSnapshotDiffMode = "create" | "update" | "delete" | "unavailable";
@@ -50,6 +55,17 @@ export const EMPTY_SNAPSHOT_DIFF: TSnapshotDiff = { mode: "unavailable", rows: [
 /** undefined / null / "" / [] 视为同一个「空」—— 没填与被清空在历史里不该算一次变化 */
 const isEmptyValue = (value: unknown) =>
   value === undefined || value === null || value === "" || (Array.isArray(value) && value.length === 0);
+
+/** 动态取值在任一侧按富文本规则填写时，值是 HTML，要和富文本字段一样按文字预览 */
+const isRichRuleValue = (field: TRequirementField, left: TRequirementData, right: TRequirementData) => {
+  if (field.field_type !== "rule_value") return false;
+  const ruleFieldId = typeof field.config.rule_field_id === "string" ? field.config.rule_field_id : "";
+  if (!ruleFieldId) return false;
+  return [left, right].some((data) => {
+    const rule = resolveRule(data[ruleFieldId]);
+    return rule.state === "ready" && rule.rule.rich;
+  });
+};
 
 const valuesDiffer = (before: unknown, after: unknown) => {
   if (isEmptyValue(before) && isEmptyValue(after)) return false;
@@ -96,7 +112,9 @@ export const diffSnapshotFields = (
       before: oldValue,
       after: newValue,
       field,
-      isRichText: field.field_type === "rich_text",
+      isRichText: field.field_type === "rich_text" || isRichRuleValue(field, leftData, rightData),
+      beforeSiblings: leftData,
+      afterSiblings: rightData,
     });
   };
 

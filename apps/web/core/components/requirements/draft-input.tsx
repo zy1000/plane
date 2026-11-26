@@ -24,6 +24,13 @@ type TProps = {
   commitOnEnter?: boolean;
   /** 挂载时抢焦点。网格里内联新增一行后，让光标直接落在新行的标题上 */
   autoFocus?: boolean;
+  /**
+   * 日期框也走草稿：键盘逐位敲年份时 onChange 会依次给出 0002 / 0020 / 0202 / 2026，
+   * 每次都提交就是好几次整行 PATCH，范围校验还会接连报错
+   */
+  type?: "text" | "date";
+  min?: string;
+  max?: string;
 };
 
 export const DraftInput = ({
@@ -35,6 +42,9 @@ export const DraftInput = ({
   disabled,
   commitOnEnter = true,
   autoFocus = false,
+  type = "text",
+  min,
+  max,
 }: TProps) => {
   const inputRef = useRef<HTMLInputElement>(null);
   // null = 没有草稿，直接显示服务端值
@@ -85,6 +95,9 @@ export const DraftInput = ({
   return (
     <input
       ref={inputRef}
+      type={type}
+      min={min}
+      max={max}
       value={draft ?? value}
       onChange={(event) => {
         draftRef.current = event.target.value;

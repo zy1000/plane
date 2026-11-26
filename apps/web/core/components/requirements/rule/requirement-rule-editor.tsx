@@ -1,10 +1,12 @@
 /**
  * 「取值规则」字段：每条需求（或表单的每一行）各写各的规则，同级的「动态取值」字段照它取值。
  *
- * 规则在浮层里改，点「确定」才提交一次 —— 规则原文与两个开关是一个值，逐字符提交会让
+ * 规则在浮层里改，点「确定」（或回车）才提交一次 —— 规则原文与两个开关是一个值，逐字符提交会让
  * 同级取值控件跟着半截规则来回变形，在「onChange 即 PATCH」的场景还会连发请求。
+ * 点浮层外面等同「取消」：有显式的取消 / 确定，就不该在别处悄悄保存。
  */
 import { useRef, useState } from "react";
+import { ChevronRight } from "lucide-react";
 import { useOutsideClickDetector } from "@plane/hooks";
 import { Button } from "@plane/propel/button";
 import type { TRequirementRuleValue, TRequirementValue } from "@plane/types";
@@ -129,6 +131,8 @@ export const RequirementRuleEditor = ({
   const [anchor, setAnchor] = useState<HTMLButtonElement | null>(null);
   // null = 浮层关着
   const [draft, setDraft] = useState<TRequirementRuleValue | null>(null);
+  // 写法速查表：新写规则时默认展开，改已有规则时折叠
+  const [showSyntax, setShowSyntax] = useState(false);
 
   const current = asRuleValue(value);
   const parsed = draft ? parseRule(draft.expr) : null;
@@ -137,7 +141,7 @@ export const RequirementRuleEditor = ({
   const errorText = parsed && !parsed.ok ? ruleParseErrorText(parsed.error) : null;
   const isTableCell = variant === "grid" || variant === "compact";
 
-  /** 写错的规则不提交也不关：留在原地让人改，想放弃就点「取消」 */
+  /** 写错的规则不提交也不关：留在原地让人改，想放弃就点「取消」或点外面 */
   const commit = () => {
     if (!draft || !parsed || !parsed.ok) return;
     const expr = draft.expr.trim();
@@ -148,8 +152,14 @@ export const RequirementRuleEditor = ({
     setDraft(null);
   };
 
+  const open = () => {
+    const initial = current ?? { ...EMPTY_RULE_VALUE };
+    setShowSyntax(!initial.expr.trim());
+    setDraft(initial);
+  };
+
   useOutsideClickDetector(wrapperRef, () => {
-    if (draft) commit();
+    if (draft) setDraft(null);
   });
 
   return (
@@ -157,7 +167,7 @@ export const RequirementRuleEditor = ({
       <button
         ref={setAnchor}
         type="button"
-        onClick={() => setDraft(draft ? null : (current ?? { ...EMPTY_RULE_VALUE }))}
+        onClick={() => (draft ? setDraft(null) : open())}
         className={cn(RULE_TRIGGER_CLASS[variant], draft && RULE_TRIGGER_OPEN_CLASS[variant])}
       >
         {current ? (
@@ -220,18 +230,28 @@ export const RequirementRuleEditor = ({
               </label>
             </div>
           )}
-          <div className="px-3 py-2.5">
-            <p className="mb-1 text-12 text-tertiary">规则写法</p>
-            <div className="grid grid-cols-2 gap-x-5">
-              {RULE_SYNTAX_EXAMPLES.map((example) => (
-                <div key={example.expr} className="flex h-7 min-w-0 items-center justify-between gap-2">
-                  <code className="truncate rounded bg-layer-1 px-1.5 py-px font-mono text-12 text-primary">
-                    {example.expr}
-                  </code>
-                  <span className="shrink-0 text-12 text-tertiary">{example.meaning}</span>
-                </div>
-              ))}
-            </div>
+          <div className="px-3 py-2">
+            <button
+              type="button"
+              aria-expanded={showSyntax}
+              onClick={() => setShowSyntax(!showSyntax)}
+              className="flex h-6 items-center gap-1 text-12 text-tertiary transition-colors hover:text-primary"
+            >
+              <ChevronRight className={cn("size-3 transition-transform", showSyntax && "rotate-90")} />
+              规则写法
+            </button>
+            {showSyntax && (
+              <div className="mt-1 grid grid-cols-2 gap-x-5">
+                {RULE_SYNTAX_EXAMPLES.map((example) => (
+                  <div key={example.expr} className="flex h-7 min-w-0 items-center justify-between gap-2">
+                    <code className="truncate rounded bg-layer-1 px-1.5 py-px font-mono text-12 text-primary">
+                      {example.expr}
+                    </code>
+                    <span className="shrink-0 text-12 text-tertiary">{example.meaning}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
           <div className="flex justify-end gap-2 border-t border-subtle px-3 py-2.5">
             <Button variant="secondary" size="sm" onClick={() => setDraft(null)}>

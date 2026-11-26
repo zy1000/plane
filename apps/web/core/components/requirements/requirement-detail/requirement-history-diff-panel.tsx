@@ -63,7 +63,12 @@ const SideValue = ({
   if (row.field) {
     return (
       <span className={block}>
-        <LeafValue field={row.field} value={value} workspaceSlug={workspaceSlug} />
+        <LeafValue
+          field={row.field}
+          value={value}
+          siblings={tone === "old" ? row.beforeSiblings : row.afterSiblings}
+          workspaceSlug={workspaceSlug}
+        />
       </span>
     );
   }

@@ -139,12 +139,12 @@ const RuleScalarEditor = ({ field, value, rule, onChange, variant }: TEditorProp
         className={`${cn(RULE_INPUT_SHELL_CLASS[variant], issue && variant !== "grid" && "!border-danger-strong")} ${ruleValueTextClass(variant)}`}
       >
         {isDate ? (
-          <input
+          <DraftInput
             type="date"
             value={text}
             min={single?.lo ?? undefined}
             max={single?.hi ?? undefined}
-            onChange={(event) => commit(event.target.value)}
+            onCommit={commit}
             className={cn(EXPANDABLE_CELL_INPUT_CLASS, issue && "!text-danger-primary")}
           />
         ) : (
@@ -366,6 +366,8 @@ const RuleValueUnavailable = ({
     /^\s*<[a-z][^>]*>/i.test(entry) ? stripAndTruncateHTML(entry, 180) : entry
   );
   const reason = rule.state === "invalid" ? "取值规则无法识别" : "未设置取值规则";
+  // 表格里规则常由后一环节的人填，整列都写原因太吵：空着，原因进悬停提示
+  const isTableCell = variant === "grid" || variant === "compact";
   return (
     <div
       title={rule.state === "invalid" ? `${reason}：${ruleParseErrorText(rule.error)}` : reason}
@@ -376,7 +378,7 @@ const RuleValueUnavailable = ({
           entries.length ? "text-tertiary" : "text-placeholder"
         }`}
       >
-        {entries.length ? entries.join(", ") : reason}
+        {entries.length ? entries.join(", ") : isTableCell ? "" : reason}
       </span>
     </div>
   );

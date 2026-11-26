@@ -58,6 +58,7 @@ const SideValue = ({
   columnKey,
   isAttachments,
   value,
+  siblings,
   workspaceSlug,
   tone,
 }: {
@@ -66,6 +67,8 @@ const SideValue = ({
   /** 需求级附件行：既不是内置列也不是自定义字段 */
   isAttachments?: boolean;
   value: TRequirementValue | undefined;
+  /** 同级值（根字段是整行 data，子字段是子行 values）：动态取值要靠它找到自己的规则 */
+  siblings?: TRequirementData;
   workspaceSlug: string;
   tone?: "old" | "new";
 }) => {
@@ -84,7 +87,9 @@ const SideValue = ({
     );
   }
   if (!field) return <EmptyValue />;
-  return <LeafValue field={field} value={value} workspaceSlug={workspaceSlug} className={className} />;
+  return (
+    <LeafValue field={field} value={value} siblings={siblings} workspaceSlug={workspaceSlug} className={className} />
+  );
 };
 
 type TRow = {
@@ -350,6 +355,7 @@ export function ChangeRequestRequirementDiff({ item, fields, builtinLayout = nul
                           columnKey={row.columnKey}
                           isAttachments={row.isAttachments}
                           value={isCreate ? row.after : row.before}
+                          siblings={isCreate ? after?.data : before?.data}
                           workspaceSlug={workspaceSlug}
                           tone={isCreate ? "new" : "old"}
                         />
@@ -364,6 +370,7 @@ export function ChangeRequestRequirementDiff({ item, fields, builtinLayout = nul
                         columnKey={row.columnKey}
                         isAttachments={row.isAttachments}
                         value={row.before}
+                        siblings={before?.data}
                         workspaceSlug={workspaceSlug}
                         tone={row.changed ? "old" : undefined}
                       />
@@ -374,6 +381,7 @@ export function ChangeRequestRequirementDiff({ item, fields, builtinLayout = nul
                         columnKey={row.columnKey}
                         isAttachments={row.isAttachments}
                         value={row.after}
+                        siblings={after?.data}
                         workspaceSlug={workspaceSlug}
                         tone={row.changed ? "new" : undefined}
                       />
@@ -459,6 +467,7 @@ export function ChangeRequestRequirementDiff({ item, fields, builtinLayout = nul
                               <SideValue
                                 field={child}
                                 value={afterValue}
+                                siblings={row.after}
                                 workspaceSlug={workspaceSlug}
                                 tone="new"
                               />
@@ -466,22 +475,30 @@ export function ChangeRequestRequirementDiff({ item, fields, builtinLayout = nul
                               <SideValue
                                 field={child}
                                 value={beforeValue}
+                                siblings={row.before}
                                 workspaceSlug={workspaceSlug}
                                 tone="old"
                               />
                             ) : isEqual(beforeValue, afterValue) ? (
-                              <SideValue field={child} value={afterValue} workspaceSlug={workspaceSlug} />
+                              <SideValue
+                                field={child}
+                                value={afterValue}
+                                siblings={row.after}
+                                workspaceSlug={workspaceSlug}
+                              />
                             ) : (
                               <Fragment>
                                 <SideValue
                                   field={child}
                                   value={beforeValue}
+                                  siblings={row.before}
                                   workspaceSlug={workspaceSlug}
                                   tone="old"
                                 />
                                 <SideValue
                                   field={child}
                                   value={afterValue}
+                                  siblings={row.after}
                                   workspaceSlug={workspaceSlug}
                                   tone="new"
                                 />

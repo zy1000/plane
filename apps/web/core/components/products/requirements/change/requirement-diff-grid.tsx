@@ -130,6 +130,8 @@ function DiffCell({
   changeType,
   before,
   after,
+  beforeSiblings,
+  afterSiblings,
   workspaceSlug,
   valueClassName,
 }: {
@@ -137,6 +139,9 @@ function DiffCell({
   changeType: TRequirementChangeType;
   before: TRequirementValue | undefined;
   after: TRequirementValue | undefined;
+  /** 同级值（根字段是整行 data，子字段是子行 values）：动态取值要靠它找到自己的规则 */
+  beforeSiblings?: TRequirementData;
+  afterSiblings?: TRequirementData;
   workspaceSlug: string;
   valueClassName?: string;
 }) {
@@ -145,6 +150,7 @@ function DiffCell({
       <LeafValue
         field={field}
         value={after}
+        siblings={afterSiblings}
         workspaceSlug={workspaceSlug}
         className={cn(DIFF_NEW_VALUE, valueClassName)}
       />
@@ -155,13 +161,22 @@ function DiffCell({
       <LeafValue
         field={field}
         value={before}
+        siblings={beforeSiblings}
         workspaceSlug={workspaceSlug}
         className={cn(DIFF_OLD_VALUE, valueClassName)}
       />
     );
   }
   if (isEqual(before, after)) {
-    return <LeafValue field={field} value={before} workspaceSlug={workspaceSlug} className={valueClassName} />;
+    return (
+      <LeafValue
+        field={field}
+        value={before}
+        siblings={beforeSiblings}
+        workspaceSlug={workspaceSlug}
+        className={valueClassName}
+      />
+    );
   }
   return (
     <span className="flex flex-col gap-0.5">
@@ -171,7 +186,8 @@ function DiffCell({
         <LeafValue
           field={field}
           value={before}
-          workspaceSlug={workspaceSlug}
+          siblings={beforeSiblings}
+        workspaceSlug={workspaceSlug}
           className={cn(DIFF_OLD_VALUE, valueClassName)}
         />
       )}
@@ -181,7 +197,8 @@ function DiffCell({
         <LeafValue
           field={field}
           value={after}
-          workspaceSlug={workspaceSlug}
+          siblings={afterSiblings}
+        workspaceSlug={workspaceSlug}
           className={cn(DIFF_NEW_VALUE, valueClassName)}
         />
       )}
@@ -424,6 +441,8 @@ export function RequirementDiffGrid(props: TProps) {
                         changeType={item.change_type}
                         before={beforeData[field.id]}
                         after={afterData[field.id]}
+                        beforeSiblings={beforeData}
+                        afterSiblings={afterData}
                         workspaceSlug={workspaceSlug}
                         valueClassName={valueClassName}
                       />
@@ -483,6 +502,8 @@ export function RequirementDiffGrid(props: TProps) {
                           changeType={cellChangeType}
                           before={beforeValue}
                           after={afterValue}
+                          beforeSiblings={subRow.before}
+                          afterSiblings={subRow.after}
                           workspaceSlug={workspaceSlug}
                           valueClassName={valueClassName}
                         />

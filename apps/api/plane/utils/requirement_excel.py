@@ -1242,7 +1242,7 @@ def parse_rule_value_cell(spec, raw, rule):
     """单元格 → 动态取值的值。rule 是同一行（同一条子记录）里规则来源字段的值。
 
     规则有选项且勾了多选时按多选分隔符切成数组，其余整格当一个值；合法性与写序列化器
-    同一套判定（utils/requirement_rule.check_rule_value）。字段配成「仅提示」时不拦。
+    同一套判定（utils/requirement_rule.check_rule_value）。字段配成「允许保存」时不拦。
     """
     if _is_blank(raw):
         return None, None

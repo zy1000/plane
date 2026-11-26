@@ -26,7 +26,9 @@ const isEmptyValue = (value: unknown) => value === null || value === undefined |
 
 const getConfigSummary = (
   config: TRequirementField["config"],
-  t: (key: string, values?: Record<string, unknown>) => string
+  t: (key: string, values?: Record<string, unknown>) => string,
+  /** 动态取值的规则来源只存 id，要翻成字段名；找不到就不显示，别把 id 露给用户 */
+  fieldNameById: Map<string, string>
 ) => {
   const parts: string[] = [];
   if (config.selection_mode) {
@@ -51,10 +53,20 @@ const getConfigSummary = (
   if (typeof config.description === "string" && config.description.trim()) {
     parts.push(`${t("workspace_templates.requirement_types.fields.description")}: ${config.description.trim()}`);
   }
+  if (typeof config.rule_field_id === "string") {
+    const sourceName = fieldNameById.get(config.rule_field_id);
+    if (sourceName) parts.push(`${t("requirement_fields.builder.rule_source")}: ${sourceName}`);
+  }
+  if (config.on_violation === "block" || config.on_violation === "warn") {
+    parts.push(
+      `${t("requirement_fields.builder.on_violation")}: ${t(`requirement_fields.builder.on_violation_${config.on_violation}`)}`
+    );
+  }
   const extraConfig = Object.fromEntries(
     Object.entries(config).filter(
       ([key, value]) =>
-        !["selection_mode", "options", "placeholder", "description"].includes(key) && !isEmptyValue(value)
+        !["selection_mode", "options", "placeholder", "description", "rule_field_id", "on_violation"].includes(key) &&
+        !isEmptyValue(value)
     )
   );
   if (Object.keys(extraConfig).length > 0) parts.push(JSON.stringify(extraConfig));
@@ -92,6 +104,17 @@ export function SchemaDiffList({ items, requirementTypes }: TSchemaDiffListProps
     return ordered;
   }, [items, requirementTypes]);
 
+  // 只认得本次变更单里出现过的字段：规则来源没动的话这里找不到名字，摘要里就不写来源
+  const fieldNameById = useMemo(() => {
+    const names = new Map<string, string>();
+    items.forEach((item) => {
+      for (const snapshot of [item.before_snapshot, item.proposed_snapshot] as (TRequirementSchemaChangeSnapshot | null)[]) {
+        if (snapshot?.id && snapshot.name) names.set(snapshot.id, snapshot.name);
+      }
+    });
+    return names;
+  }, [items]);
+
   const formatValue = (
     key: TSchemaCompareKey,
     value: unknown,
@@ -105,7 +128,7 @@ export function SchemaDiffList({ items, requirementTypes }: TSchemaDiffListProps
       return t("workspace_products.requirements.change.field_position", { position: value });
     }
     if (key === "config" && typeof value === "object") {
-      const parts = getConfigSummary(value as TRequirementField["config"], t);
+      const parts = getConfigSummary(value as TRequirementField["config"], t, fieldNameById);
       return parts.length ? parts.join(" · ") : t("workspace_products.requirements.change.empty_value");
     }
     if (key === "default_value" && snapshot?.field_type === "select") {
