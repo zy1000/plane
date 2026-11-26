@@ -210,7 +210,7 @@ export const OverdueRecordsTable = observer(({ records, isLoading = false, onOpe
           filtersRow={<FiltersRow filter={filter} />}
           actions={() => (
             <div className="flex items-center gap-2">
-              <div className="flex items-center gap-0.5 rounded-md border border-subtle bg-surface-1 p-0.5">
+              <div className="flex items-center gap-0.5 rounded-md bg-layer-3 p-0.5">
                 {QUICK_STATUS_FILTERS.map((item) => {
                   const isActive = quickStatusFilter === item.key;
 
@@ -221,7 +221,7 @@ export const OverdueRecordsTable = observer(({ records, isLoading = false, onOpe
                       aria-pressed={isActive}
                       className={cn(
                         "h-6 rounded-sm px-2 text-11 transition-colors",
-                        isActive ? "bg-accent-subtle font-medium text-accent-primary" : "text-secondary hover:bg-layer-2-hover"
+                        isActive ? "bg-surface-1 font-semibold text-accent-primary shadow-raised-100 ring-1 ring-accent-subtle" : "text-secondary hover:text-primary"
                       )}
                       onClick={() =>
                         setQuickStatusFilter((current) => (current === item.key ? "all" : item.key))

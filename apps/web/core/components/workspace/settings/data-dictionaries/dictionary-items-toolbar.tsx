@@ -36,7 +36,7 @@ export function DictionaryItemsToolbar(props: Props) {
         />
       </div>
 
-      <div className="flex h-8 items-center gap-0.5 rounded-md border border-subtle bg-surface-1 p-0.5" role="group">
+      <div className="flex h-8 items-center gap-0.5 rounded-md bg-layer-3 p-0.5" role="group">
         {SORTS.map((option) => (
           <button
             key={option}
@@ -44,7 +44,7 @@ export function DictionaryItemsToolbar(props: Props) {
             onClick={() => onSortChange(option)}
             className={cn(
               "h-full rounded px-2.5 text-12 whitespace-nowrap transition-colors",
-              sort === option ? "bg-layer-2 font-medium text-primary" : "text-secondary hover:text-primary"
+              sort === option ? "bg-surface-1 font-semibold text-accent-primary shadow-raised-100 ring-1 ring-accent-subtle" : "text-secondary hover:text-primary"
             )}
           >
             {t(`${I18N}.toolbar.sort_${option}`)}

@@ -436,7 +436,7 @@ export const TimesheetReport = observer(function TimesheetReport({
 
         <div className="ml-auto flex items-center gap-1.5">
           {/* 日期快捷预设 —— 点击切换日期筛选；再次点击已激活项取消 */}
-          <div className="flex items-center gap-0.5 rounded-md border border-subtle-1 bg-surface-1 p-0.5">
+          <div className="flex items-center gap-0.5 rounded-md bg-layer-3 p-0.5">
             {DATE_PRESETS.map((preset) => {
               const active = activePresetKey === preset.key;
               return (
@@ -447,8 +447,8 @@ export const TimesheetReport = observer(function TimesheetReport({
                   className={cn(
                     "h-6 rounded-sm px-2 text-11 transition-colors",
                     active
-                      ? "bg-accent-subtle text-accent-primary font-medium"
-                      : "text-secondary hover:bg-layer-2-hover"
+                      ? "bg-surface-1 font-semibold text-accent-primary shadow-raised-100 ring-1 ring-accent-subtle"
+                      : "text-secondary hover:text-primary"
                   )}
                 >
                   {preset.label}

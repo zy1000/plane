@@ -205,7 +205,7 @@ export const TimesheetOverview = observer(function TimesheetOverview({ workspace
                 <ChevronRight className="h-3.5 w-3.5" />
               </button>
             </div>
-            <div className="flex items-center rounded-md border border-subtle bg-surface-1 p-0.5">
+            <div className="flex items-center gap-0.5 rounded-md bg-layer-3 p-0.5">
               {MODE_OPTIONS.map((opt) => {
                 const Icon = opt.icon;
                 const isActive = mode === opt.key;
@@ -217,8 +217,8 @@ export const TimesheetOverview = observer(function TimesheetOverview({ workspace
                     className={cn(
                       "flex h-[22px] cursor-pointer items-center gap-1.5 rounded-[3px] px-2.5 text-sm font-medium transition-colors",
                       isActive
-                        ? "bg-accent-primary/10 text-accent-primary"
-                        : "text-secondary hover:text-primary hover:bg-layer-1"
+                        ? "bg-surface-1 font-semibold text-accent-primary shadow-raised-100 ring-1 ring-accent-subtle"
+                        : "text-secondary hover:text-primary"
                     )}
                   >
                     <Icon className="h-3.5 w-3.5" />
