@@ -51,6 +51,11 @@ urlpatterns = [
         name="requirement-type-detail",
     ),
     path(
+        "workspaces/<str:slug>/requirement-types/<uuid:pk>/copy/",
+        RequirementTypeViewSet.as_view({"post": "copy"}),
+        name="requirement-type-copy",
+    ),
+    path(
         "workspaces/<str:slug>/requirement-types/<uuid:pk>/configuration/",
         RequirementTypeConfigurationAPIView.as_view(),
         name="requirement-type-configuration",

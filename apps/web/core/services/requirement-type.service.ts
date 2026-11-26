@@ -63,6 +63,19 @@ export class RequirementTypeService extends APIService {
       });
   }
 
+  /** 复制成新类型：字段结构、说明照搬来源，名称与图标由 payload 给 */
+  async copyRequirementType(
+    workspaceSlug: string,
+    requirementTypeId: string,
+    payload: Pick<TCreateRequirementTypePayload, "name" | "logo_props">
+  ): Promise<TRequirementType> {
+    return this.post(`/api/workspaces/${workspaceSlug}/requirement-types/${requirementTypeId}/copy/`, payload)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
   async getConfiguration(workspaceSlug: string, requirementTypeId: string): Promise<TRequirementTypeConfiguration> {
     return this.get(`/api/workspaces/${workspaceSlug}/requirement-types/${requirementTypeId}/configuration/`)
       .then((response) => response?.data)

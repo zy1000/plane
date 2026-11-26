@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
-import { ChevronRight, Pencil, Plus, Trash2 } from "lucide-react";
+import { ChevronRight, Copy, Pencil, Plus, Trash2 } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { RequirementIcon } from "@plane/propel/icons";
@@ -36,6 +36,20 @@ const StatusBadge = ({
   );
 };
 
+/**
+ * 「X 副本」，已被占用就「X 副本 2」「X 副本 3」…；名称上限 255，超了截来源名。
+ * 按完整字符截（Array.from），不按 UTF-16 码元：slice 会把表情切成半个，后端直接拒收。
+ */
+const getCopyName = (name: string, takenNames: string[]) => {
+  const taken = new Set(takenNames);
+  const characters = Array.from(name);
+  for (let index = 1; ; index += 1) {
+    const suffix = index === 1 ? " 副本" : ` 副本 ${index}`;
+    const candidate = `${characters.slice(0, 255 - suffix.length).join("")}${suffix}`;
+    if (!taken.has(candidate)) return candidate;
+  }
+};
+
 type Props = {
   workspaceSlug: string;
   canEdit: boolean;
@@ -45,6 +59,10 @@ type Props = {
   isMutating: boolean;
   fetchRequirementTypes: () => Promise<TRequirementType[]>;
   createRequirementType: (payload: TCreateRequirementTypePayload) => Promise<TRequirementType>;
+  copyRequirementType: (
+    id: string,
+    payload: Pick<TCreateRequirementTypePayload, "name" | "logo_props">
+  ) => Promise<TRequirementType>;
   updateRequirementType: (id: string, payload: TUpdateRequirementTypePayload) => Promise<TRequirementType>;
   deleteRequirementType: (id: string) => Promise<void>;
 };
@@ -59,6 +77,7 @@ export function RequirementTypesList(props: Props) {
     isMutating,
     fetchRequirementTypes,
     createRequirementType,
+    copyRequirementType,
     updateRequirementType,
     deleteRequirementType,
   } = props;
@@ -66,6 +85,8 @@ export function RequirementTypesList(props: Props) {
   const navigate = useNavigate();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [pendingEdit, setPendingEdit] = useState<TRequirementType | null>(null);
+  // 预填名称在点「复制」那一刻算好：复制成功后列表里多出新类型，现算会让弹窗里的名称跟着变
+  const [pendingCopy, setPendingCopy] = useState<{ source: TRequirementType; name: string } | null>(null);
   const [pendingDelete, setPendingDelete] = useState<TRequirementType | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [search, setSearch] = useState("");
@@ -280,6 +301,23 @@ export function RequirementTypesList(props: Props) {
                         </span>
                       </CustomMenu.MenuItem>
                       <CustomMenu.MenuItem
+                        disabled={!canEdit}
+                        onClick={() =>
+                          setPendingCopy({
+                            source: requirementType,
+                            name: getCopyName(
+                              requirementType.name,
+                              requirementTypes.map((item) => item.name)
+                            ),
+                          })
+                        }
+                      >
+                        <span className="flex items-center gap-2">
+                          <Copy className="size-3.5" strokeWidth={2} />
+                          复制
+                        </span>
+                      </CustomMenu.MenuItem>
+                      <CustomMenu.MenuItem
                         disabled={!canEdit || isInUse}
                         onClick={() => setPendingDelete(requirementType)}
                       >
@@ -324,6 +362,23 @@ export function RequirementTypesList(props: Props) {
             title: t("success"),
             message: t("workspace_templates.requirement_types.toast.created"),
           });
+          navigate(getRequirementTypePath(workspaceSlug, created.id));
+        }}
+        isSubmitting={isMutating}
+      />
+
+      <RequirementTypeCreateModal
+        isOpen={Boolean(pendingCopy)}
+        onClose={() => setPendingCopy(null)}
+        copySource={pendingCopy?.source}
+        copyName={pendingCopy?.name}
+        onCreate={(payload) => {
+          if (!pendingCopy) throw new Error("Copy source is required.");
+          return copyRequirementType(pendingCopy.source.id, payload);
+        }}
+        onCreated={(created) => {
+          setPendingCopy(null);
+          setToast({ type: TOAST_TYPE.SUCCESS, title: t("success"), message: "需求模板已复制。" });
           navigate(getRequirementTypePath(workspaceSlug, created.id));
         }}
         isSubmitting={isMutating}

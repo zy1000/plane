@@ -1,3 +1,4 @@
+from django.db import transaction
 from django.db.models import Count, Q
 from rest_framework import status
 from rest_framework.response import Response
@@ -17,6 +18,7 @@ from plane.db.models import (
 )
 from plane.utils.requirement import (
     RequirementDataLossError,
+    copy_requirement_type_fields,
     count_requirement_field_values,
     resolve_builtin_field_layout,
     serialize_requirement_type_field_tree,
@@ -176,6 +178,49 @@ class RequirementTypeViewSet(BaseViewSet):
 
         requirement_type.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+    def copy(self, request, slug, pk):
+        """复制成一个新类型：说明、图标、字段结构照搬来源，名称（与可选的图标）由请求给。"""
+        if not has_workspace_permission(request.user, slug, PermissionKey.WORKSPACE_REQUIREMENT_TYPE_MANAGE):
+            return self._forbidden()
+        try:
+            with transaction.atomic():
+                # 锁住来源行再读：保存字段配置（RequirementTypeConfigurationWriteSerializer.save）
+                # 拿的是同一把锁，读到的说明、内置字段布局和字段才是同一个版本 —— 布局在类型
+                # 行上、字段在另一张表，不锁的话两次读之间插进一次保存，副本就是旧布局配新字段。
+                # of=("self",)：过滤条件 join 了工作区，不该把工作区行一起锁住。
+                source = (
+                    RequirementType.objects.select_for_update(of=("self",))
+                    .filter(workspace__slug=slug, pk=pk)
+                    .first()
+                )
+                if source is None:
+                    return Response(
+                        {"error": "Requirement type not found."},
+                        status=status.HTTP_404_NOT_FOUND,
+                    )
+                serializer = self.get_serializer(
+                    data={
+                        "description": source.description,
+                        "logo_props": source.logo_props,
+                        **{
+                            key: request.data[key]
+                            for key in ("name", "logo_props")
+                            if key in request.data
+                        },
+                    }
+                )
+                serializer.is_valid(raise_exception=True)
+                requirement_type = serializer.save(workspace_id=source.workspace_id)
+                copy_requirement_type_fields(
+                    source, requirement_type, actor=request.user
+                )
+        except ValueError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(
+            self.get_serializer(self._get_requirement_type(requirement_type.id)).data,
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class RequirementTypeConfigurationAPIView(BaseAPIView):

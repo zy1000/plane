@@ -63,6 +63,21 @@ export const useRequirementTypes = (workspaceSlug: string | undefined) => {
     [upsertRequirementType, workspaceSlug]
   );
 
+  const copyRequirementType = useCallback(
+    async (requirementTypeId: string, payload: Pick<TCreateRequirementTypePayload, "name" | "logo_props">) => {
+      if (!workspaceSlug) throw new Error("Workspace is required.");
+      setIsMutating(true);
+      try {
+        const response = await requirementTypeService.copyRequirementType(workspaceSlug, requirementTypeId, payload);
+        upsertRequirementType(response);
+        return response;
+      } finally {
+        setIsMutating(false);
+      }
+    },
+    [upsertRequirementType, workspaceSlug]
+  );
+
   const updateRequirementType = useCallback(
     async (requirementTypeId: string, payload: TUpdateRequirementTypePayload) => {
       if (!workspaceSlug) throw new Error("Workspace is required.");
@@ -123,6 +138,7 @@ export const useRequirementTypes = (workspaceSlug: string | undefined) => {
     error,
     fetchRequirementTypes,
     createRequirementType,
+    copyRequirementType,
     updateRequirementType,
     deleteRequirementType,
     deleteRequirementTypes,

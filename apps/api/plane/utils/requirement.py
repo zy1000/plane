@@ -1040,6 +1040,67 @@ def sync_requirement_type_fields(
     return created_field_ids
 
 
+def copy_requirement_type_fields(source, target, *, actor=None):
+    """把 source 的字段结构复制到刚建好、还没有字段的 target 上。
+
+    带过去：启用中的字段（含表单子字段、通用字段绑定）与内置字段布局，列序不变。
+    不带：回收站里的字段。
+
+    落库走 sync_requirement_type_fields，校验与字段结构修订都是同一套。client_id 用来源
+    字段的 id —— 动态取值字段 config.rule_field_id 里存的来源字段 id，会在
+    resolve_rule_value_sources 里被换成新字段的 id。
+    """
+    fields = list(
+        RequirementField.objects.filter(
+            requirement_type=source, is_active=True
+        ).order_by("sort_order", "created_at", "id")
+    )
+    children_by_parent = {}
+    for field in fields:
+        if field.parent_field_id:
+            children_by_parent.setdefault(field.parent_field_id, []).append(field)
+
+    def payload_of(field):
+        return {
+            "client_id": str(field.id),
+            "library_field_id": field.library_field_id,
+            "name": field.name,
+            "field_type": field.field_type,
+            "is_required": field.is_required,
+            "is_active": True,
+            "config": field.config,
+            "default_value": field.default_value,
+            "show_in_library": field.show_in_library,
+            "children": [
+                payload_of(child) for child in children_by_parent.get(field.id, [])
+            ],
+        }
+
+    roots = [field for field in fields if field.parent_field_id is None]
+    # 内置列与自定义根字段按 sort_order 归并（相等内置在前，同读侧），内置列落在第几个
+    # 就是它的 position，根字段由 sync 填进剩下的槽位
+    merged = sorted(
+        [(entry["sort_order"], 0, entry) for entry in resolve_builtin_field_layout(source)]
+        + [(field.sort_order, 1, field) for field in roots],
+        key=lambda item: item[:2],
+    )
+    builtin_layout = [
+        {
+            "key": item["key"],
+            "show_in_library": item["show_in_library"],
+            "position": position,
+        }
+        for position, (_, kind, item) in enumerate(merged)
+        if kind == 0
+    ]
+    sync_requirement_type_fields(
+        requirement_type=target,
+        field_payloads=[payload_of(field) for field in roots],
+        builtin_layout=builtin_layout,
+        actor=actor,
+    )
+
+
 def _reprune_pending_change_items(
     *, requirement_type, removed_fields, reset_select_fields, revision
 ):

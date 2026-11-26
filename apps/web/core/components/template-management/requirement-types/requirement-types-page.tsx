@@ -20,6 +20,7 @@ export const RequirementTypesPage = observer(function RequirementTypesPage({ wor
     error,
     fetchRequirementTypes,
     createRequirementType,
+    copyRequirementType,
     updateRequirementType,
     deleteRequirementType,
   } = useRequirementTypes(workspaceSlug);
@@ -39,6 +40,7 @@ export const RequirementTypesPage = observer(function RequirementTypesPage({ wor
           error={error}
           fetchRequirementTypes={fetchRequirementTypes}
           createRequirementType={createRequirementType}
+          copyRequirementType={copyRequirementType}
           updateRequirementType={updateRequirementType}
           deleteRequirementType={deleteRequirementType}
         />
