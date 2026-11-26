@@ -2035,9 +2035,15 @@ def filter_requirement_row_ids(
         if field_type == RequirementFieldType.RULE:
             return str(value.get("expr") or "") if isinstance(value, dict) else ""
         if field_type == RequirementFieldType.RULE_VALUE:
-            # 可能是富文本（规则写的是「富文本」），统一剥标签；多选是数组
+            # 可能是富文本（规则写的是「富文本」），统一剥标签；多选是数组；图片按文件名搜
             items = value if isinstance(value, list) else [value]
-            return " ".join(strip_tags(str(item)) for item in items if item)
+            return " ".join(
+                str(item.get("name") or "")
+                if isinstance(item, dict)
+                else strip_tags(str(item))
+                for item in items
+                if item
+            )
         return str(value or "")
 
     normalized_search = search.strip().casefold()

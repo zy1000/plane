@@ -31,7 +31,7 @@ import {
 } from "./requirement-rich-text";
 import { getRequirementSelectLabel, getRequirementSelectMode, getRequirementSelectOptions } from "./requirement-select";
 import { RequirementTextCell } from "./requirement-text-cell";
-import { asRuleValue, isRuleValue, resolveRule } from "./rule/requirement-rule";
+import { asRuleValue, isRuleValue, resolveRule, ruleValueAssets } from "./rule/requirement-rule";
 import type { TResolvedRule } from "./rule/requirement-rule";
 import { RequirementRuleDisplay, RequirementRuleEditor } from "./rule/requirement-rule-editor";
 import { RequirementRuleValueDisplay, RequirementRuleValueEditor } from "./rule/requirement-rule-value-editor";
@@ -217,6 +217,86 @@ export const RequirementAttachmentChips = ({
   );
 };
 
+/** downloadSrc 为 null = 大网 / 小网隔离下不可下载：看图照常，弹窗里两个下载入口不出现 */
+type TImagePreview = { src: string; downloadSrc: string | null; name: string };
+
+const imagePreviewOf = (asset: TRequirementAssetRef, workspaceSlug: string): TImagePreview | null => {
+  const src = getEditorAssetSrc({ assetId: asset.asset_id, workspaceSlug });
+  if (!src) return null;
+  const downloadSrc = canDownloadFile(asset)
+    ? getEditorAssetDownloadSrc({ assetId: asset.asset_id, workspaceSlug })
+    : null;
+  return { src, downloadSrc: downloadSrc ?? null, name: asset.name };
+};
+
+/** 看大图的弹窗。只读缩略图与编辑态缩略图共用 */
+const RequirementImagePreviewModal = ({
+  preview,
+  onClose,
+}: {
+  preview: TImagePreview | null;
+  onClose: () => void;
+}) => {
+  const { t } = useTranslation();
+  return (
+    <Modal
+      open={Boolean(preview)}
+      onCancel={onClose}
+      afterOpenChange={(visible) => {
+        if (!visible) onClose();
+      }}
+      footer={null}
+      modalRender={(modal) => <div data-prevent-outside-click>{modal}</div>}
+      width="100vw"
+      style={{ top: 0, paddingBottom: 0 }}
+      styles={{ body: { padding: 0 } }}
+      destroyOnHidden
+      title={
+        <div className="flex items-center justify-between gap-3 pr-8" style={{ marginTop: -16, marginBottom: -16 }}>
+          <Typography.Text strong className="min-w-0 truncate">
+            {preview?.name ?? t("requirement_fields.field_types.image")}
+          </Typography.Text>
+          {preview?.downloadSrc && (
+            <a
+              href={preview.downloadSrc}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="inline-flex shrink-0 items-center gap-1 text-13 font-medium text-accent-primary hover:text-accent-primary"
+            >
+              <Download className="size-3.5" />
+              {t("page_navigation_pane.tabs.assets.download_button")}
+            </a>
+          )}
+        </div>
+      }
+    >
+      <div
+        className="flex items-center justify-center overflow-auto bg-surface-2 p-4"
+        style={{ height: "calc(100vh - 56px)" }}
+      >
+        {preview?.src &&
+          (preview.downloadSrc ? (
+            <a
+              href={preview.downloadSrc}
+              target="_blank"
+              rel="noreferrer noopener"
+              title={t("page_navigation_pane.tabs.assets.download_button")}
+              className="inline-flex max-h-full max-w-full"
+            >
+              <img
+                src={preview.src}
+                alt={preview.name}
+                className="max-h-full max-w-full object-contain"
+              />
+            </a>
+          ) : (
+            <img src={preview.src} alt={preview.name} className="max-h-full max-w-full object-contain" />
+          ))}
+      </div>
+    </Modal>
+  );
+};
+
 const RequirementImageValue = ({
   assets,
   workspaceSlug,
@@ -226,92 +306,82 @@ const RequirementImageValue = ({
   workspaceSlug: string;
   className?: string;
 }) => {
-  const { t } = useTranslation();
-  // downloadSrc 为 null = 大网 / 小网隔离下不可下载：看图照常，弹窗里两个下载入口不出现
-  const [preview, setPreview] = useState<{ src: string; downloadSrc: string | null; name: string } | null>(null);
+  const [preview, setPreview] = useState<TImagePreview | null>(null);
 
   return (
     <>
       <span className="flex max-w-64 flex-wrap gap-1.5">
-        {assets.map((asset) => {
-          const src = getEditorAssetSrc({ assetId: asset.asset_id, workspaceSlug });
-          const downloadSrc = canDownloadFile(asset)
-            ? getEditorAssetDownloadSrc({ assetId: asset.asset_id, workspaceSlug })
-            : null;
-          return (
-            <button
-              key={asset.asset_id}
-              type="button"
-              title={asset.name}
-              onClick={() => {
-                if (!src) return;
-                setPreview({ src, downloadSrc: downloadSrc ?? null, name: asset.name });
-              }}
-              className={cn(
-                "block size-12 shrink-0 overflow-hidden rounded-md border border-subtle bg-layer-2 transition-opacity hover:opacity-90",
-                className
-              )}
-            >
-              <img src={src} alt={asset.name} className="size-full object-cover" loading="lazy" />
-            </button>
-          );
-        })}
-      </span>
-      <Modal
-        open={Boolean(preview)}
-        onCancel={() => setPreview(null)}
-        afterOpenChange={(visible) => {
-          if (!visible) setPreview(null);
-        }}
-        footer={null}
-        modalRender={(modal) => <div data-prevent-outside-click>{modal}</div>}
-        width="100vw"
-        style={{ top: 0, paddingBottom: 0 }}
-        styles={{ body: { padding: 0 } }}
-        destroyOnHidden
-        title={
-          <div className="flex items-center justify-between gap-3 pr-8" style={{ marginTop: -16, marginBottom: -16 }}>
-            <Typography.Text strong className="min-w-0 truncate">
-              {preview?.name ?? t("requirement_fields.field_types.image")}
-            </Typography.Text>
-            {preview?.downloadSrc && (
-              <a
-                href={preview.downloadSrc}
-                target="_blank"
-                rel="noreferrer noopener"
-                className="inline-flex shrink-0 items-center gap-1 text-13 font-medium text-accent-primary hover:text-accent-primary"
-              >
-                <Download className="size-3.5" />
-                {t("page_navigation_pane.tabs.assets.download_button")}
-              </a>
+        {assets.map((asset) => (
+          <button
+            key={asset.asset_id}
+            type="button"
+            title={asset.name}
+            onClick={() => setPreview(imagePreviewOf(asset, workspaceSlug))}
+            className={cn(
+              "block size-12 shrink-0 overflow-hidden rounded-md border border-subtle bg-layer-2 transition-opacity hover:opacity-90",
+              className
             )}
-          </div>
-        }
-      >
-        <div
-          className="flex items-center justify-center overflow-auto bg-surface-2 p-4"
-          style={{ height: "calc(100vh - 56px)" }}
-        >
-          {preview?.src &&
-            (preview.downloadSrc ? (
-              <a
-                href={preview.downloadSrc}
-                target="_blank"
-                rel="noreferrer noopener"
-                title={t("page_navigation_pane.tabs.assets.download_button")}
-                className="inline-flex max-h-full max-w-full"
-              >
-                <img
-                  src={preview.src}
-                  alt={preview.name}
-                  className="max-h-full max-w-full cursor-zoom-in object-contain"
-                />
-              </a>
-            ) : (
-              <img src={preview.src} alt={preview.name} className="max-h-full max-w-full object-contain" />
-            ))}
-        </div>
-      </Modal>
+          >
+            <img
+              src={getEditorAssetSrc({ assetId: asset.asset_id, workspaceSlug })}
+              alt={asset.name}
+              className="size-full object-cover"
+              loading="lazy"
+            />
+          </button>
+        ))}
+      </span>
+      <RequirementImagePreviewModal preview={preview} onClose={() => setPreview(null)} />
+    </>
+  );
+};
+
+/** 编辑态的图片缩略图：点图看大图，右上角 × 移除。图片字段与规则写成「图片」的动态取值共用 */
+const RequirementEditableImages = ({
+  assets,
+  workspaceSlug,
+  onRemove,
+}: {
+  assets: TRequirementAssetRef[];
+  workspaceSlug: string;
+  onRemove: (assetId: string) => void;
+}) => {
+  const { t } = useTranslation();
+  const [preview, setPreview] = useState<TImagePreview | null>(null);
+
+  return (
+    <>
+      <div className="flex flex-wrap gap-1">
+        {assets.map((asset) => (
+          <span
+            key={asset.asset_id}
+            title={asset.name}
+            className="relative size-9 shrink-0 overflow-hidden rounded-md border border-subtle bg-layer-2"
+          >
+            <button
+              type="button"
+              onClick={() => setPreview(imagePreviewOf(asset, workspaceSlug))}
+              className="block size-full cursor-pointer transition-opacity hover:opacity-90"
+            >
+              <img
+                src={getEditorAssetSrc({ assetId: asset.asset_id, workspaceSlug })}
+                alt={asset.name}
+                className="size-full object-cover"
+                loading="lazy"
+              />
+            </button>
+            <button
+              type="button"
+              className="absolute top-0.5 right-0.5 grid size-3.5 place-items-center rounded-full bg-surface-1/90 text-10 leading-none text-secondary shadow-sm hover:bg-danger-subtle hover:text-danger-primary"
+              onClick={() => onRemove(asset.asset_id)}
+              aria-label={t("delete")}
+            >
+              ×
+            </button>
+          </span>
+        ))}
+      </div>
+      <RequirementImagePreviewModal preview={preview} onClose={() => setPreview(null)} />
     </>
   );
 };
@@ -396,10 +466,13 @@ export const LeafValue = ({
       </span>
     );
   }
-  if (field.field_type === "attachment" || field.field_type === "image") {
-    const assets = Array.isArray(value) ? (value as TRequirementAssetRef[]) : [];
+  // 动态取值存着图片（规则写的是「图片」）就照图片字段展示。凭值本身认，不看当前规则：
+  // 规则后来改了、或 diff / 历史里拿不到同级值时，已经传上去的图不能变成一格空白
+  const ruleImages = field.field_type === "rule_value" ? ruleValueAssets(value) : [];
+  if (field.field_type === "attachment" || field.field_type === "image" || ruleImages.length > 0) {
+    const assets = ruleImages.length > 0 ? ruleImages : Array.isArray(value) ? (value as TRequirementAssetRef[]) : [];
     if (!assets.length) return null;
-    if (field.field_type === "image") {
+    if (field.field_type !== "attachment") {
       return <RequirementImageValue assets={assets} workspaceSlug={workspaceSlug} className={className} />;
     }
     return (
@@ -1125,13 +1198,25 @@ export const LeafEditor = ({
   const isTableCell = variant === "grid" || variant === "compact";
   const valueTextClass = variant === "detail" ? "text-body-xs-medium" : "text-13";
   const rule = resolveSiblingRule(field, siblings);
-  // 编辑态不靠值去猜：规则没写 / 写错时动态取值不可填，不能因为旧值是 HTML 就放出富文本编辑器
+  // 编辑态不靠值去猜：控件形态只跟当前规则走，不能因为旧值是 HTML 就放出富文本编辑器
   const isRichText = field.field_type === "rich_text" || (rule?.state === "ready" && rule.rule.rich);
+  // 规则写成「图片」的动态取值，上传与缩略图复用图片字段那一套
+  const isImageRule = rule?.state === "ready" && rule.rule.image;
+  const isImage = field.field_type === "image" || isImageRule;
   if (field.field_type === "rule") {
     return <RequirementRuleEditor value={value} onChange={onChange} variant={variant} />;
   }
-  if (rule && !isRichText) {
-    return <RequirementRuleValueEditor field={field} value={value} rule={rule} onChange={onChange} variant={variant} />;
+  if (rule && !isRichText && !isImageRule) {
+    return (
+      <RequirementRuleValueEditor
+        field={field}
+        value={value}
+        rule={rule}
+        onChange={onChange}
+        variant={variant}
+        deferCommit={deferTextCommit ?? variant === "detail"}
+      />
+    );
   }
   if (field.field_type === "boolean") {
     // 撑到和其它编辑器一样的行高：裸开关只有 16px 高，夹在一排控件里会矮一截。
@@ -1258,8 +1343,9 @@ export const LeafEditor = ({
       />
     );
   }
-  if (field.field_type === "attachment" || field.field_type === "image") {
-    const assets = Array.isArray(value) ? (value as TRequirementAssetRef[]) : [];
+  if (field.field_type === "attachment" || isImage) {
+    // 规则改成「图片」之前填的文字不是资产，逐项认（附件 / 图片字段的值本来就全是资产）
+    const assets = ruleValueAssets(value);
     const removeAsset = (assetId: string) => {
       onRemoveAsset?.(assetId);
       onChange(assets.filter((item) => item.asset_id !== assetId));
@@ -1267,29 +1353,8 @@ export const LeafEditor = ({
     // 附件是一叠卡片加一个上传区，不是输入框，铺满整格没有意义 —— grid 下补回格子内边距
     return (
       <div className={cn("flex w-full min-w-0 flex-col gap-1", variant === "grid" && "px-page-x py-1.5")}>
-        {field.field_type === "image" ? (
-          <div className="flex flex-wrap gap-1">
-            {assets.map((asset) => {
-              const src = getEditorAssetSrc({ assetId: asset.asset_id, workspaceSlug });
-              return (
-                <span
-                  key={asset.asset_id}
-                  title={asset.name}
-                  className="relative size-9 shrink-0 overflow-hidden rounded-md border border-subtle bg-layer-2"
-                >
-                  <img src={src} alt={asset.name} className="size-full object-cover" loading="lazy" />
-                  <button
-                    type="button"
-                    className="absolute top-0.5 right-0.5 grid size-3.5 place-items-center rounded-full bg-surface-1/90 text-10 leading-none text-secondary shadow-sm hover:bg-danger-subtle hover:text-danger-primary"
-                    onClick={() => removeAsset(asset.asset_id)}
-                    aria-label={t("delete")}
-                  >
-                    ×
-                  </button>
-                </span>
-              );
-            })}
-          </div>
+        {isImage ? (
+          <RequirementEditableImages assets={assets} workspaceSlug={workspaceSlug} onRemove={removeAsset} />
         ) : (
           assets.map((asset) => (
             <span
@@ -1322,20 +1387,16 @@ export const LeafEditor = ({
         >
           <Paperclip className="size-3 shrink-0" />
           <span className="truncate">
-            {t(
-              field.field_type === "image"
-                ? "requirement_grid.data.upload_image"
-                : "requirement_grid.data.upload_file"
-            )}
+            {t(isImage ? "requirement_grid.data.upload_image" : "requirement_grid.data.upload_file")}
           </span>
           <input
             type="file"
             className="sr-only"
-            accept={field.field_type === "image" ? "image/*" : undefined}
+            accept={isImage ? "image/*" : undefined}
             onChange={(event) => {
               const file = event.target.files?.[0];
               if (!file) return;
-              void onUpload(file, field.field_type === "image").then((asset) => onChange([...assets, asset]));
+              void onUpload(file, isImage).then((asset) => onChange([...assets, asset]));
               event.target.value = "";
             }}
           />

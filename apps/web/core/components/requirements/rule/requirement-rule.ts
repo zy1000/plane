@@ -11,8 +11,14 @@
  *   [0,100]/5                 步长
  *   [2026-01-01,2026-12-31]   日期
  *   富文本                    自由填写
+ *   图片                      上传图片
+ *   留空                      按普通文本填写
+ *
+ * 选项规则的右花括号后面可以带两个标志符号：{A,B,C}+ 多选，{A,B,C}* 允许填写选项以外的值，
+ * {A,B,C}+* 两者都要。界面上的两个开关与它们是同一回事（见 splitRuleFlags / formatRuleText），
+ * 存库时拆成 { expr, multiple, allow_custom }，parseRule 只认不带标志的 expr。
  */
-import type { TRequirementRuleValue, TRequirementValue } from "@plane/types";
+import type { TRequirementAssetRef, TRequirementRuleValue, TRequirementValue } from "@plane/types";
 
 export type TRuleInterval = {
   type: "number" | "date";
@@ -43,7 +49,7 @@ export type TRuleParseError =
   | "bad_step"
   | "step_on_date";
 
-export type TRuleDefinition = { rich: boolean; options: string[]; intervals: TRuleInterval[] };
+export type TRuleDefinition = { rich: boolean; image: boolean; options: string[]; intervals: TRuleInterval[] };
 
 export type TParsedRule =
   | { ok: true; empty: true }
@@ -53,6 +59,7 @@ export type TParsedRule =
 export type TRuleValueError =
   | "must_be_string"
   | "must_be_list"
+  | "must_be_images"
   | "duplicate"
   | "not_in_options"
   | "not_number"
@@ -61,7 +68,9 @@ export type TRuleValueError =
   | "step_mismatch"
   | "invalid_date";
 
-export type TRuleValueCheck = { ok: true; value: string | string[] | null } | { ok: false; error: TRuleValueError };
+export type TRuleValueCheck =
+  | { ok: true; value: string | string[] | TRequirementAssetRef[] | null }
+  | { ok: false; error: TRuleValueError };
 
 const OPEN_BRACE = "{｛";
 const CLOSE_BRACE = "}｝";
@@ -69,6 +78,10 @@ const OPEN_BRACKET = "[［【(（";
 const CLOSE_BRACKET = "]］】)）";
 const COMMA = ",，";
 const RICH_KEYWORD = "富文本";
+const IMAGE_KEYWORD = "图片";
+const MULTIPLE_FLAGS = "+＋";
+const ALLOW_CUSTOM_FLAGS = "*＊";
+const FLAG_CHARS = `${MULTIPLE_FLAGS}${ALLOW_CUSTOM_FLAGS} \t\u3000`;
 const UNBOUNDED = ["", "∞", "+∞", "-∞"];
 
 const NUMBER_WITH_UNIT = /^([+-]?[0-9]+(?:\.[0-9]+)?)\s*(.*)$/;
@@ -258,15 +271,45 @@ const splitSetItems = (inner: string): string[] => {
   return items;
 };
 
+/**
+ * `{A,B}+*` -> { expr: "{A,B}", multiple: true, allowCustom: true }。
+ *
+ * 两个标志只对选项规则有意义，所以只有跟在右花括号后面的 + / * 才当标志剥掉；别的写法
+ * 原样返回，交给 parseRule 去报错 —— `[1,30]+` 是写错了，不该悄悄忽略。
+ */
+export const splitRuleFlags = (raw: string | null | undefined) => {
+  const text = (raw ?? "").trim();
+  let end = text.length;
+  while (end > 0 && FLAG_CHARS.includes(text[end - 1])) end -= 1;
+  const suffix = text.slice(end);
+  if (!suffix || end === 0 || !CLOSE_BRACE.includes(text[end - 1])) {
+    return { expr: text, multiple: false, allowCustom: false };
+  }
+  return {
+    expr: text.slice(0, end),
+    multiple: Array.from(suffix).some((char) => MULTIPLE_FLAGS.includes(char)),
+    allowCustom: Array.from(suffix).some((char) => ALLOW_CUSTOM_FLAGS.includes(char)),
+  };
+};
+
+/** splitRuleFlags 的反向：规则原文 + 标志符号。界面回显与 Excel 导出同一种写法 */
+export const formatRuleText = (expr: string, multiple: boolean, allowCustom: boolean) => {
+  const text = expr.trim();
+  if (!text) return "";
+  return `${text}${multiple ? "+" : ""}${allowCustom ? "*" : ""}`;
+};
+
+/** 解析一条规则（不带标志符号，见 splitRuleFlags） */
 export const parseRule = (raw: string | null | undefined): TParsedRule => {
   const expr = (raw ?? "").trim();
   if (!expr) return { ok: true, empty: true };
-  if (expr === RICH_KEYWORD) return { ok: true, rich: true, options: [], intervals: [] };
+  if (expr === RICH_KEYWORD) return { ok: true, rich: true, image: false, options: [], intervals: [] };
+  if (expr === IMAGE_KEYWORD) return { ok: true, rich: false, image: true, options: [], intervals: [] };
 
   const first = Array.from(expr)[0];
   if (OPEN_BRACKET.includes(first)) {
     const result = parseInterval(expr);
-    return result.ok ? { ok: true, rich: false, options: [], intervals: [result.interval] } : result;
+    return result.ok ? { ok: true, rich: false, image: false, options: [], intervals: [result.interval] } : result;
   }
   if (!OPEN_BRACE.includes(first)) return { ok: false, error: "unrecognized" };
 
@@ -288,7 +331,7 @@ export const parseRule = (raw: string | null | undefined): TParsedRule => {
     if (options.includes(option)) return { ok: false, error: "duplicate_option" };
     options.push(option);
   }
-  return { ok: true, rich: false, options, intervals };
+  return { ok: true, rich: false, image: false, options, intervals };
 };
 
 type TSingleCheck = { ok: true; value: string } | { ok: false; error: TRuleValueError };
@@ -341,6 +384,9 @@ export const checkRuleEntry = (rule: TRuleDefinition, allowCustom: boolean, text
   return { ok: false, error: firstError ?? "not_in_options" };
 };
 
+const isAssetRef = (item: unknown): item is TRequirementAssetRef =>
+  typeof item === "object" && item !== null && Boolean((item as { asset_id?: unknown }).asset_id);
+
 export const checkRuleValue = (
   rule: TRuleDefinition,
   multiple: boolean,
@@ -351,6 +397,13 @@ export const checkRuleValue = (
   if (rule.rich) {
     if (typeof value !== "string") return { ok: false, error: "must_be_string" };
     return { ok: true, value };
+  }
+  if (rule.image) {
+    // 这里只看形状（一组资产引用）；资产是否存在、是不是图片由后端查库
+    if (!Array.isArray(value) || value.some((item) => !isAssetRef(item))) {
+      return { ok: false, error: "must_be_images" };
+    }
+    return { ok: true, value: value.length ? (value as TRequirementAssetRef[]) : null };
   }
   if (multiple && rule.options.length) {
     if (!Array.isArray(value)) return { ok: false, error: "must_be_list" };
@@ -381,8 +434,6 @@ export const checkRuleValue = (
  * 值的读取：字段值 -> 规则 / 取值。读侧一律容错，形状不对就当没填。
  * --------------------------------------------------------------------------- */
 
-export const EMPTY_RULE_VALUE: TRequirementRuleValue = { expr: "", multiple: false, allow_custom: false };
-
 export const asRuleValue = (value: TRequirementValue | undefined): TRequirementRuleValue | null => {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const candidate = value as Partial<TRequirementRuleValue>;
@@ -412,12 +463,19 @@ export const resolveRule = (value: TRequirementValue | undefined): TResolvedRule
   const hasOptions = parsed.options.length > 0;
   return {
     state: "ready",
-    rule: { rich: parsed.rich, options: parsed.options, intervals: parsed.intervals },
+    rule: { rich: parsed.rich, image: parsed.image, options: parsed.options, intervals: parsed.intervals },
     multiple: hasOptions && ruleValue.multiple,
     allowCustom: hasOptions && ruleValue.allow_custom,
     expr: ruleValue.expr.trim(),
   };
 };
+
+/**
+ * 值里的图片（资产引用）。规则写成「图片」时动态取值存的就是它；规则后来改了旧值可能是
+ * 别的形状，所以逐项认，不是资产的丢开。
+ */
+export const ruleValueAssets = (value: TRequirementValue | undefined): TRequirementAssetRef[] =>
+  Array.isArray(value) ? (value as unknown[]).filter(isAssetRef) : [];
 
 /** 取值读成字符串数组。B 的「多选」后来改过时，A 的形状会与之不符，这里两种都认 */
 export const ruleValueEntries = (value: TRequirementValue | undefined): string[] => {
@@ -502,6 +560,8 @@ export const ruleValueErrorText = (error: TRuleValueError, rule: TRuleDefinition
       return "不在可选项内";
     case "duplicate":
       return "取值不能重复";
+    case "must_be_images":
+      return "请上传图片";
     default:
       return "取值格式不正确";
   }
@@ -510,9 +570,13 @@ export const ruleValueErrorText = (error: TRuleValueError, rule: TRuleDefinition
 /** 输入框里「可以填什么」的一句提示，如「1 – 28 的整数」；多段区间用顿号连起来 */
 export const ruleEntryHint = (rule: TRuleDefinition) => rule.intervals.map(intervalSummary).join("、");
 
-/** 一个已存的取值按当前规则是否合法；规则缺失时不判（由调用方单独提示） */
+/** 一个已存的取值按当前规则是否合法；规则没填时是普通文本，不判 */
 export const ruleValueIssue = (resolved: TResolvedRule, value: TRequirementValue | undefined): string | null => {
   if (resolved.state !== "ready" || resolved.rule.rich) return null;
+  // 规则改成「图片」之前填的文字还留着：不是图片
+  if (resolved.rule.image) {
+    return ruleValueEntries(value).length ? ruleValueErrorText("must_be_images", resolved.rule) : null;
+  }
   for (const entry of ruleValueEntries(value)) {
     const result = checkRuleEntry(resolved.rule, resolved.allowCustom, entry.trim());
     if (!result.ok) return ruleValueErrorText(result.error, resolved.rule);
@@ -523,6 +587,8 @@ export const ruleValueIssue = (resolved: TResolvedRule, value: TRequirementValue
 /** 规则写法速查，编辑规则的浮层里列出 */
 export const RULE_SYNTAX_EXAMPLES: Array<{ expr: string; meaning: string }> = [
   { expr: "{A,B,C}", meaning: "选择" },
+  { expr: "{A,B,C}+", meaning: "多选" },
+  { expr: "{A,B,C}*", meaning: "可填选项以外的值" },
   { expr: "[1,30]", meaning: "区间，含两端" },
   { expr: "(0,15]", meaning: "不含左端" },
   { expr: "{[1,15],Yes}", meaning: "区间或选项" },
@@ -530,4 +596,5 @@ export const RULE_SYNTAX_EXAMPLES: Array<{ expr: string; meaning: string }> = [
   { expr: "[0,100]/5", meaning: "按步长取值" },
   { expr: "[2026-01-01,2026-12-31]", meaning: "日期" },
   { expr: "富文本", meaning: "自由填写" },
+  { expr: "图片", meaning: "上传图片" },
 ];

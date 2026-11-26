@@ -49,7 +49,8 @@ export const ExpandableCell = ({
   children,
 }: {
   variant: TExpandableCellVariant;
-  onExpand: () => void;
+  /** 不传就不出展开按钮：只借这层外壳摆只读内容，位置和可编辑时分毫不差 */
+  onExpand?: () => void;
   children: ReactNode;
 }) => {
   const { t } = useTranslation();
@@ -61,14 +62,16 @@ export const ExpandableCell = ({
       )}
     >
       {children}
-      <button
-        type="button"
-        onClick={onExpand}
-        title={t("requirement_grid.data.expand_rich_text")}
-        className="mt-0.5 shrink-0 rounded-sm text-tertiary opacity-0 transition-opacity outline-none group-focus-within/expandable-cell:opacity-100 group-hover/expandable-cell:opacity-100 hover:text-primary focus-visible:opacity-100"
-      >
-        <Maximize2 className="size-3.5" />
-      </button>
+      {onExpand && (
+        <button
+          type="button"
+          onClick={onExpand}
+          title={t("requirement_grid.data.expand_rich_text")}
+          className="mt-0.5 shrink-0 rounded-sm text-tertiary opacity-0 transition-opacity outline-none group-focus-within/expandable-cell:opacity-100 group-hover/expandable-cell:opacity-100 hover:text-primary focus-visible:opacity-100"
+        >
+          <Maximize2 className="size-3.5" />
+        </button>
+      )}
     </div>
   );
 };

@@ -4,6 +4,9 @@
  * 规则在浮层里改，点「确定」（或回车）才提交一次 —— 规则原文与两个开关是一个值，逐字符提交会让
  * 同级取值控件跟着半截规则来回变形，在「onChange 即 PATCH」的场景还会连发请求。
  * 点浮层外面等同「取消」：有显式的取消 / 确定，就不该在别处悄悄保存。
+ *
+ * 「多选」「允许填写选项以外的值」既能勾开关，也能直接写在规则后面（{A,B}+*）—— 与 Excel
+ * 导入导出是同一种写法。草稿就是输入框里那一串字，开关只是替人改末尾的符号。
  */
 import { useRef, useState } from "react";
 import { ChevronRight } from "lucide-react";
@@ -12,14 +15,15 @@ import { Button } from "@plane/propel/button";
 import type { TRequirementRuleValue, TRequirementValue } from "@plane/types";
 import { cn } from "@plane/utils";
 import {
-  EMPTY_RULE_VALUE,
   RULE_SYNTAX_EXAMPLES,
   asRuleValue,
+  formatRuleText,
   intervalNotation,
   intervalSummary,
   parseRule,
   resolveRule,
   ruleParseErrorText,
+  splitRuleFlags,
 } from "./requirement-rule";
 import type { TRuleDefinition } from "./requirement-rule";
 import {
@@ -31,8 +35,10 @@ import {
 import type { TRuleControlVariant } from "./rule-control-shell";
 
 const MAX_LISTED_OPTIONS = 6;
+/** 开关旁边标出它对应的符号，写法速查表里的 {A,B,C}+ / {A,B,C}* 才对得上号 */
+const FLAG_SYMBOL_CLASS = "rounded bg-layer-1 px-1.5 py-px font-mono text-12 text-secondary";
 
-/** 规则原文 + 开关标签。只读展示与编辑态的格子共用 */
+/** 规则原文（带标志符号）+ 开关标签。只读展示与编辑态的格子共用 */
 export const RequirementRuleDisplay = ({
   value,
   variant = "grid",
@@ -45,7 +51,8 @@ export const RequirementRuleDisplay = ({
   const ruleValue = asRuleValue(value);
   if (!ruleValue) return null;
   const resolved = resolveRule(value);
-  const expr = ruleValue.expr.trim();
+  const isReady = resolved.state === "ready";
+  const expr = formatRuleText(ruleValue.expr, isReady && resolved.multiple, isReady && resolved.allowCustom);
   const sizeClass = variant === "detail" ? "text-13" : "text-12";
   const flags =
     resolved.state === "ready"
@@ -92,6 +99,12 @@ const RecognizedRule = ({ rule }: { rule: TRuleDefinition }) => {
           <span className="font-medium text-success-primary">自由填写</span>
         </span>
       )}
+      {rule.image && (
+        <span className={chipClass}>
+          <span className={kindClass}>图片</span>
+          <span className="font-medium text-success-primary">上传图片，可多张</span>
+        </span>
+      )}
       {rule.intervals.map((interval) => (
         <span key={intervalNotation(interval)} className={chipClass}>
           <span className={kindClass}>{interval.type === "date" ? "日期" : "区间"}</span>
@@ -129,13 +142,15 @@ export const RequirementRuleEditor = ({
 }) => {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const [anchor, setAnchor] = useState<HTMLButtonElement | null>(null);
-  // null = 浮层关着
-  const [draft, setDraft] = useState<TRequirementRuleValue | null>(null);
+  // 输入框里的那一串字（规则原文 + 标志符号）；null = 浮层关着
+  const [draft, setDraft] = useState<string | null>(null);
   // 写法速查表：新写规则时默认展开，改已有规则时折叠
   const [showSyntax, setShowSyntax] = useState(false);
 
   const current = asRuleValue(value);
-  const parsed = draft ? parseRule(draft.expr) : null;
+  const isOpen = draft !== null;
+  const flags = splitRuleFlags(draft);
+  const parsed = isOpen ? parseRule(flags.expr) : null;
   const recognized = parsed && parsed.ok && !parsed.empty ? parsed : null;
   const hasOptions = Boolean(recognized && recognized.options.length > 0);
   const errorText = parsed && !parsed.ok ? ruleParseErrorText(parsed.error) : null;
@@ -143,23 +158,26 @@ export const RequirementRuleEditor = ({
 
   /** 写错的规则不提交也不关：留在原地让人改，想放弃就点「取消」或点外面 */
   const commit = () => {
-    if (!draft || !parsed || !parsed.ok) return;
-    const expr = draft.expr.trim();
-    const next: TRequirementRuleValue | null = expr
-      ? { expr, multiple: hasOptions && draft.multiple, allow_custom: hasOptions && draft.allow_custom }
+    if (!parsed || !parsed.ok) return;
+    const next: TRequirementRuleValue | null = flags.expr
+      ? { expr: flags.expr, multiple: hasOptions && flags.multiple, allow_custom: hasOptions && flags.allowCustom }
       : null;
     if (!isSameRule(next, current)) onChange(next);
     setDraft(null);
   };
 
   const open = () => {
-    const initial = current ?? { ...EMPTY_RULE_VALUE };
-    setShowSyntax(!initial.expr.trim());
+    const initial = current ? formatRuleText(current.expr, current.multiple, current.allow_custom) : "";
+    setShowSyntax(!initial);
     setDraft(initial);
   };
 
+  /** 开关不另存状态：勾一下就是改输入框末尾的符号 */
+  const setFlags = (multiple: boolean, allowCustom: boolean) =>
+    setDraft(formatRuleText(flags.expr, multiple, allowCustom));
+
   useOutsideClickDetector(wrapperRef, () => {
-    if (draft) setDraft(null);
+    if (isOpen) setDraft(null);
   });
 
   return (
@@ -167,8 +185,8 @@ export const RequirementRuleEditor = ({
       <button
         ref={setAnchor}
         type="button"
-        onClick={() => (draft ? setDraft(null) : open())}
-        className={cn(RULE_TRIGGER_CLASS[variant], draft && RULE_TRIGGER_OPEN_CLASS[variant])}
+        onClick={() => (isOpen ? setDraft(null) : open())}
+        className={cn(RULE_TRIGGER_CLASS[variant], isOpen && RULE_TRIGGER_OPEN_CLASS[variant])}
       >
         {current ? (
           <RequirementRuleDisplay value={value} variant={variant} />
@@ -176,13 +194,13 @@ export const RequirementRuleEditor = ({
           !isTableCell && <span className="truncate text-13 text-placeholder">填写取值规则</span>
         )}
       </button>
-      {draft && (
+      {isOpen && (
         <RuleFloatingPanel anchor={anchor} className="w-[480px] max-w-[calc(100vw-24px)]">
           <div className="border-b border-subtle p-3">
             <input
               autoFocus
-              value={draft.expr}
-              onChange={(event) => setDraft({ ...draft, expr: event.target.value })}
+              value={draft ?? ""}
+              onChange={(event) => setDraft(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === "Enter") {
                   event.preventDefault();
@@ -213,20 +231,22 @@ export const RequirementRuleEditor = ({
               <label className="flex cursor-pointer items-center gap-2">
                 <input
                   type="checkbox"
-                  checked={draft.multiple}
-                  onChange={(event) => setDraft({ ...draft, multiple: event.target.checked })}
+                  checked={flags.multiple}
+                  onChange={(event) => setFlags(event.target.checked, flags.allowCustom)}
                   className="size-3.5 rounded border border-subtle accent-accent-primary"
                 />
                 多选
+                <code className={FLAG_SYMBOL_CLASS}>+</code>
               </label>
               <label className="flex cursor-pointer items-center gap-2">
                 <input
                   type="checkbox"
-                  checked={draft.allow_custom}
-                  onChange={(event) => setDraft({ ...draft, allow_custom: event.target.checked })}
+                  checked={flags.allowCustom}
+                  onChange={(event) => setFlags(flags.multiple, event.target.checked)}
                   className="size-3.5 rounded border border-subtle accent-accent-primary"
                 />
                 允许填写选项以外的值
+                <code className={FLAG_SYMBOL_CLASS}>*</code>
               </label>
             </div>
           )}

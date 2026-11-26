@@ -32,6 +32,7 @@ from plane.utils.requirement_rule import (
     parse_rule,
     rule_has_options,
     rule_is_usable,
+    split_rule_flags,
 )
 from plane.utils.requirement_scope import (
     converted_display_id,
@@ -262,7 +263,8 @@ def _canonical_rule(field, value):
     """取值规则字段的值 -> `{expr, multiple, allow_custom}` 或 None。
 
     expr 原样保留（只去首尾空白），解析不过就拒绝保存；规则里没有选项时两个标志没有
-    意义，一律存成 False，免得「没改内容」被比成「改了」。
+    意义，一律存成 False，免得「没改内容」被比成「改了」。两个标志既可以走开关，也可以
+    直接写在规则后面（`{A,B}+*`，与 Excel 同一种写法），存库时一律拆出来。
     """
     name = field_attr(field, "name") or ""
     if value in (None, ""):
@@ -271,7 +273,7 @@ def _canonical_rule(field, value):
         value = {"expr": value}
     if not isinstance(value, dict) or not isinstance(value.get("expr") or "", str):
         raise serializers.ValidationError(f"{name}：取值规则格式不正确")
-    expr = (value.get("expr") or "").strip()
+    expr, multiple, allow_custom = split_rule_flags(value.get("expr") or "")
     if not expr:
         return None
     parsed = parse_rule(expr)
@@ -282,17 +284,25 @@ def _canonical_rule(field, value):
     has_options = rule_has_options(parsed)
     return {
         "expr": expr,
-        "multiple": bool(value.get("multiple")) and has_options,
-        "allow_custom": bool(value.get("allow_custom")) and has_options,
+        "multiple": (multiple or bool(value.get("multiple"))) and has_options,
+        "allow_custom": (allow_custom or bool(value.get("allow_custom")))
+        and has_options,
     }
 
 
 def _comparable_rule_value(value):
-    """动态取值比较「动没动」用的形状：去空白，空串 / 空数组归 None。"""
+    """动态取值比较「动没动」用的形状：去空白，空串 / 空数组归 None；图片只看是哪几张。"""
     if isinstance(value, str):
         return value.strip() or None
     if isinstance(value, list):
-        items = [item.strip() if isinstance(item, str) else item for item in value]
+        items = [
+            item.strip()
+            if isinstance(item, str)
+            else str(item.get("asset_id") or "")
+            if isinstance(item, dict)
+            else item
+            for item in value
+        ]
         return [item for item in items if item not in ("", None)] or None
     return value
 
@@ -306,20 +316,17 @@ def _reshape_rule_value(value, *, as_list):
     return items if as_list else "、".join(items)
 
 
-def _canonical_rule_value(field, value, *, rule, current_value):
+def _canonical_rule_value(field, value, *, owner, rule, current_value):
     """动态取值字段的值 -> (规范值, 规则是否为富文本)。
 
     **只在值相对库里已存的那一份变了时才按规则校验。** 规则后来改了导致旧值不再合法
     不拦（前端标红）—— 否则逐格保存会死锁：先改规则被旧值拦，先改值又被旧规则拦。
-    rule 是同一次保存后的同级取值规则（已规范化）；缺失或为空且填了新值时，block
-    模式报「未设置取值规则」。on_violation == "warn" 不拦取值，只规范形状。
+    所以「动没动」排在形状检查前面：规则从「图片」改成别的，旧图片还挂在这一格上，
+    不能因为它不是字符串就把整行拦住。
+    rule 是同一次保存后的同级取值规则（已规范化）；规则没填时按普通文本收，不校验内容。
+    on_violation == "warn" 不拦取值，只规范形状。
     """
     name = field_attr(field, "name") or ""
-    if value is not None and not isinstance(value, (str, list)):
-        raise serializers.ValidationError(f"{name}：取值格式不正确")
-    if isinstance(value, list) and any(not isinstance(item, str) for item in value):
-        raise serializers.ValidationError(f"{name}：取值格式不正确")
-
     rule = rule if isinstance(rule, dict) else {}
     parsed = parse_rule(rule.get("expr") or "")
     is_rich = bool(parsed.get("rich"))
@@ -329,10 +336,24 @@ def _canonical_rule_value(field, value, *, rule, current_value):
     if comparable == _comparable_rule_value(current_value):
         return current_value, is_rich
 
+    if parsed.get("image"):
+        # 资产归属与类型的校验同图片字段一条路径，warn 模式也不放过 —— 这是安全校验
+        try:
+            assets = _canonical_asset_values(owner, value, image_only=True)
+        except serializers.ValidationError as exc:
+            raise serializers.ValidationError(f"{name}：只能上传图片") from exc
+        return (assets or None), is_rich
+
+    if not isinstance(value, (str, list)) or (
+        isinstance(value, list) and any(not isinstance(item, str) for item in value)
+    ):
+        raise serializers.ValidationError(f"{name}：取值格式不正确")
+
     blocking = (field_attr(field, "config") or {}).get("on_violation") != "warn"
     if not rule_is_usable(parsed):
-        if blocking:
-            raise serializers.ValidationError(f"{name}：未设置取值规则")
+        # 写错的规则存不进库（_canonical_rule 会拒），这一支只兜历史数据
+        if blocking and not parsed["ok"]:
+            raise serializers.ValidationError(f"{name}：取值规则无法识别")
         return _reshape_rule_value(value, as_list=False), is_rich
 
     if is_rich:
@@ -451,7 +472,7 @@ def validate_requirement_leaf_value(
         value = _canonical_rule(field, value)
     elif field_type == RequirementFieldType.RULE_VALUE:
         value, rule_value_is_rich = _canonical_rule_value(
-            field, value, rule=rule, current_value=current_value
+            field, value, owner=owner, rule=rule, current_value=current_value
         )
     else:
         raise serializers.ValidationError("This value is not valid for a form field.")

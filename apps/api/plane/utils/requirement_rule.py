@@ -11,6 +11,17 @@
     [0,100]/5             按步长取值
     [2026-01-01,2026-12-31]  日期区间
     富文本                 自由填写
+    图片                   上传图片
+    留空                   按普通文本填写
+
+选项规则的右花括号后面可以带两个标志符号（放后面是因为 Excel 会把 + / - 开头的格子当公式）：
+
+    {A,B,C}+              多选
+    {A,B,C}*              允许填写选项以外的值
+    {A,B,C}+*             两者都要
+
+存库时标志拆成 `{expr, multiple, allow_custom}`（见 split_rule_flags / format_rule_text），
+parse_rule 只认不带标志的 expr。
 
 本模块是**纯函数**，不依赖 Django，前端 `apps/web/core/components/requirements/rule/`
 有一份逐例对齐的 TypeScript 实现 —— 改语法两边一起改。错误一律返回错误码，中文文案由
@@ -22,6 +33,11 @@ import re
 from decimal import Decimal
 
 RICH_KEYWORD = "富文本"
+IMAGE_KEYWORD = "图片"
+
+_MULTIPLE_FLAGS = "+＋"
+_ALLOW_CUSTOM_FLAGS = "*＊"
+_FLAG_CHARS = _MULTIPLE_FLAGS + _ALLOW_CUSTOM_FLAGS + " \t　"
 
 _OPEN_BRACES = "{｛"
 _CLOSE_BRACES = "}｝"
@@ -224,10 +240,38 @@ def _parse_set(text):
     return options, intervals
 
 
-def parse_rule(expr):
-    """解析一条规则表达式。
+def split_rule_flags(text):
+    """`{A,B}+*` -> ("{A,B}", True, True)，即（规则原文, 多选, 允许选项以外的值）。
 
-    成功：{"ok": True, "rich": bool, "options": [...], "intervals": [...]}
+    两个标志只对选项规则有意义，所以只有跟在右花括号后面的 + / * 才当标志剥掉；别的
+    写法原样返回，交给 parse_rule 去报错 —— `[1,30]+` 是写错了，不该悄悄忽略。
+    """
+    text = text.strip() if isinstance(text, str) else ""
+    end = len(text)
+    while end > 0 and text[end - 1] in _FLAG_CHARS:
+        end -= 1
+    suffix = text[end:]
+    if not suffix or end == 0 or text[end - 1] not in _CLOSE_BRACES:
+        return text, False, False
+    return (
+        text[:end],
+        any(char in _MULTIPLE_FLAGS for char in suffix),
+        any(char in _ALLOW_CUSTOM_FLAGS for char in suffix),
+    )
+
+
+def format_rule_text(expr, multiple, allow_custom):
+    """split_rule_flags 的反向：规则原文 + 标志符号。界面回显与 Excel 导出同一种写法。"""
+    text = expr.strip() if isinstance(expr, str) else ""
+    if not text:
+        return ""
+    return text + ("+" if multiple else "") + ("*" if allow_custom else "")
+
+
+def parse_rule(expr):
+    """解析一条规则表达式（不带标志符号，见 split_rule_flags）。
+
+    成功：{"ok": True, "rich": bool, "image": bool, "options": [...], "intervals": [...]}
     空串：{"ok": True, "empty": True}
     失败：{"ok": False, "error": "<错误码>"}
     """
@@ -235,7 +279,9 @@ def parse_rule(expr):
     if not text:
         return {"ok": True, "empty": True}
     if text == RICH_KEYWORD:
-        return {"ok": True, "rich": True, "options": [], "intervals": []}
+        return {"ok": True, "rich": True, "image": False, "options": [], "intervals": []}
+    if text == IMAGE_KEYWORD:
+        return {"ok": True, "rich": False, "image": True, "options": [], "intervals": []}
     try:
         if text[0] in _OPEN_BRACES:
             options, intervals = _parse_set(text)
@@ -245,7 +291,13 @@ def parse_rule(expr):
             raise _RuleError("unrecognized")
     except _RuleError as exc:
         return {"ok": False, "error": exc.code}
-    return {"ok": True, "rich": False, "options": options, "intervals": intervals}
+    return {
+        "ok": True,
+        "rich": False,
+        "image": False,
+        "options": options,
+        "intervals": intervals,
+    }
 
 
 def rule_has_options(parsed):
@@ -326,6 +378,16 @@ def check_rule_value(parsed, multiple, allow_custom, value):
             return {"ok": False, "error": "must_be_string"}
         return {"ok": True, "value": value}
 
+    if parsed.get("image"):
+        # 这里只看形状（一组资产引用）；资产是否存在、是不是图片要查库，由调用方负责
+        if value is None:
+            return {"ok": True, "value": None}
+        if not isinstance(value, list) or any(
+            not isinstance(item, dict) or not item.get("asset_id") for item in value
+        ):
+            return {"ok": False, "error": "must_be_images"}
+        return {"ok": True, "value": value or None}
+
     if parsed["options"] and multiple:
         if value is None:
             return {"ok": True, "value": None}
@@ -389,6 +451,7 @@ _VALUE_ERROR_MESSAGES = {
     "invalid_date": "日期格式应为 YYYY-MM-DD",
     "must_be_string": "取值格式不正确",
     "must_be_list": "取值格式不正确",
+    "must_be_images": "请上传图片",
     "duplicate": "取值不能重复",
 }
 

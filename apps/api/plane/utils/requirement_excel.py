@@ -39,6 +39,7 @@ from uuid import uuid4
 from django.utils.html import strip_tags
 from openpyxl import Workbook, load_workbook
 from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
+from openpyxl.comments import Comment
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
@@ -62,9 +63,11 @@ from plane.utils.requirement_rule import (
     check_rule_value,
     describe_rule_error,
     describe_value_error,
+    format_rule_text,
     parse_rule,
     rule_has_options,
     rule_is_usable,
+    split_rule_flags,
 )
 
 
@@ -112,10 +115,24 @@ UNSUPPORTED_FIELD_TYPES = frozenset(
 MULTI_VALUE_JOINER = "、"
 _MULTI_VALUE_SPLIT_RE = re.compile(r"[、,，;；\n\r]+")
 
-#: 取值规则字段的两个标志在单元格里写成表达式后面的后缀：`{A,B} [多选] [可自定义]`。
-RULE_MULTIPLE_SUFFIX = "[多选]"
-RULE_ALLOW_CUSTOM_SUFFIX = "[可自定义]"
-_RULE_FLAG_SUFFIX_RE = re.compile(r"\s*[\[［【]\s*(多选|可自定义)\s*[\]］】]\s*$")
+#: 取值规则列表头上的批注。写法与界面上的规则输入框是同一套（utils/requirement_rule.py），
+#: 「多选」「允许填写选项以外的值」写成右花括号后面的 + / *。
+RULE_HEADER_COMMENT = "\n".join(
+    (
+        "取值规则写法：",
+        "{A,B,C}　选项（单选）",
+        "{A,B,C}+　多选",
+        "{A,B,C}*　可填写选项以外的值",
+        "{A,B,C}+*　多选，且可填写选项以外的值",
+        "[1,30]　区间，含两端；(0,15] 不含左端",
+        "{[1,15],Yes}　区间或选项",
+        "[0.1%,2%]　带单位；[0,100]/5 按步长取值",
+        "[2026-01-01,2026-12-31]　日期",
+        "富文本　自由填写",
+        "图片　上传图片（在系统里上传，表格里不填）",
+        "留空　按普通文本填写",
+    )
+)
 
 #: 同批引用：父项列填 `#12` 表示「本 Sheet 第 12 行那条需求」。沿用 issue_import 的约定。
 _IN_BATCH_PARENT_RE = re.compile(r"^#\s*(\d+)$")
@@ -593,17 +610,12 @@ def sibling_rule(spec, siblings):
 
 
 def format_rule_cell(value):
-    """取值规则 `{expr, multiple, allow_custom}` → `表达式 [多选] [可自定义]`。"""
+    """取值规则 `{expr, multiple, allow_custom}` → `{A,B}+*`（+ 多选，* 可填选项以外的值）。"""
     if not isinstance(value, dict):
         return ""
-    text = str(value.get("expr") or "").strip()
-    if not text:
-        return ""
-    if value.get("multiple"):
-        text += f" {RULE_MULTIPLE_SUFFIX}"
-    if value.get("allow_custom"):
-        text += f" {RULE_ALLOW_CUSTOM_SUFFIX}"
-    return text
+    return format_rule_text(
+        value.get("expr"), value.get("multiple"), value.get("allow_custom")
+    )
 
 
 def format_leaf_value(spec, value, ctx, siblings=None):
@@ -619,7 +631,10 @@ def format_leaf_value(spec, value, ctx, siblings=None):
 
     if field_type == RequirementFieldType.RULE_VALUE:
         if isinstance(value, list):
-            return MULTI_VALUE_JOINER.join(str(item) for item in value if item)
+            # 规则写的是「图片」时值是一组资产引用，Excel 里没有表示：留空，导入时原样保留
+            return MULTI_VALUE_JOINER.join(
+                item for item in value if isinstance(item, str) and item
+            )
         if value in (None, ""):
             return ""
         rule = sibling_rule(spec, siblings)
@@ -676,6 +691,15 @@ def format_builtin_value(column_key, requirement, ctx):
     return ""
 
 
+def _comment_rule_header(cell, column):
+    """取值规则列的表头挂一条写法批注 —— 填表的人看不到界面上那张写法速查表。"""
+    if (
+        column.kind == "field"
+        and field_attr(column.spec, "field_type") == RequirementFieldType.RULE
+    ):
+        cell.comment = Comment(RULE_HEADER_COMMENT, "PMS", height=260, width=340)
+
+
 def _write_header(worksheet, sheet_spec):
     header_rows = sheet_spec.header_rows
     written_forms = set()
@@ -685,6 +709,7 @@ def _write_header(worksheet, sheet_spec):
             cell.fill = _HEADER_FILL
             cell.font = _HEADER_FONT
             cell.alignment = _HEADER_ALIGNMENT
+            _comment_rule_header(cell, column)
             if header_rows == 2:
                 worksheet.merge_cells(
                     start_row=1, start_column=index, end_row=2, end_column=index
@@ -714,6 +739,7 @@ def _write_header(worksheet, sheet_spec):
         child_cell.fill = _HEADER_FILL
         child_cell.font = _HEADER_FONT
         child_cell.alignment = _HEADER_ALIGNMENT
+        _comment_rule_header(child_cell, column)
 
 
 def _write_requirement(worksheet, sheet_spec, requirement, ctx, start_row):
@@ -1214,17 +1240,10 @@ def parse_select_value(spec, raw):
 
 
 def parse_rule_cell(raw):
-    """单元格 → 取值规则的值。末尾的 [多选] / [可自定义] 是标志，其余是表达式。"""
+    """单元格 → 取值规则的值。右花括号后面的 + / * 是标志，其余是表达式。"""
     if _is_blank(raw):
         return None, None
-    text = str(raw).strip()
-    flags = {"多选": False, "可自定义": False}
-    while True:
-        match = _RULE_FLAG_SUFFIX_RE.search(text)
-        if match is None:
-            break
-        flags[match.group(1)] = True
-        text = text[: match.start()].rstrip()
+    text, multiple, allow_custom = split_rule_flags(str(raw))
     if not text:
         return None, None
     parsed = parse_rule(text)
@@ -1233,8 +1252,8 @@ def parse_rule_cell(raw):
     has_options = rule_has_options(parsed)
     return {
         "expr": text,
-        "multiple": flags["多选"] and has_options,
-        "allow_custom": flags["可自定义"] and has_options,
+        "multiple": multiple and has_options,
+        "allow_custom": allow_custom and has_options,
     }, None
 
 
@@ -1243,6 +1262,7 @@ def parse_rule_value_cell(spec, raw, rule):
 
     规则有选项且勾了多选时按多选分隔符切成数组，其余整格当一个值；合法性与写序列化器
     同一套判定（utils/requirement_rule.check_rule_value）。字段配成「允许保存」时不拦。
+    规则没填时整格当普通文本收。规则是「图片」的格子不走这里（见 resolve_leaf）。
     """
     if _is_blank(raw):
         return None, None
@@ -1251,8 +1271,9 @@ def parse_rule_value_cell(spec, raw, rule):
     rule = rule if isinstance(rule, dict) else {}
     parsed = parse_rule(rule.get("expr") or "")
     if not rule_is_usable(parsed):
-        if blocking:
-            return None, "未设置取值规则，无法填写。"
+        # 写错的规则存不进库，这一支只兜历史数据
+        if blocking and not parsed["ok"]:
+            return None, "取值规则无法识别，无法填写。"
         return text, None
     if parsed.get("rich"):
         return text_to_html(raw), None
@@ -1549,7 +1570,11 @@ class RequirementImportResolver:
         if field_type == RequirementFieldType.RULE:
             return parse_rule_cell(raw)
         if field_type == RequirementFieldType.RULE_VALUE:
-            return parse_rule_value_cell(spec, raw, sibling_rule(spec, siblings))
+            rule = sibling_rule(spec, siblings)
+            if rule and parse_rule(rule.get("expr") or "").get("image"):
+                # 图片在 Excel 里没有表示：这一格填了什么都不认，库里的图片原样保留
+                return existing_value, None
+            return parse_rule_value_cell(spec, raw, rule)
         if field_type == RequirementFieldType.RICH_TEXT:
             return text_to_html(raw), None
         if field_type == RequirementFieldType.MEMBER:

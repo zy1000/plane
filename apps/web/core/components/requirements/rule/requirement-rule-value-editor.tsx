@@ -3,8 +3,11 @@
  *
  *   规则含选项            -> 下拉（单选 / 多选，可带「选项以外的值」或落在区间内的数）
  *   只有区间              -> 数值 / 日期输入框
- *   富文本                -> 由调用方（LeafEditor）走现成的富文本编辑器，不经过这里
- *   规则没写或写错        -> 不可填
+ *   富文本 / 图片         -> 由调用方（LeafEditor）走现成的富文本编辑器 / 图片上传，不经过这里
+ *   规则没写              -> 普通文本框
+ *   规则写错              -> 不可填
+ *
+ * 取值里的网址一律可点（RuleValueLinkedText）：只读展示、下拉格子、文本框失焦时都是。
  *
  * 这里只负责即时标红。超出规则时拦不拦保存由后端按字段配置的 on_violation 决定，
  * 所以不合规的输入照样交给 onChange —— 悄悄丢掉会让人以为已经存上了。
@@ -15,7 +18,8 @@ import { useOutsideClickDetector } from "@plane/hooks";
 import type { TRequirementField, TRequirementValue } from "@plane/types";
 import { cn, stripAndTruncateHTML } from "@plane/utils";
 import { DraftInput } from "../draft-input";
-import { EXPANDABLE_CELL_INPUT_CLASS } from "../expandable-cell";
+import { EXPANDABLE_CELL_INPUT_CLASS, ExpandableCell } from "../expandable-cell";
+import { RequirementTextCell } from "../requirement-text-cell";
 import {
   checkRuleEntry,
   intervalRangeText,
@@ -34,6 +38,7 @@ import {
   ruleValueTextClass,
 } from "./rule-control-shell";
 import type { TRuleControlVariant } from "./rule-control-shell";
+import { RuleValueLinkedText, hasRuleValueLink } from "./rule-value-links";
 
 type TReadyRule = Extract<TResolvedRule, { state: "ready" }>;
 
@@ -43,7 +48,7 @@ const SEARCH_THRESHOLD = 8;
 const unitOfEntry = (rule: TReadyRule, entry: string) => {
   if (rule.rule.options.includes(entry)) return "";
   const matched = rule.rule.intervals.find(
-    (interval) => checkRuleEntry({ rich: false, options: [], intervals: [interval] }, false, entry).ok
+    (interval) => checkRuleEntry({ rich: false, image: false, options: [], intervals: [interval] }, false, entry).ok
   );
   return matched?.unit ?? "";
 };
@@ -83,7 +88,7 @@ export const RequirementRuleValueDisplay = ({
                 : "border-subtle bg-layer-2 text-primary"
             } ${className ?? ""}`}
           >
-            {entryWithUnit(rule, entry)}
+            <RuleValueLinkedText text={entryWithUnit(rule, entry)} />
           </span>
         ))}
       </span>
@@ -97,7 +102,7 @@ export const RequirementRuleValueDisplay = ({
         variant === "detail" ? "max-w-full whitespace-pre-wrap" : "w-full min-w-0 truncate"
       } ${issue ? "text-danger-primary" : "text-primary"} ${className ?? ""}`}
     >
-      {text}
+      <RuleValueLinkedText text={text} />
     </span>
   );
 };
@@ -235,7 +240,9 @@ const RuleChoiceEditor = ({ field, value, rule, onChange, variant }: TEditorProp
                 key={entry}
                 className="inline-flex max-w-full items-center gap-1 rounded-md border border-subtle bg-layer-1 py-0.5 pr-1 pl-2 text-12 text-primary"
               >
-                <span className="truncate">{entryWithUnit(rule, entry)}</span>
+                <span className="truncate">
+                  <RuleValueLinkedText text={entryWithUnit(rule, entry)} />
+                </span>
                 <span
                   role="button"
                   tabIndex={0}
@@ -261,7 +268,7 @@ const RuleChoiceEditor = ({ field, value, rule, onChange, variant }: TEditorProp
           <span
             className={`min-w-0 flex-1 truncate ${textClass} ${issue ? "text-danger-primary" : "text-primary"}`}
           >
-            {entries.map((entry) => entryWithUnit(rule, entry)).join(", ")}
+            <RuleValueLinkedText text={entries.map((entry) => entryWithUnit(rule, entry)).join(", ")} />
           </span>
         )}
         {!(isTableCell && entries.length === 0) && <ChevronDown className="size-3 shrink-0 text-tertiary" />}
@@ -351,26 +358,85 @@ const RuleChoiceEditor = ({ field, value, rule, onChange, variant }: TEditorProp
   );
 };
 
-/** 规则没写 / 写错：不可填。已有的旧值照样显示出来，不能让它凭空消失 */
+/** 旧值可能是富文本（规则原来写的是「富文本」），别把标签原样印出来 */
+const plainEntries = (value: TRequirementValue | undefined) =>
+  ruleValueEntries(value).map((entry) => (/^\s*<[a-z][^>]*>/i.test(entry) ? stripAndTruncateHTML(entry, 180) : entry));
+
+/**
+ * 规则没写：按普通文本填，复用文本字段那一套（内联输入 + 展开弹窗）。
+ *
+ * 值里带网址时，失焦状态下盖一层只读文字让网址可点，输入框藏在下面（不卸载 —— 草稿和展开
+ * 弹窗的状态都在它身上）；点文字的其它位置把焦点交给输入框，靠 focus-within 换回来。
+ */
+const RuleValueTextEditor = ({
+  field,
+  value,
+  onChange,
+  variant,
+  deferCommit,
+}: {
+  field: TRequirementField;
+  value: TRequirementValue | undefined;
+  onChange: (value: TRequirementValue) => void;
+  variant: TRuleControlVariant;
+  deferCommit?: boolean;
+}) => {
+  const inputLayerRef = useRef<HTMLDivElement>(null);
+  // 规则原来是多选时留下的数组，按一段文字接着改
+  const text = plainEntries(value).join("、");
+  const hasLink = hasRuleValueLink(text);
+  return (
+    <div className="group/rule-text relative w-full min-w-0">
+      {hasLink && (
+        <div
+          className="cursor-text group-focus-within/rule-text:hidden"
+          onClick={() => inputLayerRef.current?.querySelector("input")?.focus()}
+        >
+          <ExpandableCell variant={variant}>
+            <span title={text} className="h-5 min-w-0 flex-1 truncate leading-5 text-primary">
+              <RuleValueLinkedText text={text} />
+            </span>
+          </ExpandableCell>
+        </div>
+      )}
+      <div
+        ref={inputLayerRef}
+        className={
+          hasLink
+            ? "pointer-events-none absolute inset-0 opacity-0 group-focus-within/rule-text:pointer-events-auto group-focus-within/rule-text:static group-focus-within/rule-text:opacity-100"
+            : undefined
+        }
+      >
+        <RequirementTextCell
+          value={text}
+          onChange={onChange}
+          label={field.name}
+          placeholder={field.config.placeholder || (variant === "detail" ? field.name : undefined)}
+          variant={variant}
+          deferCommit={deferCommit}
+        />
+      </div>
+    </div>
+  );
+};
+
+/** 规则写错：不可填。已有的旧值照样显示出来，不能让它凭空消失 */
 const RuleValueUnavailable = ({
   value,
   rule,
   variant,
 }: {
   value: TRequirementValue | undefined;
-  rule: Exclude<TResolvedRule, { state: "ready" }>;
+  rule: Extract<TResolvedRule, { state: "invalid" }>;
   variant: TRuleControlVariant;
 }) => {
-  // 旧值可能是富文本（规则原来写的是「富文本」），别把标签原样印出来
-  const entries = ruleValueEntries(value).map((entry) =>
-    /^\s*<[a-z][^>]*>/i.test(entry) ? stripAndTruncateHTML(entry, 180) : entry
-  );
-  const reason = rule.state === "invalid" ? "取值规则无法识别" : "未设置取值规则";
-  // 表格里规则常由后一环节的人填，整列都写原因太吵：空着，原因进悬停提示
+  const entries = plainEntries(value);
+  const reason = "取值规则无法识别";
+  // 表格里整列都写原因太吵：空着，原因进悬停提示
   const isTableCell = variant === "grid" || variant === "compact";
   return (
     <div
-      title={rule.state === "invalid" ? `${reason}：${ruleParseErrorText(rule.error)}` : reason}
+      title={`${reason}：${ruleParseErrorText(rule.error)}`}
       className={cn(RULE_INPUT_SHELL_CLASS[variant], "cursor-not-allowed hover:border-transparent hover:bg-transparent")}
     >
       <span
@@ -390,14 +456,22 @@ export const RequirementRuleValueEditor = ({
   rule,
   onChange,
   variant = "grid",
+  deferCommit,
 }: {
   field: TRequirementField;
   value: TRequirementValue | undefined;
   rule: TResolvedRule;
   onChange: (value: TRequirementValue) => void;
   variant?: TRuleControlVariant;
+  /** 只对「规则没写」时的文本框有意义：失焦 / 回车才提交，同 LeafEditor 的 deferTextCommit */
+  deferCommit?: boolean;
 }) => {
-  if (rule.state !== "ready") return <RuleValueUnavailable value={value} rule={rule} variant={variant} />;
+  if (rule.state === "none") {
+    return (
+      <RuleValueTextEditor field={field} value={value} onChange={onChange} variant={variant} deferCommit={deferCommit} />
+    );
+  }
+  if (rule.state === "invalid") return <RuleValueUnavailable value={value} rule={rule} variant={variant} />;
   const Editor = rule.rule.options.length > 0 ? RuleChoiceEditor : RuleScalarEditor;
   return <Editor field={field} value={value} rule={rule} onChange={onChange} variant={variant} />;
 };
