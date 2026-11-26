@@ -1,4 +1,4 @@
-import { Download, Eye, Pencil, SquarePen, Trash2, Upload, X } from "lucide-react";
+import { Download, Eye, Link2, Pencil, SquarePen, Trash2, Upload, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "@plane/i18n";
 import { canDownloadFile } from "@/helpers/network-zone.helper";
@@ -21,6 +21,7 @@ type TDetailsPanelProps = {
   onEditFile: (file: TAssetExplorerFile) => void | Promise<void>;
   onRenameFile: (file: TAssetExplorerFile) => void | Promise<void>;
   onDownloadFile: (file: TAssetExplorerFile) => void | Promise<void>;
+  onCopyFileLink: (file: TAssetExplorerFile) => void;
   onDeleteFile: (assetId: string) => void | Promise<void>;
   versions: TAssetFileVersion[];
   onUploadVersion: (file: TAssetExplorerFile, replacement: File) => void | Promise<void>;
@@ -90,6 +91,7 @@ export const DetailsPanel = ({
   onEditFile,
   onRenameFile,
   onDownloadFile,
+  onCopyFileLink,
   onDeleteFile,
   versions,
   onUploadVersion,
@@ -203,6 +205,11 @@ export const DetailsPanel = ({
                   disabled={!permissions.canDownload || !fileDownloadable}
                   title={fileDownloadable ? undefined : t("network_zone.download_denied")}
                   onClick={() => void onDownloadFile(file)}
+                />
+                <ActionRow
+                  icon={<Link2 className="size-4" strokeWidth={1.75} />}
+                  label="复制链接"
+                  onClick={() => onCopyFileLink(file)}
                 />
                 <ActionRow
                   icon={<Upload className="size-4" strokeWidth={1.75} />}

@@ -666,6 +666,23 @@ class FilestoreAssetAPIView(BaseAPIView):
 
 
 class FilestoreAssetDetailAPIView(BaseAPIView):
+    @allow_fine_permission(PermissionKey.PROJECT_FILESTORE_VIEW)
+    def get(self, request, slug, project_id, pk):
+        """单个文件的基本信息。「复制链接」打开的独立预览页只有文件 id，靠它拿文件名
+        （决定用哪种预览）和大网 / 小网下能不能看。"""
+        asset = _get_filestore_asset(pk, slug, project_id)
+        attrs = asset.attributes or {}
+        return Response(
+            {
+                "id": str(asset.id),
+                "name": asset.filename or attrs.get("name") or "",
+                "size": int(asset.size or attrs.get("size") or 0),
+                "type": attrs.get("type") or "",
+                "can_download": can_download_asset(request, asset),
+            },
+            status=status.HTTP_200_OK,
+        )
+
     @allow_fine_permission(PermissionKey.PROJECT_FILESTORE_EDIT)
     def patch(self, request, slug, project_id, pk):
         with transaction.atomic():

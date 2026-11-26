@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Modal, message } from "antd";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { copyUrlToClipboard } from "@plane/utils";
 import { FileUploadProgressList } from "@/components/common/file-upload-progress-item";
+import { filestorePreviewPath } from "@/components/filestore/filestore-preview-link";
 import type { TAssetExplorerFile } from "@/services/asset-explorer.service";
 import { BreadcrumbBar } from "./components/breadcrumb-bar";
 import { BucketHeader } from "./components/bucket-header";
@@ -174,6 +176,21 @@ export const AssetExplorer = (props: TAssetExplorerProps) => {
     [explorer, props.permissions.canEdit]
   );
 
+  /** 复制的是这个文件的预览地址：别人点开直接看到它，看不看得了由对方自己的权限决定 */
+  const handleCopyFileLink = useCallback(
+    (file: TAssetExplorerFile) => {
+      const path = filestorePreviewPath({
+        workspaceSlug: props.workspaceSlug,
+        projectId: props.projectId,
+        assetId: file.id,
+      });
+      copyUrlToClipboard(path)
+        .then(() => message.success("链接已复制"))
+        .catch(() => message.error("复制失败，请重试"));
+    },
+    [props.projectId, props.workspaceSlug]
+  );
+
   const handleDeleteFile = useCallback(
     async (assetId: string) => {
       const success = await explorer.onDeleteFiles([assetId]);
@@ -295,6 +312,7 @@ export const AssetExplorer = (props: TAssetExplorerProps) => {
               onActivateFile={handleActivateFile}
               onOpenFolder={handleOpenFolder}
               onRenameFile={handleRenameFile}
+              onCopyFileLink={handleCopyFileLink}
               onRenameFolder={(folder) => {
                 explorer.setRenamingFolder(folder);
                 explorer.setRenameFolderOpen(true);
@@ -339,6 +357,7 @@ export const AssetExplorer = (props: TAssetExplorerProps) => {
           onEditFile={handleEditFile}
           onRenameFile={handleRenameFile}
           onDownloadFile={explorer.onDownloadFile}
+          onCopyFileLink={handleCopyFileLink}
           onDeleteFile={handleDeleteFile}
           versions={explorer.assetVersions}
           onUploadVersion={explorer.onUploadAssetVersion}

@@ -1,6 +1,6 @@
 import { Checkbox, Dropdown } from "antd";
 import type { MenuProps } from "antd";
-import { Check, ChevronRight, MoreHorizontal, Pencil, SquarePen, Trash2 } from "lucide-react";
+import { Check, ChevronRight, Link2, MoreHorizontal, Pencil, SquarePen, Trash2 } from "lucide-react";
 import { useMemo } from "react";
 import type { TAssetExplorerFile, TAssetFolder } from "@/services/asset-explorer.service";
 import type { TAssetExplorerPermissions, TExplorerRow } from "../types";
@@ -19,6 +19,7 @@ type TFolderTableProps = {
   onActivateFile: (file: TAssetExplorerFile) => void;
   onOpenFolder: (folderId: number) => void;
   onRenameFile: (file: TAssetExplorerFile) => void;
+  onCopyFileLink: (file: TAssetExplorerFile) => void;
   onRenameFolder: (folder: TAssetFolder) => void;
   onDeleteFolder: (folderId: number) => void | Promise<void>;
 };
@@ -36,6 +37,7 @@ export const FolderTable = ({
   onActivateFile,
   onOpenFolder,
   onRenameFile,
+  onCopyFileLink,
   onRenameFolder,
   onDeleteFolder,
 }: TFolderTableProps) => {
@@ -83,6 +85,15 @@ export const FolderTable = ({
       onClick: ({ domEvent }) => {
         domEvent.stopPropagation();
         onRenameFile(file);
+      },
+    });
+    items.push({
+      key: "copy-link",
+      label: "复制链接",
+      icon: <Link2 className="size-3.5" />,
+      onClick: ({ domEvent }) => {
+        domEvent.stopPropagation();
+        onCopyFileLink(file);
       },
     });
     return items;

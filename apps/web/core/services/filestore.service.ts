@@ -18,6 +18,15 @@ export type TFilestoreAsset = {
   can_download?: boolean;
 };
 
+/** 单个文件的基本信息：独立预览页（复制链接打开的那一页）只有文件 id，靠它决定怎么预览 */
+export type TFilestoreAssetInfo = {
+  id: string;
+  name: string;
+  size: number;
+  type: string;
+  can_download: boolean;
+};
+
 export type TFilestoreAssetListResponse = {
   count: number;
   data: TFilestoreAsset[];
@@ -104,6 +113,15 @@ export class FilestoreService extends APIService {
       .then((response) => response?.data ?? { count: 0, data: [] })
       .catch((error) => {
         throw error?.response?.data;
+      });
+  }
+
+  async getFilestoreAsset(workspaceSlug: string, projectId: string, assetId: string): Promise<TFilestoreAssetInfo> {
+    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/filestore/assets/${assetId}/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        // 预览页要按状态码区分「没权限」和「文件不存在」
+        throw { ...error?.response?.data, status: error?.response?.status };
       });
   }
 

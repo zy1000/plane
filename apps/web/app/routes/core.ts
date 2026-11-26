@@ -565,6 +565,10 @@ export const coreRoutes: RouteConfigEntry[] = [
             ":workspaceSlug/projects/:projectId/filestore/xmind/:assetId",
             "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/filestore/xmind/[assetId]/page.tsx"
           ),
+          route(
+            ":workspaceSlug/projects/:projectId/filestore/preview/:assetId",
+            "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/filestore/preview/[assetId]/page.tsx"
+          ),
 
           // Intake list
           layout("./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/intake/layout.tsx", [
