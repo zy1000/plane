@@ -36,6 +36,8 @@ type Props = {
   sessionKey: number;
   onTitleChange: (value: string) => void;
   onEdit?: () => void;
+  /** 状态与流转（横排）：抽屉较窄、右栏并入正文时放在标题下，显隐由调用方的 class 控制 */
+  statusProperty?: React.ReactNode;
 };
 
 export const PeekOverviewIssueDetails = observer(function PeekOverviewIssueDetails(props: Props) {
@@ -53,6 +55,7 @@ export const PeekOverviewIssueDetails = observer(function PeekOverviewIssueDetai
     sessionKey,
     onTitleChange,
     onEdit,
+    statusProperty,
   } = props;
   // store hooks
   const {
@@ -96,6 +99,8 @@ export const PeekOverviewIssueDetails = observer(function PeekOverviewIssueDetai
         value={issue.name}
         onChange={onTitleChange}
       />
+
+      {statusProperty}
 
       <IssueTransitionBanner
         workspaceSlug={workspaceSlug}

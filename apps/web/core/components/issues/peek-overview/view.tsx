@@ -22,6 +22,7 @@ import usePeekOverviewOutsideClickDetector from "@/hooks/use-peek-overview-outsi
 import type { TIssueOperations } from "../issue-detail";
 import { IssueEditModeActions } from "../issue-detail/edit-mode-actions";
 import { IssueActivity } from "../issue-detail/issue-activity";
+import { IssueStatusProperty } from "../issue-detail/status-property";
 import { IssueDetailWidgets } from "../issue-detail-widgets";
 import { IssuePeekOverviewError } from "./error";
 import type { TPeekModes } from "./header";
@@ -86,6 +87,7 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
   });
   const canEdit = !disabled && !is_archived;
   const isEditing = session.isEditing && !session.isSaving;
+  const statusProps = { workspaceSlug, projectId, issueId, session, canEdit, isArchived: is_archived };
   // remove peek id
   const removeRoutePeekId = () => {
     setPeekIssue(undefined);
@@ -195,16 +197,7 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
                 isSubmitting={session.isEditing ? "saved" : isSubmitting}
                 disabled={disabled}
                 embedIssue={embedIssue}
-                editActions={
-                  <IssueEditModeActions
-                    workspaceSlug={workspaceSlug}
-                    projectId={projectId}
-                    issueId={issueId}
-                    session={session}
-                    canEdit={canEdit}
-                    isArchived={is_archived}
-                  />
-                }
+                editActions={<IssueEditModeActions session={session} canEdit={canEdit} />}
                 onRequestClose={() => void requestClose()}
               />
               {/* content */}
@@ -228,6 +221,9 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
                           sessionKey={session.sessionKey}
                           onTitleChange={session.onTitleChange}
                           onEdit={canEdit && !session.isSaving ? session.startEditing : undefined}
+                          statusProperty={
+                            <IssueStatusProperty {...statusProps} layout="inline" className="@3xl/peek:hidden" />
+                          }
                         />
                       </div>
 
@@ -255,6 +251,7 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
                           disabled={!canEdit || !isEditing}
                           dimmed={!canEdit}
                           basicGroup={false}
+                          statusProperty={<IssueStatusProperty {...statusProps} className="hidden @3xl/peek:block" />}
                         />
                       </div>
 
@@ -319,6 +316,7 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
                         disabled={!canEdit || !isEditing}
                         dimmed={!canEdit}
                         basicGroup={false}
+                        statusProperty={<IssueStatusProperty {...statusProps} />}
                       />
                     </div>
                   </div>

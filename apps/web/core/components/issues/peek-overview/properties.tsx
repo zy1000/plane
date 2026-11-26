@@ -4,6 +4,7 @@
  * See the LICENSE file for details.
  */
 
+import type { ReactNode } from "react";
 import { observer } from "mobx-react";
 import { Boxes, CalendarClock, CalendarPlus, ClipboardCheck, Layers, Package, Rocket, UserRound } from "lucide-react";
 // i18n
@@ -46,10 +47,21 @@ interface IPeekOverviewProperties {
   issueOperations: TIssueOperations;
   /** 与标题下属性条重复的字段（类型/状态/优先级/负责人、开始/结束日期）：属性条可见时隐藏，避免一页出现两份。false = 不渲染，字符串 = 外层 class（响应式显隐）；工时、标签、估算始终显示 */
   basicGroup?: boolean | string;
+  /** 独立排在「基本」之前的状态块（状态 + 流转按钮）；标题下已经横排显示状态时不传 */
+  statusProperty?: ReactNode;
 }
 
 export const PeekOverviewProperties = observer(function PeekOverviewProperties(props: IPeekOverviewProperties) {
-  const { workspaceSlug, projectId, issueId, issueOperations, disabled, dimmed = disabled, basicGroup = true } = props;
+  const {
+    workspaceSlug,
+    projectId,
+    issueId,
+    issueOperations,
+    disabled,
+    dimmed = disabled,
+    basicGroup = true,
+    statusProperty,
+  } = props;
   const { t } = useTranslation();
   // store hooks
   const { getProjectById } = useProject();
@@ -83,6 +95,8 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
     <div>
       <h6 className="text-body-sm-semibold text-primary">{t("common.properties")}</h6>
       <div className={cn("mt-3 flex w-full flex-col gap-5", dimmed && "opacity-60")}>
+        {statusProperty}
+
         {/* 基本：类型/状态/优先级/负责人（与属性条重复的部分按 basicGroup 显隐）+ 工时、标签 */}
         <PeekOverviewBasicProperties
           core={basicGroup}

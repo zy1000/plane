@@ -47,6 +47,8 @@ type Props = {
   setIsSubmitting: (value: TNameDescriptionLoader) => void;
   onTitleChange: (value: string) => void;
   onEdit?: () => void;
+  /** 状态与流转（横排）：右栏不显示时放在标题下 */
+  statusProperty?: React.ReactNode;
 };
 
 export const IssueMainContent = observer(function IssueMainContent(props: Props) {
@@ -64,6 +66,7 @@ export const IssueMainContent = observer(function IssueMainContent(props: Props)
     setIsSubmitting,
     onTitleChange,
     onEdit,
+    statusProperty,
   } = props;
   // hooks
   const windowSize = useSize();
@@ -137,6 +140,8 @@ export const IssueMainContent = observer(function IssueMainContent(props: Props)
           value={issue.name}
           onChange={onTitleChange}
         />
+
+        {windowSize[0] < 768 && statusProperty}
 
         <IssueTransitionBanner
           workspaceSlug={workspaceSlug}

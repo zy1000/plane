@@ -38,6 +38,7 @@ import {
 import { IssueEditModeActionsPortal } from "./edit-mode-actions";
 import { IssueMainContent } from "./main-content";
 import { changeIssueReleases } from "./release-operations";
+import { IssueStatusProperty } from "./status-property";
 
 /** update 失败时可带回的结果：状态变更被工作流转成了审批申请（整个 PATCH 都没落库） */
 export type TIssueUpdateOutcome = { approvalInitiated?: boolean };
@@ -322,6 +323,7 @@ export const IssueDetailRoot = observer(function IssueDetailRoot(props: TIssueDe
   });
   const isEditing = session.isEditing && !session.isSaving;
   const fieldsDisabled = !canEdit || !isEditing;
+  const statusProps = { workspaceSlug, projectId, issueId, session, canEdit, isArchived: is_archived };
 
   return (
     <>
@@ -340,14 +342,7 @@ export const IssueDetailRoot = observer(function IssueDetailRoot(props: TIssueDe
           <div className="vertical-scrollbar flex h-full w-full overflow-auto">
             <div className="relative h-full w-full min-w-0 space-y-6 overflow-auto px-5 py-6 lg:px-8">
               {/* 编辑 / 保存按钮放在路由 header「订阅」旁边 */}
-              <IssueEditModeActionsPortal
-                workspaceSlug={workspaceSlug}
-                projectId={projectId}
-                issueId={issueId}
-                session={session}
-                canEdit={canEdit}
-                isArchived={is_archived}
-              />
+              <IssueEditModeActionsPortal session={session} canEdit={canEdit} />
               <IssueMainContent
                 workspaceSlug={workspaceSlug}
                 projectId={projectId}
@@ -362,6 +357,7 @@ export const IssueDetailRoot = observer(function IssueDetailRoot(props: TIssueDe
                 setIsSubmitting={setIsSubmitting}
                 onTitleChange={session.onTitleChange}
                 onEdit={canEdit && !session.isSaving ? session.startEditing : undefined}
+                statusProperty={<IssueStatusProperty {...statusProps} layout="inline" />}
               />
             </div>
             {!issueDetailSidebarCollapsed && (
@@ -378,6 +374,7 @@ export const IssueDetailRoot = observer(function IssueDetailRoot(props: TIssueDe
                   disabled={fieldsDisabled}
                   dimmed={!canEdit}
                   basicGroup={false}
+                  statusProperty={<IssueStatusProperty {...statusProps} />}
                 />
               </div>
             )}

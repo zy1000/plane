@@ -13,18 +13,14 @@ import { cn, getDate, renderFormattedPayloadDate, shouldHighlightIssueDueDate } 
 import { DateDropdown } from "@/components/dropdowns/date";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { PriorityDropdown } from "@/components/dropdowns/priority";
-import { StateDropdown } from "@/components/dropdowns/state/dropdown";
 import { WorkItemTypeIcon } from "@/components/issues/work-item-type-icon";
 // hooks
-import { issueTransitionDraft } from "@/hooks/store/use-issue-transition-draft";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useProjectIssueTypes } from "@/hooks/store/use-project-issue-types";
 import { useProjectState } from "@/hooks/store/use-project-state";
-import { useStateTransitionAssigneeGuard } from "@/hooks/store/use-state-transition-assignee-guard";
 import { projectIssueTypesCache } from "@/services/project";
 // plane web
 import { DateAlert } from "@/plane-web/components/issues/issue-details/sidebar/date-alert";
-import { StateTransitionAssigneeModal } from "../state-transition-assignee-modal";
 import type { TIssueOperations } from "../issue-detail";
 
 type TPeekCorePropertyBar = {
@@ -38,7 +34,7 @@ type TPeekCorePropertyBar = {
 };
 
 /**
- * 标题下的核心属性区：窄屏两列、宽屏三列或六列，统一用于详情页和 Peek。
+ * 标题下的核心属性区：窄屏两列、宽屏三列或五列，统一用于详情页和 Peek。状态不在这里，在右栏「属性」下独立的状态块（IssueStatusProperty）里。
  */
 export const PeekOverviewCorePropertyBar = observer(function PeekOverviewCorePropertyBar(props: TPeekCorePropertyBar) {
   const { workspaceSlug, projectId, issueId, issueOperations, disabled, dimmed = disabled } = props;
@@ -47,7 +43,6 @@ export const PeekOverviewCorePropertyBar = observer(function PeekOverviewCorePro
     issue: { getIssueById },
   } = useIssueDetail();
   const { getStateById } = useProjectState();
-  const stateTransitionGuard = useStateTransitionAssigneeGuard(workspaceSlug, projectId);
   const { issueTypes } = useProjectIssueTypes(workspaceSlug, projectId);
 
   const issue = getIssueById(issueId);
@@ -58,12 +53,6 @@ export const PeekOverviewCorePropertyBar = observer(function PeekOverviewCorePro
       (issue?.project_id ? projectIssueTypesCache.get(issue.project_id)?.[issue.type_id]?.logo_props?.icon : undefined))
     : undefined;
 
-  const handleStateChange = async (nextStateId: string) => {
-    await stateTransitionGuard.requestStateChange(issue, nextStateId, async (payload) => {
-      await issueOperations.update(workspaceSlug, projectId, issueId, payload);
-    });
-  };
-
   const fieldShell = "flex min-w-0 flex-col gap-2";
   const fieldLabel = "text-12 text-tertiary";
 
@@ -71,7 +60,7 @@ export const PeekOverviewCorePropertyBar = observer(function PeekOverviewCorePro
     <div className="@container border-b border-subtle pb-5">
       <div
         className={cn(
-          "grid w-full min-w-0 grid-cols-2 items-start gap-x-5 gap-y-4 text-body-xs-medium @lg:grid-cols-3 @4xl:grid-cols-6",
+          "grid w-full min-w-0 grid-cols-2 items-start gap-x-5 gap-y-4 text-body-xs-medium @lg:grid-cols-3 @4xl:grid-cols-5",
           dimmed && "opacity-60"
         )}
       >
@@ -87,24 +76,6 @@ export const PeekOverviewCorePropertyBar = observer(function PeekOverviewCorePro
               <span className="min-w-0 truncate">{issue.type_name}</span>
             </div>
           ) : null}
-        </div>
-
-        <div className={fieldShell}>
-          <span className={fieldLabel}>{t("common.state")}</span>
-          <StateDropdown
-            value={issue?.state_id}
-            onChange={handleStateChange}
-            projectId={projectId}
-            issueTypeId={issue?.type_id}
-            disabled={disabled || !!issueTransitionDraft.get(issueId)}
-            buttonVariant="transparent-with-text"
-            className="group w-full min-w-0"
-            buttonContainerClassName="h-7 w-full min-w-0 text-left"
-            buttonClassName={cn(
-              "w-full min-w-0 truncate pr-1.5 !pl-0 text-body-xs-medium leading-5",
-              issue?.state_id ? "text-secondary" : "text-placeholder"
-            )}
-          />
         </div>
 
         <div className={fieldShell}>
@@ -205,7 +176,6 @@ export const PeekOverviewCorePropertyBar = observer(function PeekOverviewCorePro
           </div>
         </div>
       </div>
-      <StateTransitionAssigneeModal {...stateTransitionGuard.modalProps} />
     </div>
   );
 });

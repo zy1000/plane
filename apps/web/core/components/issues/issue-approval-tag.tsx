@@ -332,19 +332,8 @@ export function IssueApprovalTag({ workspaceSlug, projectId, issueId, variant = 
   return (
     <>
       {hasPendingApproval && variant === "button" ? (
-        <Button
-          type="button"
-          variant="secondary"
-          size="lg"
-          onClick={handleOpen}
-          aria-label="查看审批"
-          prependIcon={<Clock />}
-          className="hover:opacity-80"
-          style={tagStyle(STATUS_COLOR.pending)}
-        >
-          <span className="hidden sm:block">
-            {record?.action_name ? `审批中 · ${record.action_name}` : "审批中"}
-          </span>
+        <Button type="button" variant="secondary" size="lg" onClick={handleOpen}>
+          查看审批
         </Button>
       ) : hasPendingApproval ? (
         <button

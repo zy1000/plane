@@ -6,10 +6,7 @@
 
 import { useEffect, useState } from "react";
 import { observer } from "mobx-react";
-import { ArrowRight } from "lucide-react";
-import { EIconSize } from "@plane/constants";
-import { StateGroupIcon } from "@plane/propel/icons";
-import type { TIssue, TStateGroups } from "@plane/types";
+import type { TIssue } from "@plane/types";
 import { cn } from "@plane/utils";
 // components
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
@@ -18,7 +15,6 @@ import { findValueForField, isValueEmpty } from "@/components/issues/extra-field
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useIssueTypeExtraFields } from "@/hooks/store/use-issue-type-extra-fields";
 import { issueTransitionDraft } from "@/hooks/store/use-issue-transition-draft";
-import { useProjectState } from "@/hooks/store/use-project-state";
 // utils
 import { evaluateFieldLinkage } from "@/utils/field-linkage";
 import { ISSUE_LAYOUT_FOCUS_EVENT } from "@/utils/issue-type-layout";
@@ -33,18 +29,9 @@ type Props = {
   disabled?: boolean;
 };
 
-type TStateLabelProps = { name: string; color: string; group: string; strong?: boolean };
-
-const StateLabel = ({ name, color, group, strong }: TStateLabelProps) => (
-  <span className={cn("inline-flex items-center gap-1.5", strong ? "font-medium text-primary" : "text-secondary")}>
-    <StateGroupIcon stateGroup={group as TStateGroups} color={color} size={EIconSize.SM} />
-    {name}
-  </span>
-);
-
 /**
- * 点详情页流转按钮后，标题下方的提示条：这次流转从哪到哪、还差哪些必填字段（点了定位到字段）、
- * 需要时选处理人、填审批理由。值都走编辑会话暂存，点页头「确认流转 / 提交审批」一起提交。
+ * 点「状态」属性行的流转按钮后，标题下方的提示条：还差哪些必填字段（点了定位到字段）、需要时选处理人、填审批理由。
+ * 这次流转从哪到哪由状态行显示。值都走编辑会话暂存，点页头「确认流转 / 提交审批」一起提交。
  */
 export const IssueTransitionBanner = observer(function IssueTransitionBanner(props: Props) {
   const { workspaceSlug, projectId, issueId, issueOperations, disabled = false } = props;
@@ -52,7 +39,6 @@ export const IssueTransitionBanner = observer(function IssueTransitionBanner(pro
   const {
     issue: { getIssueById },
   } = useIssueDetail();
-  const { getStateById } = useProjectState();
   const issue = getIssueById(issueId);
   const { fields } = useIssueTypeExtraFields(
     workspaceSlug,
@@ -68,13 +54,15 @@ export const IssueTransitionBanner = observer(function IssueTransitionBanner(pro
 
   if (!issue || !transition) return null;
 
-  const fromState = getStateById(transition.from_state_id);
   const values = issue.extra_field_values ?? [];
   // 联动隐藏的字段后端不校验，这里也不列
   const visibleIds = fields?.length ? new Set(evaluateFieldLinkage(fields, values).fields.map((f) => f.id)) : null;
   const requiredFields = transition.required_fields.filter((field) => !visibleIds || visibleIds.has(field.id));
   const filledCount = requiredFields.filter((field) => !isValueEmpty(findValueForField(values, field.id))).length;
   const assigneeIds = (issue.assignee_ids ?? []).filter((id) => transition.allowed_assignee_ids.includes(id));
+
+  // 必填字段都被联动隐藏、又不用选处理人和审批时没有可列的内容
+  if (requiredFields.length === 0 && !transition.assignee_required && !transition.requires_approval) return null;
 
   const focusField = (fieldId: string) =>
     window.dispatchEvent(new CustomEvent(ISSUE_LAYOUT_FOCUS_EVENT, { detail: { issueId, fieldId } }));
@@ -84,20 +72,6 @@ export const IssueTransitionBanner = observer(function IssueTransitionBanner(pro
       aria-label="正在流转"
       className="flex flex-col gap-3.5 rounded-[10px] border border-accent-subtle bg-accent-subtle px-[18px] py-4"
     >
-      <div className="flex flex-wrap items-center gap-3">
-        <span className="text-16 font-semibold text-primary">{transition.action_name}</span>
-        <span className="inline-flex items-center gap-2 text-14">
-          {fromState && <StateLabel name={fromState.name} color={fromState.color} group={fromState.group} />}
-          <ArrowRight className="size-4 text-tertiary" aria-hidden="true" />
-          <StateLabel
-            name={transition.to_state_name}
-            color={transition.to_state_color}
-            group={transition.to_state_group}
-            strong
-          />
-        </span>
-      </div>
-
       {(requiredFields.length > 0 || transition.assignee_required) && (
         <div className="flex flex-wrap items-center gap-x-7 gap-y-3">
           {requiredFields.length > 0 && (
