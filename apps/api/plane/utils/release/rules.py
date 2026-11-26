@@ -1,7 +1,6 @@
 from dataclasses import dataclass, field
 
 from plane.db.models import (
-    FileAsset,
     Release,
     ReleaseIssue,
     ReleaseStatus,
@@ -37,12 +36,6 @@ def has_issues(release: Release):
     return ReleaseIssue.objects.filter(release=release, issue__deleted_at__isnull=True).exists()
 
 
-def all_issues_done(release: Release):
-    """判断发布下面的工作项是否全部完成"""
-    return not ReleaseIssue.objects.filter(release=release, issue__deleted_at__isnull=True).exclude(
-        issue__state__group__in=[StateGroup.COMPLETED, StateGroup.CANCELLED]).exists()
-
-
 def all_issues_cancelled(release: Release):
     """判断发布下的工作项是否全部取消"""
     return not ReleaseIssue.objects.filter(release=release, issue__deleted_at__isnull=True).exclude(
@@ -58,26 +51,13 @@ def requirement_statuses(release: Release) -> list[str]:
     )
 
 
-# 需求的「已完成」口径：已发布算完成，已关闭等同已取消的工作项
-DONE_REQUIREMENT_STATUSES = {RequirementItemStatus.RELEASED, RequirementItemStatus.CLOSED}
-
-
-def has_attachment(release: Release):
-    """判断发布下是否有附件"""
-    return FileAsset.objects.filter(release=release).exists()
-
-
-def has_test_plan(release: Release):
-    """判断发布是否有关联测试计划"""
-    return release.plans.filter(deleted_at__isnull=True).exists()
-
-
 # 不需要额外业务校验、仅做"是否允许"判断的合法流转白名单
 _WHITELISTED_TRANSITIONS: set[tuple[str, str]] = {
     # 待测试 -> 测试中 / 已驳回
     (ReleaseStatus.PENDING_TEST, ReleaseStatus.TESTING),
     (ReleaseStatus.PENDING_TEST, ReleaseStatus.REJECTED),
-    # 测试中 -> 已驳回
+    # 测试中 -> 已完成 / 已驳回
+    (ReleaseStatus.TESTING, ReleaseStatus.COMPLETED),
     (ReleaseStatus.TESTING, ReleaseStatus.REJECTED),
 }
 
@@ -124,19 +104,6 @@ def check_release_state(release: Release, next_status: ReleaseStatus) -> Release
             and all(s == RequirementItemStatus.CLOSED for s in req_statuses)
         ):
             reasons.append("发布下工作项和需求已全部取消，只能改为已取消")
-        else:
-            if not all_issues_done(release):
-                reasons.append("存在未完成的工作项")
-            if any(s not in DONE_REQUIREMENT_STATUSES for s in req_statuses):
-                reasons.append("存在未发布的需求（需为「已发布」或「已关闭」）")
-            if not has_attachment(release):
-                reasons.append("请上传发布附件")
-        return _result(reasons)
-
-    # 测试中 -> 已完成
-    if current == ReleaseStatus.TESTING and next_status == ReleaseStatus.COMPLETED:
-        if not has_test_plan(release):
-            reasons.append("请关联测试计划")
         return _result(reasons)
 
     if _is_whitelisted_no_check(current, next_status):
