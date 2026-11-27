@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import type { TIssueExtraFieldValue } from "@plane/types";
 import { cn } from "@plane/utils";
 import { useIssueLayoutPreferences } from "@/hooks/use-issue-layout-preferences";
 import type { TTypeExtraField } from "@/services/project/project-issue-type.service";
 import type {
   TIssueFieldPlacement,
-  TIssueLayoutArea,
+  TIssueLayoutContainer,
   TIssueLayoutContext,
   TIssueLayoutGroup,
   TStoredIssueTypeFieldLayout,
@@ -16,6 +16,7 @@ import {
   ISSUE_LAYOUT_ERROR_EVENT,
   ISSUE_LAYOUT_FOCUS_EVENT,
   ISSUE_LAYOUT_VALIDATE_EVENT,
+  isLongLayoutField,
   layoutFieldClass,
   layoutForContext,
   layoutGridClass,
@@ -32,13 +33,51 @@ type TProps = {
   issueId?: string;
   errors?: Record<string, string>;
   validationAttempt?: number;
+  /** 字段区标题（如「缺陷字段」）：传了就在最上面出一行「标题 + 总完成度」，操作按钮靠右 */
+  title?: string;
+  /** 没有任何分组时，全部字段所在那张卡片的名称（如「缺陷信息」） */
+  ungroupedName?: string;
   renderField: (field: TTypeExtraField, placement: TIssueFieldPlacement, clearError: () => void) => ReactNode;
 };
 const EMPTY_VALUES: TIssueExtraFieldValue[] = [];
+const TOOLBAR_BUTTON_CLASS =
+  "rounded-md border border-subtle px-2.5 py-1 text-12 text-secondary hover:bg-layer-1 hover:text-primary";
 
 /**
- * 按类型布局渲染自定义字段：未分组字段直接排在最前（没有分组和页面时就是描述下方的一片网格），
- * 其后是分组，再往下是页面页签和页内内容。
+ * 字段一律放在分组卡片里：容器（根 / 页面）里没归组的字段，没有别的分组时自成一组，
+ * 否则收进排在最后的「其他」，不插在已有分组中间。
+ */
+const groupsOf = (container: TIssueLayoutContainer, id: string, soleName: string): TIssueLayoutGroup[] =>
+  container.fields.length === 0
+    ? container.groups
+    : [
+        ...container.groups,
+        {
+          id,
+          name: container.groups.length > 0 ? "其他" : soleName,
+          columns: container.columns,
+          collapsible: true,
+          default_collapsed: false,
+          fields: container.fields,
+        },
+      ];
+
+/** 「已填 n/总数」+ 进度条，填满变绿 */
+const FillProgress = ({ filled, total }: { filled: number; total: number }) => (
+  <span className="flex shrink-0 items-center gap-2 text-12 font-normal text-tertiary tabular-nums">
+    已填 {filled}/{total}
+    <span className="h-[5px] w-[72px] overflow-hidden rounded-full bg-layer-3">
+      <span
+        className={cn("block h-full rounded-full", filled === total ? "bg-success-primary" : "bg-accent-primary")}
+        style={{ width: `${total > 0 ? (filled / total) * 100 : 0}%` }}
+      />
+    </span>
+  </span>
+);
+
+/**
+ * 按类型布局渲染自定义字段：每个分组一张卡片（标题栏带完成度、可收起），卡片里短字段排网格、
+ * 长文本统一排在下半部；根上的分组在最前，再往下是页面页签和页内分组。
  * All pages remain mounted so changing tabs or collapsing a group preserves drafts.
  */
 export function IssueFieldLayout({
@@ -50,6 +89,8 @@ export function IssueFieldLayout({
   issueId,
   errors = {},
   validationAttempt = 0,
+  title,
+  ungroupedName = "基本信息",
   renderField,
 }: TProps) {
   const id = useId();
@@ -72,20 +113,18 @@ export function IssueFieldLayout({
   const fieldMap = new Map(fields.map((field) => [field.id, field]));
   const isEmpty = (fieldId: string) => isValueEmpty(findValueForField(values, fieldId));
   const hiddenEmpty = context === "detail" && preferences.hideEmpty;
-  // 每个字段的落点：所在页面（根上的为 null）和分组（未分组的为 null）
+  const rootGroups = useMemo(() => groupsOf(visible, "ungrouped:root", ungroupedName), [visible, ungroupedName]);
+  const pageGroups = useMemo(
+    () => new Map(visible.pages.map((page) => [page.id, groupsOf(page, `ungrouped:${page.id}`, page.name)])),
+    [visible]
+  );
+  // 每个字段的落点：所在页面（根上的为 null）和分组卡片
   const locations = useMemo(() => {
-    const locate = (area: TIssueLayoutArea, pageId: string | null, group: TIssueLayoutGroup | null) =>
-      area.fields.map((entry) => ({ pageId, group, entry }));
-    return [
-      ...locate(visible, null, null),
-      ...visible.groups.flatMap((group) => locate(group, null, group)),
-      ...visible.pages.flatMap((page) => [
-        ...locate(page, page.id, null),
-        ...page.groups.flatMap((group) => locate(group, page.id, group)),
-      ]),
-    ];
-  }, [visible]);
-  const allGroups = [...visible.groups, ...pages.flatMap((page) => page.groups)];
+    const locate = (groups: TIssueLayoutGroup[], pageId: string | null) =>
+      groups.flatMap((group) => group.fields.map((entry) => ({ pageId, group, entry })));
+    return [...locate(rootGroups, null), ...[...pageGroups].flatMap(([pageId, groups]) => locate(groups, pageId))];
+  }, [rootGroups, pageGroups]);
+  const allGroups = [...rootGroups, ...[...pageGroups.values()].flat()];
   const missingRequired = locations.filter(
     ({ entry }) => fieldMap.get(entry.field_id)?.is_required && isEmpty(entry.field_id)
   );
@@ -98,7 +137,7 @@ export function IssueFieldLayout({
       update((previous) => ({
         ...previous,
         hideEmpty: false,
-        collapsed: location.group ? { ...previous.collapsed, [location.group.id]: false } : previous.collapsed,
+        collapsed: { ...previous.collapsed, [location.group.id]: false },
       }));
       setFocusField(fieldId);
       setAttempt((value) => value + 1);
@@ -186,106 +225,118 @@ export function IssueFieldLayout({
   const hasCollapsible = allGroups.some((group) => group.collapsible);
   const showHideEmpty = context === "detail" && emptyCount > 0;
 
-  const renderGrid = (area: TIssueLayoutArea) => (
-    <div className={cn("grid gap-x-6 gap-y-4", layoutGridClass(area.columns))}>
-      {area.fields.map((entry) => {
-        const field = fieldMap.get(entry.field_id);
-        if (!field) return null;
-        return (
-          <div
-            key={entry.field_id}
-            data-layout-field={entry.field_id}
-            tabIndex={-1}
-            hidden={hiddenEmpty && isEmpty(entry.field_id)}
-            className={cn("min-w-0 py-1 outline-offset-2", layoutFieldClass(entry.width, area.columns))}
-          >
-            {renderField(field, entry, () => clearFieldError(entry.field_id))}
-            {serverErrors[entry.field_id] && (
-              <p role="alert" className="mt-1 text-12 text-danger-primary">
-                {serverErrors[entry.field_id]}
-              </p>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-  /** 不在分组里的字段：没有标题，直接一片网格；隐藏未填后一个都不剩就不占位 */
-  const renderUngrouped = (area: TIssueLayoutArea) =>
-    area.fields.some((entry) => !(hiddenEmpty && isEmpty(entry.field_id))) && renderGrid(area);
+  const isShown = (entry: TIssueFieldPlacement) => !(hiddenEmpty && isEmpty(entry.field_id));
+  /** columns 不传时字段不带占列类，由网格自己决定每格多宽（长文本区） */
+  const renderFields = (entries: TIssueFieldPlacement[], columns?: number) =>
+    entries.map((entry) => {
+      const field = fieldMap.get(entry.field_id);
+      if (!field) return null;
+      return (
+        <div
+          key={entry.field_id}
+          data-layout-field={entry.field_id}
+          tabIndex={-1}
+          hidden={!isShown(entry)}
+          className={cn("min-w-0 outline-offset-2", columns && layoutFieldClass(entry.width, columns))}
+        >
+          {renderField(field, entry, () => clearFieldError(entry.field_id))}
+          {serverErrors[entry.field_id] && (
+            <p role="alert" className="mt-1 text-12 text-danger-primary">
+              {serverErrors[entry.field_id]}
+            </p>
+          )}
+        </div>
+      );
+    });
   const renderGroup = (group: TIssueLayoutGroup) => {
     const collapsed = group.collapsible && (preferences.collapsed[group.id] ?? group.default_collapsed);
-    const missing = group.fields.filter(
-      (entry) => fieldMap.get(entry.field_id)?.is_required && isEmpty(entry.field_id)
-    ).length;
-    const filled = group.fields.filter((entry) => !isEmpty(entry.field_id)).length;
+    const unfilled = group.fields.filter((entry) => isEmpty(entry.field_id));
+    const missing = unfilled.filter((entry) => fieldMap.get(entry.field_id)?.is_required).length;
     const toggle = () =>
       update((previous) => ({
         ...previous,
         collapsed: { ...previous.collapsed, [group.id]: !collapsed },
       }));
-    const title = (
-      <>
-        <span className="break-words font-semibold text-primary">{group.name}</span>
-        <span className="text-13 text-tertiary tabular-nums">{group.fields.length}</span>
-      </>
-    );
-    // 组名在框上方，和页面上「描述」标题 + 描述框同一写法，组名与框外字段左对齐；框里只放字段，折叠箭头在标题行最右
+    const isLong = (entry: TIssueFieldPlacement) => {
+      const field = fieldMap.get(entry.field_id);
+      return !!field && isLongLayoutField(field);
+    };
+    // 短字段按布局设定的每行字段数排网格；长文本不和短字段混排，统一放到卡片下半部
+    const shorts = group.fields.filter((entry) => !isLong(entry));
+    const longs = group.fields.filter(isLong);
+    const hasShorts = shorts.some(isShown);
+    const hasLongs = longs.some(isShown);
     return (
-      <section key={group.id} className="pt-3">
-        <div className="flex min-h-[30px] items-center gap-3 text-14">
-          {group.collapsible ? (
-            // 点标题也能收起；键盘操作走右侧箭头按钮，这里不再占一个 Tab 位
-            <button
-              type="button"
-              tabIndex={-1}
-              className="flex min-w-0 flex-1 items-center gap-2.5 self-stretch text-left"
-              onClick={toggle}
-            >
-              {title}
-            </button>
-          ) : (
-            <span className="flex min-w-0 flex-1 items-center gap-2.5">{title}</span>
+      <section key={group.id} className="overflow-hidden rounded-lg border border-subtle">
+        {/* 点整条标题栏都能收起；键盘操作走右侧箭头按钮 */}
+        <div
+          className={cn(
+            "flex min-h-[42px] items-center gap-2.5 bg-surface-2 px-4 py-2 text-14",
+            !collapsed && "border-b border-subtle",
+            group.collapsible && "cursor-pointer select-none"
           )}
-          {context !== "detail" && missing > 0 ? (
+          onClick={group.collapsible ? toggle : undefined}
+        >
+          <span className="min-w-0 flex-1 font-semibold break-words text-primary">{group.name}</span>
+          {context !== "detail" && missing > 0 && (
             <button
               type="button"
               className="shrink-0 text-13 text-danger-primary"
-              onClick={() => {
-                const target = missingRequired.find((item) => item.group?.id === group.id);
+              onClick={(event) => {
+                event.stopPropagation();
+                const target = missingRequired.find((item) => item.group.id === group.id);
                 if (target) openField(target.entry.field_id);
               }}
             >
               {missing} 项必填待补充
             </button>
-          ) : (
-            collapsed && (
-              <span className="shrink-0 text-13 text-tertiary">
-                已填 {filled} / {group.fields.length}
-              </span>
-            )
           )}
+          <FillProgress filled={group.fields.length - unfilled.length} total={group.fields.length} />
           {group.collapsible && (
             <button
               type="button"
               aria-expanded={!collapsed}
               aria-controls={`${id}-group-${group.id}`}
               aria-label={`${collapsed ? "展开" : "收起"}${group.name}`}
-              className="grid size-[30px] shrink-0 place-items-center rounded-md text-secondary hover:bg-layer-1"
-              onClick={toggle}
+              className="-mr-1.5 grid size-7 shrink-0 place-items-center rounded-md text-tertiary hover:bg-layer-1"
+              onClick={(event) => {
+                event.stopPropagation();
+                toggle();
+              }}
             >
-              {collapsed ? <ChevronRight className="size-4" /> : <ChevronDown className="size-4" />}
+              <ChevronDown className={cn("size-4 transition-transform", collapsed && "-rotate-90")} />
             </button>
           )}
         </div>
-        <div
-          id={`${id}-group-${group.id}`}
-          hidden={collapsed}
-          className="mt-2 rounded-[10px] border border-subtle px-[18px] pt-4 pb-[18px]"
-        >
-          {renderGrid(group)}
-          {hiddenEmpty && filled === 0 && (
-            <p className="text-13 text-tertiary">此分组暂无已填字段，可通过「显示未填」查看。</p>
+        <div id={`${id}-group-${group.id}`} hidden={collapsed} className="flex flex-col gap-3.5 px-4 pt-3.5 pb-4">
+          {shorts.length > 0 && (
+            <div hidden={!hasShorts} className={cn("grid gap-x-5 gap-y-3.5", layoutGridClass(group.columns))}>
+              {renderFields(shorts, group.columns)}
+            </div>
+          )}
+          {longs.length > 0 && (
+            <div
+              hidden={!hasLongs}
+              className={cn(
+                "grid grid-cols-[repeat(auto-fit,minmax(min(100%,20rem),1fr))] gap-3",
+                hasShorts && "border-t border-dashed border-subtle pt-3.5"
+              )}
+            >
+              {renderFields(longs)}
+            </div>
+          )}
+          {hiddenEmpty && unfilled.length > 0 && (
+            <p
+              className={cn(
+                "text-12 text-tertiary",
+                (hasShorts || hasLongs) && "border-t border-dashed border-subtle pt-2.5"
+              )}
+            >
+              未填写 {unfilled.length} 项：
+              <span className="text-secondary">
+                {unfilled.map((entry) => fieldMap.get(entry.field_id)?.name ?? "").join("、")}
+              </span>
+            </p>
           )}
         </div>
       </section>
@@ -293,10 +344,11 @@ export function IssueFieldLayout({
   };
 
   const toolbar = (hasCollapsible || showHideEmpty) && (
-    <div className="flex shrink-0 flex-wrap items-center justify-end gap-4 text-13 text-secondary">
+    <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
       {hasCollapsible && (
         <button
           type="button"
+          className={TOOLBAR_BUTTON_CLASS}
           onClick={() =>
             update((previous) => ({
               ...previous,
@@ -308,20 +360,34 @@ export function IssueFieldLayout({
         </button>
       )}
       {showHideEmpty && (
-        <button type="button" onClick={() => update((previous) => ({ ...previous, hideEmpty: !previous.hideEmpty }))}>
-          {hiddenEmpty ? `显示未填 ${emptyCount}` : "隐藏未填"}
+        <button
+          type="button"
+          className={TOOLBAR_BUTTON_CLASS}
+          onClick={() => update((previous) => ({ ...previous, hideEmpty: !previous.hideEmpty }))}
+        >
+          {hiddenEmpty ? "显示未填" : "隐藏未填"}
         </button>
       )}
     </div>
   );
-  // 页面页签是最上面一行时，操作并到页签行右侧，不再单独占一行
-  const toolbarInTabs = navigation.length > 0 && visible.fields.length === 0 && visible.groups.length === 0;
+  const showTitle = !!title && locations.length > 0;
+  // 没有标题行、页面页签又是最上面一行时，操作并到页签行右侧，不再单独占一行
+  const toolbarInTabs = !showTitle && navigation.length > 0 && rootGroups.length === 0;
 
   return (
-    <div ref={rootRef} className="@container/layout min-w-0 space-y-4">
-      {!toolbarInTabs && toolbar}
-      {renderUngrouped(visible)}
-      {visible.groups.map(renderGroup)}
+    <div ref={rootRef} className="@container/layout min-w-0 space-y-3.5">
+      {showTitle ? (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 text-14 font-semibold text-primary">
+            {title}
+            <FillProgress filled={locations.length - emptyCount} total={locations.length} />
+          </div>
+          {toolbar}
+        </div>
+      ) : (
+        !toolbarInTabs && toolbar
+      )}
+      {rootGroups.map(renderGroup)}
       {navigation.length > 0 && (
         <div className="flex items-center gap-4 border-b border-subtle">
           <div
@@ -379,10 +445,9 @@ export function IssueFieldLayout({
           role="tabpanel"
           aria-labelledby={`${id}-tab-${page.id}`}
           hidden={selectedPage !== page.id}
-          className="space-y-4"
+          className="space-y-3.5"
         >
-          {renderUngrouped(page)}
-          {page.groups.map(renderGroup)}
+          {pageGroups.get(page.id)?.map(renderGroup)}
         </div>
       ))}
       {locations.length === 0 && <p className="py-4 text-13 text-secondary">当前场景没有可展示的自定义字段</p>}

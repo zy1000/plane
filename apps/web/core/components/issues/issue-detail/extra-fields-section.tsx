@@ -10,6 +10,7 @@ import { useCallback, useEffect, useState } from "react";
 import { observer } from "mobx-react";
 // types
 import type { TIssueExtraFieldType, TIssueExtraFieldValue } from "@plane/types";
+import { Avatar } from "@plane/ui";
 // shared extra-field utilities
 import {
   ExtraFieldControl,
@@ -24,13 +25,15 @@ import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { issueTransitionDraft } from "@/hooks/store/use-issue-transition-draft";
 import { useIssueTypeExtraFields } from "@/hooks/store/use-issue-type-extra-fields";
 import { useMember } from "@/hooks/store/use-member";
+import { useProjectIssueTypes } from "@/hooks/store/use-project-issue-types";
 import { useIssueTypeLayout } from "@/hooks/store/use-issue-type-layout";
 import { useUser } from "@/hooks/store/user";
 import { IssueFieldLayout } from "../extra-fields/field-layout";
 // services
 import type { TTypeExtraField } from "@/services/project/project-issue-type.service";
 // utils
-import { cn, renderFormattedDate } from "@plane/utils";
+import { cn, getFileURL, renderFormattedDate } from "@plane/utils";
+import { issueTypeBaseName } from "@/utils/issue-type-layout";
 import { formatNumberFieldValue, getNumberFieldConfig } from "@/utils/number-field";
 import type { TIssueOperations } from "./root";
 
@@ -48,14 +51,15 @@ type TFieldCellProps = {
   disabled?: boolean;
 };
 
-const FieldLabel = ({ field, required }: { field: TTypeExtraField; required: boolean }) => {
+/** dimmed：查看态未填的字段，标签再浅一档 */
+const FieldLabel = ({ field, required, dimmed }: { field: TTypeExtraField; required: boolean; dimmed: boolean }) => {
   return (
     <div
-      className="flex min-h-[22px] min-w-0 items-center gap-2 text-14 text-secondary"
+      className={`flex min-w-0 items-center gap-1 text-12 ${dimmed ? "text-placeholder" : "text-tertiary"}`}
       title={field.description || field.name}
     >
       <span className="truncate">{field.name}</span>
-      {required && <span className="-ml-1.5 text-danger-primary">*</span>}
+      {required && <span className="text-danger-primary">*</span>}
     </div>
   );
 };
@@ -127,7 +131,10 @@ const FieldControlCell = (props: TFieldCellProps) => {
 const toIdList = (value: unknown): string[] =>
   Array.isArray(value) ? (value as string[]) : isValueEmpty(value) ? [] : [String(value)];
 
-/** 只读态：值一律排成纯文本，空值「未填写」，不渲染灰掉的输入框 */
+const VALUE_TAG_CLASS = "inline-flex h-5 items-center rounded-sm px-2 text-12 font-medium";
+const NEUTRAL_TAG_CLASS = `${VALUE_TAG_CLASS} bg-layer-1 text-secondary`;
+
+/** 只读态：按字段类型显示值（选项成标签、人员带头像、长文本落在浅底块里），未填显示「—」，不渲染灰掉的输入框 */
 const ReadOnlyFieldValue = observer(function ReadOnlyFieldValue({
   field,
   value,
@@ -136,43 +143,69 @@ const ReadOnlyFieldValue = observer(function ReadOnlyFieldValue({
   value: unknown;
 }) {
   const { getUserDetails } = useMember();
-  const text = (content: string) => <span className="font-medium break-all text-primary">{content}</span>;
+  const paragraph = isParagraphField(field);
 
-  if (field.field_type === "boolean") return text(value === true || value === "true" || value === 1 ? "是" : "否");
-  if (isValueEmpty(value)) return <span className="text-tertiary">未填写</span>;
+  if (isValueEmpty(value)) {
+    return paragraph ? (
+      <div className="min-h-[38px] rounded-md border border-dashed border-subtle px-2.5 py-2 text-placeholder">—</div>
+    ) : (
+      <span className="text-placeholder">—</span>
+    );
+  }
 
   switch (field.field_type) {
+    case "boolean": {
+      const checked = value === true || value === "true" || value === 1;
+      return (
+        <span className={checked ? `${VALUE_TAG_CLASS} bg-success-subtle text-success-primary` : NEUTRAL_TAG_CLASS}>
+          {checked ? "是" : "否"}
+        </span>
+      );
+    }
     case "date":
       return (
-        <span className="font-medium text-primary tabular-nums">
-          {renderFormattedDate(value as string) ?? String(value)}
-        </span>
+        <span className="text-primary tabular-nums">{renderFormattedDate(value as string) ?? String(value)}</span>
       );
     case "select": {
       const options = getSelectOptions(field);
-      return text(
-        toIdList(value)
-          .map((key) => options.find((option) => option.key === key)?.label ?? key)
-          .join("、")
+      return (
+        <>
+          {toIdList(value).map((key) => (
+            <span key={key} className={NEUTRAL_TAG_CLASS}>
+              {options.find((option) => option.key === key)?.label ?? key}
+            </span>
+          ))}
+        </>
       );
     }
     case "user":
-      return text(
-        toIdList(value)
-          .map((id) => getUserDetails(id)?.display_name ?? id)
-          .join("、")
+      return (
+        <>
+          {toIdList(value).map((id) => {
+            const member = getUserDetails(id);
+            const name = member?.display_name ?? id;
+            return (
+              <span key={id} className="mr-2 inline-flex min-w-0 items-center gap-1.5 text-primary">
+                <Avatar size={20} name={name} src={getFileURL(member?.avatar_url ?? "")} showTooltip={false} />
+                <span className="truncate">{name}</span>
+              </span>
+            );
+          })}
+        </>
       );
     case "number":
       return (
-        <span className="font-medium text-primary tabular-nums">
-          {formatNumberFieldValue(value, getNumberFieldConfig(field))}
-        </span>
+        <span className="text-primary tabular-nums">{formatNumberFieldValue(value, getNumberFieldConfig(field))}</span>
       );
     default:
-      if (isParagraphField(field)) {
-        return <div className="leading-relaxed break-words whitespace-pre-wrap text-primary">{String(value)}</div>;
+      if (paragraph) {
+        return (
+          <div className="min-h-[38px] rounded-md bg-layer-1 px-2.5 py-2 leading-relaxed break-words whitespace-pre-wrap text-primary">
+            {String(value)}
+          </div>
+        );
       }
-      return text(String(value));
+      return <span className="break-all text-primary">{String(value)}</span>;
   }
 });
 
@@ -204,6 +237,7 @@ export const IssueExtraFieldsSection = observer(function IssueExtraFieldsSection
     issue?.type_extra_fields ?? null
   );
   const { layout } = useIssueTypeLayout(workspaceSlug, projectId, issue?.type_id);
+  const { issueTypes } = useProjectIssueTypes(workspaceSlug, projectId);
   const commit = useCallback(
     async (fieldId: string, fieldType: TIssueExtraFieldType, nextValue: TIssueExtraFieldValue["value"]) => {
       const allowed = new Set((fields ?? []).map((field) => field.id));
@@ -227,6 +261,7 @@ export const IssueExtraFieldsSection = observer(function IssueExtraFieldsSection
       : fields,
     issue.extra_field_values ?? []
   );
+  const typeName = issueTypeBaseName(issueTypes?.find((issueType) => issueType.id === issue.type_id)?.name);
   return (
     <div className={cn(dimmed && "opacity-60")}>
       <IssueFieldLayout
@@ -237,27 +272,41 @@ export const IssueExtraFieldsSection = observer(function IssueExtraFieldsSection
         values={effective.values}
         context={isEditing ? "edit" : "detail"}
         preferenceKey={[user?.id ?? "anonymous", workspaceSlug, issue.type_id].join(":")}
-        renderField={(field, _placement, clearError) => (
-          <div className="min-w-0 space-y-2">
-            <FieldLabel field={field} required={isEditing && !!field.is_required} />
-            {isEditing ? (
-              <FieldControlCell
+        title={typeName ? `${typeName}字段` : "自定义字段"}
+        ungroupedName={typeName ? `${typeName}信息` : undefined}
+        renderField={(field, _placement, clearError) => {
+          const value = findValueForField(effective.values, field.id);
+          return (
+            <div className="min-w-0 space-y-1">
+              <FieldLabel
                 field={field}
-                projectId={projectId}
-                issueId={issueId}
-                value={findValueForField(effective.values, field.id)}
-                onCommit={(value) => {
-                  clearError();
-                  return commit(field.id, field.field_type, value);
-                }}
+                required={isEditing && !!field.is_required}
+                dimmed={!isEditing && isValueEmpty(value)}
               />
-            ) : (
-              <div className="min-w-0 text-14">
-                <ReadOnlyFieldValue field={field} value={findValueForField(effective.values, field.id)} />
-              </div>
-            )}
-          </div>
-        )}
+              {isEditing ? (
+                <FieldControlCell
+                  field={field}
+                  projectId={projectId}
+                  issueId={issueId}
+                  value={value}
+                  onCommit={(next) => {
+                    clearError();
+                    return commit(field.id, field.field_type, next);
+                  }}
+                />
+              ) : (
+                <div
+                  className={cn(
+                    "min-w-0 text-14",
+                    !isParagraphField(field) && "flex min-h-[22px] flex-wrap items-center gap-1"
+                  )}
+                >
+                  <ReadOnlyFieldValue field={field} value={value} />
+                </div>
+              )}
+            </div>
+          );
+        }}
       />
     </div>
   );

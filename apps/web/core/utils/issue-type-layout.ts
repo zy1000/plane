@@ -27,6 +27,10 @@ export const LAYOUT_ROOT_AREA: TIssueLayoutAreaRef = { kind: "root" };
 export const isLongLayoutField = (field: TLayoutField) =>
   field.field_type === "text" && (field.options?.mode === "paragraph" || field.options?.text_mode === "paragraph");
 
+/** 类型名去掉末尾括号里的子类（「缺陷(软件)」→「缺陷」），用来拼字段区标题「缺陷字段」和默认分组名「缺陷信息」 */
+export const issueTypeBaseName = (name: string | undefined) =>
+  name?.replace(/\s*[（(][^（）()]*[）)]\s*$/, "").trim() ?? "";
+
 export const defaultPlacement = (field: TLayoutField): TIssueFieldPlacement => ({
   field_id: field.id,
   width: isLongLayoutField(field) ? "full" : 1,

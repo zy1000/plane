@@ -23,9 +23,11 @@ import {
 // hooks
 import { useIssueTypeExtraFields } from "@/hooks/store/use-issue-type-extra-fields";
 import { useIssueTypeLayout } from "@/hooks/store/use-issue-type-layout";
+import { useProjectIssueTypes } from "@/hooks/store/use-project-issue-types";
 import { IssueFieldLayout } from "../../extra-fields/field-layout";
 // services
 import type { TTypeExtraField } from "@/services/project/project-issue-type.service";
+import { issueTypeBaseName } from "@/utils/issue-type-layout";
 
 type TIssueExtraFieldsProps = {
   control: Control<TIssue>;
@@ -88,6 +90,8 @@ export const IssueExtraFields = observer(function IssueExtraFields(props: TIssue
   } = props;
   const { fields } = useIssueTypeExtraFields(workspaceSlug, projectId, issueTypeId, embeddedFields);
   const { layout } = useIssueTypeLayout(workspaceSlug, projectId, issueTypeId);
+  const { issueTypes } = useProjectIssueTypes(workspaceSlug, projectId ?? undefined);
+  const typeName = issueTypeBaseName(issueTypes?.find((issueType) => issueType.id === issueTypeId)?.name);
   const {
     setValue,
     watch,
@@ -162,6 +166,7 @@ export const IssueExtraFields = observer(function IssueExtraFields(props: TIssue
             context={context}
             validationAttempt={submitCount}
             errors={errors}
+            ungroupedName={typeName ? `${typeName}信息` : undefined}
             renderField={(field) => {
               const value = findValueForField(currentValues, field.id);
               return (
