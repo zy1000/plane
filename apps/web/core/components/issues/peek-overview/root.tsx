@@ -15,6 +15,7 @@ import { TOAST_TYPE, setPromiseToast, setToast } from "@plane/propel/toast";
 import type { IWorkItemPeekOverview, TIssue } from "@plane/types";
 import { EIssueServiceType, EIssuesStoreType } from "@plane/types";
 // hooks
+import { prefetchIssueTransitionData } from "@/hooks/store/use-issue-available-transitions";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useIssues } from "@/hooks/store/use-issues";
 import { useIssueStoreType } from "@/hooks/use-issue-layout-store";
@@ -289,7 +290,15 @@ export const IssuePeekOverview = observer(function IssuePeekOverview(props: IWor
 
   const { isLoading } = useSWR(
     ["peek-issue", peekIssue?.workspaceSlug, peekIssue?.projectId, peekIssue?.issueId],
-    () => peekIssue && issueOperations.fetch(peekIssue.workspaceSlug, peekIssue.projectId, peekIssue.issueId),
+    async () => {
+      if (!peekIssue) return;
+      const { workspaceSlug, projectId, issueId } = peekIssue;
+      // 流转按钮的数据和工作项一起请求。两边差不多同时回来，工作项到了之后最多再等它 100ms，
+      // 内容出来时按钮已经在，不会晚一拍再把下面的属性顶下去
+      const transitionData = prefetchIssueTransitionData(workspaceSlug, projectId, issueId);
+      await issueOperations.fetch(workspaceSlug, projectId, issueId);
+      await Promise.race([transitionData, new Promise((resolve) => setTimeout(resolve, 100))]);
+    },
     {
       revalidateIfStale: false,
       revalidateOnFocus: false,

@@ -21,6 +21,7 @@ import { EmptyState } from "@/components/common/empty-state";
 import { PageHead } from "@/components/core/page-title";
 // hooks
 import { useAppTheme } from "@/hooks/store/use-app-theme";
+import { prefetchIssueTransitionData } from "@/hooks/store/use-issue-available-transitions";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useProject } from "@/hooks/store/use-project";
 import { useAppRouter } from "@/hooks/use-app-router";
@@ -52,7 +53,12 @@ export const IssueDetailsPage = observer(function IssueDetailsPage({ params }: R
   // fetching issue details
   const { data, isLoading, error } = useSWR<TIssue, Error>(
     `ISSUE_DETAIL_${workspaceSlug}_${projectIdentifier}_${sequence_id}`,
-    () => fetchIssueWithIdentifier(workspaceSlug.toString(), projectIdentifier, sequence_id)
+    () =>
+      fetchIssueWithIdentifier(workspaceSlug.toString(), projectIdentifier, sequence_id).then((issue) => {
+        // 拿到 id 就把流转按钮的数据先请求出去，赶在详情内容挂载时一起发的那十几个请求前面
+        if (issue.project_id) void prefetchIssueTransitionData(workspaceSlug.toString(), issue.project_id, issue.id);
+        return issue;
+      })
   );
 
   // derived values

@@ -4,9 +4,9 @@
  * See the LICENSE file for details.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { observer } from "mobx-react";
-import { ArrowRight, Loader2, Workflow } from "lucide-react";
+import { ArrowRight, Workflow } from "lucide-react";
 import { EIconSize } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
@@ -17,7 +17,6 @@ import type { TStateGroups } from "@plane/types";
 import { cn } from "@plane/utils";
 // components
 import { StateDropdown } from "@/components/dropdowns/state/dropdown";
-import { findValueForField, isValueEmpty } from "@/components/issues/extra-fields";
 import { IssueApprovalTag } from "@/components/issues/issue-approval-tag";
 // hooks
 import { useIssueApprovalStatus } from "@/hooks/store/use-issue-approval-status";
@@ -51,7 +50,7 @@ type Props = {
 };
 
 type TStateIconProps = { color?: string | null; group?: string | null; order?: number };
-type TStateLabelProps = TStateIconProps & { name: string; muted?: boolean };
+type TStateLabelProps = TStateIconProps & { name: string };
 
 /** 画法同状态下拉：16px，带 order（未开始 / 进行中组按它画进度） */
 const StateIcon = ({ color, group, order }: TStateIconProps) =>
@@ -64,8 +63,8 @@ const StateIcon = ({ color, group, order }: TStateIconProps) =>
     />
   ) : null;
 
-const StateLabel = ({ name, muted, ...icon }: TStateLabelProps) => (
-  <span className={`inline-flex min-w-0 items-center gap-1.5 text-body-xs-medium ${muted ? "text-tertiary" : "text-secondary"}`}>
+const StateLabel = ({ name, ...icon }: TStateLabelProps) => (
+  <span className="inline-flex min-w-0 items-center gap-1.5 text-body-xs-medium text-secondary">
     <StateIcon {...icon} />
     <span className="truncate">{name}</span>
   </span>
@@ -79,7 +78,8 @@ const TAG = "shrink-0 rounded-sm bg-warning-subtle px-1.5 text-12 leading-[18px]
 
 /**
  * 工作项的「状态」属性：当前状态 + 从它出发的流转按钮（全部平铺；当前用户不能发起的置灰并写明谁可以发起）。
- * 有要填的（必填字段没填、要指定处理人、要审批）→ 进入编辑态，状态显示「起 → 止」；什么都不用填 → 直接流转。
+ * 点流转按钮一律先进入编辑态（「状态」仍是起始状态，「流转至」显示目标状态），点页头「确认流转 / 提交审批」才生效，
+ * 没有要填的也一样。
  * 有待审批的流转时显示目标状态与「查看审批」，发起人可撤回。状态下拉只在编辑态可改。
  */
 export const IssueStatusProperty = observer(function IssueStatusProperty(props: Props) {
@@ -101,30 +101,34 @@ export const IssueStatusProperty = observer(function IssueStatusProperty(props: 
   const { data: currentUser } = useUser();
   const stateTransitionGuard = useStateTransitionAssigneeGuard(workspaceSlug, projectId);
   const issue = getIssueById(issueId);
-  const { records, hasPendingApproval, invalidate } = useIssueApprovalStatus(workspaceSlug, projectId, issueId);
-  const { transitions, refresh } = useIssueAvailableTransitions(
+  const {
+    records,
+    hasPendingApproval,
+    isLoaded: approvalLoaded,
+    invalidate,
+  } = useIssueApprovalStatus(workspaceSlug, projectId, issueId);
+  // 编辑中状态是暂存值、保存返回前是乐观值，库里还是旧状态，这时不能拉；编辑结束后 hook 会按库里的状态重拉
+  const { transitions } = useIssueAvailableTransitions(
     workspaceSlug,
     projectId,
     issueId,
     issue?.state_id,
-    canEdit && !isArchived && !hasPendingApproval
+    canEdit && !isArchived && !hasPendingApproval && !session.isEditing
   );
-  const [busyId, setBusyId] = useState<string | null>(null);
-  // 本地状态是先乐观改的，随状态变化拉的列表可能早于 PATCH 落库；编辑会话结束（保存完 / 取消）再拉一次
-  const wasEditing = useRef(session.isEditing);
-  useEffect(() => {
-    if (wasEditing.current && !session.isEditing) void refresh();
-    wasEditing.current = session.isEditing;
-  }, [refresh, session.isEditing]);
+  const [withdrawing, setWithdrawing] = useState(false);
 
   if (!issue) return null;
 
   const rows = layout === "rows";
-  const currentState = getStateById(issue.state_id);
   const activeTransition = session.isEditing ? session.transition : null;
+  // 流转编辑中本地状态已经暂存成目标状态：「状态」仍显示起始状态，目标状态显示在「流转至」
+  const shownStateId = activeTransition ? activeTransition.from_state_id : issue.state_id;
+  const currentState = getStateById(shownStateId);
   const pendingRecord = !isArchived && hasPendingApproval && !activeTransition ? records[0] : undefined;
   const stateEditable = canEdit && !isArchived && session.isEditing && !session.isSaving && !activeTransition;
-  const showTransitions = canEdit && !isArchived && !session.isEditing && !pendingRecord && transitions.length > 0;
+  // 有没有待审批还没取到时先不出按钮，免得审批中的工作项先闪一下按钮
+  const showTransitions =
+    canEdit && !isArchived && !session.isEditing && approvalLoaded && !pendingRecord && transitions.length > 0;
 
   const handleStateChange = async (nextStateId: string) => {
     await stateTransitionGuard.requestStateChange(issue, nextStateId, async (payload) => {
@@ -132,33 +136,8 @@ export const IssueStatusProperty = observer(function IssueStatusProperty(props: 
     });
   };
 
-  const needsInput = (transition: TAvailableTransition) => {
-    const values = issue.extra_field_values ?? [];
-    return (
-      transition.requires_approval ||
-      transition.assignee_required ||
-      transition.required_fields.some((field) => isValueEmpty(findValueForField(values, field.id)))
-    );
-  };
-
-  const handleStart = async (transition: TAvailableTransition) => {
-    if (needsInput(transition)) {
-      session.startTransition(transition);
-      return;
-    }
-    setBusyId(transition.id);
-    try {
-      await session.operations.update(workspaceSlug, projectId, issueId, { state_id: transition.to_state_id });
-    } finally {
-      setBusyId(null);
-      invalidate();
-      // PATCH 已经结束，按库里的状态重拉
-      void refresh();
-    }
-  };
-
   const handleWithdraw = async (recordId: string) => {
-    setBusyId(recordId);
+    setWithdrawing(true);
     try {
       await workflowService.withdrawTransitionRecord(workspaceSlug, projectId, recordId);
       setToast({ type: TOAST_TYPE.SUCCESS, title: "已撤回", message: "状态流转申请已撤回" });
@@ -166,7 +145,7 @@ export const IssueStatusProperty = observer(function IssueStatusProperty(props: 
       const message = (error as { error?: string } | undefined)?.error ?? "撤回失败，请重试";
       setToast({ type: TOAST_TYPE.ERROR, title: "撤回失败", message });
     } finally {
-      setBusyId(null);
+      setWithdrawing(false);
       invalidate();
     }
   };
@@ -178,7 +157,6 @@ export const IssueStatusProperty = observer(function IssueStatusProperty(props: 
       : transition.initiator_labels.length > 0
         ? `仅 ${transition.initiator_labels.join("、")} 可发起`
         : "当前账号不在发起人范围内";
-    const busy = busyId === transition.id;
     const title = (
       <>
         <StateIcon
@@ -209,8 +187,8 @@ export const IssueStatusProperty = observer(function IssueStatusProperty(props: 
         <span className={rows ? "flex w-full" : "inline-flex max-w-full"}>
           <button
             type="button"
-            disabled={!transition.can_initiate || busyId !== null}
-            onClick={() => void handleStart(transition)}
+            disabled={!transition.can_initiate}
+            onClick={() => session.startTransition(transition)}
             className={cn(
               "flex min-w-0 items-center gap-2 rounded-md border border-subtle bg-surface-1 text-13 font-medium text-secondary shadow-raised-100 transition-colors outline-none focus-visible:border-accent-strong",
               "enabled:hover:border-strong enabled:hover:bg-layer-1-hover disabled:cursor-not-allowed",
@@ -223,20 +201,10 @@ export const IssueStatusProperty = observer(function IssueStatusProperty(props: 
                   <span className={cn("flex min-w-0 items-center gap-1.5", reason && "opacity-50")}>{title}</span>
                   {reason && <span className="text-12 leading-[18px] font-normal text-balance text-tertiary">{reason}</span>}
                 </span>
-                {busy ? (
-                  <Loader2 className="size-4 shrink-0 animate-spin text-tertiary" aria-hidden="true" />
-                ) : (
-                  <ArrowRight
-                    className={cn("size-4 shrink-0 text-tertiary", reason && "opacity-50")}
-                    aria-hidden="true"
-                  />
-                )}
+                <ArrowRight className={cn("size-4 shrink-0 text-tertiary", reason && "opacity-50")} aria-hidden="true" />
               </>
             ) : (
-              <span className={cn("flex min-w-0 items-center gap-1.5", reason && "opacity-50")}>
-                {busy && <Loader2 className="size-4 shrink-0 animate-spin text-tertiary" aria-hidden="true" />}
-                {title}
-              </span>
+              <span className={cn("flex min-w-0 items-center gap-1.5", reason && "opacity-50")}>{title}</span>
             )}
           </button>
         </span>
@@ -244,28 +212,14 @@ export const IssueStatusProperty = observer(function IssueStatusProperty(props: 
     );
   };
 
-  // 流转编辑中：起 → 止
-  const fromState = activeTransition ? getStateById(activeTransition.from_state_id) : undefined;
-  const flowPath = activeTransition && (
-    <>
-      {fromState && (
-        <StateLabel
-          name={fromState.name}
-          color={fromState.color}
-          // 属性行的值列窄，起始状态只留名称，「起 → 止」尽量排在一行
-          group={rows ? null : fromState.group}
-          order={fromState.order}
-          muted
-        />
-      )}
-      <ArrowRight className="size-4 shrink-0 text-accent-primary" aria-hidden="true" />
-      <StateLabel
-        name={activeTransition.to_state_name}
-        color={activeTransition.to_state_color}
-        group={activeTransition.to_state_group}
-        order={getStateById(activeTransition.to_state_id)?.order}
-      />
-    </>
+  // 流转编辑中：目标状态（两个状态名各占一处，不挤在同一格里换行）
+  const transitionTarget = activeTransition && (
+    <StateLabel
+      name={activeTransition.to_state_name}
+      color={activeTransition.to_state_color}
+      group={activeTransition.to_state_group}
+      order={getStateById(activeTransition.to_state_id)?.order}
+    />
   );
 
   // 审批中：目标状态 + 查看审批 / 撤回
@@ -288,7 +242,7 @@ export const IssueStatusProperty = observer(function IssueStatusProperty(props: 
           variant="secondary"
           size="lg"
           onClick={() => void handleWithdraw(pendingRecord.id)}
-          loading={busyId !== null}
+          loading={withdrawing}
         >
           撤回
         </Button>
@@ -305,26 +259,29 @@ export const IssueStatusProperty = observer(function IssueStatusProperty(props: 
           <div className={ROWS_GRID}>
             <StructureFieldLabel icon={StatePropertyIcon} label={stateLabel} />
             <StructureFieldValue>
-              {activeTransition ? (
-                <div className={ROW_VALUE}>{flowPath}</div>
-              ) : (
-                <StateDropdown
-                  value={issue.state_id}
-                  onChange={handleStateChange}
-                  projectId={projectId}
-                  issueTypeId={issue.type_id}
-                  disabled={!stateEditable}
-                  buttonVariant="transparent-with-text"
-                  className="group w-full"
-                  buttonContainerClassName="w-full text-left h-7.5 rounded-sm"
-                  buttonClassName="text-body-xs-medium justify-between"
-                  dropdownArrow
-                  dropdownArrowClassName="h-3.5 w-3.5 hidden group-hover:inline"
-                />
-              )}
+              <StateDropdown
+                value={shownStateId}
+                onChange={handleStateChange}
+                projectId={projectId}
+                issueTypeId={issue.type_id}
+                disabled={!stateEditable}
+                buttonVariant="transparent-with-text"
+                className="group w-full"
+                buttonContainerClassName="w-full text-left h-7.5 rounded-sm"
+                buttonClassName="text-body-xs-medium justify-between"
+                dropdownArrow
+                dropdownArrowClassName="h-3.5 w-3.5 hidden group-hover:inline"
+              />
             </StructureFieldValue>
 
-            {pendingRecord ? (
+            {transitionTarget ? (
+              <>
+                <StructureFieldLabel icon={Workflow} label="流转至" />
+                <StructureFieldValue>
+                  <div className={ROW_VALUE}>{transitionTarget}</div>
+                </StructureFieldValue>
+              </>
+            ) : pendingRecord ? (
               <>
                 <StructureFieldLabel icon={Workflow} label="流转至" />
                 <StructureFieldValue>
@@ -343,9 +300,7 @@ export const IssueStatusProperty = observer(function IssueStatusProperty(props: 
       ) : (
         <section aria-label={stateLabel} className={cn("flex flex-wrap items-center gap-x-3 gap-y-2", className)}>
           <span className={INLINE_LABEL}>{stateLabel}</span>
-          {activeTransition ? (
-            flowPath
-          ) : stateEditable ? (
+          {stateEditable ? (
             <StateDropdown
               value={issue.state_id}
               onChange={handleStateChange}
@@ -368,18 +323,19 @@ export const IssueStatusProperty = observer(function IssueStatusProperty(props: 
             )
           )}
 
-          {(pendingRecord || showTransitions) && (
+          {(transitionTarget || pendingRecord || showTransitions) && (
             <>
               <span aria-hidden="true" className="mx-1 h-5 border-l border-subtle" />
               <span className={INLINE_LABEL}>流转至</span>
-              {pendingRecord ? (
-                <>
-                  {pendingTarget}
-                  {pendingActions}
-                </>
-              ) : (
-                transitions.map(renderTransition)
-              )}
+              {transitionTarget ??
+                (pendingRecord ? (
+                  <>
+                    {pendingTarget}
+                    {pendingActions}
+                  </>
+                ) : (
+                  transitions.map(renderTransition)
+                ))}
             </>
           )}
         </section>

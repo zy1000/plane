@@ -100,6 +100,24 @@ export async function fetchIssueApprovalStatus(
   return promise;
 }
 
+/**
+ * 详情开始加载时预取单个工作项，不等攒批：攒批的定时器会被紧接着的整页渲染拖住，
+ * 等它触发时详情内容已经出来了，「状态」那块还得再等这一趟。
+ */
+export function prefetchIssueApprovalStatus(workspaceSlug: string, projectId: string, issueId: string) {
+  const request = fetchIssueApprovalStatus(workspaceSlug, projectId, issueId);
+  if (batchTimer) {
+    clearTimeout(batchTimer);
+    processBatch();
+  }
+  return request;
+}
+
+/** 同步读已经取过的结果（没取过返回 undefined）：组件首帧就能知道有没有待审批，不必等一轮异步 */
+export function getCachedIssueApprovalStatus(projectId: string, issueId: string) {
+  return cache.get(getCacheKey(projectId, issueId));
+}
+
 export function subscribeIssueApprovalStatus(
   projectId: string,
   issueId: string,

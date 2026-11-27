@@ -103,9 +103,19 @@ def resolve_dimension_user_ids(
     issue: Issue, transition: WorkflowTransition, dimension: str
 ) -> list:
     """解析指定维度中的 member/role/dynamic，返回去重后的真实用户 ID 列表。"""
-    principals = list(get_transition_principals(transition, dimension))
+    return _resolve_principal_user_ids(issue, list(get_transition_principals(transition, dimension)))
+
+
+def _resolve_principal_user_ids(issue: Issue, principals, memo=None) -> list:
+    """
+    把一组对象行解析成真实用户 ID。
+    memo：同一个工作项连着解析好几组时（详情页流转按钮：每条流转的发起人 + 目标负责人）传同一个 dict，
+    关联产品、按角色找人、负责人、在职成员只查一次；不传就每次现查，结果一样。
+    """
     if not principals:
         return []
+    if memo is None:
+        memo = {}
 
     user_ids = []
     job_role_ids = []
@@ -130,12 +140,22 @@ def resolve_dimension_user_ids(
         # 缺陷可关联多个产品：每个关联产品的矩阵都算
         from plane.db.models import IssueProduct
 
-        product_ids = list(
-            IssueProduct.objects.filter(issue_id=issue.id).values_list("product_id", flat=True)
-        ) or ([issue.product_id] if getattr(issue, "product_id", None) else None)
-        user_ids.extend(resolve_project_job_role_users(issue.project_id, job_role_ids, product_ids))
+        if "product_ids" not in memo:
+            memo["product_ids"] = list(
+                IssueProduct.objects.filter(issue_id=issue.id).values_list("product_id", flat=True)
+            ) or ([issue.product_id] if getattr(issue, "product_id", None) else None)
+        # 每个角色各自回退、几个角色取并集，逐个角色解析与一次传一组结果相同
+        role_users = memo.setdefault("role_users", {})
+        for job_role_id in job_role_ids:
+            if job_role_id not in role_users:
+                role_users[job_role_id] = resolve_project_job_role_users(
+                    issue.project_id, [job_role_id], memo["product_ids"]
+                )
+            user_ids.extend(role_users[job_role_id])
     if want_assignees:
-        user_ids.extend(get_issue_assignee_ids(issue))
+        if "assignee_ids" not in memo:
+            memo["assignee_ids"] = get_issue_assignee_ids(issue)
+        user_ids.extend(memo["assignee_ids"])
     if want_created_by and issue.created_by_id:
         user_ids.append(issue.created_by_id)
 
@@ -144,17 +164,22 @@ def resolve_dimension_user_ids(
         return []
     # 模式方案的指定成员只要求工作区成员（共用给多个项目），解析时按本工作项项目的在职成员收口；
     # 否则会给项目外的人建审批记录、发通知，而他们进不了项目也处理不了
-    active_member_ids = set(
-        _normalize_user_ids(
-            ProjectMember.objects.filter(
-                project_id=issue.project_id,
-                is_active=True,
-                deleted_at__isnull=True,
-                member_id__in=normalized_ids,
-            ).values_list("member_id", flat=True)
+    active_members = memo.setdefault("active_members", {})
+    unchecked = [user_id for user_id in normalized_ids if user_id not in active_members]
+    if unchecked:
+        found = set(
+            _normalize_user_ids(
+                ProjectMember.objects.filter(
+                    project_id=issue.project_id,
+                    is_active=True,
+                    deleted_at__isnull=True,
+                    member_id__in=unchecked,
+                ).values_list("member_id", flat=True)
+            )
         )
-    )
-    return [user_id for user_id in normalized_ids if user_id in active_member_ids]
+        for user_id in unchecked:
+            active_members[user_id] = user_id in found
+    return [user_id for user_id in normalized_ids if active_members[user_id]]
 
 
 def resolve_transition_approver_ids(issue: Issue, transition: WorkflowTransition) -> list:
@@ -948,22 +973,40 @@ def list_available_transitions(issue: Issue, user) -> list:
     if not workflow:
         return []
 
-    transitions = (
+    transitions = list(
         WorkflowTransition.objects.filter(workflow=workflow, from_state_id=issue.state_id)
         .select_related("to_state")
         .order_by("to_state__sequence", "created_at")
     )
-    current_assignee_ids = set(get_issue_assignee_ids(issue))
+    if not transitions:
+        return []
+
+    # 详情页一打开就要用，尽量少查：各条流转的发起人 / 目标负责人、必填字段一次取完，
+    # 同一个工作项反复用到的查询（关联产品、按角色找人、在职成员）经 memo 只查一次
+    principals_by_key = {}
+    for principal in WorkflowTransitionPrincipal.objects.filter(
+        transition__in=transitions,
+        dimension__in=[WorkflowPrincipalDimension.INITIATOR, WorkflowPrincipalDimension.ASSIGNEE],
+        deleted_at__isnull=True,
+    ).select_related("member", "job_role"):
+        principals_by_key.setdefault((principal.transition_id, principal.dimension), []).append(principal)
+    required_fields_by_transition = {}
+    for item in WorkflowTransitionRequiredField.objects.filter(
+        workflow__in=transitions, deleted_at__isnull=True, extra_field__deleted_at__isnull=True
+    ).select_related("extra_field"):
+        required_fields_by_transition.setdefault(item.workflow_id, []).append(
+            {"id": str(item.extra_field_id), "name": item.extra_field.name}
+        )
+    assignee_ids = get_issue_assignee_ids(issue)
+    memo = {"assignee_ids": assignee_ids}
+    current_assignee_ids = set(assignee_ids)
+
     results = []
     for transition in transitions:
         # 发起人维度为空时全员可发起，口径同 _check_transition_initiator
-        initiator_principals = list(
-            get_transition_principals(transition, WorkflowPrincipalDimension.INITIATOR).select_related(
-                "member", "job_role"
-            )
-        )
+        initiator_principals = principals_by_key.get((transition.id, WorkflowPrincipalDimension.INITIATOR), [])
         can_initiate = not initiator_principals or str(user.id) in set(
-            resolve_dimension_user_ids(issue, transition, WorkflowPrincipalDimension.INITIATOR)
+            _resolve_principal_user_ids(issue, initiator_principals, memo)
         )
 
         # 发起不了的只用来置灰展示，不必解析负责人和必填字段
@@ -971,18 +1014,12 @@ def list_available_transitions(issue: Issue, user) -> list:
         assignee_required = False
         required_fields = []
         if can_initiate:
-            if get_transition_principals(transition, WorkflowPrincipalDimension.ASSIGNEE).exists():
-                allowed_assignee_ids = resolve_dimension_user_ids(
-                    issue, transition, WorkflowPrincipalDimension.ASSIGNEE
-                )
+            assignee_principals = principals_by_key.get((transition.id, WorkflowPrincipalDimension.ASSIGNEE), [])
+            if assignee_principals:
+                allowed_assignee_ids = _resolve_principal_user_ids(issue, assignee_principals, memo)
                 # 配了目标负责人且现负责人不全在允许范围里，就得在流转时重新指定
                 assignee_required = not current_assignee_ids.issubset(set(allowed_assignee_ids))
-            required_fields = [
-                {"id": str(item.extra_field_id), "name": item.extra_field.name}
-                for item in WorkflowTransitionRequiredField.objects.filter(
-                    workflow=transition, deleted_at__isnull=True, extra_field__deleted_at__isnull=True
-                ).select_related("extra_field")
-            ]
+            required_fields = required_fields_by_transition.get(transition.id, [])
 
         to_state = transition.to_state
         results.append(
