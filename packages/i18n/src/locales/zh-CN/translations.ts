@@ -2655,6 +2655,7 @@ export default {
       reason_save: "保存原因",
       completed_will_delete: "这条评审已评审，改为裁剪并签批后会连同轨迹、评论、附件一起删除",
       locked_disabled: "模板已停用，不能改为保留",
+      locked_parent_cut: "所属评审已裁剪，评审活动不能单独保留",
       write_reason: "填写原因",
       reason_for: "{product} · {review}",
       reason_save_hint: "保存",
@@ -2938,6 +2939,7 @@ export default {
     errors: {
       REVIEW_TAILORING_REASON_REQUIRED: "有裁剪项还没填写裁剪原因",
       REVIEW_TAILORING_TEMPLATE_DISABLED: "有勾选项来自已停用的模板",
+      REVIEW_TAILORING_PARENT_CUT: "所属评审已裁剪的评审活动不能保留",
       REVIEW_TAILORING_APPROVER_INVALID: "签批人必须是本项目的成员",
       REVIEW_TAILORING_PRODUCT_NOT_LINKED: "有产品没有关联到本项目",
       REVIEW_TAILORING_TEMPLATE_INVALID: "有评审不在本工作区的模板库里，或已被停用",

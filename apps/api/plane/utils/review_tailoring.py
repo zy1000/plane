@@ -808,8 +808,8 @@ def sync_items(*, tailoring, actor):
 def save_cells(*, tailoring, cells, actor):
     """保存勾选与裁剪原因。
 
-    评审与评审活动各自独立、互不带动（产品决策）：裁掉评审不会连带裁掉它的活动，保留活动
-    也不会把评审拉回来。
+    评审没了，评审活动也不能保留（``_cascade_parent_cut``）：裁掉评审时同表里它的活动跟着
+    裁掉；评审裁着的时候单独把活动改回保留，直接拒绝。保留活动不会把评审拉回来。
 
     草稿态允许原因留空 —— 逼着边勾边写会让人没法先把矩阵勾完。缺原因在提交签批时才拦。
 
@@ -851,6 +851,11 @@ def save_cells(*, tailoring, cells, actor):
             item.selected = bool(cell["selected"])
         if "reason" in cell:
             item.reason = (cell["reason"] or "").strip()
+
+    _cascade_parent_cut(
+        items.values(),
+        kept_ids={cell["id"] for cell in cells if cell.get("selected")},
+    )
 
     # 勾上的格子不该留着上一次的裁剪原因 —— 它会在明细表里显示成「要做，但原因是…」
     for item in items.values():
@@ -909,6 +914,52 @@ def save_cells(*, tailoring, cells, actor):
             moved, ["stage", "origin_stage", "title", "updated_at"], batch_size=500
         )
     return list(items.values())
+
+
+#: 跟着所属评审一起裁掉的活动，原因留空时填这一句（前端 ``PARENT_CUT_REASON`` 同一句）
+PARENT_CUT_REASON = "随所属评审裁剪"
+
+
+def _parent_cut_items(items):
+    """所属评审在同一张表里被裁掉、自己却还保留着的评审活动格子。
+
+    父格子按 (产品, 阶段, 父节点) 找；挪过阶段的活动已经脱离原评审，不算。
+    纵轴上压根没挑它的评审的，不在此列（只管同表里被裁掉的评审）。
+    """
+    items = list(items)
+    cut_roots = {
+        (item.product_id, item.stage_id, item.template_id)
+        for item in items
+        if not item.selected
+    }
+    return [
+        item
+        for item in items
+        if item.selected
+        and not item.origin_stage_id
+        and item.template.parent_id
+        and (item.product_id, item.stage_id, item.template.parent_id) in cut_roots
+    ]
+
+
+def _cascade_parent_cut(items, *, kept_ids):
+    """评审裁掉了，它的活动跟着裁掉；这一批里明确要保留的活动直接拒绝。"""
+    orphans = _parent_cut_items(items)
+    rejected = [
+        {"item_id": str(item.id), "title": item.title}
+        for item in orphans
+        if item.id in kept_ids
+    ]
+    if rejected:
+        raise ReviewTailoringError(
+            "A review activity cannot be kept when its review is tailored out.",
+            code="REVIEW_TAILORING_PARENT_CUT",
+            detail={"items": rejected},
+        )
+    for item in orphans:
+        item.selected = False
+        if not item.reason:
+            item.reason = PARENT_CUT_REASON
 
 
 def _restage_title(title, item, old_stage_name, stage_name):
@@ -1067,7 +1118,7 @@ def update_header(*, tailoring, title=None, description_html=None, actor):
 
 
 def _validate_before_submit(tailoring):
-    """提交签批前的三道闸门，一次全查完再抛，别让人改一处提一次。"""
+    """提交签批前的四道闸门，一次全查完再抛，别让人改一处提一次。"""
     items = list(
         ReviewTailoringItem.objects.filter(tailoring=tailoring).select_related(
             "template", "stage_review"
@@ -1105,6 +1156,18 @@ def _validate_before_submit(tailoring):
             "Some selected reviews come from a disabled template.",
             code="REVIEW_TAILORING_TEMPLATE_DISABLED",
             detail={"items": disabled},
+        )
+
+    # 3. 评审裁掉了，它的活动不能还保留着（存量数据或绕过前端的请求）
+    orphans = [
+        {"item_id": str(item.id), "title": item.title}
+        for item in _parent_cut_items(items)
+    ]
+    if orphans:
+        raise ReviewTailoringError(
+            "A review activity cannot be kept when its review is tailored out.",
+            code="REVIEW_TAILORING_PARENT_CUT",
+            detail={"items": orphans},
         )
 
     # 已评审的评审也允许裁掉：已评审即定稿、不能退回，这是定稿后唯一的纠错出口。
@@ -1636,6 +1699,8 @@ def _create_stage_reviews(tailoring, items, actor):
         StageReview.objects.bulk_create(reviews, batch_size=500)
         created.extend(reviews)
 
+    _attach_existing_children(items, roots, review_by_key)
+
     # 项目里（研发矩阵 / 成员角色）对得上主导者、审核者角色的人，直接带进负责人 / 审核人
     from plane.utils.stage_review import assign_role_holders
 
@@ -1645,6 +1710,54 @@ def _create_stage_reviews(tailoring, items, actor):
         pending, ["stage_review", "updated_at"], batch_size=500
     )
     return created_ids
+
+
+def _attach_existing_children(items, new_roots, review_by_key):
+    """本次新建的父评审，把已经存在、还没挂父评审的活动认回来。
+
+    场景：上一版只保留了活动、裁掉了评审，活动生成时就没有父；这一版把评审加回来，
+    活动不在待生成里，不补的话两边永远连不上。挪过阶段的活动不认（同新建时的规则）。
+    """
+    new_root_ids = {
+        review_by_key[(item.product_id, item.stage_id, item.template_id)]
+        for item in new_roots
+    }
+    if not new_root_ids:
+        return
+    parent_by_child = {}
+    for item in items:
+        template = item.template
+        if (
+            not item.selected
+            or not item.stage_review_id
+            or item.stage_review_id in new_root_ids
+            or item.origin_stage_id
+            or template.kind not in ACTIVITY_KINDS
+            or not template.parent_id
+        ):
+            continue
+        parent_id = review_by_key.get(
+            (item.product_id, item.stage_id, template.parent_id)
+        )
+        if parent_id in new_root_ids:
+            parent_by_child[item.stage_review_id] = parent_id
+    if not parent_by_child:
+        return
+    # 只认还没父、且仍在格子那个阶段的活动：别的入口挪走过的不去动
+    orphans = StageReview.objects.filter(
+        id__in=parent_by_child.keys(), parent__isnull=True
+    ).only("id", "stage_id", "parent_id")
+    stage_by_root = dict(
+        StageReview.objects.filter(id__in=new_root_ids).values_list("id", "stage_id")
+    )
+    to_update = []
+    for review in orphans:
+        parent_id = parent_by_child[review.id]
+        if review.stage_id != stage_by_root.get(parent_id):
+            continue
+        review.parent_id = parent_id
+        to_update.append(review)
+    StageReview.objects.bulk_update(to_update, ["parent"], batch_size=500)
 
 
 def _apply_effective(*, tailoring, actor, comment=""):

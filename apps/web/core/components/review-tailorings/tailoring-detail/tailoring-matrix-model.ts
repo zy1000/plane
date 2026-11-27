@@ -240,11 +240,18 @@ export const buildMatrixColumns = (products: TReviewTailoringProduct[]): TReview
 /**
  * 这个格子能不能改。
  *
- * 只剩一种锁：停用模板不许新增勾选。已评审的评审可以裁掉（定稿后唯一的纠错出口），
+ * 两种锁，都只拦「改为保留」：停用模板不许新增勾选；所属评审被裁掉的活动不能单独保留
+ * （`parentCutIds`，来自 `getParentCutIds`）。已评审的评审可以裁掉（定稿后唯一的纠错出口），
  * 由格子与提交弹窗提示会删除记录。返回 null 表示可改，否则是该显示的原因 key。
  */
-export const getCellLockReason = (item: TReviewTailoringItem, nextSelected: boolean): "locked_disabled" | null => {
-  if (nextSelected && !item.template_is_active && !item.stage_review_id) return "locked_disabled";
+export const getCellLockReason = (
+  item: TReviewTailoringItem,
+  nextSelected: boolean,
+  parentCutIds: Set<string>
+): "locked_disabled" | "locked_parent_cut" | null => {
+  if (!nextSelected) return null;
+  if (parentCutIds.has(item.id)) return "locked_parent_cut";
+  if (!item.template_is_active && !item.stage_review_id) return "locked_disabled";
   return null;
 };
 

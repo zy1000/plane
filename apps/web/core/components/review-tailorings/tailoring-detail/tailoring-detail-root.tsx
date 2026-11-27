@@ -16,7 +16,7 @@ import { AlertModalCore, Breadcrumbs, Loader } from "@plane/ui";
 import { cn, copyUrlToClipboard } from "@plane/utils";
 import { reviewTailoringDetailPath, reviewTailoringsPath } from "@/components/reviews/routes";
 import { FiltersRow } from "@/components/rich-filters/filters-row";
-import { useReviewTailoringDetail } from "@/hooks/store/use-review-tailoring-detail";
+import { getParentCutIds, useReviewTailoringDetail } from "@/hooks/store/use-review-tailoring-detail";
 import { useReviewTailoringFeed } from "@/hooks/store/use-review-tailoring-feed";
 import { getTailoringError } from "@/hooks/store/use-review-tailorings";
 import { useUser } from "@/hooks/store/user";
@@ -233,7 +233,7 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
   const handleToggle = (itemId: string, selected: boolean) => {
     const item = items.find((entry) => entry.id === itemId);
     if (!item) return;
-    const lock = getCellLockReason(item, selected);
+    const lock = getCellLockReason(item, selected, store.parentCutIds);
     if (lock) {
       setToast({ type: TOAST_TYPE.ERROR, title: t(`${I18N}.matrix.${lock}`) });
       return;
@@ -246,8 +246,13 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
    * 应用完**不清选中** —— 裁剪之后通常紧接着对同一批「填写原因」，清掉就得重新勾一遍。
    */
   const handleSetCells = (cells: TReviewTailoringItem[], selected: boolean) => {
+    // 「所属评审被裁」按改完之后算：评审和它的活动一起保留时，活动不该被当成锁住的跳过
+    const targets = new Set(cells.map((cell) => cell.id));
+    const parentCutAfter = getParentCutIds(
+      items.map((item) => (targets.has(item.id) ? { ...item, selected } : item))
+    );
     store.setCells(
-      cells.filter((cell) => cell.selected !== selected && !getCellLockReason(cell, selected)).map((cell) => cell.id),
+      cells.filter((cell) => cell.selected !== selected && !getCellLockReason(cell, selected, parentCutAfter)).map((cell) => cell.id),
       selected
     );
   };
@@ -484,6 +489,7 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
                 products={visibleProducts}
                 editable={editable}
                 dirtyIds={dirtyIds}
+                parentCutIds={store.parentCutIds}
                 isScrolled={scroll.isScrolled}
                 emptyMessage={groups.length === 0 ? t(`${I18N}.detail.filtered_empty`) : undefined}
                 onToggle={handleToggle}
@@ -510,6 +516,7 @@ export const ReviewTailoringDetailRoot = observer(function ReviewTailoringDetail
               products={detail.products}
               editable={editable}
               dirtyIds={dirtyIds}
+              parentCutIds={store.parentCutIds}
               selection={selection}
               onToggle={handleToggle}
               onReasonChange={(itemId, reason) => store.setCell(itemId, { reason })}

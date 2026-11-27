@@ -15,13 +15,38 @@ import { getTailoringError } from "./use-review-tailorings";
 
 const service = new ReviewTailoringService();
 
+/** 跟着所属评审一起裁掉的活动，原因留空时填这一句，免得提交签批时逐条补原因 */
+const PARENT_CUT_REASON = "随所属评审裁剪";
+
 /**
- * 保留的格子不留裁剪原因，否则明细表会显示成「要做，但原因是…」。
- *
- * 评审与评审活动各自独立、互不带动：裁掉评审不会连带裁掉它的活动，保留活动也不会把评审拉回来。
+ * 所属评审在同一张表里被裁掉的评审活动（格子 id）。评审没了活动不能单独保留，
+ * 这些格子只能是「裁剪」。挪过阶段的活动已经脱离原评审，不算。与后端 `_cascade_parent_cut` 同一口径。
  */
-const clearKeptReasons = (items: TReviewTailoringItem[]): TReviewTailoringItem[] =>
-  items.map((item) => (item.selected && item.reason ? { ...item, reason: "" } : item));
+export const getParentCutIds = (items: TReviewTailoringItem[]): Set<string> => {
+  const cutRoots = new Set(
+    items.filter((item) => !item.selected).map((item) => `${item.product_id}:${item.stage_id}:${item.template_id}`)
+  );
+  const ids = new Set<string>();
+  for (const item of items) {
+    if (!item.parent_template_id || item.origin_stage_id) continue;
+    if (cutRoots.has(`${item.product_id}:${item.stage_id}:${item.parent_template_id}`)) ids.add(item.id);
+  }
+  return ids;
+};
+
+/**
+ * 勾选改完之后统一收尾：
+ * - 所属评审被裁掉的活动跟着裁掉（原因空着就填「随所属评审裁剪」）；
+ * - 保留的格子不留裁剪原因，否则明细表会显示成「要做，但原因是…」。
+ */
+const normalizeCells = (items: TReviewTailoringItem[]): TReviewTailoringItem[] => {
+  const parentCut = getParentCutIds(items);
+  return items.map((item) => {
+    if (parentCut.has(item.id) && item.selected) return { ...item, selected: false, reason: item.reason || PARENT_CUT_REASON };
+    if (item.selected && item.reason) return { ...item, reason: "" };
+    return item;
+  });
+};
 
 /**
  * 裁剪表详情 + 矩阵的本地编辑。
@@ -69,6 +94,9 @@ export const useReviewTailoringDetail = (
     void fetchDetail().catch(() => undefined);
   }, [fetchDetail]);
 
+  /** 所属评审被裁掉、只能是「裁剪」的活动格子 */
+  const parentCutIds = useMemo(() => getParentCutIds(items), [items]);
+
   const isEditable = useMemo(
     () => Boolean(detail && REVIEW_TAILORING_EDITABLE_STATUSES.includes(detail.status)),
     [detail]
@@ -78,7 +106,7 @@ export const useReviewTailoringDetail = (
   const setCell = useCallback(
     (itemId: string, patch: { selected?: boolean; reason?: string }) => {
       setItems((current) =>
-        clearKeptReasons(current.map((item) => (item.id === itemId ? { ...item, ...patch } : item)))
+        normalizeCells(current.map((item) => (item.id === itemId ? { ...item, ...patch } : item)))
       );
       setIsDirty(true);
     },
@@ -90,7 +118,7 @@ export const useReviewTailoringDetail = (
     if (itemIds.length === 0) return;
     const targets = new Set(itemIds);
     setItems((current) =>
-      clearKeptReasons(current.map((item) => (targets.has(item.id) ? { ...item, selected } : item)))
+      normalizeCells(current.map((item) => (targets.has(item.id) ? { ...item, selected } : item)))
     );
     setIsDirty(true);
   }, []);
@@ -104,8 +132,9 @@ export const useReviewTailoringDetail = (
   const moveCells = useCallback((itemIds: string[], stage: TReviewTailoringModeStage) => {
     if (itemIds.length === 0) return;
     const targets = new Set(itemIds);
+    // 挪回原处的活动重新归到原评审下：评审裁着的话跟着裁掉（normalizeCells）
     setItems((current) =>
-      current.map((item) => {
+      normalizeCells(current.map((item) => {
         if (!targets.has(item.id) || item.stage_id === stage.id) return item;
         const homeId = item.origin_stage_id ?? item.stage_id;
         const homeLabel = item.origin_stage_label ?? item.stage_label;
@@ -123,7 +152,7 @@ export const useReviewTailoringDetail = (
           origin_stage_id: backHome ? null : homeId,
           origin_stage_label: backHome ? null : homeLabel,
         };
-      })
+      }))
     );
     setIsDirty(true);
   }, []);
@@ -285,6 +314,7 @@ export const useReviewTailoringDetail = (
     isMutating,
     isDirty,
     dirtyIds,
+    parentCutIds,
     isEditable,
     isPending: detail?.status === EReviewTailoringStatus.PENDING,
     error,

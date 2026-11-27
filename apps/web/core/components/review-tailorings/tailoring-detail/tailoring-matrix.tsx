@@ -84,6 +84,7 @@ export const TailoringMatrix = ({
   products,
   editable,
   dirtyIds,
+  parentCutIds,
   isScrolled,
   emptyMessage,
   onToggle,
@@ -103,6 +104,8 @@ export const TailoringMatrix = ({
   products: TReviewTailoringProduct[];
   editable: boolean;
   dirtyIds: Set<string>;
+  /** 所属评审被裁掉的活动：不能改为保留 */
+  parentCutIds: Set<string>;
   /** 容器已经往右滚：钉住的列画一道投影 */
   isScrolled: boolean;
   /** 筛完一行不剩时写在表体里的那句话 */
@@ -398,7 +401,7 @@ export const TailoringMatrix = ({
                       );
                     }
                     const reason = cell.reason.trim();
-                    const keepLock = cell.selected ? null : getCellLockReason(cell, true);
+                    const keepLock = cell.selected ? null : getCellLockReason(cell, true, parentCutIds);
                     const cellBg = rowBg;
                     return [
                       <td key={`${product.id}:result`} className={cn(PLAIN_TD, "relative", cellBg)}>

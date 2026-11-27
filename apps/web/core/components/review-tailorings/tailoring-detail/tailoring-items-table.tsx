@@ -90,6 +90,7 @@ export const TailoringItemsTable = ({
   products,
   editable,
   dirtyIds,
+  parentCutIds,
   selection,
   onToggle,
   onReasonChange,
@@ -100,6 +101,8 @@ export const TailoringItemsTable = ({
   editable: boolean;
   /** 与服务端有差异的格子：行首画一道蓝线 */
   dirtyIds: Set<string>;
+  /** 所属评审被裁掉的活动：不能改为保留 */
+  parentCutIds: Set<string>;
   /** 行选中，由页面持有：底部批量操作条要读它 */
   selection: TCellSelection;
   onToggle: (itemId: string, selected: boolean) => void;
@@ -167,7 +170,7 @@ export const TailoringItemsTable = ({
           ) : (
             rows.map((item, rowIndex) => {
               const reason = item.reason.trim();
-              const keepLock = item.selected ? null : getCellLockReason(item, true);
+              const keepLock = item.selected ? null : getCellLockReason(item, true, parentCutIds);
               const isPicked = selection.selectedIds.has(item.id);
               const cellClass = "h-11 border-r border-b border-subtle px-3 py-0 align-middle text-13 text-primary";
               // 产品 / 阶段 / 创建人 / 时间是定位信息，压一档颜色，让评审名称先被读到

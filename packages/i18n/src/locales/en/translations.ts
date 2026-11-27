@@ -3356,6 +3356,7 @@ export default {
       completed_will_delete:
         "This review is completed. Cutting it and getting approval will delete it along with its trail, comments and attachments",
       locked_disabled: "The template is disabled and cannot be switched to keep",
+      locked_parent_cut: "Its review is cut, so this activity cannot be kept on its own",
       write_reason: "Add reason",
       reason_for: "{product} · {review}",
       reason_save_hint: "to save",
@@ -3640,6 +3641,7 @@ export default {
     errors: {
       REVIEW_TAILORING_REASON_REQUIRED: "Some tailored-out items still need a reason",
       REVIEW_TAILORING_TEMPLATE_DISABLED: "Some selections come from a disabled template",
+      REVIEW_TAILORING_PARENT_CUT: "Activities whose review is cut cannot be kept",
       REVIEW_TAILORING_APPROVER_INVALID: "Approvers must be members of this project",
       REVIEW_TAILORING_PRODUCT_NOT_LINKED: "Some products are not linked to this project",
       REVIEW_TAILORING_TEMPLATE_INVALID: "Some reviews are not in this workspace's template library, or are disabled",
