@@ -44,15 +44,15 @@ import type { TStageReviewSupplement } from "./stage-review-content";
 import { StageReviewContent, isBlankRichText } from "./stage-review-content";
 import type { TStageReviewPeekMode } from "./stage-review-peek-mode";
 import { StageReviewPeekModeSelect } from "./stage-review-peek-mode";
+import { StageReviewProperties } from "./stage-review-properties";
 import { StageReviewSaveStatus } from "./stage-review-save-status";
 import { StageReviewRowTables, useStageReviewRowAdd } from "./stage-review-row-tables";
-import { StageReviewSidebar } from "./stage-review-sidebar";
 import { StageReviewStepper, useStepDates } from "./stage-review-stepper";
 import { StageReviewTimeline } from "./stage-review-timeline";
 
 const I18N = "stage_review";
 
-/** 标题：编辑态与只读态同一个盒子，切换时不跳；悬停出浅底，聚焦才出蓝边 —— 与右栏就地编辑格同一口径 */
+/** 标题：编辑态与只读态同一个盒子，切换时不跳；悬停出浅底，聚焦才出蓝边 —— 与属性区就地编辑格同一口径 */
 const TITLE_CLASS =
   "-mx-2 h-9 min-w-0 rounded-md border border-transparent px-2 text-20 leading-snug font-semibold text-primary";
 
@@ -104,7 +104,7 @@ const SUPPLEMENT_BUTTON_CLASS =
   "inline-flex h-7 items-center gap-1 rounded-md border border-dashed border-strong bg-surface-1 pr-2.5 pl-2 text-13 text-secondary transition hover:border-accent-strong hover:text-accent-primary disabled:opacity-50";
 
 /**
- * 正文顶部的「补充」条：还空着的描述 / 工作指引 / 成品 / 组件版本 / 附件收成一排按钮，
+ * 正文顶部的「补充」条：还空着的描述 / 成品 / 组件版本 / 附件收成一排按钮，
  * 点了才展开成区块。还没有附件时，这条也是附件的拖放落点。全都有内容了就不出。
  */
 const SupplementBar = ({
@@ -179,9 +179,9 @@ export type TStageReviewDetailRootProps = TStageReviewDetailVariant & {
  * 评审详情本体。**评审与评审活动共用这一套** —— 两者字段几乎一样，只有层级不同。抽屉
  * （`StageReviewDrawer`）与独立详情页（`/reviews/stage-reviews/:reviewId`）都是它，只差外壳。
  *
- * 布局分两段：头（名片式标题区 + 动作按钮 / 四段进度）、身（正文 + 右侧属性栏）。
- * 正文放「要读的」（描述、工作指引、附件、活动），右栏放「要查的」（产品、阶段、负责人、日期、
- * 结论、O 阶段那两组）。**动作按钮住在标题行右侧**；状态只由下面的四段进度表达，不再另出药丸。
+ * 布局从上到下单栏：头（名片式标题区 + 动作按钮 / 四段进度）、属性区、正文。
+ * 属性区放「要查的」（产品、阶段、负责人、日期、结论、O 阶段那两项）和工作指引，紧跟在标题行下面；
+ * 正文放「要读的」（描述、附件、活动）。**动作按钮住在标题行右侧**；状态只由四段进度表达，不再另出药丸。
  * 正文里空着的几项不占区块，收进顶部的「补充」条。
  *
  * 写入分两种回执：开始 / 提交 / 审核 / 退回 是动作，成功弹 toast；改字段、传删附件、发评论是
@@ -470,12 +470,6 @@ const DetailBody = (props: DetailBodyProps) => {
           onClick: () => request("description"),
         },
         {
-          key: "work_instruction" as const,
-          label: t(`${I18N}.fields.work_instruction`),
-          isEmpty: !detail.work_instruction.trim() && !requested.has("work_instruction"),
-          onClick: () => request("work_instruction"),
-        },
-        {
           key: "finished_goods" as const,
           label: t(`${I18N}.detail.finished_goods`),
           isEmpty: isOStageReview && detail.finished_goods.length === 0,
@@ -648,9 +642,17 @@ const DetailBody = (props: DetailBodyProps) => {
         </div>
       </div>
 
-      {/* 身：正文与属性栏各自滚动 */}
-      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-        <div className="stage-review-drawer-body flex min-w-0 flex-1 flex-col gap-6 overflow-y-auto px-7 pt-5 pb-8">
+      {/* 身：属性区与正文一起滚动，标题行留在上面 */}
+      <div className="stage-review-drawer-body min-h-0 flex-1 overflow-y-auto">
+        <StageReviewProperties
+          workspaceSlug={workspaceSlug}
+          projectId={projectId}
+          detail={detail}
+          editable={editable}
+          onUpdate={onUpdate}
+        />
+
+        <div className="flex flex-col gap-6 px-7 pt-5 pb-8">
           <SupplementBar items={supplements} drop={hasAttachments ? undefined : attachmentDrop} disabled={isMutating} />
 
           <StageReviewContent
@@ -702,14 +704,6 @@ const DetailBody = (props: DetailBodyProps) => {
             onDeleteComment={onDeleteComment}
           />
         </div>
-
-        <StageReviewSidebar
-          workspaceSlug={workspaceSlug}
-          projectId={projectId}
-          detail={detail}
-          editable={editable}
-          onUpdate={onUpdate}
-        />
       </div>
     </>
   );

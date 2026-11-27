@@ -5,7 +5,7 @@
  */
 
 import { useNotifyScope } from "@/hooks/use-notify-subscribers";
-import type { TNotifyScopeChip, TNotifyScopeEntityType } from "@/types/notify";
+import type { TNotifyScope, TNotifyScopeChip, TNotifyScopeEntityType } from "@/types/notify";
 
 type Props = {
   workspaceSlug: string;
@@ -33,6 +33,29 @@ function Chips({ chips }: { chips: TNotifyScopeChip[] }) {
         </span>
       ))}
     </span>
+  );
+}
+
+/**
+ * 名单排成一行：「即时邮件 …　每日摘要 …」。给自带标签列的属性区用（评审详情）——
+ * 取数、标题、没有名单时整行不出都由调用方管。
+ */
+export function NotifyScopeInline({ scope }: { scope: TNotifyScope }) {
+  return (
+    <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5">
+      {scope.instant.length > 0 && (
+        <span className="flex flex-wrap items-center gap-2">
+          <span className="text-13 text-tertiary">即时邮件</span>
+          <Chips chips={scope.instant} />
+        </span>
+      )}
+      {scope.digest.length > 0 && (
+        <span className="flex flex-wrap items-center gap-2">
+          <span className="text-13 text-tertiary">每日摘要</span>
+          <Chips chips={scope.digest} />
+        </span>
+      )}
+    </div>
   );
 }
 

@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
-import { Pencil } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { IconButton } from "@plane/propel/icon-button";
 import { Tooltip } from "@plane/propel/tooltip";
 import type { TStageReviewDetail, TUpdateStageReviewPayload } from "@plane/types";
 import { EFileAssetType } from "@plane/types";
-import { cn } from "@plane/utils";
 import { RichTextEditor } from "@/components/editor/rich-text";
 import { useEditorAsset } from "@/hooks/store/use-editor-asset";
 import { WorkspaceService } from "@/services/workspace.service";
@@ -21,7 +19,7 @@ export const isBlankRichText = (html: string | null | undefined) => {
 };
 
 /**
- * 编辑区的外壳：平时没有框，悬停出一圈淡边，聚焦出蓝边 —— 与标题、右栏就地编辑格同一口径。
+ * 编辑区的外壳：平时没有框，悬停出一圈淡边，聚焦出蓝边 —— 与标题、属性区就地编辑格同一口径。
  * 编辑器正文的 14px 靠 globals.css 里 `.stage-review-drawer-body .editor-container.large-font` 覆盖。
  */
 const FIELD_BOX_CLASS =
@@ -30,7 +28,7 @@ const FIELD_LINE_CLASS =
   "min-h-7 [font-family:var(--font-style)] text-[length:var(--font-size-regular)] leading-[var(--line-height-regular)]";
 
 /**
- * 抽屉正文的区块：描述 / 工作指引 / 附件 / 活动共用这一条头 ——
+ * 抽屉正文的区块：描述 / 附件 / 活动共用这一条头 ——
  * 28px 高，14 号加粗名称 + 12 号计数，右侧放动作（28px 图标按钮或页签组）。
  */
 export const Block = ({
@@ -73,7 +71,7 @@ export const BlockAction = ({
 
 /**
  * 就地编辑格的统一外观：平时无边框，悬停浅底，聚焦蓝边。输入框、日期、成员选择三种都照这个来，
- * 左右各伸出 8px 让文字与上下行的值对齐。右栏的格子都放在白卡片上，悬停底色用浅灰。
+ * 左右各伸出 8px 让文字与上下行的值对齐。属性区是白底，悬停底色用浅灰。
  */
 export const INLINE_FIELD_CLASS =
   "-mx-2 h-7 w-[calc(100%+1rem)] rounded-md border border-transparent bg-transparent px-2 text-14 hover:bg-layer-1";
@@ -84,17 +82,12 @@ export const EmptyLine = ({ text }: { text: string }) => (
 );
 
 /**
- * 正文里可以「空着不占地」的几项：没内容时不出区块，收进标题区下方那条「补充」按钮条，
- * 点了才展开成区块（描述 / 工作指引出编辑框，成品 / 组件版本加一行，附件开文件选择）。
+ * 正文里可以「空着不占地」的几项：没内容时不出区块，收进属性区下方那条「补充」按钮条，
+ * 点了才展开成区块（描述出编辑框，成品 / 组件版本加一行，附件开文件选择）。
  */
-export type TStageReviewSupplement =
-  | "description"
-  | "work_instruction"
-  | "finished_goods"
-  | "component_versions"
-  | "attachments";
+export type TStageReviewSupplement = "description" | "finished_goods" | "component_versions" | "attachments";
 
-/** 描述 / 工作指引：空着且没从「补充」条点开时整块不渲染 */
+/** 描述：空着且没从「补充」条点开时整块不渲染 */
 type TSupplementProps = {
   requested: ReadonlySet<TStageReviewSupplement>;
   /** 点开后又什么都没写就失焦：收回「补充」条 */
@@ -102,10 +95,9 @@ type TSupplementProps = {
 };
 
 /**
- * 抽屉正文里「要读的那两块」：描述与工作指引。空着时不出区块，入口在「补充」条。
- *
- * 描述用**工作项那套富文本**（RichTextEditor：工具栏、斜杠命令、@提及、拖拽上传）；
- * 工作指引是纯文本，模型上就是 TextField，没有 HTML 列可存。
+ * 抽屉正文里「要读的那一块」：描述。空着时不出区块，入口在「补充」条。
+ * 用**工作项那套富文本**（RichTextEditor：工具栏、斜杠命令、@提及、拖拽上传）。
+ * 工作指引是纯文本字段，住在标题下的属性区（`stage-review-properties.tsx`）。
  */
 export const StageReviewContent = ({
   workspaceSlug,
@@ -124,25 +116,16 @@ export const StageReviewContent = ({
   editable: boolean;
   onUpdate: (payload: TUpdateStageReviewPayload) => void;
 }) => (
-  <>
-    <DescriptionEditor
-      workspaceSlug={workspaceSlug}
-      workspaceId={workspaceId}
-      projectId={projectId}
-      detail={detail}
-      editable={editable}
-      onUpdate={onUpdate}
-      isRequested={requested.has("description")}
-      onDismiss={() => onDismiss("description")}
-    />
-    <WorkInstruction
-      detail={detail}
-      editable={editable}
-      onUpdate={onUpdate}
-      isRequested={requested.has("work_instruction")}
-      onDismiss={() => onDismiss("work_instruction")}
-    />
-  </>
+  <DescriptionEditor
+    workspaceSlug={workspaceSlug}
+    workspaceId={workspaceId}
+    projectId={projectId}
+    detail={detail}
+    editable={editable}
+    onUpdate={onUpdate}
+    isRequested={requested.has("description")}
+    onDismiss={() => onDismiss("description")}
+  />
 );
 
 type TRequestProps = { isRequested: boolean; onDismiss: () => void };
@@ -267,76 +250,6 @@ const DescriptionEditor = ({
           containerClassName={`!p-0 ${FIELD_LINE_CLASS}`}
         />
       </div>
-    </Block>
-  );
-};
-
-/**
- * 工作指引是纯文本（模型上就是 TextField），不套编辑器。按用户写下的样子展示，不加编号。
- */
-const WorkInstruction = ({
-  detail,
-  editable,
-  onUpdate,
-  isRequested,
-  onDismiss,
-}: TRequestProps & {
-  detail: TStageReviewDetail;
-  editable: boolean;
-  onUpdate: (payload: TUpdateStageReviewPayload) => void;
-}) => {
-  const { t } = useTranslation();
-  const [draft, setDraft] = useState(detail.work_instruction);
-  const [isOpen, setIsOpen] = useState(false);
-
-  useEffect(() => {
-    setDraft(detail.work_instruction);
-    setIsOpen(false);
-  }, [detail.id, detail.work_instruction]);
-
-  const title = t(`${I18N}.fields.work_instruction`);
-  const isBlank = !detail.work_instruction.trim();
-
-  // 从「补充」条点开、写完存上了：点开的使命完成，回到展示态
-  useEffect(() => {
-    if (isRequested && !isBlank) onDismiss();
-  }, [isRequested, isBlank, onDismiss]);
-
-  if (editable && (isOpen || (isRequested && isBlank))) {
-    return (
-      <Block title={title}>
-        <div className={FIELD_BOX_CLASS}>
-          <textarea
-            value={draft}
-            autoFocus
-            rows={Math.max(1, draft.split(/\r?\n/).length)}
-            onChange={(event) => setDraft(event.target.value)}
-            onBlur={() => {
-              if (draft !== detail.work_instruction) onUpdate({ work_instruction: draft });
-              else {
-                setIsOpen(false);
-                onDismiss();
-              }
-            }}
-            placeholder={t(`${I18N}.detail.add_work_instruction`)}
-            className={cn(
-              "block min-h-7 w-full resize-none bg-transparent p-0 text-14 leading-6 text-primary outline-none",
-              "placeholder:text-placeholder placeholder:opacity-100"
-            )}
-          />
-        </div>
-      </Block>
-    );
-  }
-
-  if (isBlank) return null;
-
-  return (
-    <Block
-      title={title}
-      action={editable && <BlockAction icon={Pencil} label={t(`${I18N}.detail.edit`)} onClick={() => setIsOpen(true)} />}
-    >
-      <p className="text-14 leading-6 whitespace-pre-wrap text-secondary">{detail.work_instruction}</p>
     </Block>
   );
 };
