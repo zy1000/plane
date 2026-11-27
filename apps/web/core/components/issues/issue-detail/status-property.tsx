@@ -64,7 +64,7 @@ const StateIcon = ({ color, group, order }: TStateIconProps) =>
   ) : null;
 
 const StateLabel = ({ name, ...icon }: TStateLabelProps) => (
-  <span className="inline-flex min-w-0 items-center gap-1.5 text-body-xs-medium text-secondary">
+  <span className="inline-flex min-w-0 items-center gap-1.5 text-body-sm-regular text-primary">
     <StateIcon {...icon} />
     <span className="truncate">{name}</span>
   </span>
@@ -73,7 +73,7 @@ const StateLabel = ({ name, ...icon }: TStateLabelProps) => (
 const ROWS_GRID = "grid w-full grid-cols-[minmax(7.5rem,max-content)_minmax(0,1fr)] gap-x-2 gap-y-2";
 /** rows 里只读的值：左缘、行高同其他属性值 */
 const ROW_VALUE = "flex min-h-7.5 min-w-0 flex-wrap items-center gap-x-2 gap-y-1 px-2";
-const INLINE_LABEL = "shrink-0 text-body-xs-regular text-tertiary";
+const INLINE_LABEL = "shrink-0 text-body-sm-regular text-tertiary";
 const TAG = "shrink-0 rounded-sm bg-warning-subtle px-1.5 text-12 leading-[18px] font-medium text-warning-primary";
 
 /**
@@ -268,7 +268,7 @@ export const IssueStatusProperty = observer(function IssueStatusProperty(props: 
                 buttonVariant="transparent-with-text"
                 className="group w-full"
                 buttonContainerClassName="w-full text-left h-7.5 rounded-sm"
-                buttonClassName="text-body-xs-medium justify-between"
+                buttonClassName="text-body-sm-regular text-primary justify-between"
                 dropdownArrow
                 dropdownArrowClassName="h-3.5 w-3.5 hidden group-hover:inline"
               />
@@ -309,7 +309,7 @@ export const IssueStatusProperty = observer(function IssueStatusProperty(props: 
               buttonVariant="border-with-text"
               className="min-w-0"
               buttonContainerClassName="h-7.5 max-w-full text-left"
-              buttonClassName="text-body-xs-medium"
+              buttonClassName="text-body-sm-regular text-primary"
               dropdownArrow
             />
           ) : (

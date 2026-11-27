@@ -194,7 +194,7 @@ export const IssueRelationSelect = observer(function IssueRelationSelect(props: 
               })}
             </div>
           ) : (
-            <span className="text-body-xs-regular text-placeholder">{currRelationOption?.placeholder}</span>
+            <span className="text-body-sm-regular text-tertiary">{currRelationOption?.placeholder}</span>
           )}
           {!disabled && (
             <span

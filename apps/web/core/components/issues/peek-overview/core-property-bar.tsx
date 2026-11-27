@@ -54,20 +54,20 @@ export const PeekOverviewCorePropertyBar = observer(function PeekOverviewCorePro
     : undefined;
 
   const fieldShell = "flex min-w-0 flex-col gap-2";
-  const fieldLabel = "text-12 text-tertiary";
+  const fieldLabel = "text-14 text-tertiary";
 
   return (
     <div className="@container border-b border-subtle pb-5">
       <div
         className={cn(
-          "grid w-full min-w-0 grid-cols-2 items-start gap-x-5 gap-y-4 text-body-xs-medium @lg:grid-cols-3 @4xl:grid-cols-5",
+          "grid w-full min-w-0 grid-cols-2 items-start gap-x-5 gap-y-4 text-body-sm-regular @lg:grid-cols-3 @4xl:grid-cols-5",
           dimmed && "opacity-60"
         )}
       >
         <div className={fieldShell}>
           <span className={fieldLabel}>工作项类型</span>
           {issue.type_name ? (
-            <div className="flex h-7 w-full min-w-0 items-center gap-1.5 truncate rounded-sm pr-1.5 text-body-xs-medium leading-5 text-secondary">
+            <div className="flex h-7 w-full min-w-0 items-center gap-1.5 truncate rounded-sm pr-1.5 text-body-sm-regular leading-5 text-primary">
               <WorkItemTypeIcon
                 typeName={issue.type_name}
                 fallbackIcon={issueTypeLogoIcon}
@@ -88,8 +88,8 @@ export const PeekOverviewCorePropertyBar = observer(function PeekOverviewCorePro
             className="h-7 w-full min-w-0 rounded-sm"
             buttonContainerClassName="h-7 w-full min-w-0 text-left"
             buttonClassName={cn(
-              "w-full min-w-0 truncate !px-0 text-body-xs-medium leading-5 [&_svg]:size-3.5",
-              !issue?.priority || issue?.priority === "none" ? "text-placeholder" : "text-secondary"
+              "w-full min-w-0 truncate !px-0 text-body-sm-regular leading-5 [&_svg]:size-3.5",
+              !issue?.priority || issue?.priority === "none" ? "text-tertiary" : "text-primary"
             )}
           />
         </div>
@@ -111,8 +111,8 @@ export const PeekOverviewCorePropertyBar = observer(function PeekOverviewCorePro
             className="group w-full min-w-0"
             buttonContainerClassName="h-7 w-full min-w-0 text-left"
             buttonClassName={cn(
-              "min-w-0 justify-start truncate !px-0 text-body-xs-medium leading-5",
-              (issue?.assignee_ids?.length ?? 0) > 0 ? "text-secondary" : "text-placeholder"
+              "min-w-0 justify-start truncate !px-0 text-body-sm-regular leading-5",
+              (issue?.assignee_ids?.length ?? 0) > 0 ? "text-primary" : "text-tertiary"
             )}
           />
         </div>
@@ -133,8 +133,8 @@ export const PeekOverviewCorePropertyBar = observer(function PeekOverviewCorePro
             className="group w-full min-w-0"
             buttonContainerClassName="h-7 w-full min-w-0 text-left"
             buttonClassName={cn(
-              "w-full min-w-0 truncate !px-0 text-body-xs-medium leading-5",
-              !issue.start_date ? "text-placeholder" : "text-secondary"
+              "w-full min-w-0 truncate !px-0 text-body-sm-regular leading-5",
+              !issue.start_date ? "text-tertiary" : "text-primary"
             )}
             clearIconClassName="text-tertiary opacity-0 group-hover:opacity-100"
           />
@@ -158,12 +158,12 @@ export const PeekOverviewCorePropertyBar = observer(function PeekOverviewCorePro
                 className="group w-full min-w-0"
                 buttonContainerClassName="h-7 w-full min-w-0 text-left"
                 buttonClassName={cn(
-                  "w-full min-w-0 truncate !px-0 text-body-xs-medium leading-5",
+                  "w-full min-w-0 truncate !px-0 text-body-sm-regular leading-5",
                   shouldHighlightIssueDueDate(issue.target_date, stateDetails?.group)
                     ? "text-red-500"
                     : !issue.target_date
-                      ? "text-placeholder"
-                      : "text-secondary"
+                      ? "text-tertiary"
+                      : "text-primary"
                 )}
                 clearIconClassName="text-tertiary opacity-0 group-hover:opacity-100"
               />

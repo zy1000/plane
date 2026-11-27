@@ -115,7 +115,7 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
           />
 
           <div className="flex w-full items-start gap-2">
-            <div className="flex h-7.5 w-30 shrink-0 items-center gap-1.5 text-body-xs-regular text-tertiary">
+            <div className="flex h-7.5 w-30 shrink-0 items-center gap-1.5 text-body-sm-regular text-tertiary">
               <LabelPropertyIcon className="size-4 shrink-0" />
               <span>{t("common.labels")}</span>
             </div>
@@ -150,7 +150,7 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
               )}
               {estimateEnabled && (
                 <div className="flex w-full items-center gap-2">
-                  <div className="flex h-7.5 w-30 shrink-0 items-center gap-1.5 text-body-xs-regular text-tertiary">
+                  <div className="flex h-7.5 w-30 shrink-0 items-center gap-1.5 text-body-sm-regular text-tertiary">
                     <EstimatePropertyIcon className="size-4 shrink-0" />
                     <span>{t("common.estimate")}</span>
                   </div>
@@ -165,7 +165,7 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
                       buttonVariant="transparent-with-text"
                       className="group w-full"
                       buttonContainerClassName="w-full text-left h-7.5 rounded-sm"
-                      buttonClassName={`text-body-xs-medium justify-between ${issue?.estimate_point ? "" : "text-placeholder"}`}
+                      buttonClassName={`text-body-sm-regular justify-between ${issue?.estimate_point ? "text-primary" : "text-tertiary"}`}
                       placeholder={t("common.none")}
                       hideIcon
                       dropdownArrow
@@ -306,7 +306,7 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
         </PropertyGroupSection>
 
         {/* 元信息：单列 grid，标签列用 max-content 与最宽「创建于/更新于」对齐，无多余空白 */}
-        <div className="mt-1 grid grid-cols-[auto_max-content_1fr] items-center gap-x-1.5 gap-y-1.5 text-caption-sm-regular text-placeholder">
+        <div className="mt-1 grid grid-cols-[auto_max-content_1fr] items-center gap-x-1.5 gap-y-1.5 text-caption-md-regular text-tertiary">
           <UserRound className="h-3.5 w-3.5 shrink-0" aria-hidden />
           <span className="shrink-0">创建者</span>
           <span className="min-w-0 truncate">{createdByLabel}</span>

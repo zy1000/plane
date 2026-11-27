@@ -112,7 +112,7 @@ export function IssueFieldLayout({
   const pages = visible.pages;
   const fieldMap = new Map(fields.map((field) => [field.id, field]));
   const isEmpty = (fieldId: string) => isValueEmpty(findValueForField(values, fieldId));
-  const hiddenEmpty = context === "detail" && preferences.hideEmpty;
+  const hiddenEmpty = context === "detail" && !preferences.showEmpty;
   const rootGroups = useMemo(() => groupsOf(visible, "ungrouped:root", ungroupedName), [visible, ungroupedName]);
   const pageGroups = useMemo(
     () => new Map(visible.pages.map((page) => [page.id, groupsOf(page, `ungrouped:${page.id}`, page.name)])),
@@ -136,7 +136,7 @@ export function IssueFieldLayout({
       if (location.pageId) setActivePage(location.pageId);
       update((previous) => ({
         ...previous,
-        hideEmpty: false,
+        showEmpty: true,
         collapsed: { ...previous.collapsed, [location.group.id]: false },
       }));
       setFocusField(fieldId);
@@ -222,7 +222,12 @@ export function IssueFieldLayout({
   const pageCount = (pageId: string) => locations.filter((item) => item.pageId === pageId).length;
   const navigation = pages.map((page) => ({ id: page.id, name: page.name }));
 
-  const hasCollapsible = allGroups.some((group) => group.collapsible);
+  const isGroupCollapsed = (group: TIssueLayoutGroup) =>
+    group.collapsible && (preferences.collapsed[group.id] ?? group.default_collapsed);
+  const collapsibleGroups = allGroups.filter((group) => group.collapsible);
+  const hasCollapsible = collapsibleGroups.length > 0;
+  // 全部展开着才显示「全部折叠」；全部折叠或有开有合时都显示「全部展开」
+  const allExpanded = collapsibleGroups.every((group) => !isGroupCollapsed(group));
   const showHideEmpty = context === "detail" && emptyCount > 0;
 
   const isShown = (entry: TIssueFieldPlacement) => !(hiddenEmpty && isEmpty(entry.field_id));
@@ -249,7 +254,7 @@ export function IssueFieldLayout({
       );
     });
   const renderGroup = (group: TIssueLayoutGroup) => {
-    const collapsed = group.collapsible && (preferences.collapsed[group.id] ?? group.default_collapsed);
+    const collapsed = isGroupCollapsed(group);
     const unfilled = group.fields.filter((entry) => isEmpty(entry.field_id));
     const missing = unfilled.filter((entry) => fieldMap.get(entry.field_id)?.is_required).length;
     const toggle = () =>
@@ -326,17 +331,16 @@ export function IssueFieldLayout({
             </div>
           )}
           {hiddenEmpty && unfilled.length > 0 && (
-            <p
-              className={cn(
-                "text-12 text-tertiary",
-                (hasShorts || hasLongs) && "border-t border-dashed border-subtle pt-2.5"
-              )}
+            <button
+              type="button"
+              onClick={() => update((previous) => ({ ...previous, showEmpty: true }))}
+              className="flex w-full items-baseline gap-1.5 rounded-md bg-warning-subtle px-3 py-2 text-left text-13 text-warning-primary hover:opacity-90"
             >
-              未填写 {unfilled.length} 项：
-              <span className="text-secondary">
+              <span className="shrink-0 font-medium">未填写 {unfilled.length} 项：</span>
+              <span className="min-w-0 text-primary">
                 {unfilled.map((entry) => fieldMap.get(entry.field_id)?.name ?? "").join("、")}
               </span>
-            </p>
+            </button>
           )}
         </div>
       </section>
@@ -352,20 +356,26 @@ export function IssueFieldLayout({
           onClick={() =>
             update((previous) => ({
               ...previous,
-              collapsed: Object.fromEntries(allGroups.map((group) => [group.id, false])),
+              collapsed: Object.fromEntries(collapsibleGroups.map((group) => [group.id, allExpanded])),
             }))
           }
         >
-          全部展开
+          {allExpanded ? "全部折叠" : "全部展开"}
         </button>
       )}
       {showHideEmpty && (
         <button
           type="button"
           className={TOOLBAR_BUTTON_CLASS}
-          onClick={() => update((previous) => ({ ...previous, hideEmpty: !previous.hideEmpty }))}
+          onClick={() => update((previous) => ({ ...previous, showEmpty: !previous.showEmpty }))}
         >
-          {hiddenEmpty ? "显示未填" : "隐藏未填"}
+          {hiddenEmpty ? (
+            <>
+              显示未填 <span className="font-medium text-warning-primary tabular-nums">{emptyCount}</span>
+            </>
+          ) : (
+            "隐藏未填"
+          )}
         </button>
       )}
     </div>

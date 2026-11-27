@@ -70,7 +70,7 @@ export const IssueReleaseSelect = observer(function IssueReleaseSelect(props: TI
         disabled={disableSelect}
         className="group w-full"
         buttonContainerClassName="w-full text-left h-7.5 rounded-sm"
-        buttonClassName={`text-body-xs-medium justify-between ${issue?.release_ids?.length ? "" : "text-placeholder"}`}
+        buttonClassName={`text-body-sm-regular justify-between ${issue?.release_ids?.length ? "text-primary" : "text-tertiary"}`}
         buttonVariant="transparent-with-text"
         hideIcon
         dropdownArrow

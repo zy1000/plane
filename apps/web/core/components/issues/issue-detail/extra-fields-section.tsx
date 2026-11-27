@@ -51,11 +51,10 @@ type TFieldCellProps = {
   disabled?: boolean;
 };
 
-/** dimmed：查看态未填的字段，标签再浅一档 */
-const FieldLabel = ({ field, required, dimmed }: { field: TTypeExtraField; required: boolean; dimmed: boolean }) => {
+const FieldLabel = ({ field, required }: { field: TTypeExtraField; required: boolean }) => {
   return (
     <div
-      className={`flex min-w-0 items-center gap-1 text-12 ${dimmed ? "text-placeholder" : "text-tertiary"}`}
+      className="flex min-w-0 items-center gap-1 text-14 text-tertiary"
       title={field.description || field.name}
     >
       <span className="truncate">{field.name}</span>
@@ -147,9 +146,9 @@ const ReadOnlyFieldValue = observer(function ReadOnlyFieldValue({
 
   if (isValueEmpty(value)) {
     return paragraph ? (
-      <div className="min-h-[38px] rounded-md border border-dashed border-subtle px-2.5 py-2 text-placeholder">—</div>
+      <div className="min-h-[38px] rounded-md border border-dashed border-subtle px-2.5 py-2 text-tertiary">—</div>
     ) : (
-      <span className="text-placeholder">—</span>
+      <span className="text-tertiary">—</span>
     );
   }
 
@@ -281,7 +280,6 @@ export const IssueExtraFieldsSection = observer(function IssueExtraFieldsSection
               <FieldLabel
                 field={field}
                 required={isEditing && !!field.is_required}
-                dimmed={!isEditing && isValueEmpty(value)}
               />
               {isEditing ? (
                 <FieldControlCell

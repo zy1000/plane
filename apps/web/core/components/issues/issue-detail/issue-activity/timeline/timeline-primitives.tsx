@@ -49,7 +49,7 @@ export const TimelineRow = ({
 export const TimelineDaySeparator = ({ label, isFirst }: { label: string; isFirst: boolean }) => (
   <li className={cn("relative grid grid-cols-[28px_minmax(0,1fr)] gap-x-2.5 pb-0.5", isFirst ? "pt-1.5" : "pt-[18px]")}>
     {!isFirst && <span aria-hidden className="absolute top-0 bottom-0 left-[13px] w-0 border-l-2 border-subtle" />}
-    <span className="col-start-2 text-12 leading-5 text-placeholder">{label}</span>
+    <span className="col-start-2 text-12 leading-5 text-tertiary">{label}</span>
   </li>
 );
 
@@ -79,7 +79,7 @@ export const ActivityTime = ({ value, className }: { value: string; className?: 
     <time
       dateTime={value}
       title={renderFormattedDateTime(value)}
-      className={cn("ml-auto shrink-0 pl-3 text-12 text-placeholder tabular-nums", className)}
+      className={cn("ml-auto shrink-0 pl-3 text-12 text-tertiary tabular-nums", className)}
     >
       {label}
     </time>
@@ -153,7 +153,7 @@ export const Value = ({ children, old = false, className }: { children: string; 
     title={children}
     className={cn(
       "inline-block max-w-[280px] truncate align-bottom",
-      old ? "text-placeholder line-through" : "text-primary",
+      old ? "text-tertiary line-through" : "text-primary",
       className
     )}
   >
@@ -165,7 +165,7 @@ export const Arrow = () => <ArrowRight className="size-3 shrink-0 text-placehold
 
 /** 人：16px 头像 + 名字；旧值灰掉、头像变淡 */
 export const PersonChip = ({ name, avatarUrl, old = false }: { name: string; avatarUrl?: string; old?: boolean }) => (
-  <span className={cn("inline-flex items-center gap-1.5 whitespace-nowrap", old ? "text-placeholder" : "text-primary")}>
+  <span className={cn("inline-flex items-center gap-1.5 whitespace-nowrap", old ? "text-tertiary" : "text-primary")}>
     <span className={cn(old && "opacity-60")}>
       <Avatar size={16} name={name} src={getFileURL(avatarUrl ?? "")} showTooltip={false} />
     </span>
@@ -192,7 +192,7 @@ export const LabelChip = ({ name, color, old = false }: { name: string; color?: 
   <span
     className={cn(
       "inline-flex max-w-[200px] items-center gap-1.5 rounded-full border border-subtle px-2 text-12 leading-5",
-      old ? "text-placeholder line-through" : "text-primary"
+      old ? "text-tertiary line-through" : "text-primary"
     )}
   >
     <span className="size-1.5 shrink-0 rounded-full" style={{ backgroundColor: color ?? "var(--text-color-placeholder)" }} aria-hidden />

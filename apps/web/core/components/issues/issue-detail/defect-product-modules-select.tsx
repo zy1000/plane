@@ -120,8 +120,8 @@ export const DefectProductModulesSelect = observer(function DefectProductModules
       disabled={disabled || isUpdating || links.length === 0}
       onClick={() => setIsOpen((value) => !value)}
       className={cn(
-        "group flex h-7.5 w-full items-center justify-between gap-1 rounded-sm px-2 text-left text-body-xs-medium hover:bg-layer-1",
-        { "cursor-not-allowed": disabled, "text-placeholder": !label }
+        "group flex h-7.5 w-full items-center justify-between gap-1 rounded-sm px-2 text-left text-body-sm-regular hover:bg-layer-1",
+        { "cursor-not-allowed": disabled, "text-tertiary": !label, "text-primary": !!label }
       )}
     >
       <span className="min-w-0 flex-1 truncate">

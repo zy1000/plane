@@ -78,7 +78,7 @@ export const ActivityCommentRow = observer(function ActivityCommentRow({
         <div className="flex min-h-7 items-center gap-2 text-14 text-secondary">
           <ActorName name={displayName} userId={comment.actor} workspaceSlug={workspaceSlug} />
           <span>{t("issue_activity.commented")}</span>
-          {comment.edited_at && <span className="text-12 text-placeholder">{t("issue_activity.edited")}</span>}
+          {comment.edited_at && <span className="text-12 text-tertiary">{t("issue_activity.edited")}</span>}
           <span className="ml-auto flex shrink-0 items-center gap-1">
             {showAccessSpecifier &&
               (comment.access === EIssueCommentAccessSpecifier.INTERNAL ? (

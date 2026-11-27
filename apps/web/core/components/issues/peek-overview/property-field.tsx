@@ -43,7 +43,7 @@ export function StructureFieldLabel(props: {
   const { icon: Icon, label, append } = props;
 
   return (
-    <div className="flex h-7.5 shrink-0 items-center gap-1.5 text-body-xs-regular text-tertiary">
+    <div className="flex h-7.5 shrink-0 items-center gap-1.5 text-body-sm-regular text-tertiary">
       <Icon className="size-4 shrink-0" />
       <span className="whitespace-nowrap">{label}</span>
       {append != null ? <span className="inline-flex shrink-0">{append}</span> : null}

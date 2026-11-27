@@ -69,7 +69,7 @@ export const IssueWorklogProperty = observer(function IssueWorklogProperty(props
 
   return (
     <div className="flex items-center gap-2">
-      <div className="flex h-7.5 w-30 shrink-0 items-center gap-1.5 text-body-xs-regular text-tertiary">
+      <div className="flex h-7.5 w-30 shrink-0 items-center gap-1.5 text-body-sm-regular text-tertiary">
         <Clock className="size-4 shrink-0" />
         <span>工时</span>
       </div>
@@ -82,7 +82,7 @@ export const IssueWorklogProperty = observer(function IssueWorklogProperty(props
             onClick={() => {
               if (!disabled) setIsOpen((prev) => !prev);
             }}
-            className="flex h-7.5 w-full items-center gap-1 rounded px-2 text-body-xs-medium text-secondary hover:bg-layer-1-hover transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
+            className="flex h-7.5 w-full items-center gap-1 rounded px-2 text-body-sm-regular text-primary hover:bg-layer-1-hover transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
           >
             <span className="tabular-nums">
               {isLoading ? "..." : formatHoursDisplay(totalHours)}

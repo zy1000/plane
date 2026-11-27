@@ -57,7 +57,7 @@ export const ActivityTabs = memo(function ActivityTabs(props: TActivityTabsProps
           >
             {t(`issue_activity.tabs.${TAB_I18N_KEY[tab]}`)}
             {count !== undefined && count > 0 && (
-              <span className={cn("text-12 tabular-nums", isActive ? "text-tertiary" : "text-placeholder")}>{count}</span>
+              <span className="text-12 text-tertiary tabular-nums">{count}</span>
             )}
           </button>
         );

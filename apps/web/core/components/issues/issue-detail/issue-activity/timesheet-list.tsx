@@ -138,7 +138,7 @@ export const IssueActivityTimesheetList = observer(function IssueActivityTimeshe
 
   if (isLoading && ordered.length === 0) {
     return (
-      <div className="flex items-center justify-center gap-2 py-6 text-13 text-placeholder">
+      <div className="flex items-center justify-center gap-2 py-6 text-13 text-tertiary">
         <Clock className="h-4 w-4" />
         {t("issue_activity.empty.loading")}
       </div>
@@ -147,7 +147,7 @@ export const IssueActivityTimesheetList = observer(function IssueActivityTimeshe
 
   if (ordered.length === 0) {
     return (
-      <div className="py-6 text-center text-13 text-placeholder">
+      <div className="py-6 text-center text-13 text-tertiary">
         {operatorFilterIds.length > 0
           ? t("issue_activity.empty.operator_timesheet")
           : t("issue_activity.empty.timesheet")}

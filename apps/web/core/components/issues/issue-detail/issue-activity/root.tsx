@@ -145,7 +145,7 @@ export const IssueActivity = observer(function IssueActivity(props: TIssueActivi
     content = <IssueActivityLoader />;
   } else if (days.length === 0) {
     content = (
-      <div className="py-6 text-center text-13 text-placeholder">
+      <div className="py-6 text-center text-13 text-tertiary">
         {selectedOperatorIds.length > 0
           ? t("issue_activity.empty.operator")
           : t(`issue_activity.empty.${TAB_I18N_KEY[activeTab]}`)}

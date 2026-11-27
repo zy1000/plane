@@ -51,7 +51,7 @@ export const IssueProductModuleSelect = observer(function IssueProductModuleSele
         disabled={disableSelect}
         className="group w-full"
         buttonContainerClassName="w-full text-left h-7.5 rounded-sm"
-        buttonClassName={`text-body-xs-medium justify-between ${issue?.product_module_id ? "" : "text-placeholder"}`}
+        buttonClassName={`text-body-sm-regular justify-between ${issue?.product_module_id ? "text-primary" : "text-tertiary"}`}
         buttonVariant="transparent-with-text"
         hideIcon
         dropdownArrow

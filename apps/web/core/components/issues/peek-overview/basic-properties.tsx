@@ -112,7 +112,7 @@ export const PeekOverviewBasicProperties = observer(function PeekOverviewBasicPr
                 href={`/${workspaceSlug}/projects/${projectDetails.id}/overview`}
                 onClick={() => setPeekIssue(undefined)}
                 title={projectDetails.name}
-                className="flex h-7.5 w-full min-w-0 items-center gap-1.5 rounded-sm px-2 text-body-xs-medium text-secondary hover:bg-layer-transparent-hover hover:text-primary"
+                className="flex h-7.5 w-full min-w-0 items-center gap-1.5 rounded-sm px-2 text-body-sm-regular text-primary hover:bg-layer-transparent-hover hover:text-primary"
               >
                 <span className="grid size-3.5 flex-shrink-0 place-items-center">
                   <Logo logo={projectDetails.logo_props} size={14} />
@@ -130,7 +130,7 @@ export const PeekOverviewBasicProperties = observer(function PeekOverviewBasicPr
                 <>
                   <StructureFieldLabel icon={WorkItemsIcon} label="类型" />
                   <StructureFieldValue>
-                    <div className="flex h-7.5 min-w-0 items-center gap-1.5 px-2 text-body-xs-medium text-secondary">
+                    <div className="flex h-7.5 min-w-0 items-center gap-1.5 px-2 text-body-sm-regular text-primary">
                       <WorkItemTypeIcon
                         typeName={issue.type_name}
                         fallbackIcon={issueTypeLogoIcon}
@@ -153,7 +153,7 @@ export const PeekOverviewBasicProperties = observer(function PeekOverviewBasicPr
                   buttonVariant="transparent-with-text"
                   className="group w-full"
                   buttonContainerClassName={BUTTON_CONTAINER}
-                  buttonClassName="text-body-xs-medium justify-between"
+                  buttonClassName="text-body-sm-regular text-primary justify-between"
                   dropdownArrow
                   dropdownArrowClassName={ARROW}
                 />
@@ -169,8 +169,8 @@ export const PeekOverviewBasicProperties = observer(function PeekOverviewBasicPr
                   className="group w-full"
                   buttonContainerClassName={BUTTON_CONTAINER}
                   buttonClassName={cn(
-                    "text-body-xs-medium justify-between [&_svg]:size-3.5",
-                    (!issue.priority || issue.priority === "none") && "text-placeholder"
+                    "text-body-sm-regular justify-between [&_svg]:size-3.5",
+                    (!issue.priority || issue.priority === "none") ? "text-tertiary" : "text-primary"
                   )}
                   dropdownArrow
                   dropdownArrowClassName={ARROW}
@@ -189,7 +189,7 @@ export const PeekOverviewBasicProperties = observer(function PeekOverviewBasicPr
                   buttonVariant={assigneeCount > 1 ? "transparent-without-text" : "transparent-with-text"}
                   className="group w-full"
                   buttonContainerClassName={BUTTON_CONTAINER}
-                  buttonClassName={cn("text-body-xs-medium justify-between", assigneeCount === 0 && "text-placeholder")}
+                  buttonClassName={cn("text-body-sm-regular justify-between", assigneeCount === 0 ? "text-tertiary" : "text-primary")}
                   hideIcon={assigneeCount === 0}
                   dropdownArrow
                   dropdownArrowClassName={ARROW}
@@ -238,7 +238,7 @@ export const PeekOverviewDateProperties = observer(function PeekOverviewDateProp
             disabled={disabled}
             className="group w-full"
             buttonContainerClassName={BUTTON_CONTAINER}
-            buttonClassName={cn("text-body-xs-medium justify-between", !issue.start_date && "text-placeholder")}
+            buttonClassName={cn("text-body-sm-regular justify-between", !issue.start_date ? "text-tertiary" : "text-primary")}
             clearIconClassName="text-tertiary opacity-0 group-hover:opacity-100"
             hideIcon
           />
@@ -262,10 +262,10 @@ export const PeekOverviewDateProperties = observer(function PeekOverviewDateProp
                 className="group w-full"
                 buttonContainerClassName={BUTTON_CONTAINER}
                 buttonClassName={cn(
-                  "text-body-xs-medium justify-between",
+                  "text-body-sm-regular justify-between",
                   shouldHighlightIssueDueDate(issue.target_date, stateDetails?.group)
                     ? "text-red-500"
-                    : !issue.target_date && "text-placeholder"
+                    : !issue.target_date ? "text-tertiary" : "text-primary"
                 )}
                 clearIconClassName="text-tertiary opacity-0 group-hover:opacity-100"
                 hideIcon

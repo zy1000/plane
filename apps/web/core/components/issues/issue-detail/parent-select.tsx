@@ -121,7 +121,7 @@ export const IssueParentSelect = observer(function IssueParentSelect(props: TIss
             )}
           </div>
         ) : (
-          <span className="text-body-xs-medium text-placeholder">{t("issue.add.parent")}</span>
+          <span className="text-body-sm-regular text-tertiary">{t("issue.add.parent")}</span>
         )}
         {!disabled && (
           <span

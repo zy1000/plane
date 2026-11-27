@@ -111,7 +111,7 @@ export const IssueDescriptionSection = observer(function IssueDescriptionSection
   return (
     <section aria-labelledby={`${id}-label`} className="min-w-0 space-y-3 py-1">
       <div className="flex min-h-6 items-center justify-between gap-3">
-        <h2 id={`${id}-label`} className="text-13 font-semibold text-primary">
+        <h2 id={`${id}-label`} className="text-14 font-semibold text-primary">
           描述
         </h2>
         {disabled && !isEmpty && onEdit && (
@@ -137,7 +137,7 @@ export const IssueDescriptionSection = observer(function IssueDescriptionSection
             添加描述，补充工作项的背景和目标
           </button>
         ) : (
-          <p className="py-2 text-13 text-tertiary">暂无描述</p>
+          <p className="py-2 text-14 text-tertiary">暂无描述</p>
         ))}
       <div hidden={disabled && isEmpty}>
         <div

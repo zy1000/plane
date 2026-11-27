@@ -86,7 +86,7 @@ export const EditValue = observer(function EditValue({
         target="_blank"
         rel="noopener noreferrer"
         title={raw}
-        className={cn("inline-block max-w-[280px] truncate align-bottom hover:underline", old ? "text-placeholder line-through" : "text-accent-primary")}
+        className={cn("inline-block max-w-[280px] truncate align-bottom hover:underline", old ? "text-tertiary line-through" : "text-accent-primary")}
       >
         {raw}
       </a>
@@ -217,7 +217,7 @@ const useEditSentence = () => {
       };
     }
     const suffix = isAutoFilledFromRequirement(activity) ? (
-      <span className="text-placeholder">（{t(`${I18N}.edits.from_requirement`)}）</span>
+      <span className="text-tertiary">（{t(`${I18N}.edits.from_requirement`)}）</span>
     ) : null;
     if (activity.old_value && activity.new_value) {
       return {
@@ -271,7 +271,7 @@ const EditDetailItem = observer(function EditDetailItem({ activity }: { activity
   } else if (isRelationField(field)) {
     value = <EditValue activity={activity} side={activity.old_value ? "old" : "new"} />;
   } else if (!activity.old_value && !activity.new_value) {
-    value = <span className="text-placeholder">—</span>;
+    value = <span className="text-tertiary">—</span>;
   } else {
     value = <ChangeValue activity={activity} />;
   }
@@ -400,7 +400,7 @@ export const ActivityEditRow = observer(function ActivityEditRow({
 
   return (
     <TimelineRow node={<DotNode />} isFirst={isFirst} isLast={isLast}>
-      <div className="flex min-h-7 flex-wrap items-center gap-x-1.5 gap-y-1 text-13 text-tertiary">
+      <div className="flex min-h-7 flex-wrap items-center gap-x-1.5 gap-y-1 text-14 text-secondary">
         {actor}
         {sentence}
         <ActivityTime value={first.created_at} />
