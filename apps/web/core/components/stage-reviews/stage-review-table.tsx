@@ -1,5 +1,5 @@
 import { memo, useMemo, useState } from "react";
-import type { MouseEvent as ReactMouseEvent, ReactNode, RefObject } from "react";
+import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, MessageSquare, Paperclip } from "lucide-react";
 import { Link } from "react-router";
@@ -491,7 +491,7 @@ export const StageReviewTable = ({
   selection,
   flashedCells,
   onUpdateReview,
-  scrollRef,
+  scrollElement,
   highlight = "",
   collapsedIds,
   onToggleCollapse,
@@ -517,7 +517,7 @@ export const StageReviewTable = ({
    * 两万多个节点，打开、切分组、滚动都会冻住；所以只渲染视口里的行（筛选 / 分组 / 计数
    * 仍基于全量数据，不受影响）。
    */
-  scrollRef: RefObject<HTMLDivElement | null>;
+  scrollElement: HTMLDivElement | null;
   /** 搜索框的关键字（已 trim + 小写），编号里命中的那段会高亮 */
   highlight?: string;
   /** 收起了评审活动的评审；rows 里已经去掉了它们的活动行，这里只用来画箭头朝向 */
@@ -529,7 +529,7 @@ export const StageReviewTable = ({
   const { t, currentLocale } = useTranslation();
   const virtualizer = useVirtualizer({
     count: rows.length,
-    getScrollElement: () => scrollRef.current,
+    getScrollElement: () => scrollElement,
     estimateSize: (index) => (rows[index]?.depth === 1 ? ACTIVITY_ROW_HEIGHT : ROW_HEIGHT),
     // 行在吸顶表头下面开始
     scrollMargin: HEADER_HEIGHT,

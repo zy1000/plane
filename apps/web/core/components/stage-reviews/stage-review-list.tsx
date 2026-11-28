@@ -148,8 +148,12 @@ export const StageReviewList = observer(function StageReviewList({
   // `?review=<id>`：只在第一次拿到数据时生效，之后用户自己点的不被它顶掉
   const deepLinkReviewId = searchParams?.get("review") ?? null;
   const deepLinkHandled = useRef(false);
-  /** 表格的滚动容器，虚拟列表按它算视口 */
-  const scrollRef = useRef<HTMLDivElement>(null);
+  /**
+   * 表格的滚动容器，虚拟列表按它算视口。用 state 而不是 ref：容器 div 包着表格，React 先跑
+   * 子组件的 layout effect 再挂父级 ref，表格首次挂载时 ref 还是 null，虚拟列表量不到视口、
+   * 一行都不画，要等下一次重渲染才出来；存进 state 后挂上即触发一次重渲染
+   */
+  const [scrollElement, setScrollElement] = useState<HTMLDivElement | null>(null);
   useEffect(() => {
     if (deepLinkHandled.current || !deepLinkReviewId || reviews.length === 0) return;
     deepLinkHandled.current = true;
@@ -326,7 +330,7 @@ export const StageReviewList = observer(function StageReviewList({
         selection={tableSelection}
         flashedCells={bulkEdit.flashedCells}
         onUpdateReview={canBulkEdit ? handleUpdateReview : undefined}
-        scrollRef={scrollRef}
+        scrollElement={scrollElement}
         highlight={search.trim().toLowerCase()}
         collapsedIds={collapse.collapsedIds}
         onToggleCollapse={collapse.toggle}
@@ -357,7 +361,7 @@ export const StageReviewList = observer(function StageReviewList({
         )}
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto">
+          <div ref={setScrollElement} className="min-h-0 flex-1 overflow-auto">
             {renderBody()}
           </div>
           {canBulkEdit && scope.kind === "project" && (
