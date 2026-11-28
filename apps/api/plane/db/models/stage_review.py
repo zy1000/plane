@@ -312,6 +312,8 @@ class StageReviewTemplate(BaseModel):
     # 富文本。口径同 Requirement.description_html / Product.description_html：只存一列 HTML，
     # 不另存 json / stripped / binary —— 那三列是 Issue、Page 走协同编辑才需要的。
     description_html = models.TextField(blank=True, null=True, verbose_name="描述 HTML")
+    # 纯文本，口径同 StageReview.work_instruction；生成评审时原样抄过去
+    work_instruction = models.TextField(blank=True, default="", verbose_name="工作指引")
     initiator_role = models.CharField(
         max_length=255, blank=True, default="", verbose_name="发起者角色"
     )

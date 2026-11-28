@@ -3922,6 +3922,8 @@ export default {
           stage_review_template_code_already_exists: "This standard code already exists. Use another code.",
         },
         description_label: "Description (optional)",
+        work_instruction_label: "Work instruction (optional)",
+        work_instruction_placeholder: "Copied to the review's work instruction when it is generated",
         role_placeholder: "Select a role",
         auditor_placeholder: "Leave empty if no approval is needed",
         role_clear: "Clear",

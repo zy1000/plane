@@ -28,6 +28,8 @@ export type TStageReviewFormValue = {
   standard_code: string;
   /** 富文本 HTML —— 裁剪表生效生成评审实例时原样抄到 StageReview.description_html */
   description_html: string;
+  /** 纯文本 —— 生成评审实例时原样抄到 StageReview.work_instruction */
+  work_instruction: string;
   initiator_role: string;
   leader_role: string;
   auditor_role: string;
@@ -61,7 +63,7 @@ const KIND_OPTIONS = [
 ];
 
 const INPUT_CLASS =
-  "h-9 w-full rounded-md border border-subtle bg-surface-1 px-2.5 text-13 text-primary outline-none placeholder:text-placeholder focus:border-accent-strong";
+  "h-9 w-full rounded-md border border-subtle bg-surface-1 px-2.5 text-14 text-primary outline-none placeholder:text-placeholder focus:border-accent-strong";
 
 type TErrorField = "title" | "standard_code" | null;
 
@@ -89,6 +91,7 @@ export const StageReviewTemplateFormModal = observer(function StageReviewTemplat
     parent_id: null,
     title: "",
     standard_code: "",
+    work_instruction: "",
     initiator_role: "",
     leader_role: "",
     auditor_role: "",
@@ -114,6 +117,7 @@ export const StageReviewTemplateFormModal = observer(function StageReviewTemplat
         parent_id: template.parent_id,
         title: template.title,
         standard_code: template.standard_code ?? "",
+        work_instruction: template.work_instruction ?? "",
         initiator_role: template.initiator_role,
         leader_role: template.leader_role,
         auditor_role: template.auditor_role,
@@ -130,6 +134,7 @@ export const StageReviewTemplateFormModal = observer(function StageReviewTemplat
       parent_id: defaultParent?.id ?? null,
       title: "",
       standard_code: "",
+      work_instruction: "",
       initiator_role: "",
       leader_role: "",
       auditor_role: "",
@@ -191,6 +196,7 @@ export const StageReviewTemplateFormModal = observer(function StageReviewTemplat
         standard_code: standardCode,
         title,
         description_html: isBlank ? "" : descriptionHTML,
+        work_instruction: value.work_instruction.trim() ? value.work_instruction : "",
       });
     } catch (submitError) {
       const payload = submitError as Record<string, unknown> | undefined;
@@ -210,10 +216,10 @@ export const StageReviewTemplateFormModal = observer(function StageReviewTemplat
   };
 
   return (
-    <ModalCore isOpen={isOpen} handleClose={onClose} position={EModalPosition.CENTER} width={EModalWidth.XXL}>
+    <ModalCore isOpen={isOpen} handleClose={onClose} position={EModalPosition.CENTER} width={EModalWidth.XXXXL}>
       <div className="flex items-start justify-between border-b border-subtle px-5 py-4">
         <div>
-          <h2 className="text-14 font-medium text-primary">
+          <h2 className="text-16 font-semibold text-primary">
             {t(isEdit ? `${I18N}.form.edit_title` : `${I18N}.form.create_title`)}
           </h2>
         </div>
@@ -228,12 +234,13 @@ export const StageReviewTemplateFormModal = observer(function StageReviewTemplat
         </button>
       </div>
 
-      <div className="flex flex-col gap-3.5 px-5 py-4">
+      {/* 内容多时正文区自己滚，页头页脚不动 */}
+      <div className="vertical-scrollbar scrollbar-sm flex max-h-[calc(100vh-12rem)] flex-col gap-3.5 overflow-y-auto px-5 py-4">
         {/* 编号与名称同一行：编号定宽在左，名称吃剩余宽度；两者的错误都提示在这一行下面 */}
         <div className="flex flex-col gap-1.5">
           <div className="grid grid-cols-[180px_minmax(0,1fr)] gap-3">
             <label className="flex min-w-0 flex-col gap-1.5">
-              <span className="text-12 text-tertiary">
+              <span className="text-13 font-medium text-secondary">
                 {t(`${I18N}.table.code`)}
                 <span className="ml-0.5 text-danger-primary">*</span>
               </span>
@@ -252,7 +259,7 @@ export const StageReviewTemplateFormModal = observer(function StageReviewTemplat
               />
             </label>
             <label className="flex min-w-0 flex-col gap-1.5">
-              <span className="text-12 text-tertiary">
+              <span className="text-13 font-medium text-secondary">
                 {t(`${I18N}.table.title`)}
                 <span className="ml-0.5 text-danger-primary">*</span>
               </span>
@@ -271,15 +278,15 @@ export const StageReviewTemplateFormModal = observer(function StageReviewTemplat
             </label>
           </div>
           {error && errorField && (
-            <p className="flex items-start gap-1 text-11 leading-4 text-danger-primary">
-              <AlertCircle className="mt-px size-3 shrink-0" />
+            <p className="flex items-start gap-1 text-12 leading-5 text-danger-primary">
+              <AlertCircle className="mt-1 size-3 shrink-0" />
               {error}
             </p>
           )}
         </div>
 
         <div className="flex flex-col gap-1.5">
-          <span className="text-12 text-tertiary">{t(`${I18N}.table.kind`)}</span>
+          <span className="text-13 font-medium text-secondary">{t(`${I18N}.table.kind`)}</span>
           <div className="flex gap-1.5">
             {KIND_OPTIONS.map((kind) => (
               <button
@@ -289,7 +296,7 @@ export const StageReviewTemplateFormModal = observer(function StageReviewTemplat
                 onClick={() => handleKindChange(kind)}
                 // 选项里直接放列表里那枚类型徽章，颜色与各处一致；选中靠描边区分
                 className={cn(
-                  "flex h-8 flex-1 items-center justify-center rounded-md border transition-colors",
+                  "flex h-9 flex-1 items-center justify-center rounded-md border transition-colors",
                   value.kind === kind ? "border-accent-strong" : "border-subtle hover:bg-layer-1-hover",
                   (isSubmitting || isEdit) && "cursor-not-allowed opacity-60"
                 )}
@@ -303,7 +310,7 @@ export const StageReviewTemplateFormModal = observer(function StageReviewTemplat
         {/* 只有评审活动才谈得上归属；评审恒在顶层 */}
         {isActivity && (
           <label className="flex flex-col gap-1.5">
-            <span className="text-12 text-tertiary">{t(`${I18N}.form.parent_label`)}</span>
+            <span className="text-13 font-medium text-secondary">{t(`${I18N}.form.parent_label`)}</span>
             <select
               value={value.parent_id ?? ""}
               disabled={isSubmitting}
@@ -320,17 +327,17 @@ export const StageReviewTemplateFormModal = observer(function StageReviewTemplat
               ))}
             </select>
             {parentOptions.length === 0 && (
-              <p className="text-10 leading-4 text-tertiary">{t(`${I18N}.form.parent_empty`)}</p>
+              <p className="text-12 leading-5 text-tertiary">{t(`${I18N}.form.parent_empty`)}</p>
             )}
           </label>
         )}
 
         {/* 描述会在裁剪表签批生效、生成评审实例时原样带到评审上 */}
         <div className="flex flex-col gap-1.5">
-          <span className="text-12 text-tertiary">{t(`${I18N}.form.description_label`)}</span>
+          <span className="text-13 font-medium text-secondary">{t(`${I18N}.form.description_label`)}</span>
           {workspaceId ? (
             <div className="overflow-hidden rounded-md border border-subtle bg-surface-1 focus-within:border-accent-strong">
-              <div className="vertical-scrollbar scrollbar-sm max-h-48 min-h-20 overflow-y-auto">
+              <div className="vertical-scrollbar scrollbar-sm max-h-80 min-h-40 overflow-y-auto">
                 <RichTextEditor
                   key={`srt-description-${editorVersion}`}
                   id={`stage_review_template_description_${template?.id ?? "new"}`}
@@ -348,19 +355,32 @@ export const StageReviewTemplateFormModal = observer(function StageReviewTemplat
                   duplicateFile={async () => ""}
                   searchMentionCallback={(payload) => workspaceService.searchEntity(workspaceSlug, payload)}
                   placeholder={() => ""}
-                  containerClassName="min-h-20 pr-3 pt-2 text-13"
+                  containerClassName="min-h-40 pr-3 pt-2 text-14"
                 />
               </div>
             </div>
           ) : (
             <Loader>
-              <Loader.Item height="80px" />
+              <Loader.Item height="160px" />
             </Loader>
           )}
         </div>
 
+        {/* 工作指引紧跟描述，生成评审时同样原样带过去 */}
+        <label className="flex flex-col gap-1.5">
+          <span className="text-13 font-medium text-secondary">{t(`${I18N}.form.work_instruction_label`)}</span>
+          <textarea
+            value={value.work_instruction}
+            rows={5}
+            disabled={isSubmitting}
+            onChange={(event) => setValue((current) => ({ ...current, work_instruction: event.target.value }))}
+            className="vertical-scrollbar scrollbar-sm block max-h-72 min-h-28 w-full resize-y rounded-md border border-subtle bg-surface-1 px-2.5 py-2 text-14 leading-5.5 text-primary outline-none placeholder:text-placeholder focus:border-accent-strong"
+            placeholder={t(`${I18N}.form.work_instruction_placeholder`)}
+          />
+        </label>
+
         <div className="flex flex-col gap-1.5">
-          <span className="text-12 text-tertiary">{t(`${I18N}.table.initiator`)}</span>
+          <span className="text-13 font-medium text-secondary">{t(`${I18N}.table.initiator`)}</span>
           <StageReviewRoleSelect
             value={value.initiator_role}
             jobRoles={jobRoles}
@@ -372,7 +392,7 @@ export const StageReviewTemplateFormModal = observer(function StageReviewTemplat
 
         <div className="grid grid-cols-2 gap-3">
           <div className="flex min-w-0 flex-col gap-1.5">
-            <span className="text-12 text-tertiary">{t(`${I18N}.table.leader`)}</span>
+            <span className="text-13 font-medium text-secondary">{t(`${I18N}.table.leader`)}</span>
             <StageReviewRoleSelect
               value={value.leader_role}
               jobRoles={jobRoles}
@@ -382,7 +402,7 @@ export const StageReviewTemplateFormModal = observer(function StageReviewTemplat
             />
           </div>
           <div className="flex min-w-0 flex-col gap-1.5">
-            <span className="text-12 text-tertiary">{t(`${I18N}.table.auditor`)}</span>
+            <span className="text-13 font-medium text-secondary">{t(`${I18N}.table.auditor`)}</span>
             <StageReviewRoleSelect
               value={value.auditor_role}
               jobRoles={jobRoles}
@@ -394,16 +414,16 @@ export const StageReviewTemplateFormModal = observer(function StageReviewTemplat
         </div>
 
         {/* 角色选的是工作区角色不是人：模板是工作区级标准流程，落到项目 + 产品时才解析成人 */}
-        <p className="text-10 leading-4 text-tertiary">{t(`${I18N}.form.role_hint`)}</p>
-        {error && !errorField && <p className="text-10 leading-4 text-danger-primary">{error}</p>}
+        <p className="text-12 leading-5 text-tertiary">{t(`${I18N}.form.role_hint`)}</p>
+        {error && !errorField && <p className="text-12 leading-5 text-danger-primary">{error}</p>}
       </div>
 
       <div className="flex items-center justify-end gap-2 border-t border-subtle px-5 py-3">
-        <Button variant="secondary" size="sm" onClick={onClose} disabled={isSubmitting}>
+        <Button variant="secondary" size="xl" onClick={onClose} disabled={isSubmitting}>
           {t("cancel")}
         </Button>
-        <Button variant="primary" size="sm" onClick={() => void handleSubmit()} loading={isSubmitting}>
-          {t(isEdit ? "save" : "create")}
+        <Button variant="primary" size="xl" onClick={() => void handleSubmit()} loading={isSubmitting}>
+          {t(isEdit ? "save" : "common.create")}
         </Button>
       </div>
     </ModalCore>

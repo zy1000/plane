@@ -1682,6 +1682,7 @@ def _create_stage_reviews(tailoring, items, actor):
                 template=template,
                 title=item.title,
                 description_html=template.description_html,
+                work_instruction=template.work_instruction,
                 initiator_role=template.initiator_role,
                 leader_role=template.leader_role,
                 auditor_role=template.auditor_role,

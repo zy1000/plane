@@ -45,6 +45,8 @@ export type TStageReviewTemplate = {
   /** 标准编号，工作区内唯一；生成评审时快照到 TStageReview.standard_code */
   standard_code: string;
   description_html: string | null;
+  /** 纯文本；生成评审时抄到 TStageReview.work_instruction */
+  work_instruction: string;
   /** 三个角色存的都是**角色名称文本**而不是人；审核者为空串 = 无需审核 */
   initiator_role: string;
   leader_role: string;
@@ -66,6 +68,7 @@ export type TCreateStageReviewTemplatePayload = {
   /** 必填，工作区内唯一 */
   standard_code: string;
   description_html?: string | null;
+  work_instruction?: string;
   initiator_role?: string;
   leader_role?: string;
   auditor_role?: string;

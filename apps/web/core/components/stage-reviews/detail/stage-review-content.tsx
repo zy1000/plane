@@ -4,6 +4,7 @@ import { IconButton } from "@plane/propel/icon-button";
 import { Tooltip } from "@plane/propel/tooltip";
 import type { TStageReviewDetail, TUpdateStageReviewPayload } from "@plane/types";
 import { EFileAssetType } from "@plane/types";
+import { cn } from "@plane/utils";
 import { RichTextEditor } from "@/components/editor/rich-text";
 import { useEditorAsset } from "@/hooks/store/use-editor-asset";
 import { WorkspaceService } from "@/services/workspace.service";
@@ -28,7 +29,7 @@ const FIELD_LINE_CLASS =
   "min-h-7 [font-family:var(--font-style)] text-[length:var(--font-size-regular)] leading-[var(--line-height-regular)]";
 
 /**
- * 抽屉正文的区块：描述 / 附件 / 活动共用这一条头 ——
+ * 抽屉正文的区块：描述 / 工作指引 / 附件 / 活动共用这一条头 ——
  * 28px 高，14 号加粗名称 + 12 号计数，右侧放动作（28px 图标按钮或页签组）。
  */
 export const Block = ({
@@ -95,9 +96,9 @@ type TSupplementProps = {
 };
 
 /**
- * 抽屉正文里「要读的那一块」：描述。空着时不出区块，入口在「补充」条。
- * 用**工作项那套富文本**（RichTextEditor：工具栏、斜杠命令、@提及、拖拽上传）。
- * 工作指引是纯文本字段，住在标题下的属性区（`stage-review-properties.tsx`）。
+ * 抽屉正文里「要读的那两块」：描述与紧跟其下的工作指引。
+ * 描述用**工作项那套富文本**（RichTextEditor：工具栏、斜杠命令、@提及、拖拽上传），空着时不出区块，入口在「补充」条；
+ * 工作指引是纯文本（模型上就是 TextField），能改时常显一个文本框。
  */
 export const StageReviewContent = ({
   workspaceSlug,
@@ -116,16 +117,19 @@ export const StageReviewContent = ({
   editable: boolean;
   onUpdate: (payload: TUpdateStageReviewPayload) => void;
 }) => (
-  <DescriptionEditor
-    workspaceSlug={workspaceSlug}
-    workspaceId={workspaceId}
-    projectId={projectId}
-    detail={detail}
-    editable={editable}
-    onUpdate={onUpdate}
-    isRequested={requested.has("description")}
-    onDismiss={() => onDismiss("description")}
-  />
+  <>
+    <DescriptionEditor
+      workspaceSlug={workspaceSlug}
+      workspaceId={workspaceId}
+      projectId={projectId}
+      detail={detail}
+      editable={editable}
+      onUpdate={onUpdate}
+      isRequested={requested.has("description")}
+      onDismiss={() => onDismiss("description")}
+    />
+    <WorkInstruction detail={detail} editable={editable} onUpdate={onUpdate} />
+  </>
 );
 
 type TRequestProps = { isRequested: boolean; onDismiss: () => void };
@@ -250,6 +254,59 @@ const DescriptionEditor = ({
           containerClassName={`!p-0 ${FIELD_LINE_CLASS}`}
         />
       </div>
+    </Block>
+  );
+};
+
+/**
+ * 工作指引：纯文本，非必填。能改时是常显的多行文本框，随内容长高，焦点离开即存；
+ * 不能改（已评审）时按写下的样子展示，空着整块不出。
+ */
+const WorkInstruction = ({
+  detail,
+  editable,
+  onUpdate,
+}: {
+  detail: TStageReviewDetail;
+  editable: boolean;
+  onUpdate: (payload: TUpdateStageReviewPayload) => void;
+}) => {
+  const { t } = useTranslation();
+  const [draft, setDraft] = useState(detail.work_instruction);
+
+  // 换一条评审、或存完之后回灌
+  useEffect(() => {
+    setDraft(detail.work_instruction);
+  }, [detail.id, detail.work_instruction]);
+
+  const title = t(`${I18N}.fields.work_instruction`);
+
+  if (!editable) {
+    if (!detail.work_instruction.trim()) return null;
+    return (
+      <Block title={title}>
+        <p className="text-14 leading-6 break-words whitespace-pre-wrap text-secondary">{detail.work_instruction}</p>
+      </Block>
+    );
+  }
+
+  return (
+    <Block title={title}>
+      <textarea
+        aria-label={title}
+        value={draft}
+        // 不支持 field-sizing 的浏览器退回按行数撑高
+        rows={Math.max(3, draft.split(/\r?\n/).length)}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={() => {
+          if (draft !== detail.work_instruction) onUpdate({ work_instruction: draft });
+        }}
+        placeholder={t(`${I18N}.detail.work_instruction_placeholder`)}
+        className={cn(
+          "block field-sizing-content min-h-21 w-full resize-none rounded-lg border border-strong bg-surface-1 px-3 py-2",
+          "text-14 leading-5.5 text-primary placeholder:text-placeholder focus:border-accent-strong focus:outline-none"
+        )}
+      />
     </Block>
   );
 };

@@ -63,6 +63,8 @@ class StageReviewTemplateSerializer(BaseSerializer):
             # 工作区内唯一；生成评审时快照到 StageReview.standard_code
             "standard_code",
             "description_html",
+            # 纯文本；生成评审时原样抄到 StageReview.work_instruction
+            "work_instruction",
             # 三个角色存的都是**角色名称文本**而不是人：模板是工作区级标准流程，
             # 落到具体项目 + 产品时才解析成人。只能填工作区「角色」里有的名字（见 validate），
             # 审核者留空 = 无需审核。

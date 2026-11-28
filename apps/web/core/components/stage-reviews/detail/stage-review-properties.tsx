@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import { ArrowRight } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import type { TProductionMode, TShipmentAssessment, TStageReviewDetail, TUpdateStageReviewPayload } from "@plane/types";
@@ -158,62 +157,12 @@ const OStageFieldValue = ({
 };
 
 /**
- * 工作指引：纯文本（模型上就是 TextField），非必填。能改时是一个常显的多行文本框，随内容长高，
- * 焦点离开即存；不能改（已评审）时按写下的样子展示，不加编号。
- */
-const WorkInstruction = ({
-  id,
-  detail,
-  editable,
-  onUpdate,
-}: {
-  id: string;
-  detail: TStageReviewDetail;
-  editable: boolean;
-  onUpdate: (payload: TUpdateStageReviewPayload) => void;
-}) => {
-  const { t } = useTranslation();
-  const [draft, setDraft] = useState(detail.work_instruction);
-
-  // 换一条评审、或存完之后回灌
-  useEffect(() => {
-    setDraft(detail.work_instruction);
-  }, [detail.id, detail.work_instruction]);
-
-  if (!editable) {
-    return detail.work_instruction.trim() ? (
-      <p className="leading-5.5 break-words whitespace-pre-wrap">{detail.work_instruction}</p>
-    ) : (
-      <span className="leading-5.5 text-placeholder">—</span>
-    );
-  }
-
-  return (
-    <textarea
-      id={id}
-      value={draft}
-      // 不支持 field-sizing 的浏览器退回按行数撑高
-      rows={Math.max(3, draft.split(/\r?\n/).length)}
-      onChange={(event) => setDraft(event.target.value)}
-      onBlur={() => {
-        if (draft !== detail.work_instruction) onUpdate({ work_instruction: draft });
-      }}
-      placeholder={t(`${I18N}.detail.work_instruction_placeholder`)}
-      className={cn(
-        "block field-sizing-content min-h-21 w-full resize-none rounded-lg border border-strong bg-surface-1 px-3 py-2",
-        "text-14 leading-5.5 text-primary placeholder:text-placeholder focus:border-accent-strong focus:outline-none"
-      )}
-    />
-  );
-};
-
-/**
  * 标题行下面的属性区：「要查的东西」排成键值清单 —— 宽处一行三项（整页），窄处一行两项（抽屉），
- * 再窄一行一项。结论说明、工作指引、通知对象是长内容，各占一整行；末尾一行小字是来源。
+ * 再窄一行一项。结论说明、通知对象是长内容，各占一整行；末尾一行小字是来源。
  *
  * 状态与结论都不在这里改：状态只能由标题行的按钮一步步推进，结论只在「提交审核」那一刻
  * 写入（见 utils/stage_review.py）。这里只显示。空值是灰字动词（指定负责人 / 设置日期），
- * 悬停才出底色，不画成空输入框；只有工作指引是常显的文本框。
+ * 悬停才出底色，不画成空输入框。工作指引在正文描述下面（`stage-review-content.tsx`）。
  */
 export const StageReviewProperties = ({
   workspaceSlug,
@@ -230,7 +179,6 @@ export const StageReviewProperties = ({
 }) => {
   const { t, currentLocale } = useTranslation();
   const isOStage = STAGE_REVIEW_O_STAGE_KINDS.includes(detail.kind);
-  const workInstructionId = `stage_review_work_instruction_${detail.id}`;
   // 通知对象：评审是流程单据，不设订阅人；邮件发给审核人、负责人，结果知会阶段负责人和阶段订阅人。没有名单时整行不出
   const { scope: notifyScope } = useNotifyScope(workspaceSlug, projectId, "stage_review", detail.id, detail.updated_at);
   const hasNotifyScope = Boolean(notifyScope && (notifyScope.instant.length > 0 || notifyScope.digest.length > 0));
@@ -353,18 +301,6 @@ export const StageReviewProperties = ({
             <p className="leading-5.5 break-words whitespace-pre-wrap">{detail.conditional_reason}</p>
           </Row>
         )}
-
-        <Row
-          label={t(`${I18N}.fields.work_instruction`)}
-          htmlFor={editable ? workInstructionId : undefined}
-          wide
-          top
-          // 文本框有 1px 边 + 8px 内边距，标签往下让 9px 才和第一行字对齐；只读时没有框，和结论说明同一种行
-          className={editable ? "pt-1.5" : "py-2.25"}
-          labelClassName={editable ? "pt-[9px]" : undefined}
-        >
-          <WorkInstruction id={workInstructionId} detail={detail} editable={editable} onUpdate={onUpdate} />
-        </Row>
 
         {hasNotifyScope && notifyScope && (
           <Row label={t(`${I18N}.detail.notify_scope`)} wide className="mt-1.5 py-1.5">

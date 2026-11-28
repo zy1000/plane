@@ -4109,6 +4109,8 @@ export default {
           stage_review_template_code_already_exists: "标准编号已存在，换一个编号",
         },
         description_label: "描述（选填）",
+        work_instruction_label: "工作指引（选填）",
+        work_instruction_placeholder: "生成评审时带到评审的工作指引上",
         role_placeholder: "请选择角色",
         auditor_placeholder: "留空表示无需审核",
         role_clear: "清空",

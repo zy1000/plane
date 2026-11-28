@@ -39,7 +39,7 @@ export function StageReviewRoleSelect({ value, jobRoles, placeholder, disabled =
         customButtonClassName="hover:bg-transparent"
         customButton={
           <div
-            className={`flex h-9 w-full items-center gap-2 rounded-md border bg-surface-1 px-2.5 text-13 ${
+            className={`flex h-9 w-full items-center gap-2 rounded-md border bg-surface-1 px-2.5 text-14 ${
               isMissing ? "border-danger-strong" : "border-subtle"
             }`}
           >
@@ -71,7 +71,7 @@ export function StageReviewRoleSelect({ value, jobRoles, placeholder, disabled =
           </div>
         }
       />
-      {isMissing && <p className="text-10 leading-4 text-danger-primary">{t(`${I18N}.role_missing`)}</p>}
+      {isMissing && <p className="text-12 leading-5 text-danger-primary">{t(`${I18N}.role_missing`)}</p>}
     </div>
   );
 }
